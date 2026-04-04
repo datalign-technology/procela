@@ -1,50 +1,89 @@
 # Clarity360
 
-A comprehensive platform for 360-degree clarity and insights.
+A SaaS platform for comprehensive 360-degree clarity and insights.
 
-## Getting Started
+## Architecture Overview
 
-### Prerequisites
+Clarity360 is organized as a monorepo with two primary packages:
 
-- Node.js >= 18
-- npm >= 9
+- **packages/backend** - REST API server handling authentication, data processing, and business logic
+- **packages/frontend** - Single-page application providing the user interface
 
-### Installation
+## Tech Stack
+
+| Layer      | Technology                          |
+|------------|-------------------------------------|
+| Backend    | Node.js, Express, Prisma, PostgreSQL |
+| Frontend   | React, TypeScript, Vite             |
+| Cache      | Redis                               |
+| AI         | Anthropic Claude API                |
+| Auth       | JWT, AWS Cognito, SAML (pluggable)  |
+| Storage    | Local filesystem or AWS S3          |
+
+## Prerequisites
+
+- Node.js 20+
+- Docker and Docker Compose
+- npm 9+
+
+## Quick Start
 
 ```bash
+# Clone the repository
+git clone <repo-url> && cd Clarity360
+
+# Copy environment variables
+cp .env.example .env
+
+# Start infrastructure services
+docker compose up -d postgres redis
+
+# Install dependencies
 npm install
-```
 
-### Development
+# Run database migrations (from packages/backend)
+npm run migrate -w packages/backend
 
-```bash
+# Start development servers
 npm run dev
 ```
 
-### Build
+The frontend will be available at `http://localhost:3000` and the API at `http://localhost:3001`.
 
-```bash
-npm run build
-```
+## Available Scripts
 
-### Testing
-
-```bash
-npm test
-```
+| Script          | Description                                      |
+|-----------------|--------------------------------------------------|
+| `npm run dev`   | Start backend and frontend in development mode   |
+| `npm run build` | Build both backend and frontend for production   |
+| `npm test`      | Run tests across all packages                    |
+| `npm run lint`  | Lint all packages                                |
 
 ## Project Structure
 
 ```
 Clarity360/
-├── src/           # Source code
-│   ├── index.ts   # Application entry point
-│   └── utils/     # Utility functions
-├── tests/         # Test files
-├── package.json
-├── tsconfig.json
-└── README.md
+├── packages/
+│   ├── backend/          # Express API server
+│   │   ├── src/
+│   │   ├── prisma/       # Database schema and migrations
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── frontend/         # React SPA
+│       ├── src/
+│       ├── public/
+│       ├── package.json
+│       └── tsconfig.json
+├── docker-compose.yml    # Local development stack
+├── tsconfig.base.json    # Shared TypeScript config
+├── package.json          # Monorepo root
+├── .env.example          # Environment variable template
+└── CLAUDE.md             # Full architecture documentation
 ```
+
+## Documentation
+
+See [CLAUDE.md](./CLAUDE.md) for full architecture documentation, design decisions, and development guidelines.
 
 ## License
 

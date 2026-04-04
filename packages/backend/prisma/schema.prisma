@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ORG_ADMIN
+  PROCESS_OWNER
+  DATA_STEWARD
+  CONTRIBUTOR
+  VIEWER
+}
+
+enum EntityStatus {
+  DRAFT
+  ACTIVE
+  UNDER_REVIEW
+  DEPRECATED
+}
+
+enum GovernanceTier {
+  BRONZE
+  SILVER
+  GOLD
+}
+
+// ──────────────────────────────────────────
+// Organization
+// ──────────────────────────────────────────
+
+model Organization {
+  id                     String   @id @default(uuid()) @db.Uuid
+  name                   String
+  industry               String?
+  identityProviderConfig Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  users          User[]
+  valueStreams   ValueStream[]
+  processes      Process[]
+  subProcesses   SubProcess[]
+  processSteps   ProcessStep[]
+  systems        SystemEntity[]
+  dataAssets     DataAsset[]
+  processDataLinks ProcessDataLink[]
+  auditLogs      AuditLog[]
+
+  @@map("organizations")
+}
+
+// ──────────────────────────────────────────
+// User
+// ──────────────────────────────────────────
+
+model User {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @db.Uuid
+  externalId String?
+  name       String
+  email      String
+  role       UserRole @default(VIEWER)
+  department String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id])
+
+  ownedValueStreams ValueStream[] @relation("ValueStreamOwner")
+  ownedProcesses    Process[]     @relation("ProcessOwner")
+  ownedSubProcesses SubProcess[]  @relation("SubProcessOwner")
+  ownedProcessSteps ProcessStep[] @relation("ProcessStepOwner")
+  ownedSystems      SystemEntity[] @relation("SystemOwner")
+  stewardedSystems  SystemEntity[] @relation("SystemSteward")
+  ownedDataAssets   DataAsset[]   @relation("DataAssetOwner")
+  stewardedDataAssets DataAsset[] @relation("DataAssetSteward")
+  auditLogs         AuditLog[]
+
+  @@unique([orgId, email])
+  @@index([orgId])
+  @@index([externalId])
+  @@map("users")
+}
+
+// ──────────────────────────────────────────
+// Value Stream
+// ──────────────────────────────────────────
+
+model ValueStream {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @db.Uuid
+  name        String
+  description String?      @db.Text
+  ownerId     String?      @db.Uuid
+  status      EntityStatus @default(DRAFT)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  createdBy   String?      @db.Uuid
+  updatedBy   String?      @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  owner        User?        @relation("ValueStreamOwner", fields: [ownerId], references: [id])
+  processes    Process[]
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@map("value_streams")
+}
+
+// ──────────────────────────────────────────
+// Process
+// ──────────────────────────────────────────
+
+model Process {
+  id            String       @id @default(uuid()) @db.Uuid
+  orgId         String       @db.Uuid
+  valueStreamId String       @db.Uuid
+  name          String
+  description   String?      @db.Text
+  ownerId       String?      @db.Uuid
+  status        EntityStatus @default(DRAFT)
+  orderIndex    Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  createdBy     String?      @db.Uuid
+  updatedBy     String?      @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  valueStream  ValueStream  @relation(fields: [valueStreamId], references: [id])
+  owner        User?        @relation("ProcessOwner", fields: [ownerId], references: [id])
+  subProcesses SubProcess[]
+
+  @@index([orgId])
+  @@index([orgId, valueStreamId])
+  @@map("processes")
+}
+
+// ──────────────────────────────────────────
+// SubProcess
+// ──────────────────────────────────────────
+
+model SubProcess {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @db.Uuid
+  processId   String       @db.Uuid
+  name        String
+  description String?      @db.Text
+  ownerId     String?      @db.Uuid
+  status      EntityStatus @default(DRAFT)
+  orderIndex  Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  createdBy   String?      @db.Uuid
+  updatedBy   String?      @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  process      Process      @relation(fields: [processId], references: [id])
+  owner        User?        @relation("SubProcessOwner", fields: [ownerId], references: [id])
+  processSteps ProcessStep[]
+
+  @@index([orgId])
+  @@index([orgId, processId])
+  @@map("sub_processes")
+}
+
+// ──────────────────────────────────────────
+// ProcessStep
+// ──────────────────────────────────────────
+
+model ProcessStep {
+  id            String       @id @default(uuid()) @db.Uuid
+  orgId         String       @db.Uuid
+  subProcessId  String       @db.Uuid
+  name          String
+  description   String?      @db.Text
+  ownerId       String?      @db.Uuid
+  status        EntityStatus @default(DRAFT)
+  orderIndex    Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  createdBy     String?      @db.Uuid
+  updatedBy     String?      @db.Uuid
+
+  organization     Organization      @relation(fields: [orgId], references: [id])
+  subProcess       SubProcess        @relation(fields: [subProcessId], references: [id])
+  owner            User?             @relation("ProcessStepOwner", fields: [ownerId], references: [id])
+  processDataLinks ProcessDataLink[]
+
+  @@index([orgId])
+  @@index([orgId, subProcessId])
+  @@map("process_steps")
+}
+
+// ──────────────────────────────────────────
+// SystemEntity (avoids "System" reserved word)
+// ──────────────────────────────────────────
+
+model SystemEntity {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  description String?  @db.Text
+  systemType  String?
+  ownerId     String?  @db.Uuid
+  stewardId   String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?  @db.Uuid
+  updatedBy   String?  @db.Uuid
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  owner        User?        @relation("SystemOwner", fields: [ownerId], references: [id])
+  steward      User?        @relation("SystemSteward", fields: [stewardId], references: [id])
+  dataAssets   DataAsset[]
+
+  @@index([orgId])
+  @@map("systems")
+}
+
+// ──────────────────────────────────────────
+// DataAsset
+// ──────────────────────────────────────────
+
+model DataAsset {
+  id             String         @id @default(uuid()) @db.Uuid
+  orgId          String         @db.Uuid
+  name           String
+  description    String?        @db.Text
+  systemId       String?        @db.Uuid
+  ownerId        String?        @db.Uuid
+  stewardId      String?        @db.Uuid
+  governanceTier GovernanceTier @default(BRONZE)
+  healthScore    Float          @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  createdBy      String?        @db.Uuid
+  updatedBy      String?        @db.Uuid
+
+  organization     Organization      @relation(fields: [orgId], references: [id])
+  system           SystemEntity?     @relation(fields: [systemId], references: [id])
+  owner            User?             @relation("DataAssetOwner", fields: [ownerId], references: [id])
+  steward          User?             @relation("DataAssetSteward", fields: [stewardId], references: [id])
+  processDataLinks ProcessDataLink[]
+
+  @@index([orgId])
+  @@index([orgId, systemId])
+  @@index([orgId, governanceTier])
+  @@map("data_assets")
+}
+
+// ──────────────────────────────────────────
+// ProcessDataLink (mapping between steps and data)
+// ──────────────────────────────────────────
+
+model ProcessDataLink {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  processStepId  String   @db.Uuid
+  dataAssetId    String   @db.Uuid
+  linkType       String?
+  notes          String?  @db.Text
+  aiSuggested    Boolean  @default(false)
+  userOverridden Boolean  @default(false)
+  createdBy      String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  processStep  ProcessStep  @relation(fields: [processStepId], references: [id])
+  dataAsset    DataAsset    @relation(fields: [dataAssetId], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, processStepId])
+  @@index([orgId, dataAssetId])
+  @@map("process_data_links")
+}
+
+// ──────────────────────────────────────────
+// AuditLog
+// ──────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @db.Uuid
+  userId     String?  @db.Uuid
+  entityType String
+  entityId   String   @db.Uuid
+  action     String
+  before     Json?
+  after      Json?
+  timestamp  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, entityType, entityId])
+  @@index([orgId, timestamp])
+  @@map("audit_logs")
+}
