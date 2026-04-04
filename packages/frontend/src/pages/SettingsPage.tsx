@@ -1,4 +1,3 @@
-import React from 'react';
 import { INDUSTRIES } from '../types';
 
 export default function SettingsPage() {
