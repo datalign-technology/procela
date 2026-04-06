@@ -19,7 +19,7 @@ export class StubAuthService implements AuthService {
     // Return a mock user for development
     return {
       sub: '00000000-0000-0000-0000-000000000001',
-      email: 'dev@clarity360.local',
+      email: 'dev@procela.local',
       orgId: '00000000-0000-0000-0000-000000000010',
       role: 'ORG_ADMIN',
       name: 'Dev User',

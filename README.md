@@ -1,10 +1,10 @@
-# Clarity360
+# Procela
 
-A SaaS platform for comprehensive 360-degree clarity and insights.
+A SaaS platform that helps organizations connect their business processes to the data and systems that support them.
 
 ## Architecture Overview
 
-Clarity360 is organized as a monorepo with two primary packages:
+Procela is organized as a monorepo with two primary packages:
 
 - **packages/backend** - REST API server handling authentication, data processing, and business logic
 - **packages/frontend** - Single-page application providing the user interface
@@ -30,7 +30,7 @@ Clarity360 is organized as a monorepo with two primary packages:
 
 ```bash
 # Clone the repository
-git clone <repo-url> && cd Clarity360
+git clone <repo-url> && cd Procela
 
 # Copy environment variables
 cp .env.example .env
@@ -62,7 +62,7 @@ The frontend will be available at `http://localhost:3000` and the API at `http:/
 ## Project Structure
 
 ```
-Clarity360/
+Procela/
 ├── packages/
 │   ├── backend/          # Express API server
 │   │   ├── src/

@@ -1,8 +1,8 @@
 {
-  "name": "@clarity360/backend",
+  "name": "@procela/backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Clarity360 SaaS platform backend",
+  "description": "Procela SaaS platform backend",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

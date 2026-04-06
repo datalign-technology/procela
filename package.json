@@ -1,8 +1,8 @@
 {
-  "name": "clarity360",
+  "name": "procela",
   "version": "0.1.0",
   "private": true,
-  "description": "Clarity360 - SaaS platform for comprehensive 360-degree clarity and insights",
+  "description": "Procela - SaaS platform connecting business processes to data and systems",
   "workspaces": [
     "packages/*"
   ],

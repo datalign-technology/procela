@@ -6,13 +6,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: clarity360
-      POSTGRES_PASSWORD: clarity360
-      POSTGRES_DB: clarity360
+      POSTGRES_USER: procela
+      POSTGRES_PASSWORD: procela
+      POSTGRES_DB: procela
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U clarity360"]
+      test: ["CMD-SHELL", "pg_isready -U procela"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -41,7 +41,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://clarity360:clarity360@postgres:5432/clarity360
+      DATABASE_URL: postgresql://procela:procela@postgres:5432/procela
       REDIS_URL: redis://redis:6379
     volumes:
       - ./packages/backend/src:/app/src

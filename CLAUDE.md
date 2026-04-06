@@ -1,10 +1,10 @@
-# Clarity360 — Claude Code Handoff Document
+# Procela — Claude Code Handoff Document
 
 ## What We Are Building
 
-Clarity360 is a standalone SaaS platform that helps organizations connect their business processes to the data and systems that support them. It gives companies a single place to define how their business works, describe the data behind each step, and discover and govern that data over time.
+Procela is a standalone SaaS platform that helps organizations connect their business processes to the data and systems that support them. It gives companies a single place to define how their business works, describe the data behind each step, and discover and govern that data over time.
 
-Most data tools start with the data and ask the business to catch up. Clarity360 starts with the business and lets the data follow.
+Most data tools start with the data and ask the business to catch up. Procela starts with the business and lets the data follow.
 
 ---
 
@@ -17,11 +17,11 @@ Enterprises operate with two parallel worlds that rarely communicate:
 
 When something breaks — a report is wrong, a regulation isn't met, a decision is made on bad data — nobody can quickly answer: *what process was affected, what data failed it, and who owns it?*
 
-Clarity360 is the answer to that question before it becomes a crisis.
+Procela is the answer to that question before it becomes a crisis.
 
 ---
 
-## The Three Phases of Clarity360
+## The Three Phases of Procela
 
 ### Phase 1 — Define
 Organizations define their business processes in plain business language. No technical knowledge required. A process owner describes what their team does using a structured hierarchy:
@@ -30,17 +30,17 @@ Organizations define their business processes in plain business language. No tec
 Value Stream → Process → Sub-Process → Step
 ```
 
-Clarity360 accelerates this with AI-generated industry templates. The user selects their industry and receives a full process hierarchy as a starting point. They can accept, modify, or replace any part of it.
+Procela accelerates this with AI-generated industry templates. The user selects their industry and receives a full process hierarchy as a starting point. They can accept, modify, or replace any part of it.
 
 ### Phase 2 — Connect
 For each step in a process, users describe — in business terms — what data and systems are involved. Not schemas or database tables. Plain language like:
 
 > "This step uses customer account data from Salesforce and billing records from SAP."
 
-Clarity360 AI suggests what data and systems typically support each step based on the industry and process type. Users can accept the suggestion, modify it, or replace it entirely. Every override is stored — it captures what makes this organization's version of the process unique.
+Procela AI suggests what data and systems typically support each step based on the industry and process type. Users can accept the suggestion, modify it, or replace it entirely. Every override is stored — it captures what makes this organization's version of the process unique.
 
 ### Phase 3 — Discover
-Once business intent is defined, Clarity360 uses that context to help find, validate, and connect to actual data assets — either by integrating with source systems or by guiding technical users to map business definitions to real data. This is where the business-layer definition meets the technical-layer reality.
+Once business intent is defined, Procela uses that context to help find, validate, and connect to actual data assets — either by integrating with source systems or by guiding technical users to map business definitions to real data. This is where the business-layer definition meets the technical-layer reality.
 
 > Phase 3 integration capabilities should be architected for from the start but are not required for the initial prototype.
 
@@ -57,7 +57,7 @@ Once business intent is defined, Clarity360 uses that context to help find, vali
 
 ### 2. Industry Templates (AI-Generated)
 - User selects industry from a predefined list
-- Clarity360 generates a full process hierarchy using AI (Claude API)
+- Procela generates a full process hierarchy using AI (Claude API)
 - Preview before applying
 - User can accept all, accept partial, or start from scratch
 - Supported industries for prototype:
@@ -117,7 +117,7 @@ Once business intent is defined, Clarity360 uses that context to help find, vali
 
 ## Identity & Access Management
 
-Clarity360 must integrate with enterprise identity providers. This is a foundational requirement, not an add-on.
+Procela must integrate with enterprise identity providers. This is a foundational requirement, not an add-on.
 
 ### Supported Providers (Priority Order)
 1. **Microsoft Active Directory / Azure AD (Entra ID)** — primary target
@@ -126,7 +126,7 @@ Clarity360 must integrate with enterprise identity providers. This is a foundati
 
 ### Authentication
 - Single Sign-On (SSO) via SAML 2.0 or OIDC
-- Users do not create separate Clarity360 accounts
+- Users do not create separate Procela accounts
 - Session management via JWT tokens
 
 ### Authorization — Role Model
@@ -140,13 +140,13 @@ Viewer            — read-only access to the full catalog
 ```
 
 ### Org Hierarchy Support
-- Clarity360 should reflect the organization's department/team structure from the directory
+- Procela should reflect the organization's department/team structure from the directory
 - Ownership and access can be scoped to business unit or department
 - A department head sees everything their team owns
 - A CDO or executive sees the full enterprise view
 
 ### Audit Trail
-- Every action in Clarity360 is tied to an authenticated identity
+- Every action in Procela is tied to an authenticated identity
 - Audit log must be queryable and exportable for compliance purposes
 
 ---
@@ -165,16 +165,16 @@ Viewer            — read-only access to the full catalog
 ### Frontend
 - **Framework**: React (TypeScript)
 - **State management**: Zustand or React Query
-- **UI**: Custom component library (no heavy UI frameworks — Clarity360 has its own design language)
+- **UI**: Custom component library (no heavy UI frameworks — Procela has its own design language)
 - **Routing**: React Router
 - **Auth**: MSAL (Microsoft) or generic OIDC client depending on provider
 - **Deployment**: S3 + CloudFront (AWS) / Nginx container (on-premise)
 
 ### Backend
-- **Runtime**: Node.js (TypeScript)
+- **Runtime**: Node.js (TypeScript) or Python (FastAPI) — choose based on team preference; document the choice here before starting
 - **API style**: REST with OpenAPI spec
 - **Authentication middleware**: Validates JWT tokens from identity provider
-- **ORM**: Prisma
+- **ORM**: Prisma (Node) or SQLAlchemy (Python)
 - **Deployment**: AWS ECS (Fargate) or containerized via Docker
 
 ### Database
@@ -182,7 +182,7 @@ Viewer            — read-only access to the full catalog
   - AWS: Amazon RDS (PostgreSQL)
   - On-premise: Self-hosted PostgreSQL or customer-managed RDS-compatible
 - **Schema design**: Multi-tenant from the start. Every table includes `org_id`.
-- **Migrations**: Managed via Prisma Migrate — version-controlled, repeatable
+- **Migrations**: Managed via Flyway or Alembic — version-controlled, repeatable
 
 ### AI Services
 - **Provider**: Anthropic Claude API
@@ -215,7 +215,7 @@ CloudWatch (Logging, monitoring, alerting)
 ```
 
 ### Infrastructure as Code
-- **Tool**: AWS CDK (TypeScript)
+- **Tool**: AWS CDK (TypeScript) or Terraform
 - All infrastructure defined as code from day one
 - Separate stacks for: networking, data, application, auth
 - Environment parity: dev, staging, production use the same IaC templates with different parameter sets
@@ -333,10 +333,10 @@ Build in this order:
 # App
 NODE_ENV=development|staging|production
 PORT=3000
-API_BASE_URL=https://api.clarity360.io
+API_BASE_URL=https://api.procela.io
 
 # Database
-DATABASE_URL=postgresql://user:pass@host:5432/clarity360
+DATABASE_URL=postgresql://user:pass@host:5432/procela
 
 # Auth
 AUTH_PROVIDER=cognito|azuread|okta|saml

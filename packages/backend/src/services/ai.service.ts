@@ -74,7 +74,7 @@ class AnthropicAiService implements AiService {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: `You are an AI assistant for the Clarity360 platform, helping with business process mapping and data governance. Organization: ${orgContext.orgName ?? 'Unknown'}, Industry: ${orgContext.industry ?? 'General'}.`,
+      system: `You are an AI assistant for the Procela platform, helping with business process mapping and data governance. Organization: ${orgContext.orgName ?? 'Unknown'}, Industry: ${orgContext.industry ?? 'General'}.`,
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,

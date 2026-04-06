@@ -16,7 +16,7 @@ export default function Layout() {
     <div className={styles.shell}>
       {/* Sidebar */}
       <aside className={styles.sidebar}>
-        <div className={styles.sidebarBrand}>Clarity360</div>
+        <div className={styles.sidebarBrand}>Procela</div>
         <nav className={styles.sidebarNav}>
           {navItems.map((item) => (
             <NavLink
@@ -37,7 +37,7 @@ export default function Layout() {
       {/* Main content area */}
       <div className={styles.main}>
         <header className={styles.header}>
-          <span className={styles.headerTitle}>Clarity360</span>
+          <span className={styles.headerTitle}>Procela</span>
           <div className={styles.userMenu}>
             <div className={styles.userAvatar}>U</div>
             <span>User</span>

@@ -60,7 +60,7 @@ app.use(errorHandler);
 const PORT = config.port;
 
 app.listen(PORT, () => {
-  console.log(`[Clarity360] Server running on port ${PORT} (${config.nodeEnv})`);
+  console.log(`[Procela] Server running on port ${PORT} (${config.nodeEnv})`);
 });
 
 export default app;
