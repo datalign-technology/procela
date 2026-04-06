@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { INDUSTRIES } from '../types';
-import { api } from '../api/client';
+import { apiClient } from '../api/client';
 
 // ── Types for the AI-generated template ──
 
@@ -140,7 +140,7 @@ export default function ValueStreamWizard() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] } }>(
+      const res = await apiClient.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] } }>(
         '/ai/generate-template',
         { industry }
       );
