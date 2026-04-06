@@ -14,6 +14,7 @@ import config from './config';
 import { errorHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
 import aiRouter from './routes/ai';
+import processCatalogRouter from './routes/process-catalog';
 
 const app = express();
 
@@ -38,9 +39,7 @@ app.use('/api/v1/auth', (_req, res) => {
 app.use('/api/v1/organizations', (_req, res) => {
   res.json({ message: 'Organization routes - not yet implemented' });
 });
-app.use('/api/v1/process-catalog', (_req, res) => {
-  res.json({ message: 'Process catalog routes - not yet implemented' });
-});
+app.use('/api/v1/process-catalog', processCatalogRouter);
 app.use('/api/v1/data-assets', (_req, res) => {
   res.json({ message: 'Data asset routes - not yet implemented' });
 });

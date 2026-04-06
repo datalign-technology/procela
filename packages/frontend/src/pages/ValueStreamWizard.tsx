@@ -160,19 +160,26 @@ export default function ValueStreamWizard() {
     }
   };
 
-  const handleApply = () => {
-    // For now, navigate back to the process catalog.
-    // In a full implementation this would POST the selected value streams to the backend.
-    navigate('/processes', {
-      state: {
-        appliedTemplate: template
-          ? {
-              industry,
-              valueStreams: template.valueStreams.filter((vs) => vs.selected),
-            }
-          : null,
-      },
-    });
+  const [applying, setApplying] = useState(false);
+
+  const handleApply = async () => {
+    if (!template) return;
+    setApplying(true);
+    setError('');
+    try {
+      const selectedStreams = template.valueStreams
+        .filter((vs) => vs.selected)
+        .map(({ selected: _, ...rest }) => rest);
+
+      await apiClient.post('/process-catalog/apply-template', {
+        industry,
+        valueStreams: selectedStreams,
+      });
+      navigate('/processes');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to apply template.');
+      setApplying(false);
+    }
   };
 
   const selectedCount = template?.valueStreams.filter((vs) => vs.selected).length ?? 0;
@@ -423,8 +430,12 @@ export default function ValueStreamWizard() {
             <button style={btnSecondary} onClick={() => setStep(1)}>
               Back
             </button>
-            <button style={btnPrimary} onClick={handleApply}>
-              Apply to Catalog
+            <button
+              style={{ ...btnPrimary, opacity: applying ? 0.6 : 1 }}
+              disabled={applying}
+              onClick={handleApply}
+            >
+              {applying ? 'Applying...' : 'Apply to Catalog'}
             </button>
           </div>
         </div>
