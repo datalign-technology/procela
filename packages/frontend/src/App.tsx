@@ -7,6 +7,7 @@ import DataAssetsPage from '@/pages/DataAssetsPage';
 import SystemsPage from '@/pages/SystemsPage';
 import MappingsPage from '@/pages/MappingsPage';
 import SettingsPage from '@/pages/SettingsPage';
+import HelpPage from '@/pages/HelpPage';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/systems" element={<SystemsPage />} />
         <Route path="/mappings" element={<MappingsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/help" element={<HelpPage />} />
       </Route>
     </Routes>
   );

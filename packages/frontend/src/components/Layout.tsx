@@ -9,6 +9,7 @@ const navItems = [
   { to: '/systems', label: 'Systems', icon: '\u2699' },
   { to: '/mappings', label: 'Mappings', icon: '\u2194' },
   { to: '/settings', label: 'Settings', icon: '\u2731' },
+  { to: '/help', label: 'Help Guide', icon: '\u003F' },
 ];
 
 export default function Layout() {
