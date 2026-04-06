@@ -4,9 +4,14 @@ import { ProcessContext, OrgContext, ChatMessage } from '../types';
 
 const MODEL = 'claude-sonnet-4-20250514';
 
-const client = new Anthropic({
-  apiKey: config.anthropicApiKey,
-});
+let _client: Anthropic | null = null;
+
+function getClient(): Anthropic {
+  if (!_client) {
+    _client = new Anthropic({ apiKey: config.anthropicApiKey });
+  }
+  return _client;
+}
 
 export interface AiService {
   generateIndustryTemplate(industry: string): Promise<object>;
@@ -19,7 +24,7 @@ class AnthropicAiService implements AiService {
    * Generate a starter value-stream / process template for a given industry.
    */
   async generateIndustryTemplate(industry: string): Promise<object> {
-    const response = await client.messages.create({
+    const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 8192,
       system: `You are a business process expert for the Procela platform. Generate a comprehensive value stream hierarchy for the specified industry.
@@ -79,7 +84,7 @@ Guidelines:
    * Suggest data assets that are likely relevant for a given process context.
    */
   async suggestDataAssets(context: ProcessContext): Promise<object> {
-    const response = await client.messages.create({
+    const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 4096,
       system:
@@ -105,7 +110,7 @@ Guidelines:
    * Multi-turn conversational chat with organization-aware context.
    */
   async chat(messages: ChatMessage[], orgContext: OrgContext): Promise<string> {
-    const response = await client.messages.create({
+    const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 2048,
       system: `You are an AI assistant for the Procela platform, helping with business process mapping and data governance. Organization: ${orgContext.orgName ?? 'Unknown'}, Industry: ${orgContext.industry ?? 'General'}.`,
