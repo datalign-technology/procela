@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
-dotenv.config({ path: path.resolve(__dirname, '../../..', '.env') });
+
+// Try multiple locations for .env: backend dir, then monorepo root
+dotenv.config({ path: path.resolve(__dirname, '../..', '.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../..', '.env') });
 
 import express from 'express';
 import cors from 'cors';
