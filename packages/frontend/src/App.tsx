@@ -9,6 +9,8 @@ import MappingsPage from '@/pages/MappingsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import HelpPage from '@/pages/HelpPage';
 import ValueStreamWizard from '@/pages/ValueStreamWizard';
+import OrganizationsPage from '@/pages/OrganizationsPage';
+import PeoplePage from '@/pages/PeoplePage';
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
         <Route path="/data-assets" element={<DataAssetsPage />} />
         <Route path="/systems" element={<SystemsPage />} />
         <Route path="/mappings" element={<MappingsPage />} />
+        <Route path="/organizations" element={<OrganizationsPage />} />
+        <Route path="/people" element={<PeoplePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

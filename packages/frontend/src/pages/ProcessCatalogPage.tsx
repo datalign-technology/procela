@@ -30,11 +30,17 @@ interface Process {
   subProcesses: SubProcess[];
 }
 
+interface Organization {
+  id: string;
+  name: string;
+}
+
 interface ValueStream {
   id: string;
   name: string;
   description: string;
   status: string;
+  orgIds: string[];
   createdAt: string;
   processes: Process[];
 }
@@ -204,11 +210,16 @@ export default function ProcessCatalogPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [addingVs, setAddingVs] = useState(false);
   const [addingTo, setAddingTo] = useState<string | null>(null); // "proc:vsId" | "sp:vsId:procId" | "step:vsId:procId:spId"
+  const [orgs, setOrgs] = useState<Organization[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ success: boolean; data: ValueStream[] }>('/process-catalog/value-streams');
-      setValueStreams(res.data || []);
+      const [vsRes, orgsRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: ValueStream[] }>('/process-catalog/value-streams'),
+        apiClient.get<{ success: boolean; data: Organization[] }>('/organizations'),
+      ]);
+      setValueStreams(vsRes.data || []);
+      setOrgs(orgsRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, []);
@@ -375,6 +386,17 @@ export default function ProcessCatalogPage() {
                       <InlineEdit value={vs.description} onSave={(description) => updateValueStream(vs.id, { description })} fontSize={13} placeholder="Add description..." />
                     </div>
                   </div>
+                  {/* Org tags */}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {(vs.orgIds || []).map((oid) => {
+                      const org = orgs.find((o) => o.id === oid);
+                      return org ? (
+                        <span key={oid} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', fontWeight: 500 }}>
+                          {org.name}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
                   <StatusSelect value={vs.status} onChange={(status) => updateValueStream(vs.id, { status })} />
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{vs.processes.length} proc</span>
                   <button style={btnIcon} onClick={() => deleteValueStream(vs.id)} title="Delete">&#x2715;</button>
@@ -383,6 +405,29 @@ export default function ProcessCatalogPage() {
                 {/* Expanded: Processes */}
                 {isExpanded && (
                   <div style={{ padding: '0 20px 16px 48px' }}>
+                    {/* Org assignment */}
+                    <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Organizations:</span>
+                      {orgs.map((org) => {
+                        const assigned = (vs.orgIds || []).includes(org.id);
+                        return (
+                          <label key={org.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              onChange={() => {
+                                const newOrgIds = assigned
+                                  ? (vs.orgIds || []).filter((id) => id !== org.id)
+                                  : [...(vs.orgIds || []), org.id];
+                                updateValueStream(vs.id, { orgIds: newOrgIds } as any);
+                              }}
+                              style={{ accentColor: 'var(--color-primary)' }}
+                            />
+                            {org.name}
+                          </label>
+                        );
+                      })}
+                    </div>
                     {vs.processes.map((proc) => (
                       <div key={proc.id} style={{ marginBottom: 10, borderLeft: '2px solid var(--color-border)', paddingLeft: 14 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>

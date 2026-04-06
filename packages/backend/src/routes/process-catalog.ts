@@ -32,6 +32,7 @@ interface StoredProcess {
 interface StoredValueStream {
   id: string;
   orgId: string;
+  orgIds: string[]; // multiple organizations can participate
   name: string;
   description: string;
   status: string;
@@ -77,11 +78,12 @@ router.get('/value-streams/:id', (req: Request, res: Response) => {
 });
 
 router.post('/value-streams', (req: Request, res: Response) => {
-  const { name, description } = req.body;
+  const { name, description, orgIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const now = new Date().toISOString();
   const vs: StoredValueStream = {
-    id: uuid(), orgId: DEV_ORG_ID, name, description: description || '',
+    id: uuid(), orgId: DEV_ORG_ID, orgIds: orgIds || [DEV_ORG_ID],
+    name, description: description || '',
     status: 'DRAFT', createdAt: now, updatedAt: now, processes: [],
   };
   valueStreams.push(vs);
@@ -91,10 +93,11 @@ router.post('/value-streams', (req: Request, res: Response) => {
 router.put('/value-streams/:id', (req: Request, res: Response) => {
   const vs = findVs(req.params.id);
   if (!vs) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
-  const { name, description, status } = req.body;
+  const { name, description, status, orgIds } = req.body;
   if (name !== undefined) vs.name = name;
   if (description !== undefined) vs.description = description;
   if (status !== undefined) vs.status = status;
+  if (orgIds !== undefined) vs.orgIds = orgIds;
   vs.updatedAt = new Date().toISOString();
   res.json({ success: true, data: vs });
 });
@@ -250,7 +253,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
     const now = new Date().toISOString();
     for (const tvs of templateStreams) {
       const vs: StoredValueStream = {
-        id: uuid(), orgId: DEV_ORG_ID, name: tvs.name,
+        id: uuid(), orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], name: tvs.name,
         description: tvs.description || `Generated from ${industry} template`,
         status: 'DRAFT', createdAt: now, updatedAt: now,
         processes: (tvs.processes || []).map((proc: any, pIdx: number) => ({

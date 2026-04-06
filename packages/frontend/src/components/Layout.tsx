@@ -8,6 +8,8 @@ const navItems = [
   { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
   { to: '/systems', label: 'Systems', icon: '\u2699' },
   { to: '/mappings', label: 'Mappings', icon: '\u2194' },
+  { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+  { to: '/people', label: 'People', icon: '\u263A' },
   { to: '/settings', label: 'Settings', icon: '\u2731' },
   { to: '/help', label: 'Help Guide', icon: '\u003F' },
 ];
