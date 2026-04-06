@@ -15,6 +15,7 @@ import { errorHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
 import aiRouter from './routes/ai';
 import processCatalogRouter from './routes/process-catalog';
+import systemsRouter from './routes/systems';
 
 const app = express();
 
@@ -43,9 +44,7 @@ app.use('/api/v1/process-catalog', processCatalogRouter);
 app.use('/api/v1/data-assets', (_req, res) => {
   res.json({ message: 'Data asset routes - not yet implemented' });
 });
-app.use('/api/v1/systems', (_req, res) => {
-  res.json({ message: 'System routes - not yet implemented' });
-});
+app.use('/api/v1/systems', systemsRouter);
 app.use('/api/v1/mappings', (_req, res) => {
   res.json({ message: 'Mapping routes - not yet implemented' });
 });
