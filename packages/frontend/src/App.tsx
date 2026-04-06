@@ -8,6 +8,7 @@ import SystemsPage from '@/pages/SystemsPage';
 import MappingsPage from '@/pages/MappingsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import HelpPage from '@/pages/HelpPage';
+import ValueStreamWizard from '@/pages/ValueStreamWizard';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/processes" element={<ProcessCatalogPage />} />
+        <Route path="/processes/wizard" element={<ValueStreamWizard />} />
         <Route path="/data-assets" element={<DataAssetsPage />} />
         <Route path="/systems" element={<SystemsPage />} />
         <Route path="/mappings" element={<MappingsPage />} />

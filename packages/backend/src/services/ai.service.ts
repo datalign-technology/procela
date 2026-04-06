@@ -21,9 +21,41 @@ class AnthropicAiService implements AiService {
   async generateIndustryTemplate(industry: string): Promise<object> {
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 4096,
-      system:
-        'You are a business process expert. Return a JSON object containing a suggested value stream hierarchy for the given industry. Include value streams, processes, sub-processes, and example process steps.',
+      max_tokens: 8192,
+      system: `You are a business process expert for the Procela platform. Generate a comprehensive value stream hierarchy for the specified industry.
+
+Return ONLY a valid JSON object with this exact structure — no markdown, no code fences, no explanation:
+{
+  "valueStreams": [
+    {
+      "name": "Value Stream Name",
+      "description": "Brief description of this value stream",
+      "processes": [
+        {
+          "name": "Process Name",
+          "description": "Brief description",
+          "subProcesses": [
+            {
+              "name": "Sub-Process Name",
+              "description": "Brief description",
+              "steps": [
+                { "name": "Step Name", "description": "Brief description" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Guidelines:
+- Generate 3-5 value streams typical for the industry
+- Each value stream should have 2-4 processes
+- Each process should have 2-3 sub-processes
+- Each sub-process should have 2-4 steps
+- Use clear business language, not technical jargon
+- Descriptions should be concise (1-2 sentences)`,
       messages: [
         {
           role: 'user',
@@ -35,7 +67,9 @@ class AnthropicAiService implements AiService {
     const text =
       response.content[0].type === 'text' ? response.content[0].text : '';
     try {
-      return JSON.parse(text);
+      // Handle potential markdown code fences in response
+      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleaned);
     } catch {
       return { raw: text };
     }

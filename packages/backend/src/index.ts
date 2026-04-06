@@ -9,6 +9,7 @@ import compression from 'compression';
 import config from './config';
 import { errorHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
+import aiRouter from './routes/ai';
 
 const app = express();
 
@@ -45,9 +46,7 @@ app.use('/api/v1/systems', (_req, res) => {
 app.use('/api/v1/mappings', (_req, res) => {
   res.json({ message: 'Mapping routes - not yet implemented' });
 });
-app.use('/api/v1/ai', (_req, res) => {
-  res.json({ message: 'AI routes - not yet implemented' });
-});
+app.use('/api/v1/ai', aiRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling

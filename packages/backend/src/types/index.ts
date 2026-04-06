@@ -1,14 +1,12 @@
 export const INDUSTRIES = [
-  'healthcare',
-  'financial_services',
-  'manufacturing',
-  'retail',
-  'technology',
-  'energy',
-  'telecommunications',
-  'government',
-  'education',
-  'logistics',
+  'Utilities (Electric, Gas, Water)',
+  'Defense & Shipbuilding',
+  'Healthcare',
+  'Manufacturing',
+  'Oil & Gas',
+  'Financial Services',
+  'Transportation & Logistics',
+  'State & Local Government',
 ] as const;
 
 export type Industry = (typeof INDUSTRIES)[number];
