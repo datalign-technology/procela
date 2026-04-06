@@ -49,13 +49,13 @@ ol {
 /* ── Design system variables ── */
 
 :root {
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-light: #dbeafe;
+  --color-primary: #1a7a6d;
+  --color-primary-hover: #15655a;
+  --color-primary-light: #d1f0eb;
 
-  --color-sidebar: #1a1f36;
-  --color-sidebar-hover: #252b48;
-  --color-sidebar-text: #a0aec0;
+  --color-sidebar: #0f4f46;
+  --color-sidebar-hover: #1a6b5f;
+  --color-sidebar-text: #a0d8cf;
   --color-sidebar-text-active: #ffffff;
 
   --color-text: #1e293b;

@@ -16,7 +16,10 @@ export default function Layout() {
     <div className={styles.shell}>
       {/* Sidebar */}
       <aside className={styles.sidebar}>
-        <div className={styles.sidebarBrand}>Procela</div>
+        <div className={styles.sidebarBrand}>
+          <img src="/procela-icon.png" alt="Procela" className={styles.brandIcon} />
+          <span>Procela</span>
+        </div>
         <nav className={styles.sidebarNav}>
           {navItems.map((item) => (
             <NavLink
@@ -37,7 +40,7 @@ export default function Layout() {
       {/* Main content area */}
       <div className={styles.main}>
         <header className={styles.header}>
-          <span className={styles.headerTitle}>Procela</span>
+          <img src="/procela-logo.png" alt="Procela" className={styles.headerLogo} />
           <div className={styles.userMenu}>
             <div className={styles.userAvatar}>U</div>
             <span>User</span>
