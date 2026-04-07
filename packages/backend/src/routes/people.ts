@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { organizations } from './organizations';
 
 const ROLES = [
   'SUPER_ADMIN',
@@ -45,6 +46,8 @@ router.post('/', (req: Request, res: Response) => {
   const { orgId, name, email, role, department, title } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'Organization is required' }); return; }
+  const org = organizations.find((o) => o.id === orgId);
+  if (!org) { res.status(400).json({ success: false, error: 'Organization not found. Person must be assigned to an existing organization level.' }); return; }
   const now = new Date().toISOString();
   const person: StoredPerson = {
     id: uuid(), orgId, name,
@@ -66,7 +69,11 @@ router.put('/:id', (req: Request, res: Response) => {
   if (role !== undefined) person.role = role;
   if (department !== undefined) person.department = department;
   if (title !== undefined) person.title = title;
-  if (orgId !== undefined) person.orgId = orgId;
+  if (orgId !== undefined) {
+    const org = organizations.find((o) => o.id === orgId);
+    if (!org) { res.status(400).json({ success: false, error: 'Organization not found. Person must be assigned to an existing organization level.' }); return; }
+    person.orgId = orgId;
+  }
   person.updatedAt = new Date().toISOString();
   res.json({ success: true, data: person });
 });

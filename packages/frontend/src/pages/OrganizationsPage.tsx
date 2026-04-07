@@ -96,6 +96,35 @@ const roleBadge = (role: string): React.CSSProperties => {
   return { display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color };
 };
 
+// ── Helpers ──
+
+interface FlatOrgOption {
+  id: string;
+  name: string;
+  type: string;
+  depth: number;
+  label: string; // indented display label
+}
+
+function flattenTreeForSelect(nodes: OrgNode[], depth: number = 0): FlatOrgOption[] {
+  const result: FlatOrgOption[] = [];
+  for (const node of nodes) {
+    const indent = '\u00A0\u00A0'.repeat(depth);
+    const typeLabel = node.type.charAt(0).toUpperCase() + node.type.slice(1);
+    result.push({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      depth,
+      label: `${indent}${node.name} (${typeLabel})`,
+    });
+    if (node.children.length > 0) {
+      result.push(...flattenTreeForSelect(node.children, depth + 1));
+    }
+  }
+  return result;
+}
+
 // ── Tab styles ──
 
 const tabStyle = (active: boolean): React.CSSProperties => ({
@@ -242,6 +271,7 @@ export default function OrganizationsPage() {
   }
 
   const filteredPeople = selectedOrgId ? people.filter((p) => p.orgId === selectedOrgId) : people;
+  const orgOptions = flattenTreeForSelect(tree);
   const selectedOrgName = selectedOrgId ? flatOrgs.find((o) => o.id === selectedOrgId)?.name || '' : '';
 
   // ── Org handlers ──
@@ -483,10 +513,10 @@ export default function OrganizationsPage() {
           {/* Filter bar */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
             <label style={{ fontSize: 12, fontWeight: 500 }}>Filter by org:</label>
-            <select style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any }} value={selectedOrgId} onChange={(e) => setSelectedOrgId(e.target.value)}>
+            <select style={{ ...inputStyle, width: 'auto', minWidth: 280, appearance: 'auto' as any }} value={selectedOrgId} onChange={(e) => setSelectedOrgId(e.target.value)}>
               <option value="">All Organizations ({people.length})</option>
-              {flatOrgs.map((org) => (
-                <option key={org.id} value={org.id}>{org.name} ({peopleCounts[org.id] || 0})</option>
+              {orgOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>{opt.label} — {peopleCounts[opt.id] || 0} people</option>
               ))}
             </select>
             {selectedOrgId && (
@@ -508,11 +538,14 @@ export default function OrganizationsPage() {
                   <input style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization Level *</label>
                   <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.orgId} onChange={(e) => setPersonForm({ ...personForm, orgId: e.target.value })}>
-                    <option value="">-- Select --</option>
-                    {flatOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                    <option value="">-- Select an organization level --</option>
+                    {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
                   </select>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                    Person will be assigned to this specific level in the org hierarchy.
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Role</label>
