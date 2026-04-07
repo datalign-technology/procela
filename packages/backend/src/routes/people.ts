@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { organizations } from './organizations';
+import logger from '../lib/logger';
 
 const ROLES = [
   'SUPER_ADMIN',
@@ -82,6 +83,89 @@ router.delete('/:id', (req: Request, res: Response) => {
   if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   people.splice(idx, 1);
   res.status(204).send();
+});
+
+/**
+ * POST /api/v1/people/import
+ * Import people from CSV or JSON. orgId is required.
+ *
+ * JSON: { orgId: string, people: [{ name, email?, role?, title? }, ...] }
+ * CSV:  { orgId: string, csv: "Name,Email,Role,Title\nJohn,john@co.com,VIEWER,Manager" }
+ */
+router.post('/import', (req: Request, res: Response) => {
+  try {
+    const { orgId, people: peopleList, csv } = req.body;
+
+    if (!orgId) {
+      res.status(400).json({ success: false, error: 'Organization level is required for import' });
+      return;
+    }
+    const org = organizations.find((o) => o.id === orgId);
+    if (!org) {
+      res.status(400).json({ success: false, error: 'Selected organization level does not exist' });
+      return;
+    }
+
+    let rows: Array<{ name: string; email?: string; role?: string; title?: string }> = [];
+
+    if (csv && typeof csv === 'string') {
+      const lines = csv.trim().split('\n');
+      const header = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
+      const nameIdx = header.indexOf('name');
+      const emailIdx = header.indexOf('email');
+      const roleIdx = header.indexOf('role');
+      const titleIdx = header.indexOf('title');
+
+      if (nameIdx === -1) {
+        res.status(400).json({ success: false, error: 'CSV must have a "Name" column' });
+        return;
+      }
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map((c: string) => c.trim());
+        if (!cols[nameIdx]) continue;
+        rows.push({
+          name: cols[nameIdx],
+          email: emailIdx >= 0 ? cols[emailIdx] : undefined,
+          role: roleIdx >= 0 ? cols[roleIdx] : undefined,
+          title: titleIdx >= 0 ? cols[titleIdx] : undefined,
+        });
+      }
+    } else if (Array.isArray(peopleList)) {
+      rows = peopleList;
+    } else {
+      res.status(400).json({ success: false, error: 'Provide "people" array or "csv" string' });
+      return;
+    }
+
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, error: 'No people to import' });
+      return;
+    }
+
+    const validRoles = ROLES as readonly string[];
+    const created: StoredPerson[] = [];
+    const now = new Date().toISOString();
+
+    for (const row of rows) {
+      if (!row.name) continue;
+      const role = row.role && validRoles.includes(row.role.toUpperCase()) ? row.role.toUpperCase() : 'VIEWER';
+      const person: StoredPerson = {
+        id: uuid(), orgId, name: row.name,
+        email: row.email || '', role,
+        title: row.title || '',
+        createdAt: now, updatedAt: now,
+      };
+      people.push(person);
+      created.push(person);
+    }
+
+    logger.info({ count: created.length, orgId, orgName: org.name }, 'Imported people');
+    res.status(201).json({ success: true, data: created });
+  } catch (err) {
+    logger.error({ err }, 'People import failed');
+    res.status(500).json({ success: false, error: 'Import failed' });
+  }
 });
 
 export default router;

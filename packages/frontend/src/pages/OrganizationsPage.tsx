@@ -245,6 +245,10 @@ export default function OrganizationsPage() {
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [personForm, setPersonForm] = useState<PersonFormData>(emptyPersonForm);
   const [selectedOrgId, setSelectedOrgId] = useState('');
+  const [showPeopleImport, setShowPeopleImport] = useState(false);
+  const [peopleImportText, setPeopleImportText] = useState('');
+  const [peopleImportFormat, setPeopleImportFormat] = useState<'csv' | 'json'>('csv');
+  const [peopleImportOrgId, setPeopleImportOrgId] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -354,9 +358,14 @@ export default function OrganizationsPage() {
             </>
           )}
           {activeTab === 'people' && (
-            <button onClick={openAddPerson} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-              + Add Person
-            </button>
+            <>
+              <button onClick={() => { setPeopleImportOrgId(selectedOrgId || (flatOrgs.length > 0 ? flatOrgs[0].id : '')); setShowPeopleImport(true); }} style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                Import People
+              </button>
+              <button onClick={openAddPerson} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                + Add Person
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -522,6 +531,82 @@ export default function OrganizationsPage() {
               <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 12 }} onClick={() => setSelectedOrgId('')}>Clear filter</button>
             )}
           </div>
+
+          {/* Import People Panel */}
+          {showPeopleImport && (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Import People</h3>
+
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization Level *</label>
+                <select style={{ ...inputStyle, appearance: 'auto' as any, width: '100%' }} value={peopleImportOrgId} onChange={(e) => setPeopleImportOrgId(e.target.value)}>
+                  <option value="">-- Select organization level --</option>
+                  {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                </select>
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                  All imported people will be assigned to this organization level.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input type="radio" checked={peopleImportFormat === 'csv'} onChange={() => setPeopleImportFormat('csv')} /> CSV
+                </label>
+                <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input type="radio" checked={peopleImportFormat === 'json'} onChange={() => setPeopleImportFormat('json')} /> JSON
+                </label>
+              </div>
+
+              {peopleImportFormat === 'csv' ? (
+                <div>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                    CSV columns: <strong>Name</strong> (required), Email, Role (SUPER_ADMIN/ORG_ADMIN/PROCESS_OWNER/DATA_STEWARD/CONTRIBUTOR/VIEWER), Title
+                  </p>
+                  <textarea
+                    style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                    value={peopleImportText}
+                    onChange={(e) => setPeopleImportText(e.target.value)}
+                    placeholder={`Name,Email,Role,Title\nJane Smith,jane@company.com,PROCESS_OWNER,Director of Operations\nBob Jones,bob@company.com,DATA_STEWARD,Data Analyst\nAlice Brown,alice@company.com,VIEWER,Business Analyst`}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                    JSON array with: <strong>name</strong> (required), email, role, title
+                  </p>
+                  <textarea
+                    style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                    value={peopleImportText}
+                    onChange={(e) => setPeopleImportText(e.target.value)}
+                    placeholder={`[\n  { "name": "Jane Smith", "email": "jane@company.com", "role": "PROCESS_OWNER", "title": "Director of Operations" },\n  { "name": "Bob Jones", "email": "bob@company.com", "role": "DATA_STEWARD", "title": "Data Analyst" }\n]`}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); }}>Cancel</button>
+                <button
+                  style={{ ...btnPrimary, opacity: !peopleImportText.trim() || !peopleImportOrgId ? 0.6 : 1 }}
+                  disabled={!peopleImportText.trim() || !peopleImportOrgId}
+                  onClick={async () => {
+                    try {
+                      const body: any = { orgId: peopleImportOrgId };
+                      if (peopleImportFormat === 'csv') { body.csv = peopleImportText; }
+                      else { body.people = JSON.parse(peopleImportText); }
+                      await apiClient.post('/people/import', body);
+                      setShowPeopleImport(false); setPeopleImportText('');
+                      setSelectedOrgId(peopleImportOrgId);
+                      fetchData();
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : 'Import failed');
+                    }
+                  }}
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Add/Edit Person Form */}
           {showPersonForm && (
