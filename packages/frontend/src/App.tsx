@@ -10,7 +10,6 @@ import SettingsPage from '@/pages/SettingsPage';
 import HelpPage from '@/pages/HelpPage';
 import ValueStreamWizard from '@/pages/ValueStreamWizard';
 import OrganizationsPage from '@/pages/OrganizationsPage';
-import PeoplePage from '@/pages/PeoplePage';
 import GapDetectionPage from '@/pages/GapDetectionPage';
 
 export default function App() {
@@ -26,7 +25,6 @@ export default function App() {
         <Route path="/mappings" element={<MappingsPage />} />
         <Route path="/gap-detection" element={<GapDetectionPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
-        <Route path="/people" element={<PeoplePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

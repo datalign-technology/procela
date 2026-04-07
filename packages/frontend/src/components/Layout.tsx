@@ -13,7 +13,6 @@ const navItems = [
   { to: '/mappings', label: 'Mappings', icon: '\u2194' },
   { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
   { to: '/organizations', label: 'Organizations', icon: '\u2616' },
-  { to: '/people', label: 'People', icon: '\u263A' },
   { to: '/settings', label: 'Settings', icon: '\u2731' },
   { to: '/help', label: 'Help Guide', icon: '\u003F' },
 ];

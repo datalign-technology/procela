@@ -25,6 +25,16 @@ interface OrgFlat {
   headCount: number;
 }
 
+interface Person {
+  id: string;
+  orgId: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  title: string;
+}
+
 // ── Styles ──
 
 const inputStyle: React.CSSProperties = {
@@ -47,6 +57,15 @@ const btnIcon: React.CSSProperties = {
   padding: '2px 6px', fontSize: 12, color: 'var(--color-text-muted)', borderRadius: 4,
 };
 
+const thStyle: React.CSSProperties = {
+  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
+  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
+};
+
 const typeBadge = (type: string): React.CSSProperties => {
   const colors: Record<string, { bg: string; color: string }> = {
     company: { bg: '#dbeafe', color: '#1e40af' },
@@ -62,30 +81,60 @@ const typeBadge = (type: string): React.CSSProperties => {
   };
 };
 
-// ── Form ──
+const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin', ORG_ADMIN: 'Org Admin', PROCESS_OWNER: 'Process Owner',
+  DATA_STEWARD: 'Data Steward', CONTRIBUTOR: 'Contributor', VIEWER: 'Viewer',
+};
 
-interface FormData {
-  name: string;
-  parentId: string | null;
-  type: string;
-  industry: string;
-  description: string;
+const roleBadge = (role: string): React.CSSProperties => {
+  const colors: Record<string, { bg: string; color: string }> = {
+    SUPER_ADMIN: { bg: '#fce7f3', color: '#9d174d' }, ORG_ADMIN: { bg: '#ede9fe', color: '#5b21b6' },
+    PROCESS_OWNER: { bg: '#d1f0eb', color: '#0f4f46' }, DATA_STEWARD: { bg: '#dbeafe', color: '#1e40af' },
+    CONTRIBUTOR: { bg: '#fef3c7', color: '#92400e' }, VIEWER: { bg: '#f1f5f9', color: '#64748b' },
+  };
+  const c = colors[role] || colors.VIEWER;
+  return { display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color };
+};
+
+// ── Tab styles ──
+
+const tabStyle = (active: boolean): React.CSSProperties => ({
+  padding: '10px 20px', fontSize: 14, fontWeight: active ? 600 : 400, cursor: 'pointer',
+  border: 'none', background: 'none',
+  color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
+  borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
+});
+
+// ── Org Form ──
+
+interface OrgFormData {
+  name: string; parentId: string | null; type: string; industry: string; description: string;
 }
+const emptyOrgForm: OrgFormData = { name: '', parentId: null, type: 'department', industry: '', description: '' };
 
-const emptyForm: FormData = { name: '', parentId: null, type: 'department', industry: '', description: '' };
+// ── Person Form ──
 
-// ── Tree Node Component ──
+interface PersonFormData {
+  orgId: string; name: string; email: string; role: string; department: string; title: string;
+}
+const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', department: '', title: '' };
+
+// ── Org Tree Node ──
 
 function OrgTreeNode({
-  node, depth, orgTypes, onEdit, onDelete, onAddChild, expanded, toggleExpand,
+  node, depth, orgTypes, onEdit, onDelete, onAddChild, onSelectOrg, selectedOrgId, expanded, toggleExpand, peopleCounts,
 }: {
   node: OrgNode; depth: number; orgTypes: string[];
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void;
   onAddChild: (parentId: string) => void;
+  onSelectOrg: (id: string) => void; selectedOrgId: string;
   expanded: Set<string>; toggleExpand: (id: string) => void;
+  peopleCounts: Record<string, number>;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
+  const isSelected = selectedOrgId === node.id;
+  const count = peopleCounts[node.id] || 0;
 
   return (
     <div>
@@ -94,58 +143,49 @@ function OrgTreeNode({
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 14px', paddingLeft: 14 + depth * 24,
           borderBottom: '1px solid var(--color-border)',
-          transition: 'background 0.1s',
+          background: isSelected ? 'var(--color-primary-light)' : undefined,
+          cursor: 'pointer', transition: 'background 0.1s',
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+        onClick={() => onSelectOrg(node.id)}
+        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
       >
-        {/* Expand toggle */}
         <span
-          onClick={() => hasChildren && toggleExpand(node.id)}
-          style={{
-            width: 16, fontSize: 11, color: 'var(--color-text-muted)',
-            cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none',
-          }}
+          onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(node.id); }}
+          style={{ width: 16, fontSize: 11, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none' }}
         >
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
 
-        {/* Info */}
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontWeight: 500, fontSize: 14 }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
+            {count > 0 && (
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '1px 6px', borderRadius: 10 }}>
+                {count} {count === 1 ? 'person' : 'people'}
+              </span>
+            )}
           </div>
           {node.description && (
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>{node.description}</div>
           )}
         </div>
 
-        {/* Industry */}
-        {node.industry && (
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{node.industry}</span>
-        )}
+        {node.industry && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{node.industry}</span>}
 
-        {/* Children count */}
-        {hasChildren && (
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{node.children.length} sub</span>
-        )}
-
-        {/* Actions */}
-        <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={() => onAddChild(node.id)} title="Add child">+</button>
-        <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={() => onEdit(node)} title="Edit">Edit</button>
+        <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id); }} title="Add child org">+</button>
+        <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
         {node.id !== '00000000-0000-0000-0000-000000000010' && (
-          <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => onDelete(node.id)} title="Delete">Del</button>
+          <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Del</button>
         )}
       </div>
 
-      {/* Children */}
       {isExpanded && node.children.map((child) => (
-        <OrgTreeNode
-          key={child.id} node={child} depth={depth + 1} orgTypes={orgTypes}
+        <OrgTreeNode key={child.id} node={child} depth={depth + 1} orgTypes={orgTypes}
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
-          expanded={expanded} toggleExpand={toggleExpand}
-        />
+          onSelectOrg={onSelectOrg} selectedOrgId={selectedOrgId}
+          expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts} />
       ))}
     </div>
   );
@@ -154,246 +194,394 @@ function OrgTreeNode({
 // ── Main Component ──
 
 export default function OrganizationsPage() {
+  const [activeTab, setActiveTab] = useState<'structure' | 'people'>('structure');
+
+  // Org state
   const [tree, setTree] = useState<OrgNode[]>([]);
   const [flatOrgs, setFlatOrgs] = useState<OrgFlat[]>([]);
   const [orgTypes, setOrgTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['00000000-0000-0000-0000-000000000010']));
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormData>(emptyForm);
+  const [showOrgForm, setShowOrgForm] = useState(false);
+  const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+  const [orgForm, setOrgForm] = useState<OrgFormData>(emptyOrgForm);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [importParent, setImportParent] = useState('');
 
+  // People state
+  const [people, setPeople] = useState<Person[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [showPersonForm, setShowPersonForm] = useState(false);
+  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
+  const [personForm, setPersonForm] = useState<PersonFormData>(emptyPersonForm);
+  const [selectedOrgId, setSelectedOrgId] = useState('');
+
   const fetchData = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>('/organizations');
-      setTree(res.tree || []);
-      setFlatOrgs(res.data || []);
-      setOrgTypes(res.orgTypes || []);
+      const [orgRes, peopleRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>('/organizations'),
+        apiClient.get<{ success: boolean; data: Person[]; roles: string[] }>('/people'),
+      ]);
+      setTree(orgRes.tree || []);
+      setFlatOrgs(orgRes.data || []);
+      setOrgTypes(orgRes.orgTypes || []);
+      setPeople(peopleRes.data || []);
+      setRoles(peopleRes.roles || []);
     } catch { /* */ }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // People count per org
+  const peopleCounts: Record<string, number> = {};
+  for (const p of people) {
+    peopleCounts[p.orgId] = (peopleCounts[p.orgId] || 0) + 1;
+  }
+
+  const filteredPeople = selectedOrgId ? people.filter((p) => p.orgId === selectedOrgId) : people;
+  const selectedOrgName = selectedOrgId ? flatOrgs.find((o) => o.id === selectedOrgId)?.name || '' : '';
+
+  // ── Org handlers ──
+
   const toggleExpand = (id: string) => {
     setExpanded((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
-
   const expandAll = () => setExpanded(new Set(flatOrgs.map((o) => o.id)));
 
-  const openAdd = (parentId: string | null = null) => {
-    setForm({ ...emptyForm, parentId });
-    setEditingId(null);
-    setShowForm(true);
+  const openAddOrg = (parentId: string | null = null) => {
+    setOrgForm({ ...emptyOrgForm, parentId }); setEditingOrgId(null); setShowOrgForm(true);
   };
-
-  const openEdit = (org: OrgFlat) => {
-    setForm({ name: org.name, parentId: org.parentId, type: org.type, industry: org.industry, description: org.description });
-    setEditingId(org.id);
-    setShowForm(true);
+  const openEditOrg = (org: OrgFlat) => {
+    setOrgForm({ name: org.name, parentId: org.parentId, type: org.type, industry: org.industry, description: org.description });
+    setEditingOrgId(org.id); setShowOrgForm(true);
   };
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return;
-    if (editingId) {
-      await apiClient.put(`/organizations/${editingId}`, form);
-    } else {
-      await apiClient.post('/organizations', form);
-    }
-    setShowForm(false); setEditingId(null); setForm(emptyForm); fetchData();
+  const handleSaveOrg = async () => {
+    if (!orgForm.name.trim()) return;
+    if (editingOrgId) { await apiClient.put(`/organizations/${editingOrgId}`, orgForm); }
+    else { await apiClient.post('/organizations', orgForm); }
+    setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData();
   };
-
-  const handleDelete = async (id: string) => {
-    try {
-      await apiClient.delete(`/organizations/${id}`);
-      fetchData();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Cannot delete');
-    }
+  const handleDeleteOrg = async (id: string) => {
+    try { await apiClient.delete(`/organizations/${id}`); fetchData(); }
+    catch (e) { alert(e instanceof Error ? e.message : 'Cannot delete'); }
   };
-
   const handleImport = async () => {
     if (!importText.trim()) return;
     try {
       const body: any = { parentId: importParent || null };
-      if (importFormat === 'csv') {
-        body.csv = importText;
-      } else {
-        body.organizations = JSON.parse(importText);
-      }
+      if (importFormat === 'csv') { body.csv = importText; } else { body.organizations = JSON.parse(importText); }
       await apiClient.post('/organizations/import', body);
-      setShowImport(false); setImportText(''); fetchData();
-      expandAll();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Import failed');
-    }
+      setShowImport(false); setImportText(''); fetchData(); expandAll();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+  };
+
+  // ── People handlers ──
+
+  const openAddPerson = () => {
+    setPersonForm({ ...emptyPersonForm, orgId: selectedOrgId || (flatOrgs.length > 0 ? flatOrgs[0].id : '') });
+    setEditingPersonId(null); setShowPersonForm(true);
+  };
+  const openEditPerson = (person: Person) => {
+    setPersonForm({ orgId: person.orgId, name: person.name, email: person.email, role: person.role, department: person.department, title: person.title });
+    setEditingPersonId(person.id); setShowPersonForm(true);
+  };
+  const handleSavePerson = async () => {
+    if (!personForm.name.trim() || !personForm.orgId) return;
+    if (editingPersonId) { await apiClient.put(`/people/${editingPersonId}`, personForm); }
+    else { await apiClient.post('/people', personForm); }
+    setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm); fetchData();
+  };
+  const handleDeletePerson = async (id: string) => {
+    await apiClient.delete(`/people/${id}`); fetchData();
+  };
+
+  const handleSelectOrg = (id: string) => {
+    setSelectedOrgId(id === selectedOrgId ? '' : id);
+    if (activeTab === 'structure') setActiveTab('people');
   };
 
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Organizations</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Define your organizational hierarchy — companies, divisions, departments, and teams.
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Organizations</h1>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            Manage your organizational hierarchy and the people within it.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setShowImport(true)} style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            Import Structure
-          </button>
-          <button onClick={() => openAdd(null)} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            + Add Organization
-          </button>
+          {activeTab === 'structure' && (
+            <>
+              <button onClick={() => setShowImport(true)} style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                Import Structure
+              </button>
+              <button onClick={() => openAddOrg(null)} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+                + Add Organization
+              </button>
+            </>
+          )}
+          {activeTab === 'people' && (
+            <button onClick={openAddPerson} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+              + Add Person
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Import Panel */}
-      {showImport && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Import Organization Structure</h3>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-            <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-              <input type="radio" checked={importFormat === 'csv'} onChange={() => setImportFormat('csv')} /> CSV
-            </label>
-            <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-              <input type="radio" checked={importFormat === 'json'} onChange={() => setImportFormat('json')} /> JSON
-            </label>
-            <div style={{ flex: 1 }}>
-              <select style={{ ...inputStyle, appearance: 'auto' as any, width: 'auto', minWidth: 200 }} value={importParent} onChange={(e) => setImportParent(e.target.value)}>
-                <option value="">Import as top-level</option>
-                {flatOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
-              </select>
-            </div>
-          </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
+        <button style={tabStyle(activeTab === 'structure')} onClick={() => setActiveTab('structure')}>
+          Structure ({flatOrgs.length})
+        </button>
+        <button style={tabStyle(activeTab === 'people')} onClick={() => setActiveTab('people')}>
+          People ({people.length})
+          {selectedOrgId && <span style={{ fontSize: 11, marginLeft: 4 }}>— {selectedOrgName}</span>}
+        </button>
+      </div>
 
-          {importFormat === 'csv' ? (
-            <div>
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                CSV columns: <strong>Name</strong> (required), Parent, Type (company/division/department/team/unit), Industry, Description
-              </p>
-              <textarea
-                style={{ ...inputStyle, minHeight: 150, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder={`Name,Parent,Type,Industry,Description\nAcme Corporation,,company,Manufacturing,Parent company\nOperations,Acme Corporation,division,,Operations division\nProduction,Operations,department,,Manufacturing production\nQuality Assurance,Operations,department,,QA and testing\nFinance,Acme Corporation,division,,Financial services\nAccounting,Finance,department,,General accounting\nAudit,Finance,department,,Internal audit`}
-              />
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{flatOrgs.length}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organizations</div>
+        </div>
+        <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{people.length}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>People</div>
+        </div>
+        {(['company', 'division', 'department', 'team'] as const).map((t) => {
+          const count = flatOrgs.filter((o) => o.type === t).length;
+          if (count === 0) return null;
+          return (
+            <div key={t} style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{count}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.charAt(0).toUpperCase() + t.slice(1)}s</div>
             </div>
-          ) : (
-            <div>
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                JSON array of objects with: <strong>name</strong> (required), parentName, type, industry, description
-              </p>
+          );
+        })}
+      </div>
+
+      {/* ═══ STRUCTURE TAB ═══ */}
+      {activeTab === 'structure' && (
+        <>
+          {/* Import Panel */}
+          {showImport && (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Import Organization Structure</h3>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input type="radio" checked={importFormat === 'csv'} onChange={() => setImportFormat('csv')} /> CSV
+                </label>
+                <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input type="radio" checked={importFormat === 'json'} onChange={() => setImportFormat('json')} /> JSON
+                </label>
+                <div style={{ flex: 1 }}>
+                  <select style={{ ...inputStyle, appearance: 'auto' as any, width: 'auto', minWidth: 200 }} value={importParent} onChange={(e) => setImportParent(e.target.value)}>
+                    <option value="">Import as top-level</option>
+                    {flatOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                  </select>
+                </div>
+              </div>
               <textarea
-                style={{ ...inputStyle, minHeight: 150, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
-                placeholder={`[\n  { "name": "Acme Corporation", "type": "company", "industry": "Manufacturing" },\n  { "name": "Operations", "parentName": "Acme Corporation", "type": "division" },\n  { "name": "Production", "parentName": "Operations", "type": "department" }\n]`}
+                placeholder={importFormat === 'csv'
+                  ? `Name,Parent,Type,Industry,Description\nAcme Corporation,,company,Manufacturing,Parent company\nOperations,Acme Corporation,division,,Operations division`
+                  : `[\n  { "name": "Acme Corp", "type": "company" },\n  { "name": "Operations", "parentName": "Acme Corp", "type": "division" }\n]`}
               />
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
+                <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1 }} disabled={!importText.trim()} onClick={handleImport}>Import</button>
+              </div>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1 }} disabled={!importText.trim()} onClick={handleImport}>
-              Import
-            </button>
+          {/* Add/Edit Org Form */}
+          {showOrgForm && (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
+                  <input autoFocus style={inputStyle} value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} placeholder="Organization name" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
+                  <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
+                    {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent</label>
+                  <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
+                    <option value="">-- No parent (top-level) --</option>
+                    {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
+                  <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.industry} onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}>
+                    <option value="">-- Select --</option>
+                    {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
+                  </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
+                  <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+                <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); }}>Cancel</button>
+                <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1 }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
+                  {editingOrgId ? 'Save Changes' : 'Add Organization'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Toolbar */}
+          {flatOrgs.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
+              <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+                Click an organization to view its people
+              </span>
+            </div>
+          )}
+
+          {/* Tree */}
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+            {loading ? (
+              <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+            ) : tree.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                <p style={{ color: 'var(--color-text-muted)' }}>No organizations defined yet. Use the + Add Organization button above to get started.</p>
+              </div>
+            ) : (
+              tree.map((node) => (
+                <OrgTreeNode key={node.id} node={node} depth={0} orgTypes={orgTypes}
+                  onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
+                  onSelectOrg={handleSelectOrg} selectedOrgId={selectedOrgId}
+                  expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts} />
+              ))
+            )}
           </div>
-        </div>
+        </>
       )}
 
-      {/* Add/Edit Form */}
-      {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Organization' : 'Add Organization'}
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Organization name" />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent Organization</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
-                <option value="">-- No parent (top-level) --</option>
-                {flatOrgs.filter((o) => o.id !== editingId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })}>
-                <option value="">-- Select industry --</option>
-                {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description" />
-            </div>
+      {/* ═══ PEOPLE TAB ═══ */}
+      {activeTab === 'people' && (
+        <>
+          {/* Filter bar */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+            <label style={{ fontSize: 12, fontWeight: 500 }}>Filter by org:</label>
+            <select style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any }} value={selectedOrgId} onChange={(e) => setSelectedOrgId(e.target.value)}>
+              <option value="">All Organizations ({people.length})</option>
+              {flatOrgs.map((org) => (
+                <option key={org.id} value={org.id}>{org.name} ({peopleCounts[org.id] || 0})</option>
+              ))}
+            </select>
+            {selectedOrgId && (
+              <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 12 }} onClick={() => setSelectedOrgId('')}>Clear filter</button>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={handleSave}>
-              {editingId ? 'Save Changes' : 'Add Organization'}
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Stats */}
-      {flatOrgs.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{flatOrgs.length}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Orgs</div>
-          </div>
-          {(['company', 'division', 'department', 'team'] as const).map((t) => (
-            <div key={t} style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{flatOrgs.filter((o) => o.type === t).length}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{t.charAt(0).toUpperCase() + t.slice(1)}s</div>
+          {/* Add/Edit Person Form */}
+          {showPersonForm && (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingPersonId ? 'Edit Person' : 'Add Person'}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
+                  <input autoFocus style={inputStyle} value={personForm.name} onChange={(e) => setPersonForm({ ...personForm, name: e.target.value })} placeholder="Full name" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Email</label>
+                  <input style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
+                  <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.orgId} onChange={(e) => setPersonForm({ ...personForm, orgId: e.target.value })}>
+                    <option value="">-- Select --</option>
+                    {flatOrgs.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Role</label>
+                  <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
+                    {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title</label>
+                  <input style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Department</label>
+                  <input style={inputStyle} value={personForm.department} onChange={(e) => setPersonForm({ ...personForm, department: e.target.value })} placeholder="e.g. Operations, IT" />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+                <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); }}>Cancel</button>
+                <button style={{ ...btnPrimary, opacity: !personForm.name.trim() || !personForm.orgId ? 0.6 : 1 }} disabled={!personForm.name.trim() || !personForm.orgId} onClick={handleSavePerson}>
+                  {editingPersonId ? 'Save Changes' : 'Add Person'}
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* Toolbar */}
-      {flatOrgs.length > 1 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-          <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
-        </div>
-      )}
-
-      {/* Tree */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-        {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
-        ) : tree.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>No organizations defined yet. Use the + Add Organization button above to get started.</p>
+          {/* People Table */}
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+            {loading ? (
+              <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+            ) : filteredPeople.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+                <p style={{ color: 'var(--color-text-muted)' }}>
+                  {selectedOrgId ? 'No people in this organization.' : 'No people defined yet.'} Use the + Add Person button above.
+                </p>
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Email</th>
+                    {!selectedOrgId && <th style={thStyle}>Organization</th>}
+                    <th style={thStyle}>Role</th>
+                    <th style={thStyle}>Title</th>
+                    <th style={thStyle}>Department</th>
+                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPeople.map((person) => (
+                    <tr key={person.id} style={{ transition: 'background 0.1s' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>{person.name}</td>
+                      <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>{person.email || '--'}</td>
+                      {!selectedOrgId && <td style={tdStyle}>{flatOrgs.find((o) => o.id === person.orgId)?.name || '--'}</td>}
+                      <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
+                      <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                      <td style={tdStyle}>{person.department || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEditPerson(person)}>Edit</button>
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => handleDeletePerson(person.id)}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
-        ) : (
-          tree.map((node) => (
-            <OrgTreeNode
-              key={node.id} node={node} depth={0} orgTypes={orgTypes}
-              onEdit={openEdit} onDelete={handleDelete} onAddChild={(pid) => openAdd(pid)}
-              expanded={expanded} toggleExpand={toggleExpand}
-            />
-          ))
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
