@@ -34,10 +34,34 @@
 
 .sidebarNav {
   flex: 1;
-  padding: 12px 0;
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  overflow-y: auto;
+}
+
+.navGroup {
+  padding: 0;
+}
+
+.navGroupLabel {
+  padding: 16px 24px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.navSpacer {
+  flex: 1;
+}
+
+.navDivider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 24px;
 }
 
 .navLink {

@@ -5,16 +5,42 @@ import styles from './Layout.module.css';
 import ChatPanel from './ChatPanel';
 import { useAuthStore } from '@/stores/authStore';
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: '\u25A3' },
-  { to: '/processes', label: 'Processes', icon: '\u2630' },
-  { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
-  { to: '/systems', label: 'Systems', icon: '\u2699' },
-  { to: '/mappings', label: 'Mappings', icon: '\u2194' },
-  { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
-  { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+type NavItem = { to: string; label: string; icon: string };
+type NavSection = { label: string | null; items: NavItem[] };
+
+const navSections: NavSection[] = [
+  {
+    label: null, // standalone top item
+    items: [
+      { to: '/', label: 'Dashboard', icon: '\u25A3' },
+    ],
+  },
+  {
+    label: 'Define',
+    items: [
+      { to: '/processes', label: 'Processes', icon: '\u2630' },
+      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+      { to: '/systems', label: 'Systems', icon: '\u2699' },
+      { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
+    ],
+  },
+  {
+    label: 'Connect',
+    items: [
+      { to: '/mappings', label: 'Mappings', icon: '\u2194' },
+    ],
+  },
+  {
+    label: 'Analyze',
+    items: [
+      { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
+    ],
+  },
+];
+
+const bottomNavItems: NavItem[] = [
   { to: '/settings', label: 'Settings', icon: '\u2731' },
-  { to: '/help', label: 'Help Guide', icon: '\u003F' },
+  { to: '/help', label: 'Help', icon: '\u003F' },
 ];
 
 export default function Layout() {
@@ -47,11 +73,34 @@ export default function Layout() {
           <span>Procela</span>
         </div>
         <nav className={styles.sidebarNav}>
-          {navItems.map((item) => (
+          {navSections.map((section, sIdx) => (
+            <div key={sIdx} className={styles.navGroup}>
+              {section.label && (
+                <div className={styles.navGroupLabel}>{section.label}</div>
+              )}
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={({ isActive }) =>
+                    clsx(styles.navLink, isActive && styles.navLinkActive)
+                  }
+                >
+                  <span className={styles.navIcon}>{item.icon}</span>
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+
+          <div className={styles.navSpacer} />
+          <div className={styles.navDivider} />
+
+          {bottomNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
               className={({ isActive }) =>
                 clsx(styles.navLink, isActive && styles.navLinkActive)
               }
