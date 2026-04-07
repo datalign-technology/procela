@@ -382,8 +382,7 @@ export default function OrganizationsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : tree.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>No organizations defined yet.</p>
-            <button onClick={() => openAdd(null)} style={btnPrimary}>+ Add First Organization</button>
+            <p style={{ color: 'var(--color-text-muted)' }}>No organizations defined yet. Use the + Add Organization button above to get started.</p>
           </div>
         ) : (
           tree.map((node) => (

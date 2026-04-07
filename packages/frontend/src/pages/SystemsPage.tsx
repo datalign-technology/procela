@@ -260,8 +260,7 @@ export default function SystemsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : systems.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>No systems defined yet.</p>
-            <button onClick={openAdd} style={btnPrimary}>+ Add First System</button>
+            <p style={{ color: 'var(--color-text-muted)' }}>No systems defined yet. Use the + Add System button above to get started.</p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

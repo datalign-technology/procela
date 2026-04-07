@@ -431,12 +431,9 @@ export default function MappingsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : mappings.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>
-              No mappings defined yet. Link data assets to process steps to get started.
+            <p style={{ color: 'var(--color-text-muted)' }}>
+              No mappings defined yet. Use the + Add Mapping button above to link data assets to process steps.
             </p>
-            <button onClick={openForm} style={btnPrimary}>
-              + Add First Mapping
-            </button>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

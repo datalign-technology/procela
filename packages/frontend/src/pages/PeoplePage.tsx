@@ -230,10 +230,9 @@ export default function PeoplePage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : filteredPeople.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>
-              {filterOrg ? 'No people in this organization.' : 'No people defined yet.'}
+            <p style={{ color: 'var(--color-text-muted)' }}>
+              {filterOrg ? 'No people in this organization.' : 'No people defined yet. Use the + Add Person button above to get started.'}
             </p>
-            <button onClick={openAdd} style={btnPrimary}>+ Add First Person</button>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
