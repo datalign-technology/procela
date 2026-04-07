@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { aiService } from '../services/ai.service';
 import { INDUSTRIES, Industry } from '../types';
+import logger from '../lib/logger';
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.post('/generate-template', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: template });
   } catch (err) {
-    console.error('[AI] Template generation failed:', err);
+    logger.error({ err }, 'Template generation failed');
     res.status(500).json({
       success: false,
       error: 'Failed to generate industry template. Please try again.',

@@ -1,0 +1,163 @@
+import { Router, Request, Response } from 'express';
+import { v4 as uuid } from 'uuid';
+import { valueStreams } from './process-catalog';
+import { dataAssets } from './data-assets';
+
+// ── Types ──
+
+interface StoredMapping {
+  id: string;
+  orgId: string;
+  processStepId: string;
+  dataAssetId: string;
+  linkType: string;
+  notes: string;
+  aiSuggested: boolean;
+  userOverridden: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const mappings: StoredMapping[] = [];
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
+const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
+
+// ── Helpers ──
+
+function findStepInfo(stepId: string) {
+  for (const vs of valueStreams) {
+    for (const proc of vs.processes) {
+      for (const sp of proc.subProcesses) {
+        const step = sp.steps.find((s) => s.id === stepId);
+        if (step) {
+          return {
+            stepId: step.id,
+            stepName: step.name,
+            subProcessId: sp.id,
+            subProcessName: sp.name,
+            processId: proc.id,
+            processName: proc.name,
+            valueStreamId: vs.id,
+            valueStreamName: vs.name,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findAssetInfo(assetId: string) {
+  const asset = dataAssets.find((a) => a.id === assetId);
+  if (!asset) return null;
+  return {
+    assetId: asset.id,
+    assetName: asset.name,
+    assetDescription: asset.description,
+    governanceTier: asset.governanceTier,
+    healthScore: asset.healthScore,
+  };
+}
+
+function enrichMapping(m: StoredMapping) {
+  return {
+    ...m,
+    stepInfo: findStepInfo(m.processStepId),
+    assetInfo: findAssetInfo(m.dataAssetId),
+  };
+}
+
+const router = Router();
+
+/** GET /api/v1/mappings */
+router.get('/', (_req: Request, res: Response) => {
+  const enriched = mappings.map(enrichMapping);
+  res.json({ success: true, data: enriched });
+});
+
+/** GET /api/v1/mappings/by-step/:stepId */
+router.get('/by-step/:stepId', (req: Request, res: Response) => {
+  const filtered = mappings.filter((m) => m.processStepId === req.params.stepId);
+  res.json({ success: true, data: filtered.map(enrichMapping) });
+});
+
+/** GET /api/v1/mappings/by-asset/:assetId */
+router.get('/by-asset/:assetId', (req: Request, res: Response) => {
+  const filtered = mappings.filter((m) => m.dataAssetId === req.params.assetId);
+  res.json({ success: true, data: filtered.map(enrichMapping) });
+});
+
+/** POST /api/v1/mappings */
+router.post('/', (req: Request, res: Response) => {
+  const { processStepId, dataAssetId, linkType, notes, aiSuggested } = req.body;
+
+  if (!processStepId) {
+    res.status(400).json({ success: false, error: 'processStepId is required' });
+    return;
+  }
+  if (!dataAssetId) {
+    res.status(400).json({ success: false, error: 'dataAssetId is required' });
+    return;
+  }
+  if (linkType && !VALID_LINK_TYPES.includes(linkType)) {
+    res.status(400).json({ success: false, error: `linkType must be one of: ${VALID_LINK_TYPES.join(', ')}` });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const mapping: StoredMapping = {
+    id: uuid(),
+    orgId: DEV_ORG_ID,
+    processStepId,
+    dataAssetId,
+    linkType: linkType || 'references',
+    notes: notes || '',
+    aiSuggested: aiSuggested === true,
+    userOverridden: false,
+    createdBy: 'dev-user',
+    createdAt: now,
+    updatedAt: now,
+  };
+  mappings.push(mapping);
+  res.status(201).json({ success: true, data: enrichMapping(mapping) });
+});
+
+/** PUT /api/v1/mappings/:id */
+router.put('/:id', (req: Request, res: Response) => {
+  const mapping = mappings.find((m) => m.id === req.params.id);
+  if (!mapping) {
+    res.status(404).json({ success: false, error: 'Mapping not found' });
+    return;
+  }
+
+  const { processStepId, dataAssetId, linkType, notes, aiSuggested, userOverridden } = req.body;
+  if (processStepId !== undefined) mapping.processStepId = processStepId;
+  if (dataAssetId !== undefined) mapping.dataAssetId = dataAssetId;
+  if (linkType !== undefined) {
+    if (!VALID_LINK_TYPES.includes(linkType)) {
+      res.status(400).json({ success: false, error: `linkType must be one of: ${VALID_LINK_TYPES.join(', ')}` });
+      return;
+    }
+    mapping.linkType = linkType;
+  }
+  if (notes !== undefined) mapping.notes = notes;
+  if (aiSuggested !== undefined) mapping.aiSuggested = aiSuggested === true;
+  if (userOverridden !== undefined) mapping.userOverridden = userOverridden === true;
+  mapping.updatedAt = new Date().toISOString();
+  res.json({ success: true, data: enrichMapping(mapping) });
+});
+
+/** DELETE /api/v1/mappings/:id */
+router.delete('/:id', (req: Request, res: Response) => {
+  const idx = mappings.findIndex((m) => m.id === req.params.id);
+  if (idx === -1) {
+    res.status(404).json({ success: false, error: 'Mapping not found' });
+    return;
+  }
+  mappings.splice(idx, 1);
+  res.status(204).send();
+});
+
+export default router;

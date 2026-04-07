@@ -11,13 +11,18 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import config from './config';
+import logger from './lib/logger';
 import { errorHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
+import authRouter from './routes/auth';
 import aiRouter from './routes/ai';
 import processCatalogRouter from './routes/process-catalog';
 import systemsRouter from './routes/systems';
+import dataAssetsRouter from './routes/data-assets';
 import organizationsRouter from './routes/organizations';
 import peopleRouter from './routes/people';
+import mappingsRouter from './routes/mappings';
+import dashboardRouter from './routes/dashboard';
 
 const app = express();
 
@@ -35,20 +40,14 @@ app.use(express.json());
 // ---------------------------------------------------------------------------
 app.use('/api/v1/health', healthRouter);
 
-// Placeholder route groups -- implementations will be added in future modules
-app.use('/api/v1/auth', (_req, res) => {
-  res.json({ message: 'Auth routes - not yet implemented' });
-});
+app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/organizations', organizationsRouter);
 app.use('/api/v1/people', peopleRouter);
 app.use('/api/v1/process-catalog', processCatalogRouter);
-app.use('/api/v1/data-assets', (_req, res) => {
-  res.json({ message: 'Data asset routes - not yet implemented' });
-});
+app.use('/api/v1/data-assets', dataAssetsRouter);
 app.use('/api/v1/systems', systemsRouter);
-app.use('/api/v1/mappings', (_req, res) => {
-  res.json({ message: 'Mapping routes - not yet implemented' });
-});
+app.use('/api/v1/mappings', mappingsRouter);
+app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/ai', aiRouter);
 
 // ---------------------------------------------------------------------------
@@ -62,7 +61,7 @@ app.use(errorHandler);
 const PORT = config.port;
 
 app.listen(PORT, () => {
-  console.log(`[Procela] Server running on port ${PORT} (${config.nodeEnv})`);
+  logger.info({ port: PORT, env: config.nodeEnv }, 'Procela server started');
 });
 
 export default app;

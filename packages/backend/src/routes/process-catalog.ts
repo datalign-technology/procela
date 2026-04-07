@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import logger from '../lib/logger';
 
 // ── In-memory store (replace with Prisma once DB is migrated) ──
 
@@ -41,7 +42,7 @@ interface StoredValueStream {
   processes: StoredProcess[];
 }
 
-const valueStreams: StoredValueStream[] = [];
+export const valueStreams: StoredValueStream[] = [];
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
@@ -272,7 +273,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
       valueStreams.push(vs);
       created.push(vs);
     }
-    console.log(`[ProcessCatalog] Applied template: ${created.length} value streams from "${industry}"`);
+    logger.info({ count: created.length, industry }, 'Applied template');
     res.status(201).json({ success: true, data: created });
   } catch (err) {
     console.error('[ProcessCatalog] Apply template failed:', err);

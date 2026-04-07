@@ -13,7 +13,7 @@ interface StoredSystem {
   updatedAt: string;
 }
 
-const systems: StoredSystem[] = [];
+export const systems: StoredSystem[] = [];
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const SYSTEM_TYPES = [

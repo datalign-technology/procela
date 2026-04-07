@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import pino from 'pino';
 import config from '../config';
-
-const logger = pino({ level: config.logLevel });
+import logger from '../lib/logger';
 
 export class AppError extends Error {
   public readonly statusCode: number;
