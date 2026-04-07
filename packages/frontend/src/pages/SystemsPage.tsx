@@ -159,11 +159,9 @@ export default function SystemsPage() {
             Applications and platforms where your organization's data lives.
           </p>
         </div>
-        {systems.length > 0 && (
-          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            + Add System
-          </button>
-        )}
+        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+          + Add System
+        </button>
       </div>
 
       {/* Add/Edit Form */}
@@ -263,7 +261,7 @@ export default function SystemsPage() {
         ) : systems.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
             <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>No systems defined yet.</p>
-            <button onClick={openAdd} style={btnPrimary}>+ Add Your First System</button>
+            <button onClick={openAdd} style={btnPrimary}>+ Add First System</button>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

@@ -148,11 +148,9 @@ export default function PeoplePage() {
             Manage people, their roles, and organization assignments.
           </p>
         </div>
-        {people.length > 0 && (
-          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            + Add Person
-          </button>
-        )}
+        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+          + Add Person
+        </button>
       </div>
 
       {/* Add/Edit Form */}
@@ -235,7 +233,7 @@ export default function PeoplePage() {
             <p style={{ color: 'var(--color-text-muted)', marginBottom: 16 }}>
               {filterOrg ? 'No people in this organization.' : 'No people defined yet.'}
             </p>
-            <button onClick={openAdd} style={btnPrimary}>+ Add Your First Person</button>
+            <button onClick={openAdd} style={btnPrimary}>+ Add First Person</button>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
