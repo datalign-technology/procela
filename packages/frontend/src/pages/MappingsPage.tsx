@@ -128,36 +128,6 @@ function formatStepPath(info: StepInfo): string {
   return `${info.valueStreamName} > ${info.processName} > ${info.subProcessName} > ${info.stepName}`;
 }
 
-interface FlatStep {
-  stepId: string;
-  label: string;
-  vsName: string;
-  procName: string;
-  spName: string;
-  stepName: string;
-}
-
-function flattenSteps(valueStreams: StoredValueStream[]): FlatStep[] {
-  const result: FlatStep[] = [];
-  for (const vs of valueStreams) {
-    for (const proc of vs.processes) {
-      for (const sp of proc.subProcesses) {
-        for (const step of sp.steps) {
-          result.push({
-            stepId: step.id,
-            label: `${vs.name} > ${proc.name} > ${sp.name} > ${step.name}`,
-            vsName: vs.name,
-            procName: proc.name,
-            spName: sp.name,
-            stepName: step.name,
-          });
-        }
-      }
-    }
-  }
-  return result;
-}
-
 // ── Component ──
 
 export default function MappingsPage() {
@@ -249,7 +219,6 @@ export default function MappingsPage() {
   const aiSuggestedCount = mappings.filter((m) => m.aiSuggested).length;
   const manualCount = totalMappings - aiSuggestedCount;
 
-  const allSteps = flattenSteps(valueStreams);
   const canSave = selectedStepId && selectedAssetId;
 
   return (

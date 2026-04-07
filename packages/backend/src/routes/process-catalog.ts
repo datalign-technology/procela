@@ -49,6 +49,10 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 // ── Helpers ──
 
+function p(val: string | string[]): string {
+  return Array.isArray(val) ? val[0] : val;
+}
+
 function findVs(id: string) {
   return valueStreams.find((v) => v.id === id);
 }
@@ -74,7 +78,7 @@ router.get('/value-streams', (_req: Request, res: Response) => {
 });
 
 router.get('/value-streams/:id', (req: Request, res: Response) => {
-  const vs = findVs(req.params.id);
+  const vs = findVs(p(req.params.id));
   if (!vs) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
   res.json({ success: true, data: vs });
 });
@@ -94,7 +98,7 @@ router.post('/value-streams', (req: Request, res: Response) => {
 });
 
 router.put('/value-streams/:id', (req: Request, res: Response) => {
-  const vs = findVs(req.params.id);
+  const vs = findVs(p(req.params.id));
   if (!vs) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
   const { name, description, status, orgIds } = req.body;
   if (name !== undefined) vs.name = name;
@@ -107,7 +111,7 @@ router.put('/value-streams/:id', (req: Request, res: Response) => {
 });
 
 router.delete('/value-streams/:id', (req: Request, res: Response) => {
-  const idx = valueStreams.findIndex((v) => v.id === req.params.id);
+  const idx = valueStreams.findIndex((v) => v.id === p(req.params.id));
   if (idx === -1) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
   const deleted = valueStreams[idx];
   auditService.log(DEV_ORG_ID, null, 'ValueStream', deleted.id, 'DELETE', deleted, null);
@@ -120,7 +124,7 @@ router.delete('/value-streams/:id', (req: Request, res: Response) => {
 // ═══════════════════════════════════════════
 
 router.post('/value-streams/:vsId/processes', (req: Request, res: Response) => {
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (!vs) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
   const { name, description } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
@@ -134,22 +138,23 @@ router.post('/value-streams/:vsId/processes', (req: Request, res: Response) => {
 });
 
 router.put('/value-streams/:vsId/processes/:procId', (req: Request, res: Response) => {
-  const proc = findProcess(req.params.vsId, req.params.procId);
+  const proc = findProcess(p(req.params.vsId), p(req.params.procId));
   if (!proc) { res.status(404).json({ success: false, error: 'Process not found' }); return; }
   const { name, description, status, orderIndex } = req.body;
   if (name !== undefined) proc.name = name;
   if (description !== undefined) proc.description = description;
   if (status !== undefined) proc.status = status;
   if (orderIndex !== undefined) proc.orderIndex = orderIndex;
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.json({ success: true, data: proc });
 });
 
 router.delete('/value-streams/:vsId/processes/:procId', (req: Request, res: Response) => {
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (!vs) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
-  const idx = vs.processes.findIndex((p) => p.id === req.params.procId);
+  const procId = p(req.params.procId);
+  const idx = vs.processes.findIndex((proc) => proc.id === procId);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Process not found' }); return; }
   vs.processes.splice(idx, 1);
   vs.updatedAt = new Date().toISOString();
@@ -161,7 +166,7 @@ router.delete('/value-streams/:vsId/processes/:procId', (req: Request, res: Resp
 // ═══════════════════════════════════════════
 
 router.post('/value-streams/:vsId/processes/:procId/sub-processes', (req: Request, res: Response) => {
-  const proc = findProcess(req.params.vsId, req.params.procId);
+  const proc = findProcess(p(req.params.vsId), p(req.params.procId));
   if (!proc) { res.status(404).json({ success: false, error: 'Process not found' }); return; }
   const { name, description } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
@@ -170,31 +175,31 @@ router.post('/value-streams/:vsId/processes/:procId/sub-processes', (req: Reques
     orderIndex: proc.subProcesses.length, status: 'DRAFT', steps: [],
   };
   proc.subProcesses.push(sp);
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.status(201).json({ success: true, data: sp });
 });
 
 router.put('/value-streams/:vsId/processes/:procId/sub-processes/:spId', (req: Request, res: Response) => {
-  const sp = findSubProcess(req.params.vsId, req.params.procId, req.params.spId);
+  const sp = findSubProcess(p(req.params.vsId), p(req.params.procId), p(req.params.spId));
   if (!sp) { res.status(404).json({ success: false, error: 'Sub-process not found' }); return; }
   const { name, description, status, orderIndex } = req.body;
   if (name !== undefined) sp.name = name;
   if (description !== undefined) sp.description = description;
   if (status !== undefined) sp.status = status;
   if (orderIndex !== undefined) sp.orderIndex = orderIndex;
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.json({ success: true, data: sp });
 });
 
 router.delete('/value-streams/:vsId/processes/:procId/sub-processes/:spId', (req: Request, res: Response) => {
-  const proc = findProcess(req.params.vsId, req.params.procId);
+  const proc = findProcess(p(req.params.vsId), p(req.params.procId));
   if (!proc) { res.status(404).json({ success: false, error: 'Process not found' }); return; }
-  const idx = proc.subProcesses.findIndex((sp) => sp.id === req.params.spId);
+  const idx = proc.subProcesses.findIndex((sp) => sp.id === p(req.params.spId));
   if (idx === -1) { res.status(404).json({ success: false, error: 'Sub-process not found' }); return; }
   proc.subProcesses.splice(idx, 1);
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.status(204).send();
 });
@@ -204,7 +209,7 @@ router.delete('/value-streams/:vsId/processes/:procId/sub-processes/:spId', (req
 // ═══════════════════════════════════════════
 
 router.post('/value-streams/:vsId/processes/:procId/sub-processes/:spId/steps', (req: Request, res: Response) => {
-  const sp = findSubProcess(req.params.vsId, req.params.procId, req.params.spId);
+  const sp = findSubProcess(p(req.params.vsId), p(req.params.procId), p(req.params.spId));
   if (!sp) { res.status(404).json({ success: false, error: 'Sub-process not found' }); return; }
   const { name, description } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
@@ -213,33 +218,33 @@ router.post('/value-streams/:vsId/processes/:procId/sub-processes/:spId/steps', 
     orderIndex: sp.steps.length, status: 'DRAFT',
   };
   sp.steps.push(step);
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.status(201).json({ success: true, data: step });
 });
 
 router.put('/value-streams/:vsId/processes/:procId/sub-processes/:spId/steps/:stepId', (req: Request, res: Response) => {
-  const sp = findSubProcess(req.params.vsId, req.params.procId, req.params.spId);
+  const sp = findSubProcess(p(req.params.vsId), p(req.params.procId), p(req.params.spId));
   if (!sp) { res.status(404).json({ success: false, error: 'Sub-process not found' }); return; }
-  const step = sp.steps.find((s) => s.id === req.params.stepId);
+  const step = sp.steps.find((s) => s.id === p(req.params.stepId));
   if (!step) { res.status(404).json({ success: false, error: 'Step not found' }); return; }
   const { name, description, status, orderIndex } = req.body;
   if (name !== undefined) step.name = name;
   if (description !== undefined) step.description = description;
   if (status !== undefined) step.status = status;
   if (orderIndex !== undefined) step.orderIndex = orderIndex;
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.json({ success: true, data: step });
 });
 
 router.delete('/value-streams/:vsId/processes/:procId/sub-processes/:spId/steps/:stepId', (req: Request, res: Response) => {
-  const sp = findSubProcess(req.params.vsId, req.params.procId, req.params.spId);
+  const sp = findSubProcess(p(req.params.vsId), p(req.params.procId), p(req.params.spId));
   if (!sp) { res.status(404).json({ success: false, error: 'Sub-process not found' }); return; }
-  const idx = sp.steps.findIndex((s) => s.id === req.params.stepId);
+  const idx = sp.steps.findIndex((s) => s.id === p(req.params.stepId));
   if (idx === -1) { res.status(404).json({ success: false, error: 'Step not found' }); return; }
   sp.steps.splice(idx, 1);
-  const vs = findVs(req.params.vsId);
+  const vs = findVs(p(req.params.vsId));
   if (vs) vs.updatedAt = new Date().toISOString();
   res.status(204).send();
 });
