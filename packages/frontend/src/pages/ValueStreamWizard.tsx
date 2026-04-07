@@ -5,21 +5,16 @@ import { apiClient } from '../api/client';
 
 // ── Types for the AI-generated template ──
 
-interface TemplateStep {
+interface TemplateActivity {
   name: string;
   description: string;
-}
-
-interface TemplateSubProcess {
-  name: string;
-  description: string;
-  steps: TemplateStep[];
 }
 
 interface TemplateProcess {
   name: string;
   description: string;
-  subProcesses: TemplateSubProcess[];
+  activities: TemplateActivity[];
+  subProcesses?: any[]; // legacy support
 }
 
 interface TemplateValueStream {
@@ -320,22 +315,24 @@ export default function ValueStreamWizard() {
                           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 6 }}>
                             {proc.description}
                           </div>
-                          {proc.subProcesses.map((sp, spIdx) => (
-                            <div key={spIdx} style={{ marginLeft: 20, marginBottom: 8 }}>
-                              <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                                {sp.name}
-                              </div>
-                              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                                {sp.description}
-                              </div>
+                          {(proc.activities || []).length > 0 ? (
+                            <div style={{ marginLeft: 20 }}>
+                              {proc.activities.map((act, aIdx) => (
+                                <div key={aIdx} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
+                                  <span style={{ color: '#065f46', fontSize: 10, marginTop: 2 }}>{'\u25B6'}</span>
+                                  <div>
+                                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text)' }}>{act.name}</div>
+                                    {act.description && <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{act.description}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (proc.subProcesses || []).map((sp: any, spIdx: number) => (
+                            <div key={spIdx} style={{ marginLeft: 20, marginBottom: 6 }}>
+                              <div style={{ fontWeight: 500, fontSize: 12, color: 'var(--color-text-secondary)' }}>{sp.name}</div>
                               <ul style={{ listStyle: 'disc', paddingLeft: 18 }}>
-                                {sp.steps.map((st, stIdx) => (
-                                  <li
-                                    key={stIdx}
-                                    style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.6 }}
-                                  >
-                                    {st.name}
-                                  </li>
+                                {(sp.steps || sp.activities || []).map((st: any, stIdx: number) => (
+                                  <li key={stIdx} style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>{st.name}</li>
                                 ))}
                               </ul>
                             </div>
@@ -396,10 +393,8 @@ export default function ValueStreamWizard() {
               .filter((vs) => vs.selected)
               .map((vs, idx) => {
                 const procCount = vs.processes.length;
-                const spCount = vs.processes.reduce((sum, p) => sum + p.subProcesses.length, 0);
-                const stepCount = vs.processes.reduce(
-                  (sum, p) => sum + p.subProcesses.reduce((s2, sp) => s2 + sp.steps.length, 0),
-                  0
+                const activityCount = vs.processes.reduce(
+                  (sum, p) => sum + (p.activities || []).length, 0
                 );
                 return (
                   <div
@@ -419,7 +414,7 @@ export default function ValueStreamWizard() {
                       </div>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {procCount} processes, {spCount} sub-processes, {stepCount} steps
+                      {procCount} processes, {activityCount} activities
                     </div>
                   </div>
                 );

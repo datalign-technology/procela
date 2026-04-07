@@ -500,7 +500,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
       processNodes.push(vsNode);
       created.push(vsNode);
 
-      // Create Process nodes
+      // Create Process nodes with Activities
       for (let pIdx = 0; pIdx < (tvs.processes || []).length; pIdx++) {
         const proc = tvs.processes[pIdx];
         const procNode: ProcessNode = {
@@ -513,43 +513,60 @@ router.post('/apply-template', (req: Request, res: Response) => {
         processNodes.push(procNode);
         created.push(procNode);
 
-        // Create SubProcess or Activity nodes
-        for (let spIdx = 0; spIdx < (proc.subProcesses || []).length; spIdx++) {
-          const sp = proc.subProcesses[spIdx];
-          const spNode: ProcessNode = {
-            id: uuid(), parentId: procNode.id, level: 'SUBPROCESS',
-            name: sp.name, description: sp.description || '',
-            activityId: null, status: 'DRAFT', orderIndex: spIdx,
-            orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
-            createdAt: now, updatedAt: now,
-          };
-          processNodes.push(spNode);
-          created.push(spNode);
-
-          // Create Activity nodes from steps
-          const prevActivities: ProcessNode[] = [];
-          for (let stIdx = 0; stIdx < (sp.steps || []).length; stIdx++) {
-            const st = sp.steps[stIdx];
-            const actNode: ProcessNode = {
-              id: uuid(), parentId: spNode.id, level: 'ACTIVITY',
-              name: st.name, description: st.description || '',
-              activityId: generateActivityId(), status: 'DRAFT', orderIndex: stIdx,
+        // Handle both formats: new (activities) and legacy (subProcesses > steps)
+        const activities = proc.activities || [];
+        const legacyActivities: any[] = [];
+        if (activities.length === 0 && proc.subProcesses) {
+          // Legacy format: create subprocesses and extract steps as activities
+          for (let spIdx = 0; spIdx < proc.subProcesses.length; spIdx++) {
+            const sp = proc.subProcesses[spIdx];
+            const spNode: ProcessNode = {
+              id: uuid(), parentId: procNode.id, level: 'SUBPROCESS',
+              name: sp.name, description: sp.description || '',
+              activityId: null, status: 'DRAFT', orderIndex: spIdx,
               orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
               createdAt: now, updatedAt: now,
             };
-            processNodes.push(actNode);
-            created.push(actNode);
+            processNodes.push(spNode);
+            created.push(spNode);
 
-            // Create sequence flow from previous activity
-            if (prevActivities.length > 0) {
-              const prevAct = prevActivities[prevActivities.length - 1];
+            for (const st of (sp.steps || sp.activities || [])) {
+              legacyActivities.push({ ...st, _parentId: spNode.id });
+            }
+          }
+        }
+
+        // Create Activity nodes (either from new format or legacy)
+        const activityList = activities.length > 0
+          ? activities.map((a: any) => ({ ...a, _parentId: procNode.id }))
+          : legacyActivities.length > 0
+            ? legacyActivities
+            : [];
+
+        const prevActivities: ProcessNode[] = [];
+        for (let aIdx = 0; aIdx < activityList.length; aIdx++) {
+          const act = activityList[aIdx];
+          const actNode: ProcessNode = {
+            id: uuid(), parentId: act._parentId || procNode.id, level: 'ACTIVITY',
+            name: act.name, description: act.description || '',
+            activityId: generateActivityId(), status: 'DRAFT', orderIndex: aIdx,
+            orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
+            createdAt: now, updatedAt: now,
+          };
+          processNodes.push(actNode);
+          created.push(actNode);
+
+          // Create sequence flow from previous activity within same parent
+          if (prevActivities.length > 0) {
+            const prevAct = prevActivities[prevActivities.length - 1];
+            if (prevAct.parentId === actNode.parentId) {
               flowRelationships.push({
                 id: uuid(), fromNodeId: prevAct.id, toNodeId: actNode.id,
                 type: 'SEQUENCE', condition: null, label: null, createdAt: now,
               });
             }
-            prevActivities.push(actNode);
           }
+          prevActivities.push(actNode);
         }
       }
     }

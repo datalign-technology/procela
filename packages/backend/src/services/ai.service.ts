@@ -31,25 +31,30 @@ class AnthropicAiService implements AiService {
     const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 8192,
-      system: `You are a business process expert for the Procela platform. Generate a comprehensive value stream hierarchy for the specified industry.
+      system: `You are a business process expert for the Procela platform. Generate a comprehensive process hierarchy for the specified industry.
 
-Return ONLY a valid JSON object with this exact structure — no markdown, no code fences, no explanation:
+Procela uses a universal process hierarchy with these levels:
+- VALUE STREAM (required) — end-to-end flow delivering value
+- PROCESS (required) — a defined set of activities achieving an outcome
+- ACTIVITY (required) — a specific unit of work with inputs and outputs
+
+Optional levels (include where they add clarity):
+- SUBPROCESS — a grouping of activities within a process
+
+Return ONLY a valid JSON object — no markdown, no code fences, no explanation:
 {
   "valueStreams": [
     {
       "name": "Value Stream Name",
-      "description": "Brief description of this value stream",
+      "description": "What value this stream delivers and to whom",
       "processes": [
         {
           "name": "Process Name",
-          "description": "Brief description",
-          "subProcesses": [
+          "description": "What this process achieves",
+          "activities": [
             {
-              "name": "Sub-Process Name",
-              "description": "Brief description",
-              "steps": [
-                { "name": "Step Name", "description": "Brief description" }
-              ]
+              "name": "Activity Name",
+              "description": "What happens in this activity, its inputs and outputs"
             }
           ]
         }
@@ -60,15 +65,18 @@ Return ONLY a valid JSON object with this exact structure — no markdown, no co
 
 Guidelines:
 - Generate 3-5 value streams typical for the industry
-- Each value stream should have 2-4 processes
-- Each process should have 2-3 sub-processes
-- Each sub-process should have 2-4 steps
-- Use clear business language, not technical jargon
-- Descriptions should be concise (1-2 sentences)`,
+- Each value stream should have 3-5 processes
+- Each process should have 3-6 activities
+- Activities should be ordered in their natural sequence (first to last)
+- Activity names should start with a verb (e.g. "Receive", "Validate", "Approve", "Dispatch")
+- Activity descriptions should mention what triggers it and what it produces
+- Use clear business language accessible to non-technical users
+- Descriptions should be concise (1-2 sentences)
+- Focus on the most common, standard processes for the industry`,
       messages: [
         {
           role: 'user',
-          content: `Generate a standard value stream template for the "${industry}" industry.`,
+          content: `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`,
         },
       ],
     });
