@@ -1,0 +1,17 @@
+Name,Parent,Type,Industry,Description
+Huntington Ingalls Industries,,company,Defense & Shipbuilding,America's largest military shipbuilding company
+Newport News Shipbuilding,Huntington Ingalls Industries,division,,Nuclear-powered aircraft carriers and submarines
+Carrier Construction,Newport News Shipbuilding,department,,Aircraft carrier new construction
+Submarine Construction,Newport News Shipbuilding,department,,Virginia-class submarine construction
+Reactor Engineering,Newport News Shipbuilding,department,,Naval nuclear reactor design and testing
+Ingalls Shipbuilding,Huntington Ingalls Industries,division,,Surface combatants and amphibious ships
+Surface Combatants,Ingalls Shipbuilding,department,,DDG-51 destroyer construction
+Amphibious Ships,Ingalls Shipbuilding,department,,LPD and LHA class construction
+Mission Technologies,Huntington Ingalls Industries,division,,Technology solutions and services
+Cyber & Intelligence,Mission Technologies,department,,Cybersecurity and intelligence services
+Fleet Support,Mission Technologies,department,,Sustainment and modernization
+Corporate Services,Huntington Ingalls Industries,division,,Corporate functions
+Finance & Accounting,Corporate Services,department,,Financial planning and reporting
+Human Resources,Corporate Services,department,,Workforce management
+Supply Chain,Corporate Services,department,,Procurement and logistics
+Quality Assurance,Corporate Services,department,,Enterprise quality programs
