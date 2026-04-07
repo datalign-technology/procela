@@ -17,7 +17,6 @@ export interface StoredPerson {
   name: string;
   email: string;
   role: string;
-  department: string;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -43,7 +42,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/people */
 router.post('/', (req: Request, res: Response) => {
-  const { orgId, name, email, role, department, title } = req.body;
+  const { orgId, name, email, role, title } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'Organization is required' }); return; }
   const org = organizations.find((o) => o.id === orgId);
@@ -52,7 +51,7 @@ router.post('/', (req: Request, res: Response) => {
   const person: StoredPerson = {
     id: uuid(), orgId, name,
     email: email || '', role: role || 'VIEWER',
-    department: department || '', title: title || '',
+    title: title || '',
     createdAt: now, updatedAt: now,
   };
   people.push(person);
@@ -63,11 +62,10 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const { name, email, role, department, title, orgId } = req.body;
+  const { name, email, role, title, orgId } = req.body;
   if (name !== undefined) person.name = name;
   if (email !== undefined) person.email = email;
   if (role !== undefined) person.role = role;
-  if (department !== undefined) person.department = department;
   if (title !== undefined) person.title = title;
   if (orgId !== undefined) {
     const org = organizations.find((o) => o.id === orgId);

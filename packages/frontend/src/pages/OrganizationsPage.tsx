@@ -31,7 +31,6 @@ interface Person {
   name: string;
   email: string;
   role: string;
-  department: string;
   title: string;
 }
 
@@ -144,9 +143,9 @@ const emptyOrgForm: OrgFormData = { name: '', parentId: null, type: 'department'
 // ── Person Form ──
 
 interface PersonFormData {
-  orgId: string; name: string; email: string; role: string; department: string; title: string;
+  orgId: string; name: string; email: string; role: string; title: string;
 }
-const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', department: '', title: '' };
+const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', title: '' };
 
 // ── Org Tree Node ──
 
@@ -315,7 +314,7 @@ export default function OrganizationsPage() {
     setEditingPersonId(null); setShowPersonForm(true);
   };
   const openEditPerson = (person: Person) => {
-    setPersonForm({ orgId: person.orgId, name: person.name, email: person.email, role: person.role, department: person.department, title: person.title });
+    setPersonForm({ orgId: person.orgId, name: person.name, email: person.email, role: person.role, title: person.title });
     setEditingPersonId(person.id); setShowPersonForm(true);
   };
   const handleSavePerson = async () => {
@@ -557,10 +556,6 @@ export default function OrganizationsPage() {
                   <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title</label>
                   <input style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
                 </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Department</label>
-                  <input style={inputStyle} value={personForm.department} onChange={(e) => setPersonForm({ ...personForm, department: e.target.value })} placeholder="e.g. Operations, IT" />
-                </div>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
                 <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); }}>Cancel</button>
@@ -590,7 +585,6 @@ export default function OrganizationsPage() {
                     {!selectedOrgId && <th style={thStyle}>Organization</th>}
                     <th style={thStyle}>Role</th>
                     <th style={thStyle}>Title</th>
-                    <th style={thStyle}>Department</th>
                     <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
@@ -604,7 +598,6 @@ export default function OrganizationsPage() {
                       {!selectedOrgId && <td style={tdStyle}>{flatOrgs.find((o) => o.id === person.orgId)?.name || '--'}</td>}
                       <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
                       <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
-                      <td style={tdStyle}>{person.department || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEditPerson(person)}>Edit</button>
                         <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => handleDeletePerson(person.id)}>Delete</button>
