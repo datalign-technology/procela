@@ -494,7 +494,7 @@ export default function ProcessCatalogPage() {
               </button>
               <button onClick={() => setAddingTo('__root__')}
                 style={{ padding: '10px 24px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-                Start from Scratch
+                Custom
               </button>
             </div>
           </div>
