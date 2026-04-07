@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { valueStreams } from './process-catalog';
+import { processNodes, flowRelationships, NODE_LEVELS } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { mappings } from './mappings';
 import { systems } from './systems';
@@ -10,30 +10,18 @@ const router = Router();
 
 /** GET /api/v1/dashboard/stats */
 router.get('/stats', (_req: Request, res: Response) => {
-  // Count all process hierarchy levels
-  let processCount = 0;
-  let subProcessCount = 0;
-  let stepCount = 0;
-  const allStepIds: string[] = [];
+  // Count by level
+  const byLevel = Object.fromEntries(
+    NODE_LEVELS.map((l) => [l, processNodes.filter((n) => n.level === l).length])
+  );
 
-  for (const vs of valueStreams) {
-    for (const proc of vs.processes) {
-      processCount++;
-      for (const sp of proc.subProcesses) {
-        subProcessCount++;
-        for (const step of sp.steps) {
-          stepCount++;
-          allStepIds.push(step.id);
-        }
-      }
-    }
-  }
+  const activityIds = processNodes.filter((n) => n.level === 'ACTIVITY').map((n) => n.id);
 
-  // Coverage: which steps have at least one mapping
-  const mappedStepIds = new Set(mappings.map((m) => m.processStepId));
-  const mappedCount = allStepIds.filter((id) => mappedStepIds.has(id)).length;
-  const unmappedCount = stepCount - mappedCount;
-  const coveragePercentage = stepCount > 0 ? Math.round((mappedCount / stepCount) * 100) : 0;
+  // Coverage: which activities have at least one mapping
+  const mappedActivityIds = new Set(mappings.map((m) => m.processStepId));
+  const mappedCount = activityIds.filter((id) => mappedActivityIds.has(id)).length;
+  const unmappedCount = activityIds.length - mappedCount;
+  const coveragePercentage = activityIds.length > 0 ? Math.round((mappedCount / activityIds.length) * 100) : 0;
 
   // Governance tiers
   const bronze = dataAssets.filter((a) => a.governanceTier === 'BRONZE').length;
@@ -47,32 +35,24 @@ router.get('/stats', (_req: Request, res: Response) => {
       : 0;
 
   // Gaps
-  const unmappedSteps = unmappedCount;
-
-  // Ungoverned assets: BRONZE-tier assets that are linked to process steps
   const linkedAssetIds = new Set(mappings.map((m) => m.dataAssetId));
   const ungovernedAssets = dataAssets.filter(
     (a) => a.governanceTier === 'BRONZE' && linkedAssetIds.has(a.id),
   ).length;
 
-  // Ownerless items: value streams with no owner (check if owner field exists)
-  // Value streams and processes don't have owner fields in current schema,
-  // so we count those without any assigned owner
-  let ownerlessItems = 0;
-  for (const vs of valueStreams) {
-    if (!(vs as any).ownerId) ownerlessItems++;
-    for (const proc of vs.processes) {
-      if (!(proc as any).ownerId) ownerlessItems++;
-    }
-  }
+  const ownerlessItems = processNodes.filter(
+    (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId
+  ).length;
 
   res.json({
     success: true,
     data: {
-      valueStreams: valueStreams.length,
-      processes: processCount,
-      subProcesses: subProcessCount,
-      steps: stepCount,
+      totalNodes: processNodes.length,
+      byLevel,
+      valueStreams: byLevel.VALUE_STREAM || 0,
+      processes: byLevel.PROCESS || 0,
+      activities: byLevel.ACTIVITY || 0,
+      flows: flowRelationships.length,
       systems: systems.length,
       dataAssets: dataAssets.length,
       mappings: mappings.length,
@@ -86,7 +66,7 @@ router.get('/stats', (_req: Request, res: Response) => {
       governance: { bronze, silver, gold },
       averageHealth,
       gaps: {
-        unmappedSteps,
+        unmappedActivities: unmappedCount,
         ungovernedAssets,
         ownerlessItems,
       },

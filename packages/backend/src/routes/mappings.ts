@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { valueStreams } from './process-catalog';
+import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 
 // ── Types ──
@@ -27,26 +27,26 @@ const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
 // ── Helpers ──
 
 function findStepInfo(stepId: string) {
-  for (const vs of valueStreams) {
-    for (const proc of vs.processes) {
-      for (const sp of proc.subProcesses) {
-        const step = sp.steps.find((s) => s.id === stepId);
-        if (step) {
-          return {
-            stepId: step.id,
-            stepName: step.name,
-            subProcessId: sp.id,
-            subProcessName: sp.name,
-            processId: proc.id,
-            processName: proc.name,
-            valueStreamId: vs.id,
-            valueStreamName: vs.name,
-          };
-        }
-      }
-    }
+  const node = processNodes.find((n) => n.id === stepId);
+  if (!node) return null;
+
+  // Build ancestry path
+  const path: string[] = [node.name];
+  let current = node;
+  while (current.parentId) {
+    const parent = processNodes.find((n) => n.id === current.parentId);
+    if (!parent) break;
+    path.unshift(parent.name);
+    current = parent;
   }
-  return null;
+
+  return {
+    stepId: node.id,
+    stepName: node.name,
+    level: node.level,
+    activityId: node.activityId,
+    path: path.join(' > '),
+  };
 }
 
 function findAssetInfo(assetId: string) {
