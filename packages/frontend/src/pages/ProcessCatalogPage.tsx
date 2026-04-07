@@ -393,16 +393,18 @@ export default function ProcessCatalogPage() {
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => navigate('/processes/wizard')}
-            style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-            Generate from Template
-          </button>
-          <button onClick={() => setAddingTo('__root__')}
-            style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-            + Add Value Stream
-          </button>
-        </div>
+        {totalNodes > 0 && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => navigate('/processes/wizard')}
+              style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              Generate from Template
+            </button>
+            <button onClick={() => setAddingTo('__root__')}
+              style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              + Add Value Stream
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Legend */}
