@@ -6,8 +6,6 @@ interface SystemEntity {
   name: string;
   description: string;
   systemType: string;
-  owners: string[];
-  stewards: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -43,68 +41,13 @@ const typeBadge: React.CSSProperties = {
   fontSize: 11, fontWeight: 500, background: 'var(--color-primary-light)', color: 'var(--color-primary)',
 };
 
-const tagStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 4,
-  padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 500,
-  background: '#f1f5f9', color: 'var(--color-text)',
-};
-
-// ── Tag Input Component ──
-
-function TagInput({ values, onChange, placeholder }: {
-  values: string[]; onChange: (vals: string[]) => void; placeholder: string;
-}) {
-  const [input, setInput] = useState('');
-
-  const addTag = () => {
-    const trimmed = input.trim();
-    if (trimmed && !values.includes(trimmed)) {
-      onChange([...values, trimmed]);
-      setInput('');
-    }
-  };
-
-  const removeTag = (idx: number) => {
-    onChange(values.filter((_, i) => i !== idx));
-  };
-
-  return (
-    <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: values.length > 0 ? 6 : 0 }}>
-        {values.map((val, idx) => (
-          <span key={idx} style={tagStyle}>
-            {val}
-            <button onClick={() => removeTag(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
-          </span>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input
-          style={inputStyle}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-          placeholder={placeholder}
-        />
-        <button onClick={addTag} style={{ ...btnSecondary, padding: '4px 10px', fontSize: 12, whiteSpace: 'nowrap' }} disabled={!input.trim()}>Add</button>
-      </div>
-    </div>
-  );
-}
-
-// ── Form ──
-
 interface FormData {
   name: string;
   description: string;
   systemType: string;
-  owners: string[];
-  stewards: string[];
 }
 
-const emptyForm: FormData = { name: '', description: '', systemType: '', owners: [], stewards: [] };
-
-// ── Main Component ──
+const emptyForm: FormData = { name: '', description: '', systemType: '' };
 
 export default function SystemsPage() {
   const [systems, setSystems] = useState<SystemEntity[]>([]);
@@ -128,10 +71,7 @@ export default function SystemsPage() {
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
   const openEdit = (sys: SystemEntity) => {
-    setForm({
-      name: sys.name, description: sys.description, systemType: sys.systemType,
-      owners: sys.owners || [], stewards: sys.stewards || [],
-    });
+    setForm({ name: sys.name, description: sys.description, systemType: sys.systemType });
     setEditingId(sys.id); setShowForm(true);
   };
 
@@ -185,14 +125,6 @@ export default function SystemsPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owners</label>
-              <TagInput values={form.owners} onChange={(owners) => setForm({ ...form, owners })} placeholder="Type a name and press Enter" />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Stewards</label>
-              <TagInput values={form.stewards} onChange={(stewards) => setForm({ ...form, stewards })} placeholder="Type a name and press Enter" />
-            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
@@ -214,10 +146,6 @@ export default function SystemsPage() {
             <div style={{ fontSize: 22, fontWeight: 700 }}>{new Set(systems.map((s) => s.systemType).filter(Boolean)).size}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>System Types</div>
           </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{systems.filter((s) => s.owners.length > 0).length}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>With Owners</div>
-          </div>
         </div>
       )}
 
@@ -236,8 +164,6 @@ export default function SystemsPage() {
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Type</th>
                 <th style={thStyle}>Description</th>
-                <th style={thStyle}>Owners</th>
-                <th style={thStyle}>Data Stewards</th>
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -250,22 +176,8 @@ export default function SystemsPage() {
                   <td style={tdStyle}>
                     {sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                   </td>
-                  <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 300 }}>
+                  <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
                     {sys.description || '--'}
-                  </td>
-                  <td style={tdStyle}>
-                    {sys.owners.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                        {sys.owners.map((o, i) => <span key={i} style={tagStyle}>{o}</span>)}
-                      </div>
-                    ) : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                  </td>
-                  <td style={tdStyle}>
-                    {sys.stewards.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                        {sys.stewards.map((s, i) => <span key={i} style={tagStyle}>{s}</span>)}
-                      </div>
-                    ) : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEdit(sys)}>Edit</button>
