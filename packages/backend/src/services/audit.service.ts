@@ -1,22 +1,23 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { v4 as uuid } from 'uuid';
+import logger from '../lib/logger';
 
 export interface AuditLogEntry {
+  id: string;
   orgId: string;
   userId: string | null;
   entityType: string;
   entityId: string;
   action: string;
-  before?: object | null;
-  after?: object | null;
+  before: object | null;
+  after: object | null;
+  timestamp: string;
 }
 
+// In-memory audit log (replace with Prisma when DB is connected)
+export const auditLogs: AuditLogEntry[] = [];
+
 export const auditService = {
-  /**
-   * Write an entry to the audit log.
-   */
-  async log(
+  log(
     orgId: string,
     userId: string | null,
     entityType: string,
@@ -24,17 +25,27 @@ export const auditService = {
     action: string,
     before: object | null = null,
     after: object | null = null
-  ): Promise<void> {
-    await prisma.auditLog.create({
-      data: {
-        orgId,
-        userId,
-        entityType,
-        entityId,
-        action,
-        before: before ?? undefined,
-        after: after ?? undefined,
-      },
-    });
+  ): void {
+    const entry: AuditLogEntry = {
+      id: uuid(),
+      orgId,
+      userId,
+      entityType,
+      entityId,
+      action,
+      before,
+      after,
+      timestamp: new Date().toISOString(),
+    };
+    auditLogs.push(entry);
+    logger.info({ entityType, entityId, action }, `[Audit] ${action} ${entityType}`);
+  },
+
+  getAll(orgId?: string): AuditLogEntry[] {
+    return orgId ? auditLogs.filter((l) => l.orgId === orgId) : auditLogs;
+  },
+
+  getByEntity(entityType: string, entityId: string): AuditLogEntry[] {
+    return auditLogs.filter((l) => l.entityType === entityType && l.entityId === entityId);
   },
 };

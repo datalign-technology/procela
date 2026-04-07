@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
+import { auditService } from '../services/audit.service';
 
 // ── In-memory store (replace with Prisma once DB is migrated) ──
 
@@ -88,6 +89,7 @@ router.post('/value-streams', (req: Request, res: Response) => {
     status: 'DRAFT', createdAt: now, updatedAt: now, processes: [],
   };
   valueStreams.push(vs);
+  auditService.log(DEV_ORG_ID, null, 'ValueStream', vs.id, 'CREATE', null, vs);
   res.status(201).json({ success: true, data: vs });
 });
 
@@ -100,12 +102,15 @@ router.put('/value-streams/:id', (req: Request, res: Response) => {
   if (status !== undefined) vs.status = status;
   if (orgIds !== undefined) vs.orgIds = orgIds;
   vs.updatedAt = new Date().toISOString();
+  auditService.log(DEV_ORG_ID, null, 'ValueStream', vs.id, 'UPDATE', null, vs);
   res.json({ success: true, data: vs });
 });
 
 router.delete('/value-streams/:id', (req: Request, res: Response) => {
   const idx = valueStreams.findIndex((v) => v.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Value stream not found' }); return; }
+  const deleted = valueStreams[idx];
+  auditService.log(DEV_ORG_ID, null, 'ValueStream', deleted.id, 'DELETE', deleted, null);
   valueStreams.splice(idx, 1);
   res.status(204).send();
 });

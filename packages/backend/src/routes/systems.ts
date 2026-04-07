@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { auditService } from '../services/audit.service';
 
 interface StoredSystem {
   id: string;
@@ -48,6 +49,7 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   systems.push(sys);
+  auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'CREATE', null, sys);
   res.status(201).json({ success: true, data: sys });
 });
 
@@ -62,6 +64,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (owner !== undefined) sys.owner = owner;
   if (steward !== undefined) sys.steward = steward;
   sys.updatedAt = new Date().toISOString();
+  auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
 });
 
@@ -69,6 +72,7 @@ router.put('/:id', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
   const idx = systems.findIndex((s) => s.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+  auditService.log(DEV_ORG_ID, null, 'System', systems[idx].id, 'DELETE', systems[idx], null);
   systems.splice(idx, 1);
   res.status(204).send();
 });
