@@ -192,9 +192,11 @@ export default function DataAssetsPage() {
             Data assets described in business terms, linked to the systems that hold them.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add Data Asset
-        </button>
+        {assets.length > 0 && (
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add Data Asset
+          </button>
+        )}
       </div>
 
       {/* Add/Edit Form */}

@@ -148,9 +148,11 @@ export default function PeoplePage() {
             Manage people, their roles, and organization assignments.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add Person
-        </button>
+        {people.length > 0 && (
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add Person
+          </button>
+        )}
       </div>
 
       {/* Add/Edit Form */}

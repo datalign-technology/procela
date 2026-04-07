@@ -159,9 +159,11 @@ export default function SystemsPage() {
             Applications and platforms where your organization's data lives.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add System
-        </button>
+        {systems.length > 0 && (
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add System
+          </button>
+        )}
       </div>
 
       {/* Add/Edit Form */}
