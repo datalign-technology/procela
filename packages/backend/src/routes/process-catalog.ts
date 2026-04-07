@@ -276,7 +276,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
     logger.info({ count: created.length, industry }, 'Applied template');
     res.status(201).json({ success: true, data: created });
   } catch (err) {
-    console.error('[ProcessCatalog] Apply template failed:', err);
+    logger.error({ err }, 'Apply template failed');
     res.status(500).json({ success: false, error: 'Failed to apply template' });
   }
 });

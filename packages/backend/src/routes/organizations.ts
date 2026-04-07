@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import logger from '../lib/logger';
 
 export interface StoredOrg {
   id: string;
@@ -205,10 +206,10 @@ router.post('/import', (req: Request, res: Response) => {
       nameToId.set(org.name.toLowerCase(), org.id);
     }
 
-    console.log(`[Organizations] Imported ${created.length} organizations`);
+    logger.info({ count: created.length }, 'Imported organizations');
     res.status(201).json({ success: true, data: created, tree: buildTree(organizations) });
   } catch (err) {
-    console.error('[Organizations] Import failed:', err);
+    logger.error({ err }, 'Organization import failed');
     res.status(500).json({ success: false, error: 'Import failed' });
   }
 });

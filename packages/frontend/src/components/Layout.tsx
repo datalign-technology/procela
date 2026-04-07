@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
+import ChatPanel from './ChatPanel';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '\u25A3' },
@@ -52,6 +53,7 @@ export default function Layout() {
         <main className={styles.content}>
           <Outlet />
         </main>
+        <ChatPanel />
       </div>
     </div>
   );
