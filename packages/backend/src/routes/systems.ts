@@ -8,8 +8,8 @@ interface StoredSystem {
   name: string;
   description: string;
   systemType: string;
-  owner: string;
-  steward: string;
+  owners: string[];
+  stewards: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -39,13 +39,13 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType, owner, steward } = req.body;
+  const { name, description, systemType, owners, stewards } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const now = new Date().toISOString();
   const sys: StoredSystem = {
     id: uuid(), orgId: DEV_ORG_ID, name,
     description: description || '', systemType: systemType || '',
-    owner: owner || '', steward: steward || '',
+    owners: owners || [], stewards: stewards || [],
     createdAt: now, updatedAt: now,
   };
   systems.push(sys);
@@ -57,12 +57,12 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const { name, description, systemType, owner, steward } = req.body;
+  const { name, description, systemType, owners, stewards } = req.body;
   if (name !== undefined) sys.name = name;
   if (description !== undefined) sys.description = description;
   if (systemType !== undefined) sys.systemType = systemType;
-  if (owner !== undefined) sys.owner = owner;
-  if (steward !== undefined) sys.steward = steward;
+  if (owners !== undefined) sys.owners = owners;
+  if (stewards !== undefined) sys.stewards = stewards;
   sys.updatedAt = new Date().toISOString();
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
