@@ -18,8 +18,8 @@ const navSections: NavSection[] = [
   {
     label: 'Define',
     items: [
-      { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+      { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/systems', label: 'Systems', icon: '\u2699' },
       { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
     ],
