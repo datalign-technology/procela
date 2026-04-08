@@ -25,6 +25,7 @@ import mappingsRouter from './routes/mappings';
 import dashboardRouter from './routes/dashboard';
 import chatRouter from './routes/chat';
 import auditRouter from './routes/audit';
+import searchRouter from './routes/search';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/ai', aiRouter);
 app.use('/api/v1/chat', chatRouter);
 app.use('/api/v1/audit', auditRouter);
+app.use('/api/v1/search', searchRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
