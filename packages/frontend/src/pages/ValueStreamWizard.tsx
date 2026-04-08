@@ -199,6 +199,7 @@ export default function ValueStreamWizard() {
       await apiClient.post('/process-catalog/apply-template', {
         industry,
         valueStreams: selectedStreams,
+        orgId: activeOrgId || undefined,
       });
       navigate('/processes');
     } catch (e) {

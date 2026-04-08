@@ -527,7 +527,8 @@ router.delete('/flows/:id', (req: Request, res: Response) => {
 /** POST /apply-template — create hierarchy from AI-generated template */
 router.post('/apply-template', (req: Request, res: Response) => {
   try {
-    const { industry, valueStreams: templateStreams } = req.body;
+    const { industry, valueStreams: templateStreams, orgId: requestOrgId } = req.body;
+    const templateOrgId = requestOrgId || DEV_ORG_ID;
     if (!templateStreams || !Array.isArray(templateStreams) || templateStreams.length === 0) {
       res.status(400).json({ success: false, error: 'No value streams provided' });
       return;
@@ -543,7 +544,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
         name: tvs.name, description: tvs.description || `Generated from ${industry} template`,
         activityId: null, status: 'DRAFT',
         orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
-        orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
+        orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
         createdAt: now, updatedAt: now,
       };
       processNodes.push(vsNode);
@@ -556,7 +557,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
           id: uuid(), parentId: vsNode.id, level: 'PROCESS',
           name: proc.name, description: proc.description || '',
           activityId: null, status: 'DRAFT', orderIndex: pIdx,
-          orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
+          orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
           createdAt: now, updatedAt: now,
         };
         processNodes.push(procNode);
@@ -573,7 +574,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
               id: uuid(), parentId: procNode.id, level: 'SUBPROCESS',
               name: sp.name, description: sp.description || '',
               activityId: null, status: 'DRAFT', orderIndex: spIdx,
-              orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
+              orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
               createdAt: now, updatedAt: now,
             };
             processNodes.push(spNode);
@@ -599,7 +600,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
             id: uuid(), parentId: act._parentId || procNode.id, level: 'ACTIVITY',
             name: act.name, description: act.description || '',
             activityId: generateActivityId(), status: 'DRAFT', orderIndex: aIdx,
-            orgId: DEV_ORG_ID, orgIds: [DEV_ORG_ID], ownerId: null,
+            orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
             createdAt: now, updatedAt: now,
           };
           processNodes.push(actNode);
