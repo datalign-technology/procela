@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { INDUSTRIES } from '../types';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 // ── Types for the AI-generated template ──
 
@@ -95,12 +96,29 @@ const selectStyle: React.CSSProperties = {
 
 export default function ValueStreamWizard() {
   const navigate = useNavigate();
+  const { activeOrgId, activeOrgName } = useOrgContext();
   const [step, setStep] = useState(0);
   const [industry, setIndustry] = useState('');
+  const [orgIndustry, setOrgIndustry] = useState('');
   const [template, setTemplate] = useState<GeneratedTemplate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedStreams, setExpandedStreams] = useState<Set<number>>(new Set());
+
+  // Fetch the active org's industry
+  useEffect(() => {
+    if (!activeOrgId) return;
+    async function loadOrg() {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: { industry?: string } }>(`/organizations/${activeOrgId}`);
+        if (res.data?.industry) {
+          setOrgIndustry(res.data.industry);
+          setIndustry(res.data.industry);
+        }
+      } catch { /* */ }
+    }
+    loadOrg();
+  }, [activeOrgId]);
 
   const steps = ['Select Industry', 'Preview Template', 'Apply'];
 
@@ -198,27 +216,50 @@ export default function ValueStreamWizard() {
       {/* Step 0: Select Industry */}
       {step === 0 && (
         <div style={card}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Choose Your Industry</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>
+            {activeOrgName ? `Generate Processes for ${activeOrgName}` : 'Choose Your Industry'}
+          </h2>
           <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
-            Select your industry and Procela AI will generate a complete value stream hierarchy
-            with processes, sub-processes, and steps as a starting point.
+            {orgIndustry
+              ? `Based on your organization's industry (${orgIndustry}), Procela AI will generate a complete process hierarchy with value streams, processes, and activities.`
+              : 'Select your industry and Procela AI will generate a complete process hierarchy with value streams, processes, and activities.'}
           </p>
 
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
-            Industry
-          </label>
-          <select
-            value={industry}
-            onChange={(e) => setIndustry(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">-- Select an industry --</option>
-            {INDUSTRIES.map((ind) => (
-              <option key={ind} value={ind}>
-                {ind}
-              </option>
-            ))}
-          </select>
+          {orgIndustry ? (
+            <div style={{ background: 'var(--color-primary-light)', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>Industry (from organization)</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-primary)' }}>{orgIndustry}</div>
+              <button
+                onClick={() => { setOrgIndustry(''); setIndustry(''); }}
+                style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 4, textDecoration: 'underline' }}
+              >
+                Choose a different industry
+              </button>
+            </div>
+          ) : (
+            <>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                Industry
+              </label>
+              <select
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="">-- Select an industry --</option>
+                {INDUSTRIES.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+              {activeOrgId && !orgIndustry && (
+                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                  Tip: Set the industry on your organization to auto-populate this field.
+                </p>
+              )}
+            </>
+          )}
 
           {error && (
             <p style={{ color: 'var(--color-error)', fontSize: 13, marginTop: 12 }}>{error}</p>
