@@ -28,6 +28,7 @@ const validRefreshTokens = new Set<string>();
 // ---------------------------------------------------------------------------
 
 const ACCESS_TOKEN_EXPIRY = '15m';
+const ACCESS_TOKEN_EXPIRY_SECONDS = 15 * 60; // 900 seconds
 const REFRESH_TOKEN_EXPIRY = '8h';
 
 interface AccessTokenPayload {
@@ -135,6 +136,7 @@ router.post('/login', async (req: Request, res: Response) => {
       data: {
         accessToken,
         refreshToken: refresh.token,
+        expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
         user: {
           sub: user.sub,
           email: user.email,
@@ -192,7 +194,7 @@ router.post('/refresh', (req: Request, res: Response) => {
     auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'TOKEN_REFRESHED', null, null);
     logger.debug({ sub: decoded.sub }, 'Token refreshed');
 
-    res.json({ success: true, data: { accessToken } });
+    res.json({ success: true, data: { accessToken, expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS } });
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
   }
@@ -257,11 +259,39 @@ router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) 
  */
 router.get('/providers', (_req: Request, res: Response) => {
   const authCfg = getAuthConfig();
+  const oidcPub = getOidcProvider().getPublicConfig();
+
+  // Determine which specific OIDC provider is configured (Microsoft vs Okta)
+  const issuer = oidcPub.issuer || '';
+  const isMicrosoft = issuer.includes('microsoftonline.com') || issuer.includes('login.microsoft');
+  const isOkta = issuer.includes('okta.com');
+
   res.json({
     success: true,
     data: {
       current: authCfg.provider,
       currentName: authCfg.providerName,
+      providers: [
+        {
+          id: 'microsoft',
+          name: 'Microsoft Entra ID',
+          type: 'oidc',
+          enabled: authCfg.provider === 'oidc' && authCfg.oidcConfigured && isMicrosoft,
+        },
+        {
+          id: 'okta',
+          name: 'Okta',
+          type: 'oidc',
+          enabled: authCfg.provider === 'oidc' && authCfg.oidcConfigured && isOkta,
+        },
+        {
+          id: 'dev',
+          name: 'Dev Mode',
+          type: 'dev',
+          enabled: authCfg.provider === 'dev',
+        },
+      ],
+      // Keep the old shape for backward compatibility
       available: [
         { type: 'dev', name: 'Development', description: 'Email-based dev login (no IdP required)' },
         { type: 'oidc', name: 'OIDC', description: 'OpenID Connect (Azure AD, Okta, etc.)', configured: authCfg.oidcConfigured },
@@ -279,12 +309,15 @@ router.get('/providers', (_req: Request, res: Response) => {
  */
 router.get('/config', (_req: Request, res: Response) => {
   const authCfg = getAuthConfig();
+  const oidcPub = getOidcProvider().getPublicConfig();
   res.json({
     success: true,
     data: {
       provider: authCfg.provider,
       providerName: authCfg.providerName,
       oidcConfigured: authCfg.oidcConfigured,
+      issuerUrl: oidcPub.issuer || '',
+      clientId: oidcPub.clientId || '',
     },
   });
 });
