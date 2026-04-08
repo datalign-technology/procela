@@ -100,24 +100,36 @@ export default function ValueStreamWizard() {
   const [step, setStep] = useState(0);
   const [industry, setIndustry] = useState('');
   const [orgIndustry, setOrgIndustry] = useState('');
+  const [industrySource, setIndustrySource] = useState<'own' | 'inherited' | ''>('');
   const [template, setTemplate] = useState<GeneratedTemplate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedStreams, setExpandedStreams] = useState<Set<number>>(new Set());
 
-  // Fetch the active org's industry
+  // Fetch the active org's industry, inheriting from parent if not set
   useEffect(() => {
     if (!activeOrgId) return;
-    async function loadOrg() {
+    async function loadOrgIndustry() {
       try {
-        const res = await apiClient.get<{ success: boolean; data: { industry?: string } }>(`/organizations/${activeOrgId}`);
-        if (res.data?.industry) {
-          setOrgIndustry(res.data.industry);
-          setIndustry(res.data.industry);
+        const res = await apiClient.get<{ success: boolean; data: { industry?: string; parentId?: string | null } }>(`/organizations/${activeOrgId}`);
+        const org = res.data;
+        if (org?.industry) {
+          setOrgIndustry(org.industry);
+          setIndustry(org.industry);
+          setIndustrySource('own');
+        } else if (org?.parentId) {
+          try {
+            const parentRes = await apiClient.get<{ success: boolean; data: { industry?: string; name?: string } }>(`/organizations/${org.parentId}`);
+            if (parentRes.data?.industry) {
+              setOrgIndustry(parentRes.data.industry);
+              setIndustry(parentRes.data.industry);
+              setIndustrySource('inherited');
+            }
+          } catch { /* */ }
         }
       } catch { /* */ }
     }
-    loadOrg();
+    loadOrgIndustry();
   }, [activeOrgId]);
 
   const steps = ['Select Industry', 'Preview Template', 'Apply'];
@@ -227,7 +239,9 @@ export default function ValueStreamWizard() {
 
           {orgIndustry ? (
             <div style={{ background: 'var(--color-primary-light)', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 8 }}>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>Industry (from organization)</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                Industry {industrySource === 'inherited' ? '(inherited from parent organization)' : '(from organization)'}
+              </div>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-primary)' }}>{orgIndustry}</div>
               <button
                 onClick={() => { setOrgIndustry(''); setIndustry(''); }}

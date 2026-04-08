@@ -323,7 +323,7 @@ export default function OrganizationsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Type</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value, industry: e.target.value === 'company' ? orgForm.industry : '' })}>
+              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value, industry: (e.target.value === 'company' || e.target.value === 'division') ? orgForm.industry : '' })}>
                 {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
               </select>
             </div>
@@ -334,7 +334,7 @@ export default function OrganizationsPage() {
                 {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </div>
-            {orgForm.type === 'company' && (
+            {(orgForm.type === 'company' || orgForm.type === 'division') && (
               <div>
                 <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Industry</label>
                 <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.industry} onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}>
