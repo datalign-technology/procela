@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/stores/authStore';
+
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 class ApiError extends Error {
@@ -11,13 +13,66 @@ class ApiError extends Error {
 }
 
 function getAuthToken(): string | null {
+  return useAuthStore.getState().accessToken;
+}
+
+function getRefreshToken(): string | null {
+  return useAuthStore.getState().refreshToken;
+}
+
+// Track in-flight refresh to avoid concurrent refresh calls
+let refreshPromise: Promise<void> | null = null;
+
+async function ensureValidToken(): Promise<void> {
+  const store = useAuthStore.getState();
+  if (!store.isAuthenticated || !store.accessToken) return;
+
+  const secondsRemaining = store.getTimeUntilExpiry();
+
+  // If more than 2 minutes remain, no refresh needed
+  if (secondsRemaining > 120) return;
+
+  // If a refresh is already in-flight, wait for it
+  if (refreshPromise) {
+    await refreshPromise;
+    return;
+  }
+
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    // No refresh token available, force logout
+    store.logout();
+    window.location.href = '/login';
+    return;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Refresh failed');
+      }
+
+      const result = await response.json();
+      const { accessToken, expiresIn } = result.data ?? result;
+
+      useAuthStore.getState().refreshSession(accessToken, expiresIn);
+    } catch {
+      // Refresh failed, force logout
+      useAuthStore.getState().logout();
+      window.location.href = '/login';
+    }
+  })();
+
   try {
-    const stored = localStorage.getItem('auth-storage');
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    return parsed?.state?.token ?? null;
-  } catch {
-    return null;
+    await refreshPromise;
+  } finally {
+    refreshPromise = null;
   }
 }
 
@@ -26,6 +81,12 @@ async function request<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
+  // Skip token refresh for auth endpoints to avoid loops
+  const isAuthEndpoint = path.startsWith('/auth/');
+  if (!isAuthEndpoint) {
+    await ensureValidToken();
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };

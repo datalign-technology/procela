@@ -4,24 +4,55 @@ import type { User } from '@/types';
 
 interface AuthState {
   user: User | null;
-  token: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
-  login: (user: User, token: string) => void;
+  sessionExpiresAt: number | null; // timestamp in ms
+  login: (user: User, accessToken: string, refreshToken: string, expiresIn: number) => void;
   logout: () => void;
+  refreshSession: (accessToken: string, expiresIn: number) => void;
+  getTimeUntilExpiry: () => number; // seconds remaining
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
-      token: null,
+      accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
+      sessionExpiresAt: null,
 
-      login: (user: User, token: string) =>
-        set({ user, token, isAuthenticated: true }),
+      login: (user: User, accessToken: string, refreshToken: string, expiresIn: number) =>
+        set({
+          user,
+          accessToken,
+          refreshToken,
+          isAuthenticated: true,
+          sessionExpiresAt: Date.now() + expiresIn * 1000,
+        }),
 
       logout: () =>
-        set({ user: null, token: null, isAuthenticated: false }),
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          sessionExpiresAt: null,
+        }),
+
+      refreshSession: (accessToken: string, expiresIn: number) =>
+        set({
+          accessToken,
+          sessionExpiresAt: Date.now() + expiresIn * 1000,
+        }),
+
+      getTimeUntilExpiry: () => {
+        const { sessionExpiresAt } = get();
+        if (!sessionExpiresAt) return 0;
+        const remaining = Math.max(0, Math.floor((sessionExpiresAt - Date.now()) / 1000));
+        return remaining;
+      },
     }),
     {
       name: 'auth-storage',

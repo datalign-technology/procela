@@ -13,6 +13,7 @@ import compression from 'compression';
 import config from './config';
 import logger from './lib/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import aiRouter from './routes/ai';
@@ -39,22 +40,25 @@ app.use(compression());
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
-// Routes
+// Routes — Public (no auth required)
 // ---------------------------------------------------------------------------
 app.use('/api/v1/health', healthRouter);
-
 app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/organizations', organizationsRouter);
-app.use('/api/v1/people', peopleRouter);
-app.use('/api/v1/process-catalog', processCatalogRouter);
-app.use('/api/v1/data-assets', dataAssetsRouter);
-app.use('/api/v1/systems', systemsRouter);
-app.use('/api/v1/mappings', mappingsRouter);
-app.use('/api/v1/dashboard', dashboardRouter);
-app.use('/api/v1/ai', aiRouter);
-app.use('/api/v1/chat', chatRouter);
-app.use('/api/v1/audit', auditRouter);
-app.use('/api/v1/search', searchRouter);
+
+// ---------------------------------------------------------------------------
+// Routes — Protected (require valid access token)
+// ---------------------------------------------------------------------------
+app.use('/api/v1/organizations', authenticateToken, organizationsRouter);
+app.use('/api/v1/people', authenticateToken, peopleRouter);
+app.use('/api/v1/process-catalog', authenticateToken, processCatalogRouter);
+app.use('/api/v1/data-assets', authenticateToken, dataAssetsRouter);
+app.use('/api/v1/systems', authenticateToken, systemsRouter);
+app.use('/api/v1/mappings', authenticateToken, mappingsRouter);
+app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
+app.use('/api/v1/ai', authenticateToken, aiRouter);
+app.use('/api/v1/chat', authenticateToken, chatRouter);
+app.use('/api/v1/audit', authenticateToken, auditRouter);
+app.use('/api/v1/search', authenticateToken, searchRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling

@@ -40,6 +40,7 @@ export interface TokenPayload {
   orgId: string;
   role: string;
   name?: string;
+  type?: 'access' | 'refresh';
 }
 
 export interface PaginationParams {

@@ -11,7 +11,7 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/procela',
 
   // Auth
-  authProvider: process.env.AUTH_PROVIDER || 'cognito',
+  authProvider: process.env.AUTH_PROVIDER || 'dev',
   cognitoUserPoolId: process.env.COGNITO_USER_POOL_ID || '',
   cognitoClientId: process.env.COGNITO_CLIENT_ID || '',
   cognitoRegion: process.env.COGNITO_REGION || 'us-east-1',

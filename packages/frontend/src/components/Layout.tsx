@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
 import ChatPanel from './ChatPanel';
+import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
@@ -347,6 +348,7 @@ export default function Layout() {
           <Outlet />
         </main>
         <ChatPanel />
+        <SessionTimeout />
         <ToastContainer />
       </div>
     </div>
