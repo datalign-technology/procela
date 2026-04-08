@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { INDUSTRIES } from '../types';
 
@@ -146,6 +146,35 @@ interface PersonFormData {
   orgId: string; name: string; email: string; role: string; title: string;
 }
 const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', title: '' };
+
+// ── File Picker ──
+
+function FilePicker({ accept, onFileRead, label }: {
+  accept: string; onFileRead: (content: string, fileName: string) => void; label?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      onFileRead(reader.result as string, file.name);
+    };
+    reader.readAsText(file);
+    // Reset so the same file can be re-selected
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
+  return (
+    <>
+      <input ref={inputRef} type="file" accept={accept} onChange={handleChange} style={{ display: 'none' }} />
+      <button style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }} onClick={() => inputRef.current?.click()}>
+        {label || 'Browse File'}
+      </button>
+    </>
+  );
+}
 
 // ── Org Tree Node ──
 
@@ -424,6 +453,17 @@ export default function OrganizationsPage() {
                   </select>
                 </div>
               </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                <FilePicker
+                  accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'}
+                  onFileRead={(content, fileName) => {
+                    setImportText(content);
+                    if (fileName.endsWith('.json') && importFormat !== 'json') setImportFormat('json');
+                    if (fileName.endsWith('.csv') && importFormat !== 'csv') setImportFormat('csv');
+                  }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>or paste data below</span>
+              </div>
               <textarea
                 style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
                 value={importText}
@@ -557,31 +597,32 @@ export default function OrganizationsPage() {
                 </label>
               </div>
 
-              {peopleImportFormat === 'csv' ? (
-                <div>
-                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                    CSV columns: <strong>Name</strong> (required), Email, Role (SUPER_ADMIN/ORG_ADMIN/PROCESS_OWNER/DATA_STEWARD/CONTRIBUTOR/VIEWER), Title
-                  </p>
-                  <textarea
-                    style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-                    value={peopleImportText}
-                    onChange={(e) => setPeopleImportText(e.target.value)}
-                    placeholder={`Name,Email,Role,Title\nJane Smith,jane@company.com,PROCESS_OWNER,Director of Operations\nBob Jones,bob@company.com,DATA_STEWARD,Data Analyst\nAlice Brown,alice@company.com,VIEWER,Business Analyst`}
-                  />
-                </div>
-              ) : (
-                <div>
-                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                    JSON array with: <strong>name</strong> (required), email, role, title
-                  </p>
-                  <textarea
-                    style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
-                    value={peopleImportText}
-                    onChange={(e) => setPeopleImportText(e.target.value)}
-                    placeholder={`[\n  { "name": "Jane Smith", "email": "jane@company.com", "role": "PROCESS_OWNER", "title": "Director of Operations" },\n  { "name": "Bob Jones", "email": "bob@company.com", "role": "DATA_STEWARD", "title": "Data Analyst" }\n]`}
-                  />
-                </div>
-              )}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                <FilePicker
+                  accept={peopleImportFormat === 'csv' ? '.csv,.txt' : '.json,.txt'}
+                  onFileRead={(content, fileName) => {
+                    setPeopleImportText(content);
+                    if (fileName.endsWith('.json') && peopleImportFormat !== 'json') setPeopleImportFormat('json');
+                    if (fileName.endsWith('.csv') && peopleImportFormat !== 'csv') setPeopleImportFormat('csv');
+                  }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>or paste data below</span>
+              </div>
+
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                {peopleImportFormat === 'csv'
+                  ? <>CSV columns: <strong>Name</strong> (required), Email, Role, Title</>
+                  : <>JSON array with: <strong>name</strong> (required), email, role, title</>
+                }
+              </p>
+              <textarea
+                style={{ ...inputStyle, minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                value={peopleImportText}
+                onChange={(e) => setPeopleImportText(e.target.value)}
+                placeholder={peopleImportFormat === 'csv'
+                  ? `Name,Email,Role,Title\nJane Smith,jane@company.com,PROCESS_OWNER,Director of Operations\nBob Jones,bob@company.com,DATA_STEWARD,Data Analyst`
+                  : `[\n  { "name": "Jane Smith", "email": "jane@company.com", "role": "PROCESS_OWNER", "title": "Director" }\n]`}
+              />
 
               <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
                 <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); }}>Cancel</button>
