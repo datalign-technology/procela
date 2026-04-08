@@ -1,28 +1,47 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 
-interface AuthConfig {
+interface AuthConfigData {
   provider: string;
-  issuerUrl?: string;
-  clientId?: string;
+  providerName: string;
+  oidcConfigured: boolean;
+  issuerUrl: string;
+  clientId: string;
 }
 
 interface AuthConfigResponse {
   success: boolean;
-  data: AuthConfig;
+  data: AuthConfigData;
+}
+
+// The form uses "display" provider values (dev, microsoft, okta)
+// which map to the backend's provider types (dev, oidc)
+type DisplayProvider = 'dev' | 'microsoft' | 'okta';
+
+function displayProviderToBackend(dp: DisplayProvider): string {
+  if (dp === 'microsoft' || dp === 'okta') return 'oidc';
+  return 'dev';
+}
+
+function backendToDisplayProvider(backendProvider: string, issuerUrl: string): DisplayProvider {
+  if (backendProvider !== 'oidc') return 'dev';
+  if (issuerUrl.includes('microsoftonline.com') || issuerUrl.includes('login.microsoft')) return 'microsoft';
+  if (issuerUrl.includes('okta.com')) return 'okta';
+  // Default to microsoft if OIDC is active but issuer doesn't match known patterns
+  return 'microsoft';
 }
 
 export default function SettingsPage() {
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
 
   // Auth settings state
-  const [currentProvider, setCurrentProvider] = useState<string>('dev');
+  const [currentProvider, setCurrentProvider] = useState<DisplayProvider>('dev');
   const [currentIssuerUrl, setCurrentIssuerUrl] = useState<string>('');
   const [currentClientId, setCurrentClientId] = useState<string>('');
   const [authLoading, setAuthLoading] = useState(true);
 
   // Auth config form state
-  const [formProvider, setFormProvider] = useState<string>('dev');
+  const [formProvider, setFormProvider] = useState<DisplayProvider>('dev');
   const [formIssuerUrl, setFormIssuerUrl] = useState('');
   const [formClientId, setFormClientId] = useState('');
   const [authSaving, setAuthSaving] = useState(false);
@@ -44,10 +63,11 @@ export default function SettingsPage() {
       try {
         const res = await apiClient.get<AuthConfigResponse>('/auth/config');
         const config = res.data;
-        setCurrentProvider(config.provider || 'dev');
+        const dp = backendToDisplayProvider(config.provider, config.issuerUrl || '');
+        setCurrentProvider(dp);
         setCurrentIssuerUrl(config.issuerUrl || '');
         setCurrentClientId(config.clientId || '');
-        setFormProvider(config.provider || 'dev');
+        setFormProvider(dp);
         setFormIssuerUrl(config.issuerUrl || '');
         setFormClientId(config.clientId || '');
       } catch {
@@ -80,9 +100,9 @@ export default function SettingsPage() {
 
     try {
       await apiClient.put('/auth/config', {
-        provider: formProvider,
-        issuerUrl: isOidc ? formIssuerUrl.trim() : undefined,
-        clientId: isOidc ? formClientId.trim() : undefined,
+        provider: displayProviderToBackend(formProvider),
+        oidcIssuer: isOidc ? formIssuerUrl.trim() : undefined,
+        oidcClientId: isOidc ? formClientId.trim() : undefined,
       });
       setCurrentProvider(formProvider);
       setCurrentIssuerUrl(isOidc ? formIssuerUrl.trim() : '');
@@ -96,7 +116,7 @@ export default function SettingsPage() {
     }
   };
 
-  const providerDisplayName = (provider: string) => {
+  const providerDisplayName = (provider: DisplayProvider) => {
     switch (provider) {
       case 'dev': return 'Dev Mode';
       case 'microsoft': return 'Microsoft Entra ID';
@@ -189,7 +209,7 @@ export default function SettingsPage() {
                 <select
                   value={formProvider}
                   onChange={(e) => {
-                    setFormProvider(e.target.value);
+                    setFormProvider(e.target.value as DisplayProvider);
                     setAuthError('');
                   }}
                   style={inputStyle}
