@@ -5,7 +5,7 @@ import config from '../config';
 import { AuthenticatedRequest, authenticateToken } from '../middleware/auth';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
-import { people } from './people';
+import { people, computeAccessibleOrgs } from './people';
 import { organizations } from './organizations';
 import {
   getAuthProvider,
@@ -383,13 +383,18 @@ router.put('/config', (req: Request, res: Response) => {
 /**
  * GET /api/v1/auth/accessible-orgs
  *
- * Returns the list of organization IDs the current user can "work in".
+ * Returns the orgs the current user can "work in", based on:
+ * 1. Role-based computed access (from org assignment + role)
+ * 2. Explicit grants (accessibleOrgIds on the person record)
  *
  * Rules:
  * - SUPER_ADMIN: all company + division orgs
- * - Assigned to a Company: that company + all divisions under it
- * - ORG_ADMIN assigned to a Division: only their division
- * - Other roles assigned to a Division: only their division
+ * - ORG_ADMIN at Company: company + all descendant working-level orgs
+ * - ORG_ADMIN at Division: division + all descendant working-level orgs
+ * - Other roles at Company: company + direct child divisions
+ * - Other roles at Division: that division only
+ * - Dept/Team/Unit: parent division or company
+ * - Explicit grants: always added on top of computed access
  * - No people record: all orgs (dev fallback)
  */
 router.get('/accessible-orgs', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
@@ -398,54 +403,17 @@ router.get('/accessible-orgs', authenticateToken, (req: AuthenticatedRequest, re
 
   const WORKING_LEVELS = ['company', 'division'];
 
-  // Super Admin sees everything
-  if (user.role === 'SUPER_ADMIN') {
-    const all = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
-    res.json({ success: true, data: all.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
-    return;
-  }
-
-  // Find the user's people record
+  // Find the user's people record by email
   const person = people.find((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
+
   if (!person) {
-    // No people record — dev fallback, show all
+    // No people record — dev fallback, show all working-level orgs
     const all = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
     res.json({ success: true, data: all.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
     return;
   }
 
-  const assignedOrg = organizations.find((o) => o.id === person.orgId);
-  if (!assignedOrg) {
-    res.json({ success: true, data: [] });
-    return;
-  }
-
-  const accessible: Array<{ id: string; name: string; type: string }> = [];
-
-  if (assignedOrg.type === 'company') {
-    // Company-level: see this company + all divisions under it
-    accessible.push({ id: assignedOrg.id, name: assignedOrg.name, type: assignedOrg.type });
-    const childDivisions = organizations.filter((o) => o.parentId === assignedOrg.id && o.type === 'division');
-    for (const div of childDivisions) {
-      accessible.push({ id: div.id, name: div.name, type: div.type });
-    }
-  } else if (WORKING_LEVELS.includes(assignedOrg.type)) {
-    // Division-level: only their division
-    accessible.push({ id: assignedOrg.id, name: assignedOrg.name, type: assignedOrg.type });
-  } else {
-    // Assigned to department/team/unit — find the parent division or company
-    let current = assignedOrg;
-    while (current.parentId) {
-      const parent = organizations.find((o) => o.id === current.parentId);
-      if (!parent) break;
-      if (WORKING_LEVELS.includes(parent.type)) {
-        accessible.push({ id: parent.id, name: parent.name, type: parent.type });
-        break;
-      }
-      current = parent;
-    }
-  }
-
+  const accessible = computeAccessibleOrgs(person);
   res.json({ success: true, data: accessible });
 });
 

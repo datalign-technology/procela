@@ -19,8 +19,92 @@ export interface StoredPerson {
   email: string;
   role: string;
   title: string;
+  accessibleOrgIds: string[]; // explicit org access grants (empty = computed from role + assignment)
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Org access resolution ──
+
+function getDescendantOrgIds(orgId: string): string[] {
+  const ids: string[] = [];
+  const children = organizations.filter((o) => o.parentId === orgId);
+  for (const child of children) {
+    ids.push(child.id);
+    ids.push(...getDescendantOrgIds(child.id));
+  }
+  return ids;
+}
+
+function getAncestorOrgs(orgId: string, levels: string[]): string[] {
+  const ids: string[] = [];
+  let current = organizations.find((o) => o.id === orgId);
+  while (current?.parentId) {
+    const parent = organizations.find((o) => o.id === current!.parentId);
+    if (!parent) break;
+    if (levels.includes(parent.type)) ids.push(parent.id);
+    current = parent;
+  }
+  return ids;
+}
+
+const WORKING_LEVELS = ['company', 'division'];
+
+export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string; name: string; type: string }> {
+  const allWorkingOrgs = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
+
+  // SUPER_ADMIN: everything
+  if (person.role === 'SUPER_ADMIN') {
+    return allWorkingOrgs.map((o) => ({ id: o.id, name: o.name, type: o.type }));
+  }
+
+  const computed = new Set<string>();
+  const assignedOrg = organizations.find((o) => o.id === person.orgId);
+
+  if (assignedOrg) {
+    if (assignedOrg.type === 'company') {
+      // Company level: this company + all children that are working levels
+      computed.add(assignedOrg.id);
+      if (person.role === 'ORG_ADMIN') {
+        // Org Admin at company: all descendants that are working levels
+        const descendants = getDescendantOrgIds(assignedOrg.id);
+        for (const did of descendants) {
+          const d = organizations.find((o) => o.id === did);
+          if (d && WORKING_LEVELS.includes(d.type)) computed.add(d.id);
+        }
+      } else {
+        // Other roles at company: company + direct child divisions
+        const childDivisions = organizations.filter((o) => o.parentId === assignedOrg.id && o.type === 'division');
+        for (const div of childDivisions) computed.add(div.id);
+      }
+    } else if (assignedOrg.type === 'division') {
+      // Division level: this division
+      computed.add(assignedOrg.id);
+      if (person.role === 'ORG_ADMIN') {
+        // Org Admin at division: this division + all working-level descendants
+        const descendants = getDescendantOrgIds(assignedOrg.id);
+        for (const did of descendants) {
+          const d = organizations.find((o) => o.id === did);
+          if (d && WORKING_LEVELS.includes(d.type)) computed.add(d.id);
+        }
+      }
+    } else {
+      // Department/team/unit: find parent division or company
+      const ancestors = getAncestorOrgs(assignedOrg.id, WORKING_LEVELS);
+      for (const aid of ancestors) computed.add(aid);
+    }
+  }
+
+  // Add explicit grants
+  for (const grantId of person.accessibleOrgIds) {
+    const org = organizations.find((o) => o.id === grantId);
+    if (org && WORKING_LEVELS.includes(org.type)) computed.add(grantId);
+  }
+
+  return Array.from(computed).map((id) => {
+    const org = organizations.find((o) => o.id === id)!;
+    return { id: org.id, name: org.name, type: org.type };
+  });
 }
 
 export const people: StoredPerson[] = [];
@@ -43,7 +127,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/people */
 router.post('/', (req: Request, res: Response) => {
-  const { orgId, name, email, role, title } = req.body;
+  const { orgId, name, email, role, title, accessibleOrgIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'Organization is required' }); return; }
   const org = organizations.find((o) => o.id === orgId);
@@ -53,6 +137,7 @@ router.post('/', (req: Request, res: Response) => {
     id: uuid(), orgId, name,
     email: email || '', role: role || 'VIEWER',
     title: title || '',
+    accessibleOrgIds: accessibleOrgIds || [],
     createdAt: now, updatedAt: now,
   };
   people.push(person);
@@ -63,11 +148,12 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const { name, email, role, title, orgId } = req.body;
+  const { name, email, role, title, orgId, accessibleOrgIds } = req.body;
   if (name !== undefined) person.name = name;
   if (email !== undefined) person.email = email;
   if (role !== undefined) person.role = role;
   if (title !== undefined) person.title = title;
+  if (accessibleOrgIds !== undefined) person.accessibleOrgIds = accessibleOrgIds;
   if (orgId !== undefined) {
     const org = organizations.find((o) => o.id === orgId);
     if (!org) { res.status(400).json({ success: false, error: 'Organization not found. Person must be assigned to an existing organization level.' }); return; }
@@ -154,6 +240,7 @@ router.post('/import', (req: Request, res: Response) => {
         id: uuid(), orgId, name: row.name,
         email: row.email || '', role,
         title: row.title || '',
+        accessibleOrgIds: [],
         createdAt: now, updatedAt: now,
       };
       people.push(person);

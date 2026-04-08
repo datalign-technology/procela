@@ -15,7 +15,7 @@ interface OrgFlat {
   industry: string; description: string; headCount: number;
 }
 interface Person {
-  id: string; orgId: string; name: string; email: string; role: string; title: string;
+  id: string; orgId: string; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
 }
 
 // ── Styles ──
@@ -88,8 +88,8 @@ function flattenTreeForSelect(nodes: OrgNode[], depth = 0): FlatOrgOption[] {
 interface OrgFormData { name: string; parentId: string | null; type: string; industry: string; description: string; }
 const emptyOrgForm: OrgFormData = { name: '', parentId: null, type: 'department', industry: '', description: '' };
 
-interface PersonFormData { orgId: string; name: string; email: string; role: string; title: string; }
-const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', title: '' };
+interface PersonFormData { orgId: string; name: string; email: string; role: string; title: string; accessibleOrgIds: string[]; }
+const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', title: '', accessibleOrgIds: [] };
 
 // ── File Picker ──
 
@@ -246,7 +246,7 @@ export default function OrganizationsPage() {
 
   // ── People handlers ──
   const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgId: selectedOrgId }); setEditingPersonId(null); setShowPersonForm(true); };
-  const openEditPerson = (person: Person) => { setPersonForm({ orgId: person.orgId, name: person.name, email: person.email, role: person.role, title: person.title }); setEditingPersonId(person.id); setShowPersonForm(true); };
+  const openEditPerson = (person: Person) => { setPersonForm({ orgId: person.orgId, name: person.name, email: person.email, role: person.role, title: person.title, accessibleOrgIds: person.accessibleOrgIds || [] }); setEditingPersonId(person.id); setShowPersonForm(true); };
   const handleSavePerson = async () => {
     if (!personForm.name.trim() || !personForm.orgId) return;
     if (editingPersonId) await apiClient.put(`/people/${editingPersonId}`, personForm);
@@ -438,6 +438,39 @@ export default function OrganizationsPage() {
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Title</label>
                       <input style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Additional Org Access</label>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                        Grant access to additional organizations beyond what their role and assignment provide. Only company and division levels shown.
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {orgOptions.filter((o) => o.type === 'company' || o.type === 'division').map((opt) => {
+                          const isGranted = personForm.accessibleOrgIds.includes(opt.id);
+                          const isAssigned = opt.id === personForm.orgId;
+                          return (
+                            <label key={opt.id} style={{
+                              fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: isAssigned ? 'default' : 'pointer',
+                              opacity: isAssigned ? 0.5 : 1,
+                            }}>
+                              <input type="checkbox" checked={isGranted || isAssigned} disabled={isAssigned}
+                                onChange={() => {
+                                  if (isAssigned) return;
+                                  setPersonForm({
+                                    ...personForm,
+                                    accessibleOrgIds: isGranted
+                                      ? personForm.accessibleOrgIds.filter((id) => id !== opt.id)
+                                      : [...personForm.accessibleOrgIds, opt.id],
+                                  });
+                                }}
+                                style={{ accentColor: 'var(--color-primary)' }}
+                              />
+                              {opt.name}
+                              {isAssigned && <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>(assigned)</span>}
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
