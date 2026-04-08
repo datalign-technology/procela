@@ -164,16 +164,29 @@ export default function Layout() {
 
   const fetchOrgs = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgTreeNode[] }>('/organizations');
-      const flat = flattenOrgTree(res.tree || []);
-      setOrgOptions(flat);
-      setOrgs(flat.map((o) => ({ id: o.id, name: o.name, type: o.type })));
-      // If active org no longer exists, clear it
-      if (activeOrgId && !flat.find((o) => o.id === activeOrgId)) {
+      // Fetch accessible orgs for the current user (filtered by role/assignment)
+      const accessRes = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; type: string }> }>('/auth/accessible-orgs');
+      const accessible = accessRes.data || [];
+
+      const options = accessible.map((o) => {
+        const typeLabel = o.type.charAt(0).toUpperCase() + o.type.slice(1);
+        return { id: o.id, name: o.name, type: o.type, label: `${o.name} (${typeLabel})` };
+      });
+
+      setOrgOptions(options);
+      setOrgs(options.map((o) => ({ id: o.id, name: o.name, type: o.type })));
+
+      // If active org is no longer accessible, clear it
+      if (activeOrgId && !options.find((o) => o.id === activeOrgId)) {
         clearActiveOrg();
       }
+
+      // If only one org is accessible, auto-select it
+      if (options.length === 1 && !activeOrgId) {
+        setActiveOrg(options[0].id, options[0].name, options[0].type);
+      }
     } catch { /* */ }
-  }, [activeOrgId, setOrgs, clearActiveOrg, refreshKey]);
+  }, [activeOrgId, setOrgs, clearActiveOrg, setActiveOrg, refreshKey]);
 
   useEffect(() => {
     if (isAuthenticated) fetchOrgs();

@@ -5,6 +5,8 @@ import config from '../config';
 import { AuthenticatedRequest, authenticateToken } from '../middleware/auth';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
+import { people } from './people';
+import { organizations } from './organizations';
 import {
   getAuthProvider,
   getAuthConfig,
@@ -122,14 +124,28 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const user = result.user;
-    const accessToken = createAccessToken(user);
+
+    // Resolve user's org and role from people records (if they exist)
+    const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    const resolvedOrgId = personRecord?.orgId || DEV_ORG_ID;
+    const resolvedRole = personRecord?.role || user.role;
+    const resolvedName = personRecord?.name || user.name;
+
+    const accessToken = createAccessToken({
+      ...user,
+      name: resolvedName,
+      orgId: resolvedOrgId,
+      role: resolvedRole,
+    });
     const refresh = createRefreshToken(user.sub);
 
-    auditService.log(DEV_ORG_ID, user.sub, 'Auth', 'login', 'LOGIN_SUCCESS', null, {
+    auditService.log(resolvedOrgId, user.sub, 'Auth', 'login', 'LOGIN_SUCCESS', null, {
       email: user.email,
       provider: provider.type,
+      resolvedOrg: resolvedOrgId,
+      resolvedRole,
     });
-    logger.info({ email: user.email, provider: provider.type }, 'Login successful');
+    logger.info({ email: user.email, provider: provider.type, orgId: resolvedOrgId, role: resolvedRole }, 'Login successful');
 
     res.json({
       success: true,
@@ -140,9 +156,9 @@ router.post('/login', async (req: Request, res: Response) => {
         user: {
           sub: user.sub,
           email: user.email,
-          name: user.name,
-          orgId: DEV_ORG_ID,
-          role: user.role,
+          name: resolvedName,
+          orgId: resolvedOrgId,
+          role: resolvedRole,
         },
       },
     });
@@ -358,6 +374,79 @@ router.put('/config', (req: Request, res: Response) => {
       oidcConfigured: authCfg.oidcConfigured,
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// Accessible organizations for the current user
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/v1/auth/accessible-orgs
+ *
+ * Returns the list of organization IDs the current user can "work in".
+ *
+ * Rules:
+ * - SUPER_ADMIN: all company + division orgs
+ * - Assigned to a Company: that company + all divisions under it
+ * - ORG_ADMIN assigned to a Division: only their division
+ * - Other roles assigned to a Division: only their division
+ * - No people record: all orgs (dev fallback)
+ */
+router.get('/accessible-orgs', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user;
+  if (!user) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+
+  const WORKING_LEVELS = ['company', 'division'];
+
+  // Super Admin sees everything
+  if (user.role === 'SUPER_ADMIN') {
+    const all = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
+    res.json({ success: true, data: all.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
+    return;
+  }
+
+  // Find the user's people record
+  const person = people.find((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
+  if (!person) {
+    // No people record — dev fallback, show all
+    const all = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
+    res.json({ success: true, data: all.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
+    return;
+  }
+
+  const assignedOrg = organizations.find((o) => o.id === person.orgId);
+  if (!assignedOrg) {
+    res.json({ success: true, data: [] });
+    return;
+  }
+
+  const accessible: Array<{ id: string; name: string; type: string }> = [];
+
+  if (assignedOrg.type === 'company') {
+    // Company-level: see this company + all divisions under it
+    accessible.push({ id: assignedOrg.id, name: assignedOrg.name, type: assignedOrg.type });
+    const childDivisions = organizations.filter((o) => o.parentId === assignedOrg.id && o.type === 'division');
+    for (const div of childDivisions) {
+      accessible.push({ id: div.id, name: div.name, type: div.type });
+    }
+  } else if (WORKING_LEVELS.includes(assignedOrg.type)) {
+    // Division-level: only their division
+    accessible.push({ id: assignedOrg.id, name: assignedOrg.name, type: assignedOrg.type });
+  } else {
+    // Assigned to department/team/unit — find the parent division or company
+    let current = assignedOrg;
+    while (current.parentId) {
+      const parent = organizations.find((o) => o.id === current.parentId);
+      if (!parent) break;
+      if (WORKING_LEVELS.includes(parent.type)) {
+        accessible.push({ id: parent.id, name: parent.name, type: parent.type });
+        break;
+      }
+      current = parent;
+    }
+  }
+
+  res.json({ success: true, data: accessible });
 });
 
 export default router;
