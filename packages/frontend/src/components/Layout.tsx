@@ -76,13 +76,17 @@ interface OrgTreeNode {
   children: OrgTreeNode[];
 }
 
+const WORKING_ORG_LEVELS = ['company', 'division'];
+
 function flattenOrgTree(nodes: OrgTreeNode[], depth: number = 0): Array<{ id: string; name: string; type: string; label: string }> {
   const result: Array<{ id: string; name: string; type: string; label: string }> = [];
   for (const node of nodes) {
-    const indent = '\u00A0\u00A0'.repeat(depth);
-    const typeLabel = node.type.charAt(0).toUpperCase() + node.type.slice(1);
-    result.push({ id: node.id, name: node.name, type: node.type, label: `${indent}${node.name} (${typeLabel})` });
-    if (node.children.length > 0) result.push(...flattenOrgTree(node.children, depth + 1));
+    if (WORKING_ORG_LEVELS.includes(node.type)) {
+      const indent = '\u00A0\u00A0'.repeat(depth);
+      const typeLabel = node.type.charAt(0).toUpperCase() + node.type.slice(1);
+      result.push({ id: node.id, name: node.name, type: node.type, label: `${indent}${node.name} (${typeLabel})` });
+    }
+    if (node.children.length > 0) result.push(...flattenOrgTree(node.children, depth + (WORKING_ORG_LEVELS.includes(node.type) ? 1 : 0)));
   }
   return result;
 }
