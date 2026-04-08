@@ -111,7 +111,7 @@ export default function Layout() {
   const handleOrgChange = (id: string) => {
     if (!id) { clearActiveOrg(); return; }
     const org = orgOptions.find((o) => o.id === id);
-    if (org) setActiveOrg(id, org.name);
+    if (org) setActiveOrg(id, org.name, org.type);
   };
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';

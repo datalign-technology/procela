@@ -320,7 +320,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
 
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   const [tree, setTree] = useState<ProcessNode[]>([]);
   const [stats, setStats] = useState<Record<string, any>>({});
   const [validChildrenMap, setValidChildrenMap] = useState<Record<string, string[]>>({});
@@ -396,7 +396,7 @@ export default function ProcessCatalogPage() {
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
         </div>
-        {totalNodes > 0 && (
+        {totalNodes > 0 && canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => navigate('/processes/wizard')}
               style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -409,6 +409,18 @@ export default function ProcessCatalogPage() {
           </div>
         )}
       </div>
+
+      {/* Org restriction notice */}
+      {!activeOrgId && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+          Select a <strong>company or division</strong> from the "Working in" dropdown above to create and manage value streams.
+        </div>
+      )}
+      {activeOrgId && !canCreateValueStreams && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+          Value streams can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Select a company or division from the "Working in" dropdown.
+        </div>
+      )}
 
       {/* Legend */}
       {totalNodes > 0 && (
@@ -490,16 +502,22 @@ export default function ProcessCatalogPage() {
               Start simple, then add optional levels (Domain, Capability, Sub-Process, Task, Execution) as you need more detail.
             </p>
 
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <button onClick={() => navigate('/processes/wizard')}
-                style={{ padding: '10px 24px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-                Generate from Industry Template
-              </button>
-              <button onClick={() => setAddingTo('__root__')}
-                style={{ padding: '10px 24px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
-                Custom
-              </button>
-            </div>
+            {canCreateValueStreams ? (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button onClick={() => navigate('/processes/wizard')}
+                  style={{ padding: '10px 24px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+                  Generate from Industry Template
+                </button>
+                <button onClick={() => setAddingTo('__root__')}
+                  style={{ padding: '10px 24px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+                  Custom
+                </button>
+              </div>
+            ) : (
+              <p style={{ color: '#92400e', fontSize: 13 }}>
+                Select a <strong>company or division</strong> from the "Working in" dropdown to get started.
+              </p>
+            )}
           </div>
         ) : (
           tree.map((node) => (

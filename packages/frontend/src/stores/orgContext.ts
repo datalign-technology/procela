@@ -7,12 +7,16 @@ interface OrgOption {
   type: string;
 }
 
+const VALUE_STREAM_LEVELS = ['company', 'division'];
+
 interface OrgContextState {
   activeOrgId: string;
   activeOrgName: string;
+  activeOrgType: string;
   orgs: OrgOption[];
   refreshKey: number;
-  setActiveOrg: (id: string, name: string) => void;
+  canCreateValueStreams: boolean;
+  setActiveOrg: (id: string, name: string, type: string) => void;
   setOrgs: (orgs: OrgOption[]) => void;
   clearActiveOrg: () => void;
   triggerRefresh: () => void;
@@ -23,13 +27,25 @@ export const useOrgContext = create<OrgContextState>()(
     (set) => ({
       activeOrgId: '',
       activeOrgName: '',
+      activeOrgType: '',
       orgs: [],
       refreshKey: 0,
-      setActiveOrg: (id, name) => set({ activeOrgId: id, activeOrgName: name }),
+      canCreateValueStreams: false,
+      setActiveOrg: (id, name, type) => set({
+        activeOrgId: id,
+        activeOrgName: name,
+        activeOrgType: type,
+        canCreateValueStreams: VALUE_STREAM_LEVELS.includes(type),
+      }),
       setOrgs: (orgs) => set({ orgs }),
-      clearActiveOrg: () => set({ activeOrgId: '', activeOrgName: '' }),
+      clearActiveOrg: () => set({
+        activeOrgId: '', activeOrgName: '', activeOrgType: '',
+        canCreateValueStreams: false,
+      }),
       triggerRefresh: () => set((state) => ({ refreshKey: state.refreshKey + 1 })),
     }),
     { name: 'org-context' }
   )
 );
+
+export { VALUE_STREAM_LEVELS };

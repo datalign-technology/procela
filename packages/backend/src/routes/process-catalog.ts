@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
+import { organizations } from './organizations';
+
+const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UNIVERSAL PROCESS HIERARCHY
@@ -258,6 +261,18 @@ router.post('/nodes', (req: Request, res: Response) => {
     if (parentId) {
       res.status(400).json({ success: false, error: 'Value streams cannot have a parent' });
       return;
+    }
+    // Validate org level — value streams only at company/division
+    const orgIds = req.body.orgIds || [DEV_ORG_ID];
+    for (const oid of orgIds) {
+      const org = organizations.find((o) => o.id === oid);
+      if (org && !VALUE_STREAM_ORG_LEVELS.includes(org.type)) {
+        res.status(400).json({
+          success: false,
+          error: `Value streams can only be created at the company or division level. "${org.name}" is a ${org.type}.`,
+        });
+        return;
+      }
     }
   } else {
     if (!parentId) {
