@@ -382,6 +382,24 @@ export default function DashboardPage() {
 
   const hasGaps = stats.gaps.unmappedSteps > 0 || stats.gaps.ungovernedAssets > 0;
 
+  const allZero =
+    stats.valueStreams === 0 &&
+    stats.processes === 0 &&
+    stats.systems === 0 &&
+    stats.dataAssets === 0 &&
+    stats.mappings === 0 &&
+    stats.people === 0;
+
+  if (allZero) {
+    return (
+      <div>
+        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Dashboard</h1>
+        <GettingStartedChecklist stats={stats} />
+        <RecentActivity activeOrgId={activeOrgId} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Dashboard</h1>
@@ -503,6 +521,8 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <RecentActivity activeOrgId={activeOrgId} />
     </div>
   );
 }

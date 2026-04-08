@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
@@ -270,7 +271,10 @@ export default function OrganizationsPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 2 }}>Organizations</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Organizations</h1>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+          </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Select an organization to manage its people. {flatOrgs.length} orgs, {people.length} people.
           </p>

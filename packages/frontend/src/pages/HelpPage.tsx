@@ -57,7 +57,7 @@ export default function HelpPage() {
       </p>
 
       {/* Getting Started */}
-      <div style={sectionStyle}>
+      <div id="getting-started" style={sectionStyle}>
         <h2 style={h2Style}>Getting Started</h2>
         <p style={pStyle}>
           Procela works in three phases: <strong>Define</strong> your business processes,{' '}
@@ -74,7 +74,7 @@ export default function HelpPage() {
       </div>
 
       {/* Process Catalog */}
-      <div style={sectionStyle}>
+      <div id="process-catalog" style={sectionStyle}>
         <h2 style={h2Style}>Process Catalog</h2>
         <p style={pStyle}>
           The process catalog is the heart of Procela. It organizes your business operations into a clear hierarchy:
@@ -112,7 +112,7 @@ export default function HelpPage() {
       </div>
 
       {/* Data Assets & Systems */}
-      <div style={sectionStyle}>
+      <div id="data-assets" style={sectionStyle}>
         <h2 style={h2Style}>Data Assets & Systems</h2>
         <p style={pStyle}>
           Define the data your organization relies on — in plain business language, not technical schemas.
@@ -154,7 +154,7 @@ export default function HelpPage() {
       </div>
 
       {/* Mappings */}
-      <div style={sectionStyle}>
+      <div id="mappings" style={sectionStyle}>
         <h2 style={h2Style}>Process-to-Data Mapping</h2>
         <p style={pStyle}>
           Mappings connect your process steps to the data assets they consume or produce. This is where
@@ -184,7 +184,7 @@ export default function HelpPage() {
       </div>
 
       {/* Gap Detection */}
-      <div style={sectionStyle}>
+      <div id="gap-detection" style={sectionStyle}>
         <h2 style={h2Style}>Gap Detection</h2>
         <p style={pStyle}>
           Procela automatically identifies weaknesses in your process-data landscape:
@@ -201,7 +201,7 @@ export default function HelpPage() {
       </div>
 
       {/* AI Assistant */}
-      <div style={sectionStyle}>
+      <div id="ai-assistant" style={sectionStyle}>
         <h2 style={h2Style}>AI Assistant</h2>
         <p style={pStyle}>
           The AI assistant is available throughout Procela to answer questions about your
@@ -220,7 +220,7 @@ export default function HelpPage() {
       </div>
 
       {/* Dashboards */}
-      <div style={sectionStyle}>
+      <div id="dashboards" style={sectionStyle}>
         <h2 style={h2Style}>Dashboards</h2>
 
         <h3 style={h3Style}>Executive Dashboard</h3>
@@ -241,7 +241,7 @@ export default function HelpPage() {
       </div>
 
       {/* Roles */}
-      <div style={sectionStyle}>
+      <div id="roles" style={sectionStyle}>
         <h2 style={h2Style}>Roles & Permissions</h2>
         <p style={pStyle}>
           Procela uses role-based access control tied to your enterprise identity provider:
@@ -272,7 +272,7 @@ export default function HelpPage() {
       </div>
 
       {/* FAQ */}
-      <div style={sectionStyle}>
+      <div id="faq" style={sectionStyle}>
         <h2 style={h2Style}>Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>Do I need technical knowledge to use Procela?</h3>

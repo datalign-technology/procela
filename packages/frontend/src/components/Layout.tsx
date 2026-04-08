@@ -259,6 +259,43 @@ export default function Layout() {
         <header className={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <img src="/procela-logo.png" alt="Procela" className={styles.headerLogo} />
+            {/* Global Search */}
+            <div className={styles.searchWrapper} ref={searchWrapperRef}>
+              <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
+              <input
+                type="text"
+                className={styles.searchInput}
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }}
+              />
+              {searchOpen && (
+                <div className={styles.searchDropdown}>
+                  {searchLoading && (
+                    <div className={styles.searchEmpty}>Searching...</div>
+                  )}
+                  {!searchLoading && searchResults.length === 0 && (
+                    <div className={styles.searchEmpty}>No results found</div>
+                  )}
+                  {!searchLoading && searchResults.map((r) => (
+                    <div
+                      key={`${r.type}-${r.id}`}
+                      className={styles.searchResult}
+                      onClick={() => handleSearchResultClick(r)}
+                    >
+                      <span className={styles.searchBadge}>{r.type}</span>
+                      <div className={styles.searchResultText}>
+                        <div className={styles.searchResultName}>{r.name}</div>
+                        {r.description && (
+                          <div className={styles.searchResultDesc}>{r.description}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {orgOptions.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>Working in:</span>
@@ -306,6 +343,7 @@ export default function Layout() {
           <Outlet />
         </main>
         <ChatPanel />
+        <ToastContainer />
       </div>
     </div>
   );

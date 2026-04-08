@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 
@@ -190,7 +191,10 @@ export default function DataAssetsPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+          </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Data assets described in business terms, linked to the systems that hold them.
           </p>
@@ -335,7 +339,7 @@ export default function DataAssetsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : assets.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>No data assets defined yet. Use the + Add Data Asset button above to get started.</p>
+            <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>Data assets are the data your organization relies on — customer records, billing data, compliance reports, etc. Use the + Add Data Asset button to define your first one.</p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

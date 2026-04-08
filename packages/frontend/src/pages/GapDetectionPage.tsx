@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 
@@ -215,9 +216,30 @@ export default function GapDetectionPage() {
     );
   }
 
+  const hasNoProcesses = unmappedSteps.length === 0 && ungovernedAssets.length === 0 && ownerlessItems.length === 0;
+
   return (
     <div>
-      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Gap Detection</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600 }}>Gap Detection</h1>
+        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+      </div>
+
+      {hasNoProcesses && (
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: '3rem 2rem',
+          textAlign: 'center',
+          marginBottom: 20,
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>
+            Gap detection identifies process activities with no linked data assets and ungoverned data. Define your processes first to see gap analysis.
+          </p>
+        </div>
+      )}
 
       {/* Section 1: Unmapped Process Steps */}
       <div style={sectionStyle}>
