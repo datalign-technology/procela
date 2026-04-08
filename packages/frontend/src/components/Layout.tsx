@@ -73,7 +73,7 @@ function flattenOrgTree(nodes: OrgTreeNode[], depth: number = 0): Array<{ id: st
 export default function Layout() {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuthStore();
-  const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg } = useOrgContext();
+  const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; label: string }>>([]);
 
   const fetchOrgs = useCallback(async () => {
@@ -87,7 +87,7 @@ export default function Layout() {
         clearActiveOrg();
       }
     } catch { /* */ }
-  }, [activeOrgId, setOrgs, clearActiveOrg]);
+  }, [activeOrgId, setOrgs, clearActiveOrg, refreshKey]);
 
   useEffect(() => {
     if (isAuthenticated) fetchOrgs();

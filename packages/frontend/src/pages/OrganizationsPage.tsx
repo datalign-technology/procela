@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 
 // ── Types ──
@@ -251,6 +252,7 @@ function OrgTreeNode({
 // ── Main Component ──
 
 export default function OrganizationsPage() {
+  const { triggerRefresh } = useOrgContext();
   const [activeTab, setActiveTab] = useState<'structure' | 'people'>('structure');
 
   // Org state
@@ -324,10 +326,10 @@ export default function OrganizationsPage() {
     if (!orgForm.name.trim()) return;
     if (editingOrgId) { await apiClient.put(`/organizations/${editingOrgId}`, orgForm); }
     else { await apiClient.post('/organizations', orgForm); }
-    setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData();
+    setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData(); triggerRefresh();
   };
   const handleDeleteOrg = async (id: string) => {
-    try { await apiClient.delete(`/organizations/${id}`); fetchData(); }
+    try { await apiClient.delete(`/organizations/${id}`); fetchData(); triggerRefresh(); }
     catch (e) { alert(e instanceof Error ? e.message : 'Cannot delete'); }
   };
   const handleImport = async () => {
@@ -336,7 +338,7 @@ export default function OrganizationsPage() {
       const body: any = { parentId: importParent || null };
       if (importFormat === 'csv') { body.csv = importText; } else { body.organizations = JSON.parse(importText); }
       await apiClient.post('/organizations/import', body);
-      setShowImport(false); setImportText(''); fetchData(); expandAll();
+      setShowImport(false); setImportText(''); fetchData(); expandAll(); triggerRefresh();
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
   };
 
