@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -59,6 +59,10 @@ export default function SystemsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -92,6 +96,30 @@ export default function SystemsPage() {
 
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
+  const handleImport = async () => {
+    if (!importText.trim()) return;
+    if (!activeOrgId) { alert('Select an organization from the "Working in" dropdown first.'); return; }
+    try {
+      const body: any = { orgId: activeOrgId };
+      if (importFormat === 'csv') { body.csv = importText; } else { body.systems = JSON.parse(importText); }
+      await apiClient.post('/systems/import', body);
+      setShowImport(false); setImportText(''); fetchData();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+  };
+
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImportText(reader.result as string);
+      if (file.name.endsWith('.json')) setImportFormat('json');
+      if (file.name.endsWith('.csv')) setImportFormat('csv');
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   return (
     <div>
       {/* Header */}
@@ -105,10 +133,50 @@ export default function SystemsPage() {
             Applications and platforms where your organization's data lives.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add System
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setShowImport(true)} style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            Import Systems
+          </button>
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add System
+          </button>
+        </div>
       </div>
+
+      {/* Import Panel */}
+      {showImport && (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Systems</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'csv'} onChange={() => setImportFormat('csv')} /> CSV</label>
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'json'} onChange={() => setImportFormat('json')} /> JSON</label>
+            </div>
+          </div>
+          {!activeOrgId && (
+            <div style={{ background: '#fef3c7', padding: '8px 12px', borderRadius: 4, fontSize: 12, color: '#92400e', marginBottom: 10 }}>
+              Select an organization from the "Working in" dropdown in the header before importing.
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input ref={fileInputRef} type="file" accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onChange={handleFileRead} style={{ display: 'none' }} />
+            <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below. Columns: Name (required), Description, Type</span>
+          </div>
+          <textarea
+            style={{ ...inputStyle, width: '100%', minHeight: 100, fontFamily: 'var(--font-mono)', fontSize: 11 }}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder={importFormat === 'csv'
+              ? 'Name,Description,Type\nSAP ERP,Enterprise resource planning,ERP\nSalesforce,Customer relationship management,CRM\nArcGIS,Geographic information system,GIS'
+              : '[{ "name": "SAP ERP", "description": "Enterprise resource planning", "systemType": "ERP" }]'}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
+            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1 }} disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</button>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Form */}
       {showForm && (

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
+import logger from '../lib/logger';
 
 interface StoredSystem {
   id: string;
@@ -72,6 +73,80 @@ router.delete('/:id', (req: Request, res: Response) => {
   auditService.log(DEV_ORG_ID, null, 'System', systems[idx].id, 'DELETE', systems[idx], null);
   systems.splice(idx, 1);
   res.status(204).send();
+});
+
+/**
+ * POST /api/v1/systems/import
+ * Import systems from CSV or JSON. orgId is required.
+ *
+ * JSON: { orgId, systems: [{ name, description?, systemType? }, ...] }
+ * CSV:  { orgId, csv: "Name,Description,Type\nSAP ERP,Enterprise resource planning,ERP" }
+ */
+router.post('/import', (req: Request, res: Response) => {
+  try {
+    const { orgId, systems: systemList, csv } = req.body;
+
+    if (!orgId) {
+      res.status(400).json({ success: false, error: 'Organization is required for import' });
+      return;
+    }
+
+    let rows: Array<{ name: string; description?: string; systemType?: string }> = [];
+
+    if (csv && typeof csv === 'string') {
+      const lines = csv.trim().split('\n');
+      const header = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
+      const nameIdx = header.indexOf('name');
+      const descIdx = header.indexOf('description');
+      const typeIdx = header.findIndex((h: string) => h === 'type' || h === 'systemtype' || h === 'system type');
+
+      if (nameIdx === -1) {
+        res.status(400).json({ success: false, error: 'CSV must have a "Name" column' });
+        return;
+      }
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map((c: string) => c.trim());
+        if (!cols[nameIdx]) continue;
+        rows.push({
+          name: cols[nameIdx],
+          description: descIdx >= 0 ? cols[descIdx] : undefined,
+          systemType: typeIdx >= 0 ? cols[typeIdx] : undefined,
+        });
+      }
+    } else if (Array.isArray(systemList)) {
+      rows = systemList;
+    } else {
+      res.status(400).json({ success: false, error: 'Provide "systems" array or "csv" string' });
+      return;
+    }
+
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, error: 'No systems to import' });
+      return;
+    }
+
+    const created: StoredSystem[] = [];
+    const now = new Date().toISOString();
+
+    for (const row of rows) {
+      if (!row.name) continue;
+      const sys: StoredSystem = {
+        id: uuid(), orgId, name: row.name,
+        description: row.description || '',
+        systemType: row.systemType && SYSTEM_TYPES.includes(row.systemType) ? row.systemType : row.systemType || '',
+        createdAt: now, updatedAt: now,
+      };
+      systems.push(sys);
+      created.push(sys);
+    }
+
+    logger.info({ count: created.length, orgId }, 'Imported systems');
+    res.status(201).json({ success: true, data: created });
+  } catch (err) {
+    logger.error({ err }, 'Systems import failed');
+    res.status(500).json({ success: false, error: 'Import failed' });
+  }
 });
 
 export default router;
