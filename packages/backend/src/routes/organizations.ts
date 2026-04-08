@@ -109,8 +109,10 @@ router.put('/:id', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
-  if (org.id === '00000000-0000-0000-0000-000000000010') {
-    res.status(400).json({ success: false, error: 'Cannot delete the root organization' });
+  // Must have at least one org remaining
+  const topLevelOrgs = organizations.filter((o) => !o.parentId);
+  if (topLevelOrgs.length <= 1 && !org.parentId) {
+    res.status(400).json({ success: false, error: 'Cannot delete the last top-level organization' });
     return;
   }
   // Re-parent children to this org's parent
