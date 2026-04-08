@@ -69,20 +69,44 @@ const btnAdd: React.CSSProperties = {
 
 function countByLevel(node: ProcessNode, level: NodeLevel): number {
   let count = node.level === level ? 1 : 0;
-  for (const child of node.children || []) {
-    count += countByLevel(child, level);
-  }
+  for (const child of node.children || []) count += countByLevel(child, level);
   return count;
 }
 
-function hasRequiredPath(node: ProcessNode): { complete: boolean; missing: string[] } {
-  if (node.level !== 'VALUE_STREAM') return { complete: true, missing: [] };
+function hasRequiredPath(node: ProcessNode): { complete: boolean; missing: string[]; hasProcess: boolean; hasActivity: boolean } {
+  if (node.level !== 'VALUE_STREAM') return { complete: true, missing: [], hasProcess: true, hasActivity: true };
   const missing: string[] = [];
-  const processes = countByLevel(node, 'PROCESS');
-  const activities = countByLevel(node, 'ACTIVITY');
-  if (processes === 0) missing.push('Process');
-  if (activities === 0) missing.push('Activity');
-  return { complete: missing.length === 0, missing };
+  const hasProcess = countByLevel(node, 'PROCESS') > 0;
+  const hasActivity = countByLevel(node, 'ACTIVITY') > 0;
+  if (!hasProcess) missing.push('Process');
+  if (!hasActivity) missing.push('Activity');
+  return { complete: missing.length === 0, missing, hasProcess, hasActivity };
+}
+
+function getRequiredNextLevel(node: ProcessNode): NodeLevel | null {
+  if (node.level === 'VALUE_STREAM' && countByLevel(node, 'PROCESS') === 0) return 'PROCESS';
+  if (node.level === 'PROCESS' && countByLevel(node, 'ACTIVITY') === 0) return 'ACTIVITY';
+  if (node.level === 'VALUE_STREAM' && countByLevel(node, 'ACTIVITY') === 0) return null; // need to go deeper
+  return null;
+}
+
+function collectIssues(tree: ProcessNode[]): Array<{ nodeId: string; nodeName: string; level: NodeLevel; issue: string }> {
+  const issues: Array<{ nodeId: string; nodeName: string; level: NodeLevel; issue: string }> = [];
+  function walk(nodes: ProcessNode[]) {
+    for (const node of nodes) {
+      if (node.level === 'VALUE_STREAM') {
+        const cp = hasRequiredPath(node);
+        if (!cp.hasProcess) issues.push({ nodeId: node.id, nodeName: node.name, level: node.level, issue: 'Missing Process' });
+        else if (!cp.hasActivity) issues.push({ nodeId: node.id, nodeName: node.name, level: node.level, issue: 'Missing Activity' });
+      }
+      if (node.level === 'PROCESS' && countByLevel(node, 'ACTIVITY') === 0) {
+        issues.push({ nodeId: node.id, nodeName: node.name, level: node.level, issue: 'Missing Activity' });
+      }
+      if (node.children) walk(node.children);
+    }
+  }
+  walk(tree);
+  return issues;
 }
 
 function findNodeInTree(nodes: ProcessNode[], id: string): ProcessNode | null {
@@ -193,14 +217,26 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   // Completeness check for value streams
   const completeness = node.level === 'VALUE_STREAM' ? hasRequiredPath(node) : null;
 
-  // Missing required children warnings
+  // Missing required children — what's needed next
+  const requiredNext = getRequiredNextLevel(node);
   let warning: string | null = null;
-  if (node.level === 'PROCESS' && countByLevel(node, 'ACTIVITY') === 0) {
-    warning = 'Needs at least one Activity';
-  }
+  let guidedLevel: NodeLevel | null = null;
   if (node.level === 'VALUE_STREAM' && countByLevel(node, 'PROCESS') === 0) {
-    warning = 'Needs at least one Process';
+    warning = 'Next step: Add a Process';
+    guidedLevel = 'PROCESS';
+  } else if (node.level === 'PROCESS' && countByLevel(node, 'ACTIVITY') === 0) {
+    warning = 'Next step: Add Activities';
+    guidedLevel = 'ACTIVITY';
+  } else if (node.level === 'VALUE_STREAM' && countByLevel(node, 'ACTIVITY') === 0) {
+    warning = 'Processes need Activities';
   }
+
+  // Can this node be set to ACTIVE?
+  const canBeActive = (() => {
+    if (node.level === 'VALUE_STREAM') return completeness?.complete ?? false;
+    if (node.level === 'PROCESS') return countByLevel(node, 'ACTIVITY') > 0;
+    return true;
+  })();
 
   // Flow indicators for activities
   const outgoingFlows = flows.filter((f) => f.fromNodeId === node.id);
@@ -257,24 +293,30 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           <div style={{ marginTop: 1 }}>
             <InlineEdit value={node.description} onSave={(description) => onUpdate(node.id, { description })} fontSize={11} placeholder="Add description..." />
           </div>
-          {/* Warning for missing required children */}
+          {/* Guided prompt for missing required children */}
           {warning && (
-            <div style={{ fontSize: 10, color: '#d97706', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 12 }}>{'\u26A0'}</span> {warning}
-              <button style={{ ...btnAdd, fontSize: 10, padding: '1px 6px', borderStyle: 'solid', borderColor: '#d97706', color: '#d97706' }}
-                onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }}>
-                Add now
-              </button>
+            <div style={{ fontSize: 10, color: '#d97706', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, background: '#fef3c7', padding: '2px 8px', borderRadius: 4, width: 'fit-content' }}>
+              <span style={{ fontSize: 11 }}>{'\u2192'}</span>
+              <span style={{ fontWeight: 500 }}>{warning}</span>
+              {guidedLevel && (
+                <button style={{ ...btnAdd, fontSize: 10, padding: '1px 8px', borderColor: '#d97706', color: '#d97706', background: '#fff', fontWeight: 600 }}
+                  onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }}>
+                  + Add {LEVEL_CONFIG[guidedLevel].label}
+                </button>
+              )}
             </div>
           )}
-          {/* Completeness badge for value streams */}
+          {/* Progress checklist for value streams */}
           {completeness && (
-            <div style={{ fontSize: 10, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-              {completeness.complete ? (
-                <span style={{ color: '#16a34a' }}>{'\u2713'} Complete path: Value Stream → Process → Activity</span>
-              ) : (
-                <span style={{ color: '#d97706' }}>{'\u26A0'} Missing: {completeness.missing.join(', ')}</span>
-              )}
+            <div style={{ fontSize: 10, marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: '#16a34a' }}>{'\u2713'} Value Stream</span>
+              <span style={{ color: completeness.hasProcess ? '#16a34a' : '#d97706' }}>
+                {completeness.hasProcess ? '\u2713' : '\u2717'} Process
+              </span>
+              <span style={{ color: completeness.hasActivity ? '#16a34a' : '#d97706' }}>
+                {completeness.hasActivity ? '\u2713' : '\u2717'} Activity
+              </span>
+              {completeness.complete && <span style={{ color: '#16a34a', fontWeight: 500 }}>Ready</span>}
             </div>
           )}
         </div>
@@ -288,19 +330,41 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           </span>
         )}
 
-        {/* Status */}
-        <select value={node.status} onChange={(e) => onUpdate(node.id, { status: e.target.value })}
+        {/* Status — blocks ACTIVE on incomplete nodes */}
+        <select value={node.status} onChange={(e) => {
+            if (e.target.value === 'ACTIVE' && !canBeActive) {
+              alert(`Cannot set to ACTIVE. ${node.level === 'VALUE_STREAM' ? 'Value stream needs Process + Activity.' : 'Process needs at least one Activity.'}`);
+              return;
+            }
+            onUpdate(node.id, { status: e.target.value });
+          }}
           style={{ ...inputStyle, width: 'auto', fontSize: 10, padding: '1px 4px',
             background: statusColors[node.status]?.bg || '#f1f5f9',
             color: statusColors[node.status]?.color || '#64748b', fontWeight: 600, border: 'none',
           }}>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {STATUSES.map((s) => (
+            <option key={s} value={s} disabled={s === 'ACTIVE' && !canBeActive}>
+              {s}{s === 'ACTIVE' && !canBeActive ? ' (incomplete)' : ''}
+            </option>
+          ))}
         </select>
 
-        {/* Actions */}
+        {/* Actions — smart + button */}
         {canAddChildren && (
-          <button style={{ ...btnIcon, color: config.color, fontWeight: 700, fontSize: 14 }}
-            onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }} title={`Add child to ${node.name}`}>+</button>
+          guidedLevel ? (
+            <button style={{
+              background: LEVEL_CONFIG[guidedLevel].bg, color: LEVEL_CONFIG[guidedLevel].color,
+              border: `1px solid ${LEVEL_CONFIG[guidedLevel].color}44`, borderRadius: 4,
+              padding: '1px 8px', fontSize: 10, fontWeight: 600, cursor: 'pointer',
+            }}
+              onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }}
+              title={`Add ${LEVEL_CONFIG[guidedLevel].label} to ${node.name}`}>
+              + {LEVEL_CONFIG[guidedLevel].label}
+            </button>
+          ) : (
+            <button style={{ ...btnIcon, color: config.color, fontWeight: 700, fontSize: 14 }}
+              onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }} title={`Add child to ${node.name}`}>+</button>
+          )
         )}
         <button style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete">&times;</button>
       </div>
@@ -385,6 +449,7 @@ export default function ProcessCatalogPage() {
 
   const byLevel = stats.byLevel || {};
   const totalNodes = stats.total || 0;
+  const issues = collectIssues(tree);
 
   return (
     <div>
@@ -452,6 +517,28 @@ export default function ProcessCatalogPage() {
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
             Click any name or description to edit. Optional levels can be added at any time.
           </span>
+        </div>
+      )}
+
+      {/* Validation summary */}
+      {issues.length > 0 && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: issues.length > 3 ? 6 : 0 }}>
+            <span style={{ fontSize: 14 }}>{'\u26A0'}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e' }}>
+              {issues.length} {issues.length === 1 ? 'issue' : 'issues'} to resolve before processes can be set to Active
+            </span>
+          </div>
+          {issues.slice(0, 5).map((issue, i) => (
+            <div key={i} style={{ fontSize: 11, color: '#92400e', marginLeft: 22, marginTop: 2 }}>
+              <strong>{issue.nodeName}</strong> ({LEVEL_CONFIG[issue.level].label}): {issue.issue}
+            </div>
+          ))}
+          {issues.length > 5 && (
+            <div style={{ fontSize: 11, color: '#92400e', marginLeft: 22, marginTop: 2 }}>
+              ...and {issues.length - 5} more
+            </div>
+          )}
         </div>
       )}
 

@@ -363,10 +363,40 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   if (name !== undefined) node.name = name;
   if (description !== undefined) node.description = description;
-  if (status !== undefined) node.status = status;
   if (orderIndex !== undefined) node.orderIndex = orderIndex;
   if (orgIds !== undefined) node.orgIds = orgIds;
   if (ownerId !== undefined) node.ownerId = ownerId;
+
+  // Enforce ACTIVE status only on complete paths
+  if (status !== undefined) {
+    if (status === 'ACTIVE') {
+      if (node.level === 'VALUE_STREAM') {
+        const descendants = getDescendants(node.id);
+        const hasProcess = descendants.some((d) => d.level === 'PROCESS');
+        const hasActivity = descendants.some((d) => d.level === 'ACTIVITY');
+        if (!hasProcess || !hasActivity) {
+          res.status(400).json({
+            success: false,
+            error: `Cannot set to ACTIVE. Value stream "${node.name}" requires at least one Process and one Activity.`,
+          });
+          return;
+        }
+      }
+      if (node.level === 'PROCESS') {
+        const descendants = getDescendants(node.id);
+        const hasActivity = descendants.some((d) => d.level === 'ACTIVITY');
+        if (!hasActivity) {
+          res.status(400).json({
+            success: false,
+            error: `Cannot set to ACTIVE. Process "${node.name}" requires at least one Activity.`,
+          });
+          return;
+        }
+      }
+    }
+    node.status = status;
+  }
+
   node.updatedAt = new Date().toISOString();
 
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'UPDATE', null, node);
