@@ -24,8 +24,10 @@ const SYSTEM_TYPES = [
 const router = Router();
 
 /** GET /api/v1/systems */
-router.get('/', (_req: Request, res: Response) => {
-  res.json({ success: true, data: systems, systemTypes: SYSTEM_TYPES });
+router.get('/', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const filtered = orgId ? systems.filter((s) => s.orgId === orgId) : systems;
+  res.json({ success: true, data: filtered, systemTypes: SYSTEM_TYPES });
 });
 
 /** GET /api/v1/systems/:id */
@@ -37,11 +39,11 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType } = req.body;
+  const { name, description, systemType, orgId } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const now = new Date().toISOString();
   const sys: StoredSystem = {
-    id: uuid(), orgId: DEV_ORG_ID, name,
+    id: uuid(), orgId: orgId || DEV_ORG_ID, name,
     description: description || '', systemType: systemType || '',
     createdAt: now, updatedAt: now,
   };

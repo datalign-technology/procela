@@ -72,8 +72,10 @@ function enrichMapping(m: StoredMapping) {
 const router = Router();
 
 /** GET /api/v1/mappings */
-router.get('/', (_req: Request, res: Response) => {
-  const enriched = mappings.map(enrichMapping);
+router.get('/', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const filtered = orgId ? mappings.filter((m) => m.orgId === orgId) : mappings;
+  const enriched = filtered.map(enrichMapping);
   res.json({ success: true, data: enriched });
 });
 
@@ -91,7 +93,7 @@ router.get('/by-asset/:assetId', (req: Request, res: Response) => {
 
 /** POST /api/v1/mappings */
 router.post('/', (req: Request, res: Response) => {
-  const { processStepId, dataAssetId, linkType, notes, aiSuggested } = req.body;
+  const { processStepId, dataAssetId, linkType, notes, aiSuggested, orgId } = req.body;
 
   if (!processStepId) {
     res.status(400).json({ success: false, error: 'processStepId is required' });
@@ -109,7 +111,7 @@ router.post('/', (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const mapping: StoredMapping = {
     id: uuid(),
-    orgId: DEV_ORG_ID,
+    orgId: orgId || DEV_ORG_ID,
     processStepId,
     dataAssetId,
     linkType: linkType || 'references',

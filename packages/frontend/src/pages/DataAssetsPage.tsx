@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 interface DataAssetEntity {
   id: string;
@@ -104,6 +105,7 @@ const emptyForm: FormData = {
 };
 
 export default function DataAssetsPage() {
+  const { activeOrgId } = useOrgContext();
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,12 +115,13 @@ export default function DataAssetsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>('/data-assets');
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const res = await apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`);
       setAssets(res.data || []);
       setSystems(res.systems || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -152,7 +155,7 @@ export default function DataAssetsPage() {
     if (editingId) {
       await apiClient.put(`/data-assets/${editingId}`, form);
     } else {
-      await apiClient.post('/data-assets', form);
+      await apiClient.post('/data-assets', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
     }
     setShowForm(false);
     setEditingId(null);

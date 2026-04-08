@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 // ── Types ──
 
@@ -319,6 +320,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
 
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
+  const { activeOrgId } = useOrgContext();
   const [tree, setTree] = useState<ProcessNode[]>([]);
   const [stats, setStats] = useState<Record<string, any>>({});
   const [validChildrenMap, setValidChildrenMap] = useState<Record<string, string[]>>({});
@@ -329,8 +331,9 @@ export default function ProcessCatalogPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [catalogRes, flowsRes] = await Promise.all([
-        apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>('/process-catalog'),
+        apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
       ]);
       setTree(catalogRes.tree || []);
@@ -347,7 +350,7 @@ export default function ProcessCatalogPage() {
       }
     } catch { /* */ }
     finally { setLoading(false); }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -365,7 +368,7 @@ export default function ProcessCatalogPage() {
   };
 
   const addNode = async (parentId: string | null, name: string, description: string, level: NodeLevel) => {
-    await apiClient.post('/process-catalog/nodes', { parentId, level, name, description });
+    await apiClient.post('/process-catalog/nodes', { parentId, level, name, description, orgIds: activeOrgId ? [activeOrgId] : undefined });
     setAddingTo(null);
     fetchData();
   };

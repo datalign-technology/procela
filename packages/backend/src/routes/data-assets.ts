@@ -24,8 +24,11 @@ const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'];
 const router = Router();
 
 /** GET /api/v1/data-assets */
-router.get('/', (_req: Request, res: Response) => {
-  res.json({ success: true, data: dataAssets, systems });
+router.get('/', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const filtered = orgId ? dataAssets.filter((a) => a.orgId === orgId) : dataAssets;
+  const filteredSystems = orgId ? systems.filter((s) => s.orgId === orgId) : systems;
+  res.json({ success: true, data: filtered, systems: filteredSystems });
 });
 
 /** GET /api/v1/data-assets/:id */
@@ -37,7 +40,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-assets */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemId, owner, steward, governanceTier, healthScore } = req.body;
+  const { name, description, systemId, owner, steward, governanceTier, healthScore, orgId } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
 
   const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
@@ -45,7 +48,7 @@ router.post('/', (req: Request, res: Response) => {
 
   const now = new Date().toISOString();
   const asset: StoredDataAsset = {
-    id: uuid(), orgId: DEV_ORG_ID, name,
+    id: uuid(), orgId: orgId || DEV_ORG_ID, name,
     description: description || '',
     systemId: systemId || '',
     owner: owner || '',

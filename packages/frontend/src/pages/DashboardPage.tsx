@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 interface DashboardStats {
   valueStreams: number;
@@ -71,15 +72,23 @@ function Badge({ label, count, color }: { label: string; count: number; color: s
 }
 
 export default function DashboardPage() {
+  const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchData = useCallback(async () => {
+    try {
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats${query}`);
+      setStats(res.data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load dashboard');
+    }
+  }, [activeOrgId]);
+
   useEffect(() => {
-    apiClient
-      .get<{ success: boolean; data: DashboardStats }>('/dashboard/stats')
-      .then((res) => setStats(res.data))
-      .catch((err) => setError(err.message || 'Failed to load dashboard'));
-  }, []);
+    fetchData();
+  }, [fetchData]);
 
   if (error) {
     return (

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 interface SystemEntity {
   id: string;
@@ -50,6 +51,7 @@ interface FormData {
 const emptyForm: FormData = { name: '', description: '', systemType: '' };
 
 export default function SystemsPage() {
+  const { activeOrgId } = useOrgContext();
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,12 +61,13 @@ export default function SystemsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await apiClient.get<{ success: boolean; data: SystemEntity[]; systemTypes: string[] }>('/systems');
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const res = await apiClient.get<{ success: boolean; data: SystemEntity[]; systemTypes: string[] }>(`/systems${query}`);
       setSystems(res.data || []);
       setSystemTypes(res.systemTypes || []);
     } catch { /* */ }
     finally { setLoading(false); }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -78,7 +81,7 @@ export default function SystemsPage() {
   const handleSave = async () => {
     if (!form.name.trim()) return;
     if (editingId) { await apiClient.put(`/systems/${editingId}`, form); }
-    else { await apiClient.post('/systems', form); }
+    else { await apiClient.post('/systems', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) }); }
     setShowForm(false); setEditingId(null); setForm(emptyForm); fetchData();
   };
 

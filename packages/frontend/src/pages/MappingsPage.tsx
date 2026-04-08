@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 // ── Types ──
 
@@ -131,6 +132,7 @@ function formatStepPath(info: StepInfo): string {
 // ── Component ──
 
 export default function MappingsPage() {
+  const { activeOrgId } = useOrgContext();
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [valueStreams, setValueStreams] = useState<StoredValueStream[]>([]);
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
@@ -148,10 +150,11 @@ export default function MappingsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [mappingsRes, vsRes, assetsRes] = await Promise.all([
-        apiClient.get<{ success: boolean; data: Mapping[] }>('/mappings'),
-        apiClient.get<{ success: boolean; data: StoredValueStream[] }>('/process-catalog/value-streams'),
-        apiClient.get<{ success: boolean; data: DataAsset[] }>('/data-assets'),
+        apiClient.get<{ success: boolean; data: Mapping[] }>(`/mappings${query}`),
+        apiClient.get<{ success: boolean; data: StoredValueStream[] }>(`/process-catalog/value-streams${query}`),
+        apiClient.get<{ success: boolean; data: DataAsset[] }>(`/data-assets${query}`),
       ]);
       setMappings(mappingsRes.data || []);
       setValueStreams(vsRes.data || []);
@@ -161,7 +164,7 @@ export default function MappingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => {
     fetchData();
@@ -203,6 +206,7 @@ export default function MappingsPage() {
       linkType,
       notes,
       aiSuggested: false,
+      ...(activeOrgId ? { orgId: activeOrgId } : {}),
     });
     setShowForm(false);
     resetForm();

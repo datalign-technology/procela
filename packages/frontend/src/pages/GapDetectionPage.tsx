@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 
 // ── Types ──
 
@@ -123,19 +124,20 @@ const noOwnerBadgeStyle: React.CSSProperties = {
 };
 
 export default function GapDetectionPage() {
+  const { activeOrgId } = useOrgContext();
   const [unmappedSteps, setUnmappedSteps] = useState<UnmappedStep[]>([]);
   const [ungovernedAssets, setUngovernedAssets] = useState<UngovervedAsset[]>([]);
   const [ownerlessItems, setOwnerlessItems] = useState<OwnerlessItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       try {
+        const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
         const [vsRes, assetsRes, mappingsRes] = await Promise.all([
-          apiClient.get<{ success: boolean; data: ValueStream[] }>('/process-catalog/value-streams'),
-          apiClient.get<{ success: boolean; data: DataAsset[] }>('/data-assets'),
-          apiClient.get<{ success: boolean; data: Mapping[] }>('/mappings'),
+          apiClient.get<{ success: boolean; data: ValueStream[] }>(`/process-catalog/value-streams${query}`),
+          apiClient.get<{ success: boolean; data: DataAsset[] }>(`/data-assets${query}`),
+          apiClient.get<{ success: boolean; data: Mapping[] }>(`/mappings${query}`),
         ]);
 
         const valueStreams = vsRes.data;
@@ -189,9 +191,11 @@ export default function GapDetectionPage() {
       } finally {
         setLoading(false);
       }
-    }
+  }, [activeOrgId]);
+
+  useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   if (loading) {
     return (

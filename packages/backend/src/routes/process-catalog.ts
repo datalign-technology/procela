@@ -183,19 +183,23 @@ const router = Router();
 // ── HIERARCHY NODES ──
 
 /** GET / — list all nodes as flat list + tree + metadata */
-router.get('/', (_req: Request, res: Response) => {
-  const valueStreams = processNodes.filter((n) => n.level === 'VALUE_STREAM');
+router.get('/', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const filtered = orgId
+    ? processNodes.filter((n) => n.orgIds.includes(orgId as string) || n.orgId === orgId)
+    : processNodes;
+  const valueStreams = filtered.filter((n) => n.level === 'VALUE_STREAM');
   res.json({
     success: true,
-    data: processNodes,
-    tree: buildTree(processNodes),
+    data: filtered,
+    tree: buildTree(filtered),
     levels: NODE_LEVELS,
     validChildren: VALID_CHILDREN,
     requiredLevels: REQUIRED_LEVELS,
     stats: {
-      total: processNodes.length,
+      total: filtered.length,
       byLevel: Object.fromEntries(
-        NODE_LEVELS.map((l) => [l, processNodes.filter((n) => n.level === l).length])
+        NODE_LEVELS.map((l) => [l, filtered.filter((n) => n.level === l).length])
       ),
       valueStreams: valueStreams.length,
     },
