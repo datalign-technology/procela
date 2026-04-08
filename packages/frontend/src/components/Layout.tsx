@@ -1,8 +1,9 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
 import ChatPanel from './ChatPanel';
+import ToastContainer from './ToastContainer';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { apiClient } from '@/api/client';
@@ -45,6 +46,22 @@ const bottomNavItems: NavItem[] = [
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
 
+interface SearchResult {
+  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person';
+  id: string;
+  name: string;
+  description: string;
+  meta: Record<string, string>;
+}
+
+const typeRouteMap: Record<string, string> = {
+  process: '/processes',
+  system: '/systems',
+  'data-asset': '/data-assets',
+  organization: '/organizations',
+  person: '/organizations',
+};
+
 interface OrgFlat {
   id: string;
   name: string;
@@ -75,6 +92,70 @@ export default function Layout() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; label: string }>>([]);
+
+  // Sidebar collapse state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Search debounce
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchOpen(false);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await apiClient.get<{ success: boolean; data: { results: SearchResult[] } }>(
+          `/search?q=${encodeURIComponent(q)}`
+        );
+        setSearchResults(res.data.results);
+        setSearchOpen(true);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery]);
+
+  // Close search dropdown on click outside or Escape
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSearchOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handleSearchResultClick = (result: SearchResult) => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    const route = typeRouteMap[result.type] || '/';
+    navigate(route);
+  };
 
   const fetchOrgs = useCallback(async () => {
     try {
@@ -119,15 +200,15 @@ export default function Layout() {
   return (
     <div className={styles.shell}>
       {/* Sidebar */}
-      <aside className={styles.sidebar}>
+      <aside className={clsx(styles.sidebar, sidebarCollapsed && styles.sidebarCollapsed)}>
         <div className={styles.sidebarBrand}>
           <img src="/procela-icon.png" alt="Procela" className={styles.brandIcon} />
-          <span>Procela</span>
+          {!sidebarCollapsed && <span>Procela</span>}
         </div>
         <nav className={styles.sidebarNav}>
           {navSections.map((section, sIdx) => (
             <div key={sIdx} className={styles.navGroup}>
-              {section.label && (
+              {section.label && !sidebarCollapsed && (
                 <div className={styles.navGroupLabel}>{section.label}</div>
               )}
               {section.items.map((item) => (
@@ -138,9 +219,10 @@ export default function Layout() {
                   className={({ isActive }) =>
                     clsx(styles.navLink, isActive && styles.navLinkActive)
                   }
+                  title={sidebarCollapsed ? item.label : undefined}
                 >
                   <span className={styles.navIcon}>{item.icon}</span>
-                  {item.label}
+                  {!sidebarCollapsed && item.label}
                 </NavLink>
               ))}
             </div>
@@ -156,12 +238,20 @@ export default function Layout() {
               className={({ isActive }) =>
                 clsx(styles.navLink, isActive && styles.navLinkActive)
               }
+              title={sidebarCollapsed ? item.label : undefined}
             >
               <span className={styles.navIcon}>{item.icon}</span>
-              {item.label}
+              {!sidebarCollapsed && item.label}
             </NavLink>
           ))}
         </nav>
+        <button
+          className={styles.sidebarToggle}
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {'\u2630'}
+        </button>
       </aside>
 
       {/* Main content area */}

@@ -50,6 +50,277 @@ function healthColor(score: number): string {
   return 'var(--color-danger, #ef4444)';
 }
 
+interface AuditLogEntry {
+  id: string;
+  orgId: string;
+  userId: string | null;
+  entityType: string;
+  entityId: string;
+  action: string;
+  before: Record<string, any> | null;
+  after: Record<string, any> | null;
+  timestamp: string;
+}
+
+function relativeTime(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+const ACTION_COLORS: Record<string, string> = {
+  CREATE: '#22c55e',
+  UPDATE: '#3b82f6',
+  DELETE: '#ef4444',
+};
+
+function entityDisplayName(entry: AuditLogEntry): string {
+  if (entry.after && typeof entry.after === 'object' && (entry.after as any).name) {
+    return (entry.after as any).name;
+  }
+  if (entry.before && typeof entry.before === 'object' && (entry.before as any).name) {
+    return (entry.before as any).name;
+  }
+  return entry.entityId.slice(0, 8);
+}
+
+interface ChecklistStep {
+  number: number;
+  title: string;
+  description: string;
+  link: string;
+  complete: boolean;
+}
+
+function GettingStartedChecklist({ stats }: { stats: DashboardStats }) {
+  const steps: ChecklistStep[] = [
+    {
+      number: 1,
+      title: 'Set up your organization',
+      description: 'Create your company structure to organize processes and data by business unit.',
+      link: '/organizations',
+      complete: stats.organizations > 1,
+    },
+    {
+      number: 2,
+      title: 'Add people to your org',
+      description: 'Add team members so you can assign ownership of processes and data assets.',
+      link: '/organizations',
+      complete: stats.people > 0,
+    },
+    {
+      number: 3,
+      title: 'Define your processes',
+      description: 'Build your process catalog with value streams, processes, and activities.',
+      link: '/processes',
+      complete: stats.valueStreams > 0,
+    },
+    {
+      number: 4,
+      title: 'Register your systems',
+      description: 'Add the applications and platforms where your organization\'s data lives.',
+      link: '/systems',
+      complete: stats.systems > 0,
+    },
+    {
+      number: 5,
+      title: 'Define data assets',
+      description: 'Describe the data your organization relies on in business terms.',
+      link: '/data-assets',
+      complete: stats.dataAssets > 0,
+    },
+    {
+      number: 6,
+      title: 'Map data to processes',
+      description: 'Link data assets to process steps to track dependencies and discover gaps.',
+      link: '/mappings',
+      complete: stats.mappings > 0,
+    },
+  ];
+
+  const completedCount = steps.filter((s) => s.complete).length;
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      padding: 28,
+      boxShadow: 'var(--shadow-sm)',
+    }}>
+      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: 'var(--color-primary)' }}>
+        Getting Started with Procela
+      </h2>
+      <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
+        Follow these steps to set up your process-data landscape. {completedCount} of {steps.length} complete.
+      </p>
+      <div style={{
+        height: 6,
+        background: 'var(--color-border)',
+        borderRadius: 3,
+        marginBottom: 24,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%',
+          width: `${(completedCount / steps.length) * 100}%`,
+          background: 'var(--color-primary)',
+          borderRadius: 3,
+          transition: 'width 0.3s',
+        }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {steps.map((step) => (
+          <div
+            key={step.number}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              padding: '14px 16px',
+              background: step.complete ? '#d1f0eb' : 'var(--color-bg)',
+              border: `1px solid ${step.complete ? '#0f4f4633' : 'var(--color-border)'}`,
+              borderRadius: 'var(--radius-md)',
+              transition: 'background 0.15s',
+            }}
+          >
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              fontWeight: 700,
+              flexShrink: 0,
+              background: step.complete ? 'var(--color-primary)' : 'var(--color-border)',
+              color: step.complete ? '#fff' : 'var(--color-text-muted)',
+            }}>
+              {step.complete ? '\u2713' : step.number}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: step.complete ? 'var(--color-primary)' : 'var(--color-text)',
+                textDecoration: step.complete ? 'line-through' : 'none',
+              }}>
+                {step.title}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                {step.description}
+              </div>
+            </div>
+            <Link
+              to={step.link}
+              style={{
+                padding: '6px 14px',
+                background: step.complete ? 'transparent' : 'var(--color-primary)',
+                color: step.complete ? 'var(--color-primary)' : '#fff',
+                border: step.complete ? '1px solid var(--color-primary)' : 'none',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 12,
+                fontWeight: 500,
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+              }}
+            >
+              {step.complete ? 'View' : 'Get Started'}
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecentActivity({ activeOrgId }: { activeOrgId: string | null }) {
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: AuditLogEntry[] }>('/audit?limit=10');
+        setEntries(res.data || []);
+      } catch { /* */ }
+      finally { setLoading(false); }
+    })();
+  }, [activeOrgId]);
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      padding: 20,
+      boxShadow: 'var(--shadow-sm)',
+      marginTop: 24,
+    }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Recent Activity</h2>
+      {loading ? (
+        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0' }}>Loading...</div>
+      ) : entries.length === 0 ? (
+        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0', textAlign: 'center' }}>
+          No recent activity
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {entries.map((entry) => {
+            const actionColor = ACTION_COLORS[entry.action] || 'var(--color-text-muted)';
+            return (
+              <div
+                key={entry.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 0',
+                  borderBottom: '1px solid var(--color-border)',
+                  fontSize: 13,
+                }}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: '#fff',
+                  background: actionColor,
+                  minWidth: 52,
+                  textAlign: 'center',
+                  textTransform: 'uppercase',
+                  flexShrink: 0,
+                }}>
+                  {entry.action}
+                </span>
+                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500, flexShrink: 0 }}>
+                  {entry.entityType}
+                </span>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                  {entityDisplayName(entry)}
+                </span>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>
+                  {relativeTime(entry.timestamp)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Badge({ label, count, color }: { label: string; count: number; color: string }) {
   return (
     <span
