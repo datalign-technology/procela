@@ -127,6 +127,11 @@ router.post('/', (req: Request, res: Response) => {
   // Support both orgIds (array) and orgId (single, backward compat)
   const assignedOrgIds: string[] = orgIds || (orgId ? [orgId] : []);
   if (assignedOrgIds.length === 0) { res.status(400).json({ success: false, error: 'At least one organization is required' }); return; }
+  // Prevent duplicate emails
+  if (email && people.find((p) => p.email.toLowerCase() === email.toLowerCase())) {
+    res.status(409).json({ success: false, error: `A person with email "${email}" already exists.` });
+    return;
+  }
   for (const oid of assignedOrgIds) {
     const org = organizations.find((o) => o.id === oid);
     if (!org) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
@@ -234,10 +239,19 @@ router.post('/import', (req: Request, res: Response) => {
 
     const validRoles = ROLES as readonly string[];
     const created: StoredPerson[] = [];
+    const skipped: string[] = [];
     const now = new Date().toISOString();
 
     for (const row of rows) {
       if (!row.name) continue;
+      // Skip duplicates by email
+      if (row.email) {
+        const existing = people.find((p) => p.email.toLowerCase() === row.email!.toLowerCase());
+        if (existing) {
+          skipped.push(row.email);
+          continue;
+        }
+      }
       const role = row.role && validRoles.includes(row.role.toUpperCase()) ? row.role.toUpperCase() : 'VIEWER';
       const person: StoredPerson = {
         id: uuid(), orgIds: [orgId], name: row.name,
@@ -250,8 +264,16 @@ router.post('/import', (req: Request, res: Response) => {
       created.push(person);
     }
 
-    logger.info({ count: created.length, orgId, orgName: org.name }, 'Imported people');
-    res.status(201).json({ success: true, data: created });
+    logger.info({ created: created.length, skipped: skipped.length, orgId, orgName: org.name }, 'Imported people');
+    res.status(201).json({
+      success: true,
+      data: created,
+      skipped: skipped.length,
+      skippedEmails: skipped,
+      message: skipped.length > 0
+        ? `Imported ${created.length}, skipped ${skipped.length} (duplicate email: ${skipped.join(', ')})`
+        : `Imported ${created.length} people`,
+    });
   } catch (err) {
     logger.error({ err }, 'People import failed');
     res.status(500).json({ success: false, error: 'Import failed' });
