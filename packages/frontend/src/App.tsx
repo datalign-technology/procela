@@ -19,6 +19,7 @@ import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
 import ScorecardPage from '@/pages/ScorecardPage';
 import ExecutiveReportPage from '@/pages/ExecutiveReportPage';
 import ComparisonPage from '@/pages/ComparisonPage';
+import RaciMatrixPage from '@/pages/RaciMatrixPage';
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/dama-roles" element={<DamaRolesPage />} />
         <Route path="/scorecard" element={<ScorecardPage />} />
         <Route path="/report" element={<ExecutiveReportPage />} />
+        <Route path="/raci" element={<RaciMatrixPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

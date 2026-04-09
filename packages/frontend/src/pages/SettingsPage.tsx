@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface AuthConfigData {
   provider: string;
@@ -114,6 +115,87 @@ export default function SettingsPage() {
       setAuthError(err.message || 'Failed to save authentication configuration');
     } finally {
       setAuthSaving(false);
+    }
+  };
+
+  // Backup & Restore state
+  const [exportLoading, setExportLoading] = useState(false);
+  const [, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<Record<string, number> | null>(null);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<Record<string, number> | null>(null);
+  const [importError, setImportError] = useState('');
+  const importParsedData = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportBackup = async () => {
+    setExportLoading(true);
+    try {
+      const data = await apiClient.get<any>('/backup/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `procela-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Failed to export backup: ' + (err.message || 'Unknown error'));
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImportResult(null);
+    setImportError('');
+    const file = e.target.files?.[0] || null;
+    setImportFile(file);
+    setImportPreview(null);
+    importParsedData.current = null;
+
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(reader.result as string);
+          if (!parsed.data || typeof parsed.data !== 'object') {
+            setImportError('Invalid backup file: missing "data" field.');
+            return;
+          }
+          importParsedData.current = parsed;
+          const counts: Record<string, number> = {};
+          for (const [key, value] of Object.entries(parsed.data)) {
+            if (Array.isArray(value)) {
+              counts[key] = value.length;
+            }
+          }
+          setImportPreview(counts);
+        } catch {
+          setImportError('Invalid JSON file. Please select a valid Procela backup file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    setImportConfirmOpen(false);
+    setImportLoading(true);
+    setImportError('');
+    setImportResult(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; imported: Record<string, number> }>('/backup/import', importParsedData.current);
+      setImportResult(res.imported);
+      setImportFile(null);
+      setImportPreview(null);
+      importParsedData.current = null;
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) {
+      setImportError('Import failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -303,6 +385,120 @@ export default function SettingsPage() {
           Set ANTHROPIC_API_KEY in your .env file to enable AI features (template generation, suggestions, chat).
         </p>
       </div>
+
+      {/* Spacer */}
+      <div style={{ height: '1.5rem' }} />
+
+      {/* Backup & Restore */}
+      <div style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Backup & Restore</h2>
+
+        {/* Export */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Export Backup</h3>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+            Download a complete backup of all Procela data as a JSON file.
+          </p>
+          <button
+            onClick={handleExportBackup}
+            disabled={exportLoading}
+            style={{
+              padding: '0.5rem 1.5rem',
+              background: exportLoading ? '#6b7280' : 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              cursor: exportLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {exportLoading ? 'Exporting...' : 'Export Backup'}
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: '1px', background: 'var(--color-border)', marginBottom: '1.5rem' }} />
+
+        {/* Import */}
+        <div>
+          <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>Import Backup</h3>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem' }}>
+            Restore data from a previously exported Procela backup file.
+          </p>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleFileSelect}
+            style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}
+          />
+
+          {importError && (
+            <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.8125rem' }}>
+              {importError}
+            </div>
+          )}
+
+          {importPreview && (
+            <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+              <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+                This backup contains:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 1rem', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                {Object.entries(importPreview).map(([key, count]) => (
+                  <div key={key}>
+                    <span style={{ fontWeight: 500 }}>{count}</span> {key}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem', color: '#d97706' }}>
+                Warning: This will replace ALL existing data. This cannot be undone.
+              </div>
+              <button
+                onClick={() => setImportConfirmOpen(true)}
+                disabled={importLoading}
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.5rem 1.5rem',
+                  background: importLoading ? '#6b7280' : '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  cursor: importLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {importLoading ? 'Importing...' : 'Import'}
+              </button>
+            </div>
+          )}
+
+          {importResult && (
+            <div style={{ color: 'var(--color-success)', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', fontSize: '0.8125rem' }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Import successful!</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 1rem' }}>
+                {Object.entries(importResult).map(([key, count]) => (
+                  <div key={key}>
+                    <span style={{ fontWeight: 500 }}>{count}</span> {key}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={importConfirmOpen}
+        title="Replace All Data?"
+        message="This will permanently replace ALL existing data with the contents of the backup file. This action cannot be undone. Are you sure you want to continue?"
+        confirmLabel="Yes, Import"
+        onConfirm={handleImportConfirm}
+        onCancel={() => setImportConfirmOpen(false)}
+      />
     </div>
   );
 }

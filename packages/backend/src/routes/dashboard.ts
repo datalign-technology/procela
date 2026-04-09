@@ -7,6 +7,7 @@ import { organizations } from './organizations';
 import { people } from './people';
 import { dataDomains } from './data-domains';
 import { governanceGroups } from './governance-groups';
+import { damaRoles } from './dama-roles';
 
 const router = Router();
 
@@ -209,5 +210,140 @@ function scoreColor(score: number): string {
   if (score >= 40) return '#eab308';
   return '#ef4444';
 }
+
+/** GET /api/v1/dashboard/raci — Auto-generated RACI matrix */
+router.get('/raci', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const oid = orgId as string | undefined;
+
+  // Filter data by org
+  const filteredNodes = oid
+    ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid)
+    : processNodes;
+  const filteredPeople = oid
+    ? people.filter((p) => (p as any).orgId === oid || p.orgIds?.includes(oid))
+    : people;
+  const filteredRoles = oid
+    ? damaRoles.filter((r) => r.scopeType === 'ORG' && r.scopeId === oid)
+    : damaRoles;
+  const filteredGroups = oid
+    ? governanceGroups.filter((g) => g.orgId === oid)
+    : governanceGroups;
+
+  // Rows: Value Streams and Processes
+  const rows = filteredNodes
+    .filter((n) => n.level === 'VALUE_STREAM' || n.level === 'PROCESS')
+    .map((n) => {
+      const parentNode =
+        n.level === 'PROCESS' && n.parentId
+          ? filteredNodes.find((p) => p.id === n.parentId)
+          : null;
+      return {
+        id: n.id,
+        name: n.name,
+        level: n.level,
+        parentName: parentNode?.name || null,
+        ownerId: (n as any).ownerId || null,
+      };
+    });
+
+  // Build lookup sets for DAMA role types -> person IDs
+  const rolePersonMap: Record<string, Set<string>> = {};
+  for (const r of filteredRoles) {
+    if (!rolePersonMap[r.roleType]) rolePersonMap[r.roleType] = new Set();
+    rolePersonMap[r.roleType].add(r.personId);
+  }
+
+  // Governance group members -> person IDs (for Informed)
+  const groupMemberIds = new Set<string>();
+  for (const g of filteredGroups) {
+    for (const m of g.members) {
+      groupMemberIds.add(m.personId);
+    }
+  }
+
+  // Determine which people are relevant (appear in at least one RACI cell)
+  // R: process owners + Business Data Stewards
+  const responsibleIds = new Set<string>([
+    ...(rolePersonMap['BUSINESS_DATA_STEWARD'] || []),
+  ]);
+  for (const row of rows) {
+    if (row.ownerId) responsibleIds.add(row.ownerId);
+  }
+
+  // A: CDO + Data Owners
+  const accountableIds = new Set<string>([
+    ...(rolePersonMap['CDO'] || []),
+    ...(rolePersonMap['DATA_OWNER'] || []),
+  ]);
+
+  // C: Data Architects + Technical Data Stewards
+  const consultedIds = new Set<string>([
+    ...(rolePersonMap['DATA_ARCHITECT'] || []),
+    ...(rolePersonMap['TECHNICAL_DATA_STEWARD'] || []),
+  ]);
+
+  // I: Org Admins + Data Quality Analysts + governance group members + Viewers
+  const informedIds = new Set<string>([
+    ...(rolePersonMap['DATA_QUALITY_ANALYST'] || []),
+    ...(rolePersonMap['DATA_GOVERNANCE_LEAD'] || []),
+    ...groupMemberIds,
+    ...filteredPeople.filter((p) => p.role === 'ORG_ADMIN' || p.role === 'VIEWER').map((p) => p.id),
+  ]);
+
+  // Collect all relevant person IDs
+  const allRelevantIds = new Set<string>([
+    ...responsibleIds,
+    ...accountableIds,
+    ...consultedIds,
+    ...informedIds,
+  ]);
+
+  // Build columns (one per relevant person)
+  const columns = filteredPeople
+    .filter((p) => allRelevantIds.has(p.id))
+    .map((p) => {
+      // Determine primary DAMA role for display
+      const personRoles = filteredRoles.filter((r) => r.personId === p.id);
+      const primaryRole = personRoles.length > 0 ? personRoles[0].roleType : p.role || '';
+      return {
+        personId: p.id,
+        name: p.name,
+        role: primaryRole,
+      };
+    });
+
+  // Build matrix
+  const matrix: Record<string, Record<string, string>> = {};
+
+  for (const row of rows) {
+    const cellMap: Record<string, string> = {};
+
+    for (const col of columns) {
+      const pid = col.personId;
+      // Priority: A > R > C > I (a person gets the highest-priority designation)
+      if (accountableIds.has(pid)) {
+        cellMap[pid] = 'A';
+      } else if (responsibleIds.has(pid) || row.ownerId === pid) {
+        cellMap[pid] = 'R';
+      } else if (consultedIds.has(pid)) {
+        cellMap[pid] = 'C';
+      } else if (informedIds.has(pid)) {
+        cellMap[pid] = 'I';
+      }
+    }
+
+    matrix[row.id] = cellMap;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      rows: rows.map(({ ownerId, ...rest }) => rest),
+      columns,
+      matrix,
+    },
+  });
+});
 
 export default router;

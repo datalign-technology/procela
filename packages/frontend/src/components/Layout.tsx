@@ -49,6 +49,7 @@ const navSections: NavSection[] = [
       { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
       { to: '/scorecard', label: 'Scorecard', icon: '\u2605' },
       { to: '/report', label: 'Report', icon: '\u2637' },
+      { to: '/raci', label: 'RACI Matrix', icon: '\u2611' },
     ],
   },
 ];

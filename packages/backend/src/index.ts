@@ -37,6 +37,7 @@ import commentsRouter from './routes/comments';
 import notificationsRouter from './routes/notifications';
 import trendsRouter from './routes/trends';
 import maturityTrendsRouter from './routes/maturity-trends';
+import backupRouter from './routes/backup';
 
 const app = express();
 
@@ -78,6 +79,7 @@ app.use('/api/v1/comments', authenticateToken, commentsRouter);
 app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
 app.use('/api/v1/trends', authenticateToken, trendsRouter);
 app.use('/api/v1/maturity-trends', authenticateToken, maturityTrendsRouter);
+app.use('/api/v1/backup', authenticateToken, backupRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
