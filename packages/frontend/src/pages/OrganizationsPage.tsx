@@ -48,10 +48,14 @@ const DAMA_ROLE_LABELS: Record<string, string> = {
   CDO: 'Chief Data Officer',
   DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
   DATA_OWNER: 'Data Owner',
-  DATA_STEWARD: 'Data Steward',
+  BUSINESS_DATA_STEWARD: 'Business Data Steward',
+  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+  TECHNICAL_DATA_STEWARD: 'Technical Data Steward',
   DATA_CUSTODIAN: 'Data Custodian',
   DATA_ARCHITECT: 'Data Architect',
-  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+  DATA_ENGINEER: 'Data Engineer',
+  DATABASE_ADMINISTRATOR: 'Database Administrator',
+  DATA_STEWARD: 'Data Steward (Legacy)',
 };
 
 const GROUP_TYPE_LABELS: Record<string, string> = {

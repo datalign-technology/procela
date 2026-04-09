@@ -6,13 +6,19 @@ import logger from '../lib/logger';
 import { people } from './people';
 
 export const DAMA_ROLE_TYPES = [
-  'CDO',                    // Chief Data Officer
-  'DATA_GOVERNANCE_LEAD',   // Data Governance Program Manager
-  'DATA_OWNER',             // Business executive accountable for data domain
-  'DATA_STEWARD',           // Manages data definitions, quality, standards
-  'DATA_CUSTODIAN',         // Technical responsibility for data storage/security
-  'DATA_ARCHITECT',         // Designs data models and integration
-  'DATA_QUALITY_ANALYST',   // Monitors and reports on data quality
+  // Executive/Strategic
+  'CDO',                        // Chief Data Officer
+  'DATA_GOVERNANCE_LEAD',       // Data Governance Program Manager
+  // Business
+  'DATA_OWNER',                 // Business executive accountable for data domain
+  'BUSINESS_DATA_STEWARD',      // Defines business rules, data definitions, quality requirements
+  'DATA_QUALITY_ANALYST',       // Monitors quality metrics, identifies issues, reports
+  // Technical
+  'TECHNICAL_DATA_STEWARD',     // Implements business rules technically, manages schemas
+  'DATA_CUSTODIAN',             // Infrastructure — storage, security, backup, access control
+  'DATA_ARCHITECT',             // Designs data models, integration patterns, standards
+  'DATA_ENGINEER',              // Builds pipelines, ETL, data movement
+  'DATABASE_ADMINISTRATOR',     // Manages database instances, performance, maintenance
 ] as const;
 
 export interface StoredDamaRole {

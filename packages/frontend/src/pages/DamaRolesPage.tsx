@@ -32,23 +32,47 @@ interface DomainOption {
 }
 
 const ROLE_TYPE_LABELS: Record<string, string> = {
+  // Executive/Strategic
   CDO: 'Chief Data Officer',
   DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
+  // Business
   DATA_OWNER: 'Data Owner',
-  DATA_STEWARD: 'Data Steward',
+  BUSINESS_DATA_STEWARD: 'Business Data Steward',
+  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+  // Technical
+  TECHNICAL_DATA_STEWARD: 'Technical Data Steward',
   DATA_CUSTODIAN: 'Data Custodian',
   DATA_ARCHITECT: 'Data Architect',
-  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+  DATA_ENGINEER: 'Data Engineer',
+  DATABASE_ADMINISTRATOR: 'Database Administrator',
+  // Legacy
+  DATA_STEWARD: 'Data Steward (Legacy)',
+};
+
+const ROLE_CATEGORIES: Record<string, string> = {
+  CDO: 'Executive', DATA_GOVERNANCE_LEAD: 'Executive',
+  DATA_OWNER: 'Business', BUSINESS_DATA_STEWARD: 'Business', DATA_QUALITY_ANALYST: 'Business',
+  TECHNICAL_DATA_STEWARD: 'Technical', DATA_CUSTODIAN: 'Technical', DATA_ARCHITECT: 'Technical',
+  DATA_ENGINEER: 'Technical', DATABASE_ADMINISTRATOR: 'Technical',
+  DATA_STEWARD: 'Business',
 };
 
 const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  // Executive — pink/purple
   CDO: { bg: '#fce7f3', color: '#9d174d' },
   DATA_GOVERNANCE_LEAD: { bg: '#ede9fe', color: '#5b21b6' },
+  // Business — blue/teal
   DATA_OWNER: { bg: '#dbeafe', color: '#1e40af' },
-  DATA_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
-  DATA_CUSTODIAN: { bg: '#fef3c7', color: '#92400e' },
+  BUSINESS_DATA_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
+  DATA_QUALITY_ANALYST: { bg: '#f0fdf4', color: '#166534' },
+  // Technical — amber/slate
+  TECHNICAL_DATA_STEWARD: { bg: '#fef3c7', color: '#92400e' },
+  DATA_CUSTODIAN: { bg: '#e2e8f0', color: '#475569' },
   DATA_ARCHITECT: { bg: '#e0e7ff', color: '#3730a3' },
-  DATA_QUALITY_ANALYST: { bg: '#f1f5f9', color: '#64748b' },
+  DATA_ENGINEER: { bg: '#fef9c3', color: '#854d0e' },
+  DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#64748b' },
+  // Legacy
+  DATA_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
 };
 
 const inputStyle: React.CSSProperties = {
@@ -249,9 +273,21 @@ export default function DamaRolesPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>DAMA Role *</label>
               <select style={selectStyle} value={form.roleType} onChange={(e) => setForm({ ...form, roleType: e.target.value })}>
-                {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).map((rt) => (
-                  <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
-                ))}
+                <optgroup label="Executive/Strategic">
+                  {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Executive').map((rt) => (
+                    <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Business">
+                  {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Business').map((rt) => (
+                    <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Technical">
+                  {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Technical').map((rt) => (
+                    <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div>
