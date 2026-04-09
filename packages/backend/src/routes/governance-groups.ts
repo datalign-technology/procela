@@ -130,20 +130,25 @@ router.post('/', (req: Request, res: Response) => {
     return;
   }
 
-  // Validate parent-child relationship
+  // Check parent-child relationship (soft warning, not a block)
+  let warning: string | null = null;
   if (parentId) {
     const parent = governanceGroups.find((g) => g.id === parentId);
     if (!parent) { res.status(400).json({ success: false, error: 'Parent group not found' }); return; }
-    const validChildren = VALID_CHILDREN[parent.type] || [];
-    if (!validChildren.includes(type)) {
-      res.status(400).json({
-        success: false,
-        error: `Cannot add ${GROUP_TYPE_LABELS[type] || type} under ${GROUP_TYPE_LABELS[parent.type] || parent.type}. Valid children: ${validChildren.map((t: string) => GROUP_TYPE_LABELS[t] || t).join(', ')}`,
-      });
-      return;
+    const recommended = VALID_CHILDREN[parent.type] || [];
+    if (!recommended.includes(type)) {
+      warning = `DAMA suggests ${GROUP_TYPE_LABELS[type] || type} typically reports to ${recommended.map((t: string) => GROUP_TYPE_LABELS[t] || t).join(' or ') || 'a higher-level body'}, not ${GROUP_TYPE_LABELS[parent.type] || parent.type}. Saved anyway.`;
     }
-  } else if (type !== 'COUNCIL' && type !== 'OFFICE') {
-    // Non-top-level types should ideally have a parent, but allow it with a warning
+  } else if (type !== 'COUNCIL' && type !== 'OFFICE' && !parentId) {
+    warning = `DAMA recommends ${GROUP_TYPE_LABELS[type] || type} be placed under a higher-level governance body.`;
+  }
+
+  // Check if no top-level council exists
+  if (type !== 'COUNCIL' && !parentId) {
+    const hasCouncil = governanceGroups.some((g) => g.type === 'COUNCIL');
+    if (!hasCouncil && !warning) {
+      warning = 'DAMA recommends establishing a Data Governance Council as the top-level governing body first.';
+    }
   }
 
   const now = new Date().toISOString();
@@ -156,7 +161,7 @@ router.post('/', (req: Request, res: Response) => {
   saveStore('governanceGroups', governanceGroups);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'CREATE', null, group);
   logger.info({ groupId: group.id, name: group.name, type: group.type, parentId }, 'Created governance group');
-  res.status(201).json({ success: true, data: group, validChildTypes: VALID_CHILDREN[group.type] || [] });
+  res.status(201).json({ success: true, data: group, warning, validChildTypes: VALID_CHILDREN[group.type] || [] });
 });
 
 /** PUT /api/v1/governance-groups/:id */
@@ -196,6 +201,46 @@ router.delete('/:id', (req: Request, res: Response) => {
   governanceGroups.splice(idx, 1);
   saveStore('governanceGroups', governanceGroups);
   res.status(204).send();
+});
+
+/**
+ * POST /api/v1/governance-groups/generate-template
+ * Generate a DAMA-standard governance structure as a starting point.
+ */
+router.post('/generate-template', (req: Request, res: Response) => {
+  const { orgId } = req.body;
+  const targetOrgId = orgId || DEV_ORG_ID;
+  const now = new Date().toISOString();
+  const created: StoredGovernanceGroup[] = [];
+
+  const template = [
+    { type: 'COUNCIL', name: 'Data Governance Council', description: 'Executive steering committee that sets data governance strategy, policy, and priorities.', charter: 'Define data governance vision, approve policies, allocate resources, resolve escalations.' },
+    { type: 'OFFICE', name: 'Data Governance Office', description: 'Day-to-day program management and coordination of governance activities.', charter: 'Coordinate governance initiatives, track compliance, manage governance tools, support stewardship teams.', parentType: 'COUNCIL' },
+    { type: 'COMMITTEE', name: 'Enterprise Data Committee', description: 'Cross-functional working group that implements governance standards and practices.', charter: 'Develop data standards, review data issues, coordinate across domains, report to the Council.', parentType: 'OFFICE' },
+    { type: 'STEWARDSHIP_TEAM', name: 'Customer Data Stewardship Team', description: 'Manages quality, definitions, and standards for customer data.', charter: 'Define customer data standards, resolve data quality issues, manage customer master data.', parentType: 'COMMITTEE' },
+    { type: 'STEWARDSHIP_TEAM', name: 'Financial Data Stewardship Team', description: 'Manages quality, definitions, and standards for financial data.', charter: 'Define financial data standards, ensure regulatory compliance, manage financial master data.', parentType: 'COMMITTEE' },
+    { type: 'STEWARDSHIP_TEAM', name: 'Operational Data Stewardship Team', description: 'Manages quality, definitions, and standards for operational data.', charter: 'Define operational data standards, manage process data quality, coordinate with system owners.', parentType: 'COMMITTEE' },
+    { type: 'WORKING_GROUP', name: 'Data Quality Improvement', description: 'Initiative-focused group driving data quality improvements.', charter: 'Identify data quality issues, implement fixes, measure improvement, report progress.', parentType: 'COMMITTEE' },
+  ];
+
+  const typeToId: Record<string, string> = {};
+
+  for (const t of template) {
+    const parentId = t.parentType ? typeToId[t.parentType] || null : null;
+    const group: StoredGovernanceGroup = {
+      id: uuid(), orgId: targetOrgId, parentId,
+      name: t.name, type: t.type, description: t.description, charter: t.charter,
+      status: 'ACTIVE', members: [], createdAt: now, updatedAt: now,
+    };
+    governanceGroups.push(group);
+    created.push(group);
+    // Store first of each type for parent resolution
+    if (!typeToId[t.type]) typeToId[t.type] = group.id;
+  }
+
+  saveStore('governanceGroups', governanceGroups);
+  logger.info({ count: created.length, orgId: targetOrgId }, 'Generated DAMA governance template');
+  res.status(201).json({ success: true, data: created, tree: buildTree(governanceGroups.filter((g) => g.orgId === targetOrgId)) });
 });
 
 /** POST /api/v1/governance-groups/:id/members */

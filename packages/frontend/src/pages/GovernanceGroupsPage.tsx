@@ -351,14 +351,11 @@ export default function GovernanceGroupsPage() {
   };
 
   const openAddChild = (parentId: string, parentType: string) => {
-    const allowed = validChildren[parentType] || [];
-    if (allowed.length === 0) {
-      alert(`${groupTypeLabels[parentType] || parentType} cannot have child groups.`);
-      return;
-    }
-    setForm({ ...emptyForm, parentId, type: allowed[0] });
+    const recommended = validChildren[parentType] || [];
+    const defaultType = recommended.length > 0 ? recommended[0] : groupTypes[0];
+    setForm({ ...emptyForm, parentId, type: defaultType });
     setEditingId(null);
-    setAllowedTypes(allowed);
+    setAllowedTypes(null); // show all types — recommended ones will be highlighted
     setShowForm(true);
   };
 
@@ -378,14 +375,19 @@ export default function GovernanceGroupsPage() {
       ...form,
       ...(activeOrgId ? { orgId: activeOrgId } : {}),
     };
+    let res: any;
     if (editingId) {
-      await apiClient.put(`/governance-groups/${editingId}`, payload);
+      res = await apiClient.put(`/governance-groups/${editingId}`, payload);
     } else {
-      await apiClient.post('/governance-groups', payload);
+      res = await apiClient.post('/governance-groups', payload);
     }
     setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null);
     fetchGroups();
     if (selectedGroupId) fetchGroupDetail(selectedGroupId);
+    // Show DAMA recommendation warning if returned
+    if (res?.warning) {
+      setTimeout(() => alert(res.warning), 100);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -442,7 +444,9 @@ export default function GovernanceGroupsPage() {
   };
 
   // Determine which types to show in the type dropdown
-  const typeOptions = allowedTypes || groupTypes;
+  const typeOptions = groupTypes; // always show all types
+  const parentGroup = form.parentId ? flatGroups.find((g) => g.id === form.parentId) : null;
+  const recommendedTypes = parentGroup ? (validChildren[parentGroup.type] || []) : [];
 
   // ── Render ──
 
@@ -477,6 +481,17 @@ export default function GovernanceGroupsPage() {
               Export CSV
             </button>
           )}
+          <button
+            onClick={async () => {
+              try {
+                await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
+                fetchData();
+              } catch { /* */ }
+            }}
+            style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+          >
+            Generate DAMA Template
+          </button>
           <button onClick={openAdd} style={btnPrimary}>+ Add Group</button>
         </div>
       </div>
@@ -518,7 +533,11 @@ export default function GovernanceGroupsPage() {
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Type *</label>
               <select style={selectStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, parentId: form.parentId })}>
-                {typeOptions.map((t) => <option key={t} value={t}>{groupTypeLabels[t] || GROUP_TYPE_LABELS[t] || t}</option>)}
+                {typeOptions.map((t) => {
+                  const isRecommended = recommendedTypes.length > 0 && recommendedTypes.includes(t);
+                  const label = groupTypeLabels[t] || GROUP_TYPE_LABELS[t] || t;
+                  return <option key={t} value={t}>{label}{isRecommended ? ' (recommended)' : ''}</option>;
+                })}
               </select>
             </div>
             <div>
@@ -565,7 +584,8 @@ export default function GovernanceGroupsPage() {
         <div style={{ maxHeight: 'calc(100vh - 420px)', overflowY: 'auto' }}>
           {tree.length === 0 && !showForm ? (
             <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>No governance groups defined yet. Use the + Add Group button above to get started.</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 12 }}>No governance groups defined yet.</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Use "Generate DAMA Template" to create a recommended governance structure, or "+ Add Group" to start custom.</p>
             </div>
           ) : (
             tree.map((node) => (
