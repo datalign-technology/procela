@@ -102,7 +102,7 @@ router.get('/scorecard', (req: Request, res: Response) => {
   const filteredAssets = oid ? dataAssets.filter((a) => a.orgId === oid) : dataAssets;
   const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
   const filteredGroups = oid ? governanceGroups.filter((g) => g.orgId === oid) : governanceGroups;
-  const filteredPeople = oid ? people.filter((p) => p.orgId === oid) : people;
+  const filteredPeople = oid ? people.filter((p) => (p as any).orgId === oid || p.orgIds?.includes(oid)) : people;
 
   // 1. processDocumentation: % of value streams with ACTIVE status that have complete paths
   //    (complete path = VS has at least one PROCESS descendant which has at least one ACTIVITY descendant)
