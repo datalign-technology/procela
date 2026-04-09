@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
+import { loadStore, saveStore } from '../lib/persistence';
 import { people } from './people';
 import logger from '../lib/logger';
 
@@ -26,7 +27,7 @@ interface StoredGovernanceGroup {
   updatedAt: string;
 }
 
-export const governanceGroups: StoredGovernanceGroup[] = [];
+export const governanceGroups: StoredGovernanceGroup[] = loadStore<StoredGovernanceGroup>('governanceGroups');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const router = Router();
@@ -75,6 +76,7 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
   governanceGroups.push(group);
+  saveStore('governanceGroups', governanceGroups);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'CREATE', null, group);
   logger.info({ groupId: group.id, name: group.name, type: group.type }, 'Created governance group');
   res.status(201).json({ success: true, data: group });
@@ -98,6 +100,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (charter !== undefined) group.charter = charter;
   if (status !== undefined) group.status = status;
   group.updatedAt = new Date().toISOString();
+  saveStore('governanceGroups', governanceGroups);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'UPDATE', before, group);
   res.json({ success: true, data: group });
 });
@@ -109,6 +112,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   const removed = governanceGroups[idx];
   auditService.log(removed.orgId, null, 'GovernanceGroup', removed.id, 'DELETE', removed, null);
   governanceGroups.splice(idx, 1);
+  saveStore('governanceGroups', governanceGroups);
   res.status(204).send();
 });
 
@@ -132,6 +136,7 @@ router.post('/:id/members', (req: Request, res: Response) => {
   const member: GroupMember = { personId, groupRole, since: new Date().toISOString() };
   group.members.push(member);
   group.updatedAt = new Date().toISOString();
+  saveStore('governanceGroups', governanceGroups);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { personId, groupRole });
   logger.info({ groupId: group.id, personId, groupRole }, 'Added member to governance group');
   res.status(201).json({ success: true, data: { ...member, personName: person.name } });
@@ -146,6 +151,7 @@ router.delete('/:id/members/:personId', (req: Request, res: Response) => {
   const removed = group.members[memberIdx];
   group.members.splice(memberIdx, 1);
   group.updatedAt = new Date().toISOString();
+  saveStore('governanceGroups', governanceGroups);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'REMOVE_MEMBER', removed, null);
   res.status(204).send();
 });

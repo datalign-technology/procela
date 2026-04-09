@@ -140,6 +140,7 @@ export default function MappingsPage() {
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Form state — hierarchical step selection
   const [selectedVsId, setSelectedVsId] = useState('');
@@ -217,6 +218,29 @@ export default function MappingsPage() {
 
   const handleDelete = async (id: string) => {
     await apiClient.delete(`/mappings/${id}`);
+    fetchData();
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === mappings.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(mappings.map((m) => m.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/mappings/${id}`)));
+    setSelectedIds(new Set());
     fetchData();
   };
 
@@ -443,6 +467,28 @@ export default function MappingsPage() {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={handleBulkDelete}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div
         style={{
@@ -464,6 +510,9 @@ export default function MappingsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                  <input type="checkbox" checked={mappings.length > 0 && selectedIds.size === mappings.length} onChange={toggleSelectAll} />
+                </th>
                 <th style={thStyle}>Process Step</th>
                 <th style={thStyle}>Data Asset</th>
                 <th style={thStyle}>Link Type</th>
@@ -476,10 +525,13 @@ export default function MappingsPage() {
               {mappings.map((m) => (
                 <tr
                   key={m.id}
-                  style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                  style={{ transition: 'background 0.1s', background: selectedIds.has(m.id) ? '#f0f9ff' : '' }}
+                  onMouseEnter={(e) => { if (!selectedIds.has(m.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { if (!selectedIds.has(m.id)) e.currentTarget.style.background = ''; }}
                 >
+                  <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                    <input type="checkbox" checked={selectedIds.has(m.id)} onChange={() => toggleSelect(m.id)} />
+                  </td>
                   <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 300 }}>
                     {m.stepInfo ? formatStepPath(m.stepInfo) : m.processStepId}
                   </td>

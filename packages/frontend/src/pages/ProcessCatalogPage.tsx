@@ -390,11 +390,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
       </div>
 
       {/* Children */}
-      {isExpanded && (node.children || []).map((child) => (
+      {isExpanded && (node.children || []).map((child, idx, arr) => (
         <TreeNode key={child.id} node={child} depth={depth + 1}
           onUpdate={onUpdate} onDelete={onDelete} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand}
-          validChildrenMap={validChildrenMap} flows={flows} />
+          validChildrenMap={validChildrenMap} flows={flows}
+          siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder} />
       ))}
     </div>
   );
@@ -466,6 +467,34 @@ export default function ProcessCatalogPage() {
 
   const deleteNode = async (id: string) => {
     await apiClient.delete(`/process-catalog/nodes/${id}`);
+    fetchData();
+  };
+
+  const reorderNode = async (nodeId: string, direction: 'up' | 'down') => {
+    // Find the node and its siblings in the tree
+    function findSiblings(nodes: ProcessNode[]): ProcessNode[] | null {
+      for (const n of nodes) {
+        if (n.id === nodeId) return nodes;
+        if (n.children) {
+          const found = findSiblings(n.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    const siblings = findSiblings(tree);
+    if (!siblings) return;
+    const idx = siblings.findIndex((n) => n.id === nodeId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) return;
+    const current = siblings[idx];
+    const swap = siblings[swapIdx];
+    // Swap orderIndex values
+    await Promise.all([
+      apiClient.put(`/process-catalog/nodes/${current.id}`, { orderIndex: swap.orderIndex }),
+      apiClient.put(`/process-catalog/nodes/${swap.id}`, { orderIndex: current.orderIndex }),
+    ]);
     fetchData();
   };
 
@@ -642,12 +671,13 @@ export default function ProcessCatalogPage() {
             )}
           </div>
         ) : (
-          tree.map((node) => (
+          tree.map((node, idx) => (
             <TreeNode key={node.id} node={node} depth={0}
               onUpdate={updateNode} onDelete={deleteNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
               expanded={expanded} toggleExpand={toggleExpand}
-              validChildrenMap={validChildrenMap} flows={flows} />
+              validChildrenMap={validChildrenMap} flows={flows}
+              siblingIndex={idx} siblingCount={tree.length} onReorder={reorderNode} />
           ))
         )}
       </div>

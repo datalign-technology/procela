@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { loadStore, saveStore } from '../lib/persistence';
 import { people } from './people';
 
 export const DAMA_ROLE_TYPES = [
@@ -22,7 +23,7 @@ export interface StoredDamaRole {
   createdAt: string;
 }
 
-export const damaRoles: StoredDamaRole[] = [];
+export const damaRoles: StoredDamaRole[] = loadStore<StoredDamaRole>('damaRoles');
 
 const router = Router();
 
@@ -84,6 +85,7 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
   };
   damaRoles.push(role);
+  saveStore('damaRoles', damaRoles);
   res.status(201).json({ success: true, data: { ...role, personName: person.name } });
 });
 
