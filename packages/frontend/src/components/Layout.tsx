@@ -48,12 +48,12 @@ const navSections: NavSection[] = [
     items: [
       { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
       { to: '/scorecard', label: 'Scorecard', icon: '\u2605' },
+      { to: '/report', label: 'Report', icon: '\u2637' },
     ],
   },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { to: '/report', label: 'Report', icon: '\u2637' },
   { to: '/settings', label: 'Settings', icon: '\u2731' },
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
