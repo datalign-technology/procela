@@ -382,9 +382,9 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   if (orgIds !== undefined) node.orgIds = orgIds;
   if (ownerId !== undefined) node.ownerId = ownerId;
 
-  // Enforce ACTIVE status only on complete paths
+  // Enforce ACTIVE/APPROVED status only on complete paths
   if (status !== undefined) {
-    if (status === 'ACTIVE') {
+    if (status === 'ACTIVE' || status === 'APPROVED') {
       if (node.level === 'VALUE_STREAM') {
         const descendants = getDescendants(node.id);
         const hasProcess = descendants.some((d) => d.level === 'PROCESS');
@@ -392,7 +392,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
         if (!hasProcess || !hasActivity) {
           res.status(400).json({
             success: false,
-            error: `Cannot set to ACTIVE. Value stream "${node.name}" requires at least one Process and one Activity.`,
+            error: `Cannot set to ${status}. Value stream "${node.name}" requires at least one Process and one Activity.`,
           });
           return;
         }
@@ -403,7 +403,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
         if (!hasActivity) {
           res.status(400).json({
             success: false,
-            error: `Cannot set to ACTIVE. Process "${node.name}" requires at least one Activity.`,
+            error: `Cannot set to ${status}. Process "${node.name}" requires at least one Activity.`,
           });
           return;
         }

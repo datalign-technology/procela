@@ -43,11 +43,13 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
   EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', required: false, icon: '\u2318', hint: 'System or automation that executes a task' },
 };
 
-const STATUSES = ['DRAFT', 'ACTIVE', 'UNDER_REVIEW', 'DEPRECATED'];
+const STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
 const statusColors: Record<string, { bg: string; color: string }> = {
   DRAFT: { bg: '#f1f5f9', color: '#64748b' },
-  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
+  PROPOSED: { bg: '#dbeafe', color: '#1e40af' },
   UNDER_REVIEW: { bg: '#fef3c7', color: '#92400e' },
+  APPROVED: { bg: '#ede9fe', color: '#5b21b6' },
+  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
   DEPRECATED: { bg: '#fce7f3', color: '#9d174d' },
 };
 
@@ -337,8 +339,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
 
         {/* Status — blocks ACTIVE on incomplete nodes */}
         <select value={node.status} onChange={(e) => {
-            if (e.target.value === 'ACTIVE' && !canBeActive) {
-              alert(`Cannot set to ACTIVE. ${node.level === 'VALUE_STREAM' ? 'Value stream needs Process + Activity.' : 'Process needs at least one Activity.'}`);
+            if ((e.target.value === 'ACTIVE' || e.target.value === 'APPROVED') && !canBeActive) {
+              alert(`Cannot set to ${e.target.value}. ${node.level === 'VALUE_STREAM' ? 'Value stream needs Process + Activity.' : 'Process needs at least one Activity.'}`);
               return;
             }
             onUpdate(node.id, { status: e.target.value });
@@ -347,11 +349,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
             background: statusColors[node.status]?.bg || '#f1f5f9',
             color: statusColors[node.status]?.color || '#64748b', fontWeight: 600, border: 'none',
           }}>
-          {STATUSES.map((s) => (
-            <option key={s} value={s} disabled={s === 'ACTIVE' && !canBeActive}>
-              {s}{s === 'ACTIVE' && !canBeActive ? ' (incomplete)' : ''}
-            </option>
-          ))}
+          {STATUSES.map((s) => {
+            const blocked = (s === 'ACTIVE' || s === 'APPROVED') && !canBeActive;
+            return (
+              <option key={s} value={s} disabled={blocked}>
+                {s}{blocked ? ' (incomplete)' : ''}
+              </option>
+            );
+          })}
         </select>
 
         {/* Actions — smart + button */}

@@ -22,8 +22,10 @@ enum UserRole {
 
 enum EntityStatus {
   DRAFT
-  ACTIVE
+  PROPOSED
   UNDER_REVIEW
+  APPROVED
+  ACTIVE
   DEPRECATED
 }
 

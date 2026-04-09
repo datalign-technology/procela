@@ -153,7 +153,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Editing and Status</h3>
         <ul style={listStyle}>
           <li>Inline editing — click any item to rename or update its description</li>
-          <li>Status tracking: <span style={badgeStyle('#6b7280')}>Draft</span> <span style={badgeStyle('#2563eb')}>Active</span> <span style={badgeStyle('#d97706')}>Under Review</span> <span style={badgeStyle('#dc2626')}>Deprecated</span></li>
+          <li>Status lifecycle: <span style={badgeStyle('#6b7280')}>Draft</span> <span style={badgeStyle('#1e40af')}>Proposed</span> <span style={badgeStyle('#d97706')}>Under Review</span> <span style={badgeStyle('#5b21b6')}>Approved</span> <span style={badgeStyle('#0f4f46')}>Active</span> <span style={badgeStyle('#9d174d')}>Deprecated</span></li>
           <li>ACTIVE status is blocked until the required path (Value Stream, Process, Activity) is complete</li>
           <li>Guided prompts and a completeness checklist help you fill in all required information</li>
           <li>A validation summary bar shows the overall health of your process catalog</li>

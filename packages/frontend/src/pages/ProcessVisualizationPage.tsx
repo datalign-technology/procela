@@ -43,8 +43,10 @@ const LEVEL_VISUAL: Record<NodeLevel, { bg: string; border: string; width: numbe
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DRAFT: { bg: '#f1f5f9', color: '#64748b' },
-  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
+  PROPOSED: { bg: '#dbeafe', color: '#1e40af' },
   UNDER_REVIEW: { bg: '#fef3c7', color: '#92400e' },
+  APPROVED: { bg: '#ede9fe', color: '#5b21b6' },
+  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
   DEPRECATED: { bg: '#fce7f3', color: '#9d174d' },
 };
 
