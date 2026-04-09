@@ -466,6 +466,10 @@ export default function ProcessCatalogPage() {
         </div>
         {totalNodes > 0 && canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => navigate('/processes/visualization')}
+              style={{ padding: '8px 16px', background: '#0f4f46', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {'\u25A3'} Visualize
+            </button>
             <button onClick={() => navigate('/processes/wizard')}
               style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               Generate from Template
@@ -475,6 +479,12 @@ export default function ProcessCatalogPage() {
               + Add Value Stream
             </button>
           </div>
+        )}
+        {totalNodes > 0 && !canCreateValueStreams && (
+          <button onClick={() => navigate('/processes/visualization')}
+            style={{ padding: '8px 16px', background: '#0f4f46', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {'\u25A3'} Visualize
+          </button>
         )}
       </div>
 

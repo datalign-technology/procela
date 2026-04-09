@@ -14,6 +14,7 @@ import GapDetectionPage from '@/pages/GapDetectionPage';
 import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
 import DataDomainsPage from '@/pages/DataDomainsPage';
 import DamaRolesPage from '@/pages/DamaRolesPage';
+import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/processes" element={<ProcessCatalogPage />} />
         <Route path="/processes/wizard" element={<ValueStreamWizard />} />
+        <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
         <Route path="/data-assets" element={<DataAssetsPage />} />
         <Route path="/systems" element={<SystemsPage />} />
         <Route path="/mappings" element={<MappingsPage />} />
