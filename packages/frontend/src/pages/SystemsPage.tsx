@@ -68,6 +68,8 @@ export default function SystemsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -278,7 +280,7 @@ export default function SystemsPage() {
         }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
           <button
-            onClick={handleBulkDelete}
+            onClick={() => setConfirmBulkDelete(true)}
             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
             Delete Selected
@@ -304,6 +306,31 @@ export default function SystemsPage() {
           fetchData();
         }}
         onCancel={() => setShowDeleteAll(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete System?"
+        message="This will permanently delete this system. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          const id = confirmDelete;
+          setConfirmDelete(null);
+          if (id) await handleDelete(id);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Systems?"
+        message={`Delete ${selectedIds.size} selected items? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => {
+          setConfirmBulkDelete(false);
+          await handleBulkDelete();
+        }}
+        onCancel={() => setConfirmBulkDelete(false)}
       />
 
       {/* Table */}
@@ -344,7 +371,7 @@ export default function SystemsPage() {
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEdit(sys)}>Edit</button>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => handleDelete(sys.id)}>Delete</button>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => setConfirmDelete(sys.id)}>Delete</button>
                   </td>
                 </tr>
               ))}

@@ -123,6 +123,7 @@ export default function DamaRolesPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [error, setError] = useState('');
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -331,14 +332,27 @@ export default function DamaRolesPage() {
         onCancel={() => setShowDeleteAll(false)}
       />
 
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete DAMA Role?"
+        message="This will permanently delete this role assignment. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          const id = confirmDelete;
+          setConfirmDelete(null);
+          if (id) await handleRemove(id);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : roles.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>
-              No DAMA role assignments yet. Use the + Assign Role button above, or go to Organizations and click "Manage" on any person to assign all their governance roles from one place.
+            <p style={{ color: 'var(--color-text-muted)' }}>
+              No DAMA roles defined yet. Use the + Assign Role button above to get started.
             </p>
           </div>
         ) : (
@@ -370,10 +384,10 @@ export default function DamaRolesPage() {
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
                     <button
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }}
-                      onClick={() => handleRemove(role.id)}
-                      title="Remove"
+                      onClick={() => setConfirmDelete(role.id)}
+                      title="Delete"
                     >
-                      Remove
+                      Delete
                     </button>
                   </td>
                 </tr>

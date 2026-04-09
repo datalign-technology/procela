@@ -203,7 +203,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, s
         <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 13 }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id); }} title="Add child">+</button>
         <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
         {node.id !== '00000000-0000-0000-0000-000000000010' && (
-          <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Del</button>
+          <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Delete</button>
         )}
       </div>
       {isExpanded && node.children.map((child) => (
@@ -797,7 +797,7 @@ export default function OrganizationsPage() {
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <button style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }} onClick={() => openPerson360(person.id)} title="Manage governance roles, groups, and domains">Manage</button>
                             <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={() => openEditPerson(person)}>Edit</button>
-                            <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => handleDeletePerson(person.id)}>Del</button>
+                            <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => handleDeletePerson(person.id)}>Delete</button>
                           </td>
                         </tr>
                         );

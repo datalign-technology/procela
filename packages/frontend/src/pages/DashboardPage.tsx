@@ -641,7 +641,10 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Dashboard</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
+          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+        </div>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
     );
@@ -650,7 +653,10 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Dashboard</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
+          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+        </div>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
       </div>
     );
@@ -670,7 +676,10 @@ export default function DashboardPage() {
   if (allZero) {
     return (
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Dashboard</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
+          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+        </div>
         <GettingStartedChecklist stats={stats} />
         <RecentActivity activeOrgId={activeOrgId} />
       </div>
@@ -679,7 +688,10 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>Dashboard</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
+        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+      </div>
       <div
         style={{
           display: 'grid',

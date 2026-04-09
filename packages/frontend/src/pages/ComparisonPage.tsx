@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 
@@ -236,9 +236,12 @@ export default function ComparisonPage() {
         }}
       >
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>
-            Compare Value Streams
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+              Compare Value Streams
+            </h1>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+          </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Select two value streams to compare their hierarchies side by side.
           </p>

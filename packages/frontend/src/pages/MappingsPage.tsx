@@ -143,6 +143,8 @@ export default function MappingsPage() {
   const [showForm, setShowForm] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Form state — hierarchical step selection
   const [selectedVsId, setSelectedVsId] = useState('');
@@ -485,7 +487,7 @@ export default function MappingsPage() {
         }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
           <button
-            onClick={handleBulkDelete}
+            onClick={() => setConfirmBulkDelete(true)}
             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
             Delete Selected
@@ -513,6 +515,31 @@ export default function MappingsPage() {
         onCancel={() => setShowDeleteAll(false)}
       />
 
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Mapping?"
+        message="This will permanently delete this mapping. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          const id = confirmDelete;
+          setConfirmDelete(null);
+          if (id) await handleDelete(id);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Mappings?"
+        message={`Delete ${selectedIds.size} selected items? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => {
+          setConfirmBulkDelete(false);
+          await handleBulkDelete();
+        }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
       {/* Table */}
       <div
         style={{
@@ -526,8 +553,8 @@ export default function MappingsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : mappings.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>
-              Mappings connect your process activities to the data assets they use. Define processes and data assets first, then create mappings here.
+            <p style={{ color: 'var(--color-text-muted)' }}>
+              No mappings defined yet. Use the + Add Mapping button above to get started.
             </p>
           </div>
         ) : (
@@ -615,7 +642,7 @@ export default function MappingsPage() {
                         fontSize: 12,
                         padding: '2px 6px',
                       }}
-                      onClick={() => handleDelete(m.id)}
+                      onClick={() => setConfirmDelete(m.id)}
                       title="Delete"
                     >
                       Delete

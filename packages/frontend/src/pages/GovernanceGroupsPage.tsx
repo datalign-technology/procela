@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -232,7 +233,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
         </div>
         <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 13 }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id, node.type); }} title="Add child group">+</button>
         <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
-        <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Del</button>
+        <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Delete</button>
       </div>
       {isExpanded && node.children.map((child) => (
         <GroupTreeNode key={child.id} node={child} depth={depth + 1}
@@ -249,6 +250,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
 export default function GovernanceGroupsPage() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
 
   // Data state
   const [flatGroups, setFlatGroups] = useState<GovernanceGroupFlat[]>([]);
@@ -276,6 +278,7 @@ export default function GovernanceGroupsPage() {
   // When adding a child, restrict the type dropdown to valid child types
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   // ── Data fetching ──
 
@@ -381,8 +384,10 @@ export default function GovernanceGroupsPage() {
     let res: any;
     if (editingId) {
       res = await apiClient.put(`/governance-groups/${editingId}`, payload);
+      addToast('success', 'Governance group updated');
     } else {
       res = await apiClient.post('/governance-groups', payload);
+      addToast('success', 'Governance group created');
     }
     setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null);
     fetchGroups();
@@ -396,6 +401,7 @@ export default function GovernanceGroupsPage() {
   const handleDelete = async (id: string) => {
     await apiClient.delete(`/governance-groups/${id}`);
     if (selectedGroupId === id) { setSelectedGroupId(null); setSelectedGroupDetail(null); }
+    addToast('success', 'Governance group deleted');
     fetchGroups();
   };
 
@@ -530,6 +536,19 @@ export default function GovernanceGroupsPage() {
         onCancel={() => setShowDeleteAll(false)}
       />
 
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Governance Group?"
+        message="This will permanently delete this governance group and its children. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          const id = confirmDelete;
+          setConfirmDelete(null);
+          if (id) await handleDelete(id);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
       {/* DAMA Hierarchy Guidance */}
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         <strong>DAMA recommends:</strong> Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
@@ -618,13 +637,12 @@ export default function GovernanceGroupsPage() {
         <div style={{ maxHeight: 'calc(100vh - 420px)', overflowY: 'auto' }}>
           {tree.length === 0 && !showForm ? (
             <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 12 }}>No governance groups defined yet.</p>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Use "Generate DAMA Template" to create a recommended governance structure, or "+ Add Group" to start custom.</p>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>No governance groups defined yet. Use the + Add Group button above to get started.</p>
             </div>
           ) : (
             tree.map((node) => (
               <GroupTreeNode key={node.id} node={node} depth={0}
-                onEdit={openEdit} onDelete={handleDelete} onAddChild={openAddChild}
+                onEdit={openEdit} onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
                 onSelect={handleSelect} selectedId={selectedGroupId}
                 expanded={expanded} toggleExpand={toggleExpand} />
             ))

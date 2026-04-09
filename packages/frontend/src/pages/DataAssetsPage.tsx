@@ -140,6 +140,8 @@ export default function DataAssetsPage() {
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [assetComments, setAssetComments] = useState<CommentEntry[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentUserName, setCommentUserName] = useState('');
@@ -466,7 +468,7 @@ export default function DataAssetsPage() {
         }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
           <button
-            onClick={handleBulkDelete}
+            onClick={() => setConfirmBulkDelete(true)}
             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
             Delete Selected
@@ -494,13 +496,38 @@ export default function DataAssetsPage() {
         onCancel={() => setShowDeleteAll(false)}
       />
 
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Data Asset?"
+        message="This will permanently delete this data asset. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          const id = confirmDelete;
+          setConfirmDelete(null);
+          if (id) await handleDelete(id);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Data Assets?"
+        message={`Delete ${selectedIds.size} selected items? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => {
+          setConfirmBulkDelete(false);
+          await handleBulkDelete();
+        }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : assets.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>Data assets are the data your organization relies on — customer records, billing data, compliance reports, etc. Use the + Add Data Asset button to define your first one.</p>
+            <p style={{ color: 'var(--color-text-muted)' }}>No data assets defined yet. Use the + Add Data Asset button above to get started.</p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -585,7 +612,7 @@ export default function DataAssetsPage() {
                       </button>
                       <button
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }}
-                        onClick={() => handleDelete(asset.id)}
+                        onClick={() => setConfirmDelete(asset.id)}
                         title="Delete"
                       >
                         Delete

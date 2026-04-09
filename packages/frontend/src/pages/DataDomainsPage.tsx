@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 interface DataDomain {
@@ -73,6 +74,7 @@ const emptyForm: FormData = { name: '', description: '', status: 'DRAFT' };
 
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [summary, setSummary] = useState<DomainSummary>({ total: 0, governed: 0, ungoverned: 0, totalAssetsInDomains: 0 });
   const [people, setPeople] = useState<Person[]>([]);
@@ -83,6 +85,7 @@ export default function DataDomainsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedDomain, setSelectedDomain] = useState<DataDomain | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   // Detail editing state
   const [detailOwnerId, setDetailOwnerId] = useState<string>('');
@@ -135,8 +138,10 @@ export default function DataDomainsPage() {
     if (!form.name.trim()) return;
     if (editingId) {
       await apiClient.put(`/data-domains/${editingId}`, form);
+      addToast('success', 'Data domain updated');
     } else {
       await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      addToast('success', 'Data domain created');
     }
     setShowForm(false);
     setEditingId(null);
@@ -147,6 +152,7 @@ export default function DataDomainsPage() {
   const handleDelete = async (id: string) => {
     await apiClient.delete(`/data-domains/${id}`);
     if (selectedDomain?.id === id) setSelectedDomain(null);
+    addToast('success', 'Data domain deleted');
     fetchData();
   };
 
@@ -245,6 +251,19 @@ export default function DataDomainsPage() {
           fetchData();
         }}
         onCancel={() => setShowDeleteAll(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Data Domain?"
+        message="This will permanently delete this data domain. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          const id = confirmDelete;
+          setConfirmDelete(null);
+          if (id) await handleDelete(id);
+        }}
+        onCancel={() => setConfirmDelete(null)}
       />
 
       {/* Add/Edit Form */}
@@ -364,8 +383,8 @@ export default function DataDomainsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : domains.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>
-              No data domains defined yet. Data domains help you organize and govern related data assets. Use the + Add Domain button to create your first one.
+            <p style={{ color: 'var(--color-text-muted)' }}>
+              No data domains defined yet. Use the + Add Domain button above to get started.
             </p>
           </div>
         ) : (
@@ -423,7 +442,7 @@ export default function DataDomainsPage() {
                     </button>
                     <button
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }}
-                      onClick={() => handleDelete(domain.id)}
+                      onClick={() => setConfirmDelete(domain.id)}
                       title="Delete"
                     >
                       Delete
