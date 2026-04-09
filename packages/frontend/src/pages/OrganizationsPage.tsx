@@ -652,11 +652,11 @@ export default function OrganizationsPage() {
                       <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
                         Select all org levels this person belongs to. They will appear in each org's people list.
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', padding: '6px 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0' }}>
                         {orgOptions.map((opt) => {
                           const checked = personForm.orgIds.includes(opt.id);
                           return (
-                            <label key={opt.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', paddingLeft: opt.depth * 16 }}>
+                            <label key={opt.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', paddingLeft: opt.depth * 20 }}>
                               <input type="checkbox" checked={checked}
                                 onChange={() => setPersonForm({
                                   ...personForm,
