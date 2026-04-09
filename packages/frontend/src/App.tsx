@@ -20,6 +20,8 @@ import ScorecardPage from '@/pages/ScorecardPage';
 import ExecutiveReportPage from '@/pages/ExecutiveReportPage';
 import ComparisonPage from '@/pages/ComparisonPage';
 import RaciMatrixPage from '@/pages/RaciMatrixPage';
+import DataLineagePage from '@/pages/DataLineagePage';
+import DataQualityPage from '@/pages/DataQualityPage';
 
 export default function App() {
   return (
@@ -43,6 +45,8 @@ export default function App() {
         <Route path="/scorecard" element={<ScorecardPage />} />
         <Route path="/report" element={<ExecutiveReportPage />} />
         <Route path="/raci" element={<RaciMatrixPage />} />
+        <Route path="/data-lineage" element={<DataLineagePage />} />
+        <Route path="/data-quality" element={<DataQualityPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

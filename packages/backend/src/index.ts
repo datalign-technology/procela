@@ -38,6 +38,8 @@ import notificationsRouter from './routes/notifications';
 import trendsRouter from './routes/trends';
 import maturityTrendsRouter from './routes/maturity-trends';
 import backupRouter from './routes/backup';
+import dataLineageRouter from './routes/data-lineage';
+import dataQualityRouter from './routes/data-quality';
 
 const app = express();
 
@@ -80,6 +82,8 @@ app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
 app.use('/api/v1/trends', authenticateToken, trendsRouter);
 app.use('/api/v1/maturity-trends', authenticateToken, maturityTrendsRouter);
 app.use('/api/v1/backup', authenticateToken, backupRouter);
+app.use('/api/v1/data-lineage', authenticateToken, dataLineageRouter);
+app.use('/api/v1/data-quality', authenticateToken, dataQualityRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -103,6 +107,8 @@ import { tags } from './routes/tags';
 import { comments } from './routes/comments';
 import { notifications } from './routes/notifications';
 import { maturitySnapshots } from './routes/maturity-trends';
+import { dataLineageLinks } from './routes/data-lineage';
+import { dataQualityRules } from './routes/data-quality';
 
 startAutoSave({
   processNodes: () => processNodes,
@@ -121,6 +127,8 @@ startAutoSave({
   comments: () => comments,
   notifications: () => notifications,
   maturitySnapshots: () => maturitySnapshots,
+  dataLineageLinks: () => dataLineageLinks,
+  dataQualityRules: () => dataQualityRules,
 });
 
 // ---------------------------------------------------------------------------

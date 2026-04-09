@@ -35,12 +35,14 @@ const navSections: NavSection[] = [
       { to: '/governance-groups', label: 'Governance Groups', icon: '\u2637' },
       { to: '/data-domains', label: 'Data Domains', icon: '\u25C8' },
       { to: '/dama-roles', label: 'DAMA Roles', icon: '\u2606' },
+      { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
     ],
   },
   {
     label: 'Connect',
     items: [
       { to: '/mappings', label: 'Mappings', icon: '\u2194' },
+      { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
     ],
   },
   {
