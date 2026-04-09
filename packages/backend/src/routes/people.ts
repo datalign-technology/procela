@@ -12,8 +12,7 @@ import logger from '../lib/logger';
 const ROLES = [
   'SUPER_ADMIN',
   'ORG_ADMIN',
-  'PROCESS_OWNER',
-  'DATA_STEWARD',
+  'EDITOR',
   'CONTRIBUTOR',
   'VIEWER',
 ] as const;

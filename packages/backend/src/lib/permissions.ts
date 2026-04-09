@@ -14,11 +14,13 @@ import { AppError } from '../middleware/errorHandler';
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: ['*'],
-  ORG_ADMIN: ['org:*', 'process:*', 'system:*', 'data-asset:*', 'mapping:*', 'people:*'],
-  PROCESS_OWNER: ['process:read', 'process:write', 'system:read', 'data-asset:read', 'mapping:read', 'mapping:write'],
-  DATA_STEWARD: ['process:read', 'system:read', 'data-asset:read', 'data-asset:write', 'mapping:read', 'mapping:write'],
+  ORG_ADMIN: ['org:*', 'process:*', 'system:*', 'data-asset:*', 'mapping:*', 'people:*', 'governance:*'],
+  EDITOR: ['process:read', 'process:write', 'system:read', 'system:write', 'data-asset:read', 'data-asset:write', 'mapping:read', 'mapping:write'],
   CONTRIBUTOR: ['process:read', 'process:write', 'system:read', 'data-asset:read'],
   VIEWER: ['process:read', 'system:read', 'data-asset:read', 'mapping:read', 'org:read', 'people:read'],
+  // Legacy roles (still work if assigned)
+  PROCESS_OWNER: ['process:read', 'process:write', 'system:read', 'data-asset:read', 'mapping:read', 'mapping:write'],
+  DATA_STEWARD: ['process:read', 'system:read', 'data-asset:read', 'data-asset:write', 'mapping:read', 'mapping:write'],
 };
 
 /**

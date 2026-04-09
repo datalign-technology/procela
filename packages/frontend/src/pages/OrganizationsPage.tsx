@@ -103,14 +103,17 @@ const typeBadge = (type: string): React.CSSProperties => {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin', ORG_ADMIN: 'Org Admin', PROCESS_OWNER: 'Process Owner',
-  DATA_STEWARD: 'Data Steward', CONTRIBUTOR: 'Contributor', VIEWER: 'Viewer',
+  SUPER_ADMIN: 'Super Admin', ORG_ADMIN: 'Org Admin', EDITOR: 'Editor',
+  CONTRIBUTOR: 'Contributor', VIEWER: 'Viewer',
+  // Legacy (still display if existing data uses them)
+  PROCESS_OWNER: 'Process Owner (Legacy)', DATA_STEWARD: 'Data Steward (Legacy)',
 };
 const roleBadge = (role: string): React.CSSProperties => {
   const colors: Record<string, { bg: string; color: string }> = {
     SUPER_ADMIN: { bg: '#fce7f3', color: '#9d174d' }, ORG_ADMIN: { bg: '#ede9fe', color: '#5b21b6' },
-    PROCESS_OWNER: { bg: '#d1f0eb', color: '#0f4f46' }, DATA_STEWARD: { bg: '#dbeafe', color: '#1e40af' },
+    EDITOR: { bg: '#d1f0eb', color: '#0f4f46' },
     CONTRIBUTOR: { bg: '#fef3c7', color: '#92400e' }, VIEWER: { bg: '#f1f5f9', color: '#64748b' },
+    PROCESS_OWNER: { bg: '#d1f0eb', color: '#0f4f46' }, DATA_STEWARD: { bg: '#dbeafe', color: '#1e40af' },
   };
   const c = colors[role] || colors.VIEWER;
   return { display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: c.bg, color: c.color };
