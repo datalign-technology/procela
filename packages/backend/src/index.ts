@@ -27,6 +27,9 @@ import dashboardRouter from './routes/dashboard';
 import chatRouter from './routes/chat';
 import auditRouter from './routes/audit';
 import searchRouter from './routes/search';
+import governanceGroupsRouter from './routes/governance-groups';
+import damaRolesRouter from './routes/dama-roles';
+import dataDomainsRouter from './routes/data-domains';
 
 const app = express();
 
@@ -59,6 +62,9 @@ app.use('/api/v1/ai', authenticateToken, aiRouter);
 app.use('/api/v1/chat', authenticateToken, chatRouter);
 app.use('/api/v1/audit', authenticateToken, auditRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
+app.use('/api/v1/governance-groups', authenticateToken, governanceGroupsRouter);
+app.use('/api/v1/dama-roles', authenticateToken, damaRolesRouter);
+app.use('/api/v1/data-domains', authenticateToken, dataDomainsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling

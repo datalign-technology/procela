@@ -11,6 +11,9 @@ import HelpPage from '@/pages/HelpPage';
 import ValueStreamWizard from '@/pages/ValueStreamWizard';
 import OrganizationsPage from '@/pages/OrganizationsPage';
 import GapDetectionPage from '@/pages/GapDetectionPage';
+import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
+import DataDomainsPage from '@/pages/DataDomainsPage';
+import DamaRolesPage from '@/pages/DamaRolesPage';
 
 export default function App() {
   return (
@@ -25,6 +28,9 @@ export default function App() {
         <Route path="/mappings" element={<MappingsPage />} />
         <Route path="/gap-detection" element={<GapDetectionPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
+        <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
+        <Route path="/data-domains" element={<DataDomainsPage />} />
+        <Route path="/dama-roles" element={<DamaRolesPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>
