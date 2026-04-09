@@ -795,7 +795,7 @@ export default function OrganizationsPage() {
                           </td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
-                            <button style={{ ...btnIcon, color: 'var(--color-text-secondary)' }} onClick={() => openPerson360(person.id)}>View</button>
+                            <button style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }} onClick={() => openPerson360(person.id)} title="Manage governance roles, groups, and domains">Manage</button>
                             <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={() => openEditPerson(person)}>Edit</button>
                             <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => handleDeletePerson(person.id)}>Del</button>
                           </td>
@@ -830,6 +830,7 @@ export default function OrganizationsPage() {
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                   <div>
+                    <div style={{ fontSize: 11, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 2 }}>Manage Person</div>
                     <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{viewing360.person.name}</h2>
                     <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
                       {viewing360.person.email && <span>{viewing360.person.email}</span>}

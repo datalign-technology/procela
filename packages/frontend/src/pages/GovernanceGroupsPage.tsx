@@ -643,6 +643,7 @@ export default function GovernanceGroupsPage() {
                 <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{selectedGroupDetail.members?.length || 0} {(selectedGroupDetail.members?.length || 0) === 1 ? 'member' : 'members'}</span>
               </div>
               {selectedGroupDetail.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedGroupDetail.description}</p>}
+              <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>Tip: You can also manage group memberships from Organizations → click "Manage" on any person.</p>
             </div>
             <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
           </div>

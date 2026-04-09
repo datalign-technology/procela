@@ -338,7 +338,7 @@ export default function DamaRolesPage() {
         ) : roles.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
             <p style={{ color: 'var(--color-text-muted)', lineHeight: 1.6, maxWidth: 500, margin: '0 auto' }}>
-              No DAMA role assignments yet. Use the + Assign Role button to assign data management roles to people in your organization.
+              No DAMA role assignments yet. Use the + Assign Role button above, or go to Organizations and click "Manage" on any person to assign all their governance roles from one place.
             </p>
           </div>
         ) : (
