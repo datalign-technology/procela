@@ -14,12 +14,12 @@ const ROLES = [
 
 export interface StoredPerson {
   id: string;
-  orgId: string;
+  orgIds: string[];             // assigned org levels (multi-assignment)
+  accessibleOrgIds: string[];   // explicit additional org access grants
   name: string;
   email: string;
   role: string;
   title: string;
-  accessibleOrgIds: string[]; // explicit org access grants (empty = computed from role + assignment)
   createdAt: string;
   updatedAt: string;
 }
@@ -59,39 +59,34 @@ export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string;
   }
 
   const computed = new Set<string>();
-  const assignedOrg = organizations.find((o) => o.id === person.orgId);
 
-  if (assignedOrg) {
+  // Process each assigned org
+  for (const assignedOrgId of person.orgIds) {
+    const assignedOrg = organizations.find((o) => o.id === assignedOrgId);
+    if (!assignedOrg) continue;
+
     if (assignedOrg.type === 'company') {
-      // Company level: this company + all children that are working levels
       computed.add(assignedOrg.id);
       if (person.role === 'ORG_ADMIN') {
-        // Org Admin at company: all descendants that are working levels
-        const descendants = getDescendantOrgIds(assignedOrg.id);
-        for (const did of descendants) {
+        for (const did of getDescendantOrgIds(assignedOrg.id)) {
           const d = organizations.find((o) => o.id === did);
           if (d && WORKING_LEVELS.includes(d.type)) computed.add(d.id);
         }
       } else {
-        // Other roles at company: company + direct child divisions
         const childDivisions = organizations.filter((o) => o.parentId === assignedOrg.id && o.type === 'division');
         for (const div of childDivisions) computed.add(div.id);
       }
     } else if (assignedOrg.type === 'division') {
-      // Division level: this division
       computed.add(assignedOrg.id);
       if (person.role === 'ORG_ADMIN') {
-        // Org Admin at division: this division + all working-level descendants
-        const descendants = getDescendantOrgIds(assignedOrg.id);
-        for (const did of descendants) {
+        for (const did of getDescendantOrgIds(assignedOrg.id)) {
           const d = organizations.find((o) => o.id === did);
           if (d && WORKING_LEVELS.includes(d.type)) computed.add(d.id);
         }
       }
     } else {
       // Department/team/unit: find parent division or company
-      const ancestors = getAncestorOrgs(assignedOrg.id, WORKING_LEVELS);
-      for (const aid of ancestors) computed.add(aid);
+      for (const aid of getAncestorOrgs(assignedOrg.id, WORKING_LEVELS)) computed.add(aid);
     }
   }
 
@@ -114,7 +109,7 @@ const router = Router();
 /** GET /api/v1/people */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? people.filter((p) => p.orgId === orgId) : people;
+  const filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
   res.json({ success: true, data: filtered, roles: ROLES });
 });
 
@@ -127,14 +122,18 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/people */
 router.post('/', (req: Request, res: Response) => {
-  const { orgId, name, email, role, title, accessibleOrgIds } = req.body;
+  const { orgIds, orgId, name, email, role, title, accessibleOrgIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
-  if (!orgId) { res.status(400).json({ success: false, error: 'Organization is required' }); return; }
-  const org = organizations.find((o) => o.id === orgId);
-  if (!org) { res.status(400).json({ success: false, error: 'Organization not found. Person must be assigned to an existing organization level.' }); return; }
+  // Support both orgIds (array) and orgId (single, backward compat)
+  const assignedOrgIds: string[] = orgIds || (orgId ? [orgId] : []);
+  if (assignedOrgIds.length === 0) { res.status(400).json({ success: false, error: 'At least one organization is required' }); return; }
+  for (const oid of assignedOrgIds) {
+    const org = organizations.find((o) => o.id === oid);
+    if (!org) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
+  }
   const now = new Date().toISOString();
   const person: StoredPerson = {
-    id: uuid(), orgId, name,
+    id: uuid(), orgIds: assignedOrgIds, name,
     email: email || '', role: role || 'VIEWER',
     title: title || '',
     accessibleOrgIds: accessibleOrgIds || [],
@@ -148,16 +147,20 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const { name, email, role, title, orgId, accessibleOrgIds } = req.body;
+  const { name, email, role, title, orgIds, orgId, accessibleOrgIds } = req.body;
   if (name !== undefined) person.name = name;
   if (email !== undefined) person.email = email;
   if (role !== undefined) person.role = role;
   if (title !== undefined) person.title = title;
   if (accessibleOrgIds !== undefined) person.accessibleOrgIds = accessibleOrgIds;
-  if (orgId !== undefined) {
-    const org = organizations.find((o) => o.id === orgId);
-    if (!org) { res.status(400).json({ success: false, error: 'Organization not found. Person must be assigned to an existing organization level.' }); return; }
-    person.orgId = orgId;
+  // Support both orgIds (array) and orgId (single, backward compat)
+  const newOrgIds = orgIds || (orgId ? [orgId] : undefined);
+  if (newOrgIds !== undefined) {
+    for (const oid of newOrgIds) {
+      const org = organizations.find((o) => o.id === oid);
+      if (!org) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
+    }
+    person.orgIds = newOrgIds;
   }
   person.updatedAt = new Date().toISOString();
   res.json({ success: true, data: person });
@@ -237,7 +240,7 @@ router.post('/import', (req: Request, res: Response) => {
       if (!row.name) continue;
       const role = row.role && validRoles.includes(row.role.toUpperCase()) ? row.role.toUpperCase() : 'VIEWER';
       const person: StoredPerson = {
-        id: uuid(), orgId, name: row.name,
+        id: uuid(), orgIds: [orgId], name: row.name,
         email: row.email || '', role,
         title: row.title || '',
         accessibleOrgIds: [],

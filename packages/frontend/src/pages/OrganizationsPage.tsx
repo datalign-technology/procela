@@ -15,7 +15,7 @@ interface OrgFlat {
   industry: string; description: string; headCount: number;
 }
 interface Person {
-  id: string; orgId: string; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
+  id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
 }
 
 // ── Styles ──
@@ -88,8 +88,8 @@ function flattenTreeForSelect(nodes: OrgNode[], depth = 0): FlatOrgOption[] {
 interface OrgFormData { name: string; parentId: string | null; type: string; industry: string; description: string; }
 const emptyOrgForm: OrgFormData = { name: '', parentId: null, type: 'department', industry: '', description: '' };
 
-interface PersonFormData { orgId: string; name: string; email: string; role: string; title: string; accessibleOrgIds: string[]; }
-const emptyPersonForm: PersonFormData = { orgId: '', name: '', email: '', role: 'VIEWER', title: '', accessibleOrgIds: [] };
+interface PersonFormData { orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[]; }
+const emptyPersonForm: PersonFormData = { orgIds: [], name: '', email: '', role: 'VIEWER', title: '', accessibleOrgIds: [] };
 
 // ── File Picker ──
 
@@ -212,10 +212,12 @@ export default function OrganizationsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const peopleCounts: Record<string, number> = {};
-  for (const p of people) peopleCounts[p.orgId] = (peopleCounts[p.orgId] || 0) + 1;
+  for (const p of people) {
+    for (const oid of p.orgIds) peopleCounts[oid] = (peopleCounts[oid] || 0) + 1;
+  }
 
   const selectedOrg = flatOrgs.find((o) => o.id === selectedOrgId);
-  const filteredPeople = selectedOrgId ? people.filter((p) => p.orgId === selectedOrgId) : [];
+  const filteredPeople = selectedOrgId ? people.filter((p) => p.orgIds.includes(selectedOrgId)) : [];
   const orgOptions = flattenTreeForSelect(tree);
 
   // ── Org handlers ──
@@ -245,10 +247,10 @@ export default function OrganizationsPage() {
   };
 
   // ── People handlers ──
-  const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgId: selectedOrgId }); setEditingPersonId(null); setShowPersonForm(true); };
-  const openEditPerson = (person: Person) => { setPersonForm({ orgId: person.orgId, name: person.name, email: person.email, role: person.role, title: person.title, accessibleOrgIds: person.accessibleOrgIds || [] }); setEditingPersonId(person.id); setShowPersonForm(true); };
+  const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgIds: selectedOrgId ? [selectedOrgId] : [] }); setEditingPersonId(null); setShowPersonForm(true); };
+  const openEditPerson = (person: Person) => { setPersonForm({ orgIds: person.orgIds || [], name: person.name, email: person.email, role: person.role, title: person.title, accessibleOrgIds: person.accessibleOrgIds || [] }); setEditingPersonId(person.id); setShowPersonForm(true); };
   const handleSavePerson = async () => {
-    if (!personForm.name.trim() || !personForm.orgId) return;
+    if (!personForm.name.trim() || personForm.orgIds.length === 0) return;
     if (editingPersonId) await apiClient.put(`/people/${editingPersonId}`, personForm);
     else await apiClient.post('/people', personForm);
     setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm); fetchData();
@@ -424,10 +426,27 @@ export default function OrganizationsPage() {
                       <input style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Organization Level *</label>
-                      <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.orgId} onChange={(e) => setPersonForm({ ...personForm, orgId: e.target.value })}>
-                        {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-                      </select>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assigned Organizations *</label>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                        Select all org levels this person belongs to. They will appear in each org's people list.
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 0' }}>
+                        {orgOptions.map((opt) => {
+                          const checked = personForm.orgIds.includes(opt.id);
+                          return (
+                            <label key={opt.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={checked}
+                                onChange={() => setPersonForm({
+                                  ...personForm,
+                                  orgIds: checked ? personForm.orgIds.filter((id) => id !== opt.id) : [...personForm.orgIds, opt.id],
+                                })}
+                                style={{ accentColor: 'var(--color-primary)' }}
+                              />
+                              {opt.label}
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Role</label>
@@ -447,7 +466,7 @@ export default function OrganizationsPage() {
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {orgOptions.filter((o) => o.type === 'company' || o.type === 'division').map((opt) => {
                           const isGranted = personForm.accessibleOrgIds.includes(opt.id);
-                          const isAssigned = opt.id === personForm.orgId;
+                          const isAssigned = personForm.orgIds.includes(opt.id);
                           return (
                             <label key={opt.id} style={{
                               fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: isAssigned ? 'default' : 'pointer',
@@ -475,7 +494,7 @@ export default function OrganizationsPage() {
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
                     <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); }}>Cancel</button>
-                    <button style={{ ...btnPrimary, opacity: !personForm.name.trim() || !personForm.orgId ? 0.6 : 1 }} disabled={!personForm.name.trim() || !personForm.orgId} onClick={handleSavePerson}>
+                    <button style={{ ...btnPrimary, opacity: !personForm.name.trim() || personForm.orgIds.length === 0 ? 0.6 : 1 }} disabled={!personForm.name.trim() || personForm.orgIds.length === 0} onClick={handleSavePerson}>
                       {editingPersonId ? 'Save' : 'Add'}
                     </button>
                   </div>

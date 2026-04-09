@@ -127,7 +127,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Resolve user's org and role from people records (if they exist)
     const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
-    const resolvedOrgId = personRecord?.orgId || DEV_ORG_ID;
+    const resolvedOrgId = personRecord?.orgIds?.[0] || DEV_ORG_ID;
     const resolvedRole = personRecord?.role || user.role;
     const resolvedName = personRecord?.name || user.name;
 
