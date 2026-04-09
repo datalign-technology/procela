@@ -672,10 +672,11 @@ export default function OrganizationsPage() {
                       </div>
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Role</label>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Application Role</label>
                       <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
                         {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                       </select>
+                      <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 2 }}>Controls platform permissions. Governance roles are assigned separately.</div>
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Title</label>
@@ -759,7 +760,7 @@ export default function OrganizationsPage() {
                       <tr style={{ background: 'var(--color-bg)' }}>
                         <th style={thStyle}>Name</th>
                         <th style={thStyle}>Email</th>
-                        <th style={thStyle}>Role</th>
+                        <th style={thStyle}>App Role</th>
                         <th style={thStyle}>Governance</th>
                         <th style={thStyle}>Title</th>
                         <th style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
@@ -827,14 +828,11 @@ export default function OrganizationsPage() {
                       {viewing360.person.email && <span>{viewing360.person.email}</span>}
                       {viewing360.person.title && <span>{viewing360.person.email ? ' \u2022 ' : ''}{viewing360.person.title}</span>}
                     </div>
-                    <div style={{ marginTop: 6 }}>
-                      <span style={roleBadge(viewing360.person.role)}>{ROLE_LABELS[viewing360.person.role] || viewing360.person.role}</span>
-                    </div>
                   </div>
                   <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
                 </div>
 
-                {/* Organizations */}
+                {/* ── ORGANIZATIONS ── */}
                 <div style={{ marginBottom: 16 }}>
                   <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Organizations ({viewing360.orgAssignments.length})</h3>
                   {viewing360.orgAssignments.length === 0 ? (
@@ -849,6 +847,22 @@ export default function OrganizationsPage() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* ── APPLICATION ACCESS ── */}
+                <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                  <h3 style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Application Access</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Platform role:</span>
+                    <span style={roleBadge(viewing360.person.role)}>{ROLE_LABELS[viewing360.person.role] || viewing360.person.role}</span>
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Controls what this person can do in the application</span>
+                  </div>
+                </div>
+
+                {/* ── GOVERNANCE RESPONSIBILITIES ── */}
+                <div style={{ marginBottom: 8, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
+                  <h3 style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Responsibilities</h3>
+                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 10 }}>DAMA roles, governance group memberships, and data domain assignments</p>
                 </div>
 
                 {/* Governance Groups — Editable */}
