@@ -329,6 +329,136 @@ function RecentActivity({ activeOrgId }: { activeOrgId: string | null }) {
   );
 }
 
+interface TrendDay {
+  date: string;
+  creates: number;
+  updates: number;
+  deletes: number;
+  total: number;
+}
+
+function ActivityTrends() {
+  const [days, setDays] = useState<TrendDay[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: TrendDay[] }>('/trends/activity');
+        // Take last 7 days (data is sorted most recent first)
+        setDays((res.data || []).slice(0, 7));
+      } catch { /* */ }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const maxTotal = Math.max(1, ...days.map((d) => d.total));
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      padding: 20,
+      boxShadow: 'var(--shadow-sm)',
+      marginTop: 24,
+    }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Activity Trends (Last 7 Days)</h2>
+      {loading ? (
+        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0' }}>Loading...</div>
+      ) : days.length === 0 || days.every((d) => d.total === 0) ? (
+        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0', textAlign: 'center' }}>
+          No activity in the last 7 days
+        </div>
+      ) : (
+        <div>
+          {/* Table header */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '100px 1fr 60px 60px 60px 60px',
+            gap: 8,
+            padding: '8px 0',
+            borderBottom: '2px solid var(--color-border)',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}>
+            <span>Date</span>
+            <span>Activity</span>
+            <span style={{ textAlign: 'right' }}>Creates</span>
+            <span style={{ textAlign: 'right' }}>Updates</span>
+            <span style={{ textAlign: 'right' }}>Deletes</span>
+            <span style={{ textAlign: 'right' }}>Total</span>
+          </div>
+          {/* Table rows */}
+          {days.map((day) => (
+            <div
+              key={day.date}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '100px 1fr 60px 60px 60px 60px',
+                gap: 8,
+                padding: '8px 0',
+                borderBottom: '1px solid var(--color-border)',
+                fontSize: 13,
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontWeight: 500, fontSize: 12 }}>{day.date}</span>
+              <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 16 }}>
+                {day.creates > 0 && (
+                  <div style={{
+                    height: '100%',
+                    width: `${(day.creates / maxTotal) * 100}%`,
+                    background: '#22c55e',
+                    borderRadius: '3px 0 0 3px',
+                    minWidth: 3,
+                  }} />
+                )}
+                {day.updates > 0 && (
+                  <div style={{
+                    height: '100%',
+                    width: `${(day.updates / maxTotal) * 100}%`,
+                    background: '#3b82f6',
+                    minWidth: 3,
+                  }} />
+                )}
+                {day.deletes > 0 && (
+                  <div style={{
+                    height: '100%',
+                    width: `${(day.deletes / maxTotal) * 100}%`,
+                    background: '#ef4444',
+                    borderRadius: '0 3px 3px 0',
+                    minWidth: 3,
+                  }} />
+                )}
+              </div>
+              <span style={{ textAlign: 'right', color: '#22c55e', fontWeight: day.creates > 0 ? 600 : 400 }}>{day.creates}</span>
+              <span style={{ textAlign: 'right', color: '#3b82f6', fontWeight: day.updates > 0 ? 600 : 400 }}>{day.updates}</span>
+              <span style={{ textAlign: 'right', color: '#ef4444', fontWeight: day.deletes > 0 ? 600 : 400 }}>{day.deletes}</span>
+              <span style={{ textAlign: 'right', fontWeight: 700 }}>{day.total}</span>
+            </div>
+          ))}
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#22c55e', display: 'inline-block' }} /> Creates
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#3b82f6', display: 'inline-block' }} /> Updates
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#ef4444', display: 'inline-block' }} /> Deletes
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Badge({ label, count, color }: { label: string; count: number; color: string }) {
   return (
     <span
@@ -673,6 +803,8 @@ export default function DashboardPage() {
       </div>
 
       <RecentActivity activeOrgId={activeOrgId} />
+
+      <ActivityTrends />
     </div>
   );
 }

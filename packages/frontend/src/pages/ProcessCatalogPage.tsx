@@ -20,6 +20,7 @@ interface ProcessNode {
   orderIndex: number;
   orgIds: string[];
   ownerId: string | null;
+  version?: number;
   children?: ProcessNode[];
 }
 
@@ -28,6 +29,26 @@ interface FlowRelationship {
   fromNodeId: string;
   toNodeId: string;
   type: string;
+}
+
+interface ProcessVersion {
+  id: string;
+  nodeId: string;
+  version: number;
+  snapshot: ProcessNode;
+  changedBy: string | null;
+  changedAt: string;
+  status: string;
+  note: string;
+}
+
+interface TagEntry {
+  id: string;
+  orgId: string;
+  entityType: string;
+  entityId: string;
+  tag: string;
+  createdAt: string;
 }
 
 // ── Level Configuration ──
@@ -203,7 +224,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -214,7 +235,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
+  onShowHistory: (nodeId: string) => void;
+  allTags: TagEntry[];
+  onAddTag: (nodeId: string, tag: string) => void;
+  onRemoveTag: (tagId: string) => void;
 }) {
+  const [showTagInput, setShowTagInput] = useState(false);
+  const [tagDraft, setTagDraft] = useState('');
+  const nodeTags = allTags.filter((t) => t.entityId === node.id);
   const isExpanded = expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
   const config = LEVEL_CONFIG[node.level];
@@ -376,6 +404,36 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           )}
         </span>
 
+        {/* Tags display */}
+        {nodeTags.length > 0 && (
+          <span style={{ display: 'inline-flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+            {nodeTags.map((t) => (
+              <span key={t.id} onClick={() => onRemoveTag(t.id)} title="Click to remove tag"
+                style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 8, fontSize: 9, fontWeight: 500, background: '#e0e7ff', color: '#3730a3', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {t.tag} x
+              </span>
+            ))}
+          </span>
+        )}
+
+        {/* Tag add button / input */}
+        {showTagInput ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <input autoFocus style={{ ...inputStyle, width: 80, fontSize: 10, padding: '1px 4px' }}
+              placeholder="tag..."
+              value={tagDraft}
+              onChange={(e) => setTagDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && tagDraft.trim()) { onAddTag(node.id, tagDraft.trim()); setTagDraft(''); setShowTagInput(false); }
+                if (e.key === 'Escape') { setTagDraft(''); setShowTagInput(false); }
+              }}
+              onBlur={() => { if (tagDraft.trim()) { onAddTag(node.id, tagDraft.trim()); } setTagDraft(''); setShowTagInput(false); }}
+            />
+          </span>
+        ) : (
+          <button style={{ ...btnIcon, fontSize: 9, color: '#6366f1' }} onClick={() => setShowTagInput(true)} title="Add tag">tag+</button>
+        )}
+
         {canAddChildren && (
           guidedLevel ? (
             <button style={{
@@ -392,6 +450,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
               onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }} title={`Add child to ${node.name}`}>+</button>
           )
         )}
+        <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onShowHistory(node.id)} title="Version History">Hist</button>
         <button style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete">&times;</button>
       </div>
 
@@ -401,7 +460,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           onUpdate={onUpdate} onDelete={onDelete} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand}
           validChildrenMap={validChildrenMap} flows={flows}
-          siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder} />
+          siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder}
+          onShowHistory={onShowHistory}
+          allTags={allTags}
+          onAddTag={onAddTag}
+          onRemoveTag={onRemoveTag} />
       ))}
     </div>
   );
@@ -420,18 +483,25 @@ export default function ProcessCatalogPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [allTags, setAllTags] = useState<TagEntry[]>([]);
+  const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
+  const [historyVersions, setHistoryVersions] = useState<ProcessVersion[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [viewingVersion, setViewingVersion] = useState<ProcessVersion | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
+        apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
       ]);
       setTree(catalogRes.tree || []);
       setStats(catalogRes.stats || {});
       setValidChildrenMap(catalogRes.validChildren || {});
       setFlows(flowsRes.data || []);
+      setAllTags(tagsRes.data || []);
       // Auto-expand value streams
       if (catalogRes.tree) {
         setExpanded((prev) => {
@@ -468,8 +538,20 @@ export default function ProcessCatalogPage() {
   };
 
   const updateNode = async (id: string, data: Record<string, any>) => {
-    await apiClient.put(`/process-catalog/nodes/${id}`, data);
-    fetchData();
+    // Look up current version from tree for optimistic locking
+    const node = findNodeInTree(tree, id);
+    const payload = node?.version !== undefined ? { ...data, version: node.version } : data;
+    try {
+      await apiClient.put(`/process-catalog/nodes/${id}`, payload);
+      fetchData();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        alert('This item was modified by another user. The page will refresh.');
+        fetchData();
+      } else {
+        throw err;
+      }
+    }
   };
 
   const deleteNode = async (id: string) => {
@@ -497,12 +579,52 @@ export default function ProcessCatalogPage() {
     if (swapIdx < 0 || swapIdx >= siblings.length) return;
     const current = siblings[idx];
     const swap = siblings[swapIdx];
-    // Swap orderIndex values
-    await Promise.all([
-      apiClient.put(`/process-catalog/nodes/${current.id}`, { orderIndex: swap.orderIndex }),
-      apiClient.put(`/process-catalog/nodes/${swap.id}`, { orderIndex: current.orderIndex }),
-    ]);
-    fetchData();
+    // Swap orderIndex values (include version for optimistic locking)
+    try {
+      await Promise.all([
+        apiClient.put(`/process-catalog/nodes/${current.id}`, {
+          orderIndex: swap.orderIndex,
+          ...(current.version !== undefined ? { version: current.version } : {}),
+        }),
+        apiClient.put(`/process-catalog/nodes/${swap.id}`, {
+          orderIndex: current.orderIndex,
+          ...(swap.version !== undefined ? { version: swap.version } : {}),
+        }),
+      ]);
+      fetchData();
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        alert('This item was modified by another user. The page will refresh.');
+        fetchData();
+      } else {
+        throw err;
+      }
+    }
+  };
+
+  const showHistory = async (nodeId: string) => {
+    setHistoryNodeId(nodeId);
+    setHistoryLoading(true);
+    setViewingVersion(null);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: ProcessVersion[] }>(`/process-catalog/nodes/${nodeId}/history`);
+      setHistoryVersions(res.data || []);
+    } catch { setHistoryVersions([]); }
+    finally { setHistoryLoading(false); }
+  };
+
+  const addTag = async (nodeId: string, tag: string) => {
+    try {
+      await apiClient.post('/tags', { entityType: 'ProcessNode', entityId: nodeId, tag, orgId: activeOrgId });
+      fetchData();
+    } catch { /* duplicate or error */ }
+  };
+
+  const removeTag = async (tagId: string) => {
+    try {
+      await apiClient.delete(`/tags/${tagId}`);
+      fetchData();
+    } catch { /* */ }
   };
 
   const byLevel = stats.byLevel || {};
@@ -701,7 +823,11 @@ export default function ProcessCatalogPage() {
               onAddChild={(parentId) => setAddingTo(parentId)}
               expanded={expanded} toggleExpand={toggleExpand}
               validChildrenMap={validChildrenMap} flows={flows}
-              siblingIndex={idx} siblingCount={tree.length} onReorder={reorderNode} />
+              siblingIndex={idx} siblingCount={tree.length} onReorder={reorderNode}
+              onShowHistory={showHistory}
+              allTags={allTags}
+              onAddTag={addTag}
+              onRemoveTag={removeTag} />
           ))
         )}
       </div>
@@ -723,6 +849,93 @@ export default function ProcessCatalogPage() {
           </div>
         );
       })()}
+
+      {/* Version History Modal */}
+      {historyNodeId && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={() => { setHistoryNodeId(null); setViewingVersion(null); }}>
+          <div style={{
+            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
+            padding: 24, maxWidth: 600, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }} onClick={(e) => e.stopPropagation()}>
+            {viewingVersion ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700 }}>Version {viewingVersion.version} Snapshot</h2>
+                  <button onClick={() => setViewingVersion(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--color-primary)', padding: '4px 8px' }}>Back</button>
+                </div>
+                <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{viewingVersion.snapshot.name}</div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</div>
+                    <div style={{ fontSize: 13 }}>{viewingVersion.snapshot.description || '(none)'}</div>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status at this version</div>
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                      background: statusColors[viewingVersion.status]?.bg || '#f1f5f9',
+                      color: statusColors[viewingVersion.status]?.color || '#64748b',
+                    }}>{viewingVersion.status}</span>
+                  </div>
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Level</div>
+                    <div style={{ fontSize: 13 }}>{viewingVersion.snapshot.level}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Note</div>
+                    <div style={{ fontSize: 13 }}>{viewingVersion.note}</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700 }}>Version History</h2>
+                  <button onClick={() => setHistoryNodeId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
+                </div>
+                {historyLoading ? (
+                  <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
+                ) : historyVersions.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No version history yet. History is recorded when a node's status changes.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {historyVersions.map((v) => (
+                      <div key={v.id} style={{
+                        background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>Version {v.version}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                            <span style={{
+                              display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, marginRight: 6,
+                              background: statusColors[v.status]?.bg || '#f1f5f9',
+                              color: statusColors[v.status]?.color || '#64748b',
+                            }}>{v.status}</span>
+                            {new Date(v.changedAt).toLocaleString()}
+                          </div>
+                        </div>
+                        <button onClick={() => setViewingVersion(v)}
+                          style={{ padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                          View
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

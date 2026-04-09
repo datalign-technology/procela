@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
 import Breadcrumbs from './Breadcrumbs';
@@ -47,11 +47,13 @@ const navSections: NavSection[] = [
     label: 'Analyze',
     items: [
       { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
+      { to: '/scorecard', label: 'Scorecard', icon: '\u2605' },
     ],
   },
 ];
 
 const bottomNavItems: NavItem[] = [
+  { to: '/report', label: 'Report', icon: '\u2637' },
   { to: '/settings', label: 'Settings', icon: '\u2731' },
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
@@ -86,6 +88,18 @@ interface OrgTreeNode {
   children: OrgTreeNode[];
 }
 
+interface Notification {
+  id: string;
+  orgId: string;
+  userId: string | null;
+  type: 'INFO' | 'WARNING' | 'ACTION';
+  title: string;
+  message: string;
+  link: string;
+  read: boolean;
+  createdAt: string;
+}
+
 const WORKING_ORG_LEVELS = ['company', 'division'];
 
 function flattenOrgTree(nodes: OrgTreeNode[], depth: number = 0): Array<{ id: string; name: string; type: string; label: string }> {
@@ -103,12 +117,20 @@ function flattenOrgTree(nodes: OrgTreeNode[], depth: number = 0): Array<{ id: st
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; label: string }>>([]);
 
   // Sidebar collapse state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Notification state
+  const [notifCount, setNotifCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifList, setNotifList] = useState<Notification[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const notifWrapperRef = useRef<HTMLDivElement>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,6 +177,67 @@ export default function Layout() {
     }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') setSearchOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Notification: fetch unread count on mount and route change
+  const fetchNotifCount = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: { unread: number } }>('/notifications/count');
+      setNotifCount(res.data.unread);
+    } catch { /* */ }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) fetchNotifCount();
+  }, [isAuthenticated, fetchNotifCount, location.pathname]);
+
+  // Notification: fetch list when panel is opened
+  const fetchNotifList = useCallback(async () => {
+    setNotifLoading(true);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: Notification[] }>('/notifications');
+      setNotifList(res.data);
+    } catch { /* */ }
+    finally { setNotifLoading(false); }
+  }, []);
+
+  const handleNotifToggle = () => {
+    if (!notifOpen) fetchNotifList();
+    setNotifOpen((v) => !v);
+  };
+
+  const handleNotifClick = async (notif: Notification) => {
+    if (!notif.read) {
+      await apiClient.put(`/notifications/${notif.id}/read`);
+      setNotifCount((c) => Math.max(0, c - 1));
+      setNotifList((list) => list.map((n) => n.id === notif.id ? { ...n, read: true } : n));
+    }
+    setNotifOpen(false);
+    navigate(notif.link);
+  };
+
+  const handleMarkAllRead = async () => {
+    await apiClient.put('/notifications/read-all');
+    setNotifCount(0);
+    setNotifList((list) => list.map((n) => ({ ...n, read: true })));
+  };
+
+  // Close notification dropdown on click outside or Escape
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (notifWrapperRef.current && !notifWrapperRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setNotifOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
     document.addEventListener('keydown', handleKeyDown);
@@ -284,7 +367,7 @@ export default function Layout() {
       {/* Main content area */}
       <div className={styles.main}>
         <header className={styles.header}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
             <img src="/procela-logo.png" alt="Procela" className={styles.headerLogo} />
             {/* Global Search */}
             <div className={styles.searchWrapper} ref={searchWrapperRef}>
@@ -296,6 +379,7 @@ export default function Layout() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }}
+                style={{ maxWidth: 'min(220px, 40vw)' }}
               />
               {searchOpen && (
                 <div className={styles.searchDropdown}>
@@ -334,7 +418,7 @@ export default function Layout() {
                     border: '1px solid var(--color-border)', borderRadius: 6,
                     background: activeOrgId ? 'var(--color-primary-light)' : 'var(--color-surface)',
                     color: activeOrgId ? 'var(--color-primary)' : 'var(--color-text)',
-                    minWidth: 200, cursor: 'pointer',
+                    minWidth: 200, maxWidth: '100%', width: 'auto', cursor: 'pointer',
                   }}
                 >
                   <option value="">All Organizations</option>
@@ -346,6 +430,111 @@ export default function Layout() {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Notification Bell */}
+            <div ref={notifWrapperRef} style={{ position: 'relative' }}>
+              <button
+                onClick={handleNotifToggle}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 18, position: 'relative', padding: '4px 8px',
+                  color: 'var(--color-text-secondary)',
+                }}
+                title="Notifications"
+              >
+                N
+                {notifCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: 0, right: 2,
+                    background: '#ef4444', color: '#fff', fontSize: 9,
+                    fontWeight: 700, borderRadius: '50%',
+                    width: 16, height: 16, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    lineHeight: 1,
+                  }}>
+                    {notifCount > 99 ? '99+' : notifCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                  width: 380, maxHeight: 440, overflowY: 'auto',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-lg)',
+                  zIndex: 800,
+                }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
+                  }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Notifications</span>
+                    {notifList.some((n) => !n.read) && (
+                      <button onClick={handleMarkAllRead} style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 11, color: 'var(--color-primary)', fontWeight: 500,
+                      }}>
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+                  {notifLoading && (
+                    <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>Loading...</div>
+                  )}
+                  {!notifLoading && notifList.length === 0 && (
+                    <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>No notifications</div>
+                  )}
+                  {!notifLoading && notifList.map((n) => {
+                    const typeColor = n.type === 'WARNING' ? '#d97706' : n.type === 'ACTION' ? '#0f766e' : '#2563eb';
+                    const typeIcon = n.type === 'WARNING' ? '\u26A0' : n.type === 'ACTION' ? '\u25B6' : '\u2139';
+                    const ago = (() => {
+                      const diff = Date.now() - new Date(n.createdAt).getTime();
+                      const mins = Math.floor(diff / 60000);
+                      if (mins < 1) return 'just now';
+                      if (mins < 60) return `${mins}m ago`;
+                      const hrs = Math.floor(mins / 60);
+                      if (hrs < 24) return `${hrs}h ago`;
+                      return `${Math.floor(hrs / 24)}d ago`;
+                    })();
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotifClick(n)}
+                        style={{
+                          display: 'flex', gap: 10, padding: '10px 14px',
+                          cursor: 'pointer', borderBottom: '1px solid var(--color-border)',
+                          background: n.read ? 'transparent' : 'var(--color-bg)',
+                          transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = n.read ? 'transparent' : 'var(--color-bg)'; }}
+                      >
+                        <span style={{
+                          width: 24, height: 24, borderRadius: '50%',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, background: typeColor + '18', color: typeColor,
+                          flexShrink: 0, marginTop: 2,
+                        }}>
+                          {typeIcon}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: n.read ? 400 : 600, color: 'var(--color-text)' }}>{n.title}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{n.message}</div>
+                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>{ago}</div>
+                        </div>
+                        {!n.read && (
+                          <span style={{
+                            width: 8, height: 8, borderRadius: '50%', background: '#2563eb',
+                            flexShrink: 0, marginTop: 6,
+                          }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div className={styles.userMenu}>
               <div className={styles.userAvatar}>{userInitial}</div>
               <span>{user?.name || 'User'}</span>

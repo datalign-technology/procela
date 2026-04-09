@@ -4,6 +4,7 @@ import logger from '../lib/logger';
 import { loadStore, saveStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import { organizations } from './organizations';
+import { createNotification } from './notifications';
 
 const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
 
@@ -63,6 +64,7 @@ export interface ProcessNode {
   orgId: string;
   orgIds: string[];
   ownerId: string | null;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,10 +79,22 @@ export interface FlowRelationship {
   createdAt: string;
 }
 
+export interface ProcessVersion {
+  id: string;
+  nodeId: string;
+  version: number;
+  snapshot: ProcessNode;
+  changedBy: string | null;
+  changedAt: string;
+  status: string;
+  note: string;
+}
+
 // ── Persistent stores ──
 
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
+export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 let activityCounter = 0;
@@ -324,6 +338,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     orgId: DEV_ORG_ID,
     orgIds: orgIds || [DEV_ORG_ID],
     ownerId: ownerId || null,
+    version: 1,
     createdAt: now,
     updatedAt: now,
   };
@@ -345,7 +360,16 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   const node = findNode(param(req.params.id));
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
-  const { name, description, status, orderIndex, orgIds, ownerId, parentId } = req.body;
+  const { name, description, status, orderIndex, orgIds, ownerId, parentId, version } = req.body;
+
+  // Optimistic locking: if version is provided and doesn't match, reject the update
+  if (version !== undefined && version !== (node.version ?? 1)) {
+    res.status(409).json({
+      success: false,
+      error: 'This item has been modified by another user. Please refresh and try again.',
+    });
+    return;
+  }
 
   // If moving to a new parent, validate
   if (parentId !== undefined && parentId !== node.parentId) {
@@ -383,6 +407,26 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   if (ownerId !== undefined) node.ownerId = ownerId;
 
   // Enforce ACTIVE/APPROVED status only on complete paths
+  if (status !== undefined && status !== node.status) {
+    // Status is changing — create a version snapshot before applying the change
+    const existingVersions = processVersions.filter((v) => v.nodeId === node.id);
+    const nextVersion = existingVersions.length > 0
+      ? Math.max(...existingVersions.map((v) => v.version)) + 1
+      : 1;
+    const versionSnapshot: ProcessVersion = {
+      id: uuid(),
+      nodeId: node.id,
+      version: nextVersion,
+      snapshot: { ...node },
+      changedBy: (req as any).user?.sub || null,
+      changedAt: new Date().toISOString(),
+      status: node.status,
+      note: `Status changed from ${node.status} to ${status}`,
+    };
+    processVersions.push(versionSnapshot);
+    saveStore('processVersions', processVersions);
+  }
+
   if (status !== undefined) {
     if (status === 'ACTIVE' || status === 'APPROVED') {
       if (node.level === 'VALUE_STREAM') {
@@ -409,10 +453,50 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
         }
       }
     }
+    const oldStatus = node.status;
     node.status = status;
+
+    // Workflow notifications on status transitions
+    if (status !== oldStatus) {
+      const levelLabel = node.level.toLowerCase().replace('_', ' ');
+      if (status === 'PROPOSED') {
+        createNotification({
+          orgId: node.orgId,
+          type: 'ACTION',
+          title: `Process '${node.name}' has been proposed for review`,
+          message: `The ${levelLabel} "${node.name}" has been submitted for review and requires attention.`,
+          link: '/processes',
+        });
+      } else if (status === 'APPROVED') {
+        createNotification({
+          orgId: node.orgId,
+          type: 'INFO',
+          title: `Process '${node.name}' has been approved`,
+          message: `The ${levelLabel} "${node.name}" has been approved and can be set to active.`,
+          link: '/processes',
+        });
+      } else if (status === 'ACTIVE') {
+        createNotification({
+          orgId: node.orgId,
+          type: 'INFO',
+          title: `Process '${node.name}' is now active`,
+          message: `The ${levelLabel} "${node.name}" is now active in the process catalog.`,
+          link: '/processes',
+        });
+      } else if (status === 'DEPRECATED') {
+        createNotification({
+          orgId: node.orgId,
+          type: 'WARNING',
+          title: `Process '${node.name}' has been deprecated`,
+          message: `The ${levelLabel} "${node.name}" has been marked as deprecated. Review any dependent data assets and mappings.`,
+          link: '/processes',
+        });
+      }
+    }
   }
 
   node.updatedAt = new Date().toISOString();
+  node.version = (node.version ?? 1) + 1;
 
   saveStore('processNodes', processNodes);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'UPDATE', null, node);
@@ -455,6 +539,32 @@ router.delete('/nodes/:id', (req: Request, res: Response) => {
 router.get('/nodes/:id/validate', (req: Request, res: Response) => {
   const result = validateProcessIntegrity(param(req.params.id));
   res.json({ success: true, data: result });
+});
+
+// ── VERSION HISTORY ──
+
+/** GET /nodes/:id/history — returns all versions for a node, newest first */
+router.get('/nodes/:id/history', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+
+  const versions = processVersions
+    .filter((v) => v.nodeId === nodeId)
+    .sort((a, b) => b.version - a.version);
+
+  res.json({ success: true, data: versions });
+});
+
+/** GET /nodes/:id/history/:versionId — returns a specific version */
+router.get('/nodes/:id/history/:versionId', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const versionId = param(req.params.versionId);
+
+  const version = processVersions.find((v) => v.id === versionId && v.nodeId === nodeId);
+  if (!version) { res.status(404).json({ success: false, error: 'Version not found' }); return; }
+
+  res.json({ success: true, data: version });
 });
 
 // ── FLOW RELATIONSHIPS ──
@@ -565,6 +675,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
         activityId: null, status: 'DRAFT',
         orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+        version: 1,
         createdAt: now, updatedAt: now,
       };
       processNodes.push(vsNode);
@@ -578,6 +689,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
           name: proc.name, description: proc.description || '',
           activityId: null, status: 'DRAFT', orderIndex: pIdx,
           orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+          version: 1,
           createdAt: now, updatedAt: now,
         };
         processNodes.push(procNode);
@@ -595,6 +707,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
               name: sp.name, description: sp.description || '',
               activityId: null, status: 'DRAFT', orderIndex: spIdx,
               orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+              version: 1,
               createdAt: now, updatedAt: now,
             };
             processNodes.push(spNode);
@@ -621,6 +734,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
             name: act.name, description: act.description || '',
             activityId: generateActivityId(), status: 'DRAFT', orderIndex: aIdx,
             orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+            version: 1,
             createdAt: now, updatedAt: now,
           };
           processNodes.push(actNode);

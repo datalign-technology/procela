@@ -32,6 +32,10 @@ import governanceGroupsRouter from './routes/governance-groups';
 import damaRolesRouter from './routes/dama-roles';
 import dataDomainsRouter from './routes/data-domains';
 import docsRouter from './routes/docs';
+import tagsRouter from './routes/tags';
+import commentsRouter from './routes/comments';
+import notificationsRouter from './routes/notifications';
+import trendsRouter from './routes/trends';
 
 const app = express();
 
@@ -68,6 +72,10 @@ app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/governance-groups', authenticateToken, governanceGroupsRouter);
 app.use('/api/v1/dama-roles', authenticateToken, damaRolesRouter);
 app.use('/api/v1/data-domains', authenticateToken, dataDomainsRouter);
+app.use('/api/v1/tags', authenticateToken, tagsRouter);
+app.use('/api/v1/comments', authenticateToken, commentsRouter);
+app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
+app.use('/api/v1/trends', authenticateToken, trendsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -77,7 +85,7 @@ app.use(errorHandler);
 // ---------------------------------------------------------------------------
 // Auto-save persistence
 // ---------------------------------------------------------------------------
-import { processNodes, flowRelationships } from './routes/process-catalog';
+import { processNodes, flowRelationships, processVersions } from './routes/process-catalog';
 import { systems } from './routes/systems';
 import { dataAssets } from './routes/data-assets';
 import { organizations } from './routes/organizations';
@@ -87,10 +95,14 @@ import { governanceGroups } from './routes/governance-groups';
 import { damaRoles } from './routes/dama-roles';
 import { dataDomains } from './routes/data-domains';
 import { auditLogs } from './services/audit.service';
+import { tags } from './routes/tags';
+import { comments } from './routes/comments';
+import { notifications } from './routes/notifications';
 
 startAutoSave({
   processNodes: () => processNodes,
   flowRelationships: () => flowRelationships,
+  processVersions: () => processVersions,
   systems: () => systems,
   dataAssets: () => dataAssets,
   organizations: () => organizations,
@@ -100,6 +112,9 @@ startAutoSave({
   damaRoles: () => damaRoles,
   dataDomains: () => dataDomains,
   auditLogs: () => auditLogs,
+  tags: () => tags,
+  comments: () => comments,
+  notifications: () => notifications,
 });
 
 // ---------------------------------------------------------------------------

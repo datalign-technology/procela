@@ -16,6 +16,9 @@ import DataDomainsPage from '@/pages/DataDomainsPage';
 import DamaRolesPage from '@/pages/DamaRolesPage';
 import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
 import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
+import ScorecardPage from '@/pages/ScorecardPage';
+import ExecutiveReportPage from '@/pages/ExecutiveReportPage';
+import ComparisonPage from '@/pages/ComparisonPage';
 
 export default function App() {
   return (
@@ -26,6 +29,7 @@ export default function App() {
         <Route path="/processes" element={<ProcessCatalogPage />} />
         <Route path="/processes/wizard" element={<ValueStreamWizard />} />
         <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
+        <Route path="/processes/compare" element={<ComparisonPage />} />
         <Route path="/data-assets" element={<DataAssetsPage />} />
         <Route path="/systems" element={<SystemsPage />} />
         <Route path="/mappings" element={<MappingsPage />} />
@@ -35,6 +39,8 @@ export default function App() {
         <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
         <Route path="/data-domains" element={<DataDomainsPage />} />
         <Route path="/dama-roles" element={<DamaRolesPage />} />
+        <Route path="/scorecard" element={<ScorecardPage />} />
+        <Route path="/report" element={<ExecutiveReportPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

@@ -6,6 +6,7 @@ import { systems } from './systems';
 import { organizations } from './organizations';
 import { people } from './people';
 import { dataDomains } from './data-domains';
+import { governanceGroups } from './governance-groups';
 
 const router = Router();
 
@@ -91,5 +92,122 @@ router.get('/stats', (req: Request, res: Response) => {
     },
   });
 });
+
+/** GET /api/v1/dashboard/scorecard — Governance Maturity Scorecard */
+router.get('/scorecard', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const oid = orgId as string | undefined;
+
+  const filteredNodes = oid ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid) : processNodes;
+  const filteredAssets = oid ? dataAssets.filter((a) => a.orgId === oid) : dataAssets;
+  const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
+  const filteredGroups = oid ? governanceGroups.filter((g) => g.orgId === oid) : governanceGroups;
+  const filteredPeople = oid ? people.filter((p) => p.orgId === oid) : people;
+
+  // 1. processDocumentation: % of value streams with ACTIVE status that have complete paths
+  //    (complete path = VS has at least one PROCESS descendant which has at least one ACTIVITY descendant)
+  const valueStreams = filteredNodes.filter((n) => n.level === 'VALUE_STREAM');
+  let vsWithCompletePaths = 0;
+  for (const vs of valueStreams) {
+    if (vs.status !== 'ACTIVE') continue;
+    // Find descendant processes
+    const descendantProcesses = filteredNodes.filter(
+      (n) => n.level === 'PROCESS' && hasAncestor(n, vs.id, filteredNodes)
+    );
+    // Check if any process has an activity descendant
+    const hasActivity = descendantProcesses.some((proc) =>
+      filteredNodes.some(
+        (n) => n.level === 'ACTIVITY' && hasAncestor(n, proc.id, filteredNodes)
+      )
+    );
+    if (hasActivity) vsWithCompletePaths++;
+  }
+  const processDocumentation = valueStreams.length > 0
+    ? Math.round((vsWithCompletePaths / valueStreams.length) * 100)
+    : 0;
+
+  // 2. dataGovernance: % of data assets at SILVER or GOLD tier
+  const silverOrGold = filteredAssets.filter(
+    (a) => a.governanceTier === 'SILVER' || a.governanceTier === 'GOLD'
+  ).length;
+  const dataGovernance = filteredAssets.length > 0
+    ? Math.round((silverOrGold / filteredAssets.length) * 100)
+    : 0;
+
+  // 3. domainCoverage: % of data domains with assigned owners
+  const domainsWithOwners = filteredDomains.filter((d) => d.ownerId).length;
+  const domainCoverage = filteredDomains.length > 0
+    ? Math.round((domainsWithOwners / filteredDomains.length) * 100)
+    : 0;
+
+  // 4. governanceStructure: has council + has office + has committee + has stewardship teams (25 each)
+  const hasCouncil = filteredGroups.some((g) => g.type === 'COUNCIL') ? 25 : 0;
+  const hasOffice = filteredGroups.some((g) => g.type === 'OFFICE') ? 25 : 0;
+  const hasCommittee = filteredGroups.some((g) => g.type === 'COMMITTEE') ? 25 : 0;
+  const hasStewardship = filteredGroups.some((g) => g.type === 'STEWARDSHIP_TEAM') ? 25 : 0;
+  const governanceStructure = hasCouncil + hasOffice + hasCommittee + hasStewardship;
+
+  // 5. peopleCoverage: % of governance groups with at least one member
+  const groupsWithMembers = filteredGroups.filter((g) => g.members.length > 0).length;
+  const peopleCoverage = filteredGroups.length > 0
+    ? Math.round((groupsWithMembers / filteredGroups.length) * 100)
+    : 0;
+
+  const overall = Math.round(
+    (processDocumentation + dataGovernance + domainCoverage + governanceStructure + peopleCoverage) / 5
+  );
+
+  const dimensions = [
+    {
+      name: 'Process Documentation',
+      score: processDocumentation,
+      description: 'Percentage of value streams with ACTIVE status and complete process paths (Value Stream > Process > Activity).',
+      color: scoreColor(processDocumentation),
+    },
+    {
+      name: 'Data Governance',
+      score: dataGovernance,
+      description: 'Percentage of data assets at Silver or Gold governance tier.',
+      color: scoreColor(dataGovernance),
+    },
+    {
+      name: 'Domain Coverage',
+      score: domainCoverage,
+      description: 'Percentage of data domains with assigned owners.',
+      color: scoreColor(domainCoverage),
+    },
+    {
+      name: 'Governance Structure',
+      score: governanceStructure,
+      description: 'Presence of key governance bodies: Council, Office, Committee, and Stewardship Teams (25 points each).',
+      color: scoreColor(governanceStructure),
+    },
+    {
+      name: 'People Coverage',
+      score: peopleCoverage,
+      description: 'Percentage of governance groups with at least one member assigned.',
+      color: scoreColor(peopleCoverage),
+    },
+  ];
+
+  res.json({ success: true, data: { overall, dimensions } });
+});
+
+/** Check if node has a given ancestor */
+function hasAncestor(node: any, ancestorId: string, allNodes: any[]): boolean {
+  let current = node;
+  while (current.parentId) {
+    if (current.parentId === ancestorId) return true;
+    current = allNodes.find((n: any) => n.id === current.parentId);
+    if (!current) break;
+  }
+  return false;
+}
+
+function scoreColor(score: number): string {
+  if (score >= 70) return '#22c55e';
+  if (score >= 40) return '#eab308';
+  return '#ef4444';
+}
 
 export default router;
