@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface DataAssetEntity {
   id: string;
@@ -127,6 +128,7 @@ export default function DataAssetsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -248,6 +250,14 @@ export default function DataAssetsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {assets.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            >
+              Delete All
+            </button>
+          )}
           {assets.length > 0 && (
             <button
               onClick={() => exportCsv('data-assets.csv', ['Name', 'System', 'Governance Tier', 'Health Score', 'Owner', 'Steward'], assets.map((a) => [
@@ -419,6 +429,20 @@ export default function DataAssetsPage() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Data Assets?"
+        message={`This will permanently delete all ${assets.length} data assets. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/data-assets/all');
+          setSelectedIds(new Set());
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>

@@ -186,6 +186,19 @@ const router = Router();
 
 // ── HIERARCHY NODES ──
 
+/** DELETE /all — delete all process nodes and flow relationships */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = processNodes.length;
+  const flowCount = flowRelationships.length;
+  processNodes.splice(0, processNodes.length);
+  flowRelationships.splice(0, flowRelationships.length);
+  saveStore('processNodes', processNodes);
+  saveStore('flowRelationships', flowRelationships);
+  auditService.log(DEV_ORG_ID, null, 'ProcessNode', '*', 'DELETE_ALL', null, { count, flowCount });
+  logger.info({ count, flowCount }, 'Deleted all process nodes and flow relationships');
+  res.json({ success: true, deleted: count + flowCount });
+});
+
 /** GET / — list all nodes as flat list + tree + metadata */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;

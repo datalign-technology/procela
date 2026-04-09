@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 // ── Types ──
 
@@ -141,6 +142,7 @@ export default function MappingsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   // Form state — hierarchical step selection
   const [selectedVsId, setSelectedVsId] = useState('');
@@ -265,6 +267,14 @@ export default function MappingsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {mappings.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            >
+              Delete All
+            </button>
+          )}
           {mappings.length > 0 && (
             <button
               onClick={() => exportCsv('mappings.csv', ['Process Step', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'], mappings.map((m) => [
@@ -488,6 +498,20 @@ export default function MappingsPage() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Mappings?"
+        message={`This will permanently delete all ${mappings.length} mappings. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/mappings/all');
+          setSelectedIds(new Set());
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* Table */}
       <div

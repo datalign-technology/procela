@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface DataDomain {
   id: string;
@@ -81,6 +82,7 @@ export default function DataDomainsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedDomain, setSelectedDomain] = useState<DataDomain | null>(null);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   // Detail editing state
   const [detailOwnerId, setDetailOwnerId] = useState<string>('');
@@ -196,9 +198,19 @@ export default function DataDomainsPage() {
             Organize data assets into governed domains with assigned owners and stewards.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add Domain
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {domains.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            >
+              Delete All
+            </button>
+          )}
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add Domain
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -220,6 +232,20 @@ export default function DataDomainsPage() {
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Assets in Domains</div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Data Domains?"
+        message={`This will permanently delete all ${domains.length} data domains. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/data-domains/all');
+          setSelectedDomain(null);
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* Add/Edit Form */}
       {showForm && (

@@ -56,6 +56,23 @@ function buildTree(orgs: StoredOrg[]): any[] {
 
 const router = Router();
 
+/** DELETE /api/v1/organizations/all — delete all organizations except the default org */
+router.delete('/all', (_req: Request, res: Response) => {
+  const defaultOrgId = '00000000-0000-0000-0000-000000000010';
+  const count = organizations.filter((o) => o.id !== defaultOrgId).length;
+  for (let i = organizations.length - 1; i >= 0; i--) {
+    if (organizations[i].id !== defaultOrgId) {
+      organizations.splice(i, 1);
+    }
+  }
+  // Reset default org parentId in case it was nested
+  const defaultOrg = organizations.find((o) => o.id === defaultOrgId);
+  if (defaultOrg) defaultOrg.parentId = null;
+  saveStore('organizations', organizations);
+  logger.info({ count }, 'Deleted all organizations except default');
+  res.json({ success: true, deleted: count });
+});
+
 /** GET /api/v1/organizations — returns flat list and tree */
 router.get('/', (_req: Request, res: Response) => {
   res.json({

@@ -25,6 +25,16 @@ const SYSTEM_TYPES = [
 
 const router = Router();
 
+/** DELETE /api/v1/systems/all — delete all systems */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = systems.length;
+  systems.splice(0, systems.length);
+  saveStore('systems', systems);
+  auditService.log(DEV_ORG_ID, null, 'System', '*', 'DELETE_ALL', null, { count });
+  logger.info({ count }, 'Deleted all systems');
+  res.json({ success: true, deleted: count });
+});
+
 /** GET /api/v1/systems */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;

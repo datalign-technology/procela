@@ -81,6 +81,16 @@ function buildTree(groups: StoredGovernanceGroup[]): any[] {
 
 const router = Router();
 
+/** DELETE /api/v1/governance-groups/all — delete all governance groups */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = governanceGroups.length;
+  governanceGroups.splice(0, governanceGroups.length);
+  saveStore('governanceGroups', governanceGroups);
+  auditService.log(DEV_ORG_ID, null, 'GovernanceGroup', '*', 'DELETE_ALL', null, { count });
+  logger.info({ count }, 'Deleted all governance groups');
+  res.json({ success: true, deleted: count });
+});
+
 /** GET /api/v1/governance-groups */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;

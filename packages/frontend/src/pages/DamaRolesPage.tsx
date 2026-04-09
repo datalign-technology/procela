@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface DamaRoleAssignment {
   id: string;
@@ -97,6 +98,7 @@ export default function DamaRolesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [error, setError] = useState('');
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -180,6 +182,14 @@ export default function DamaRolesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {roles.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            >
+              Delete All
+            </button>
+          )}
           {roles.length > 0 && (
             <button
               onClick={() => exportCsv('dama-roles.csv', ['Person', 'DAMA Role', 'Scope Type', 'Scope', 'Since'], roles.map((r) => [
@@ -271,6 +281,19 @@ export default function DamaRolesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All DAMA Roles?"
+        message={`This will permanently delete all ${roles.length} DAMA role assignments. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/dama-roles/all');
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>

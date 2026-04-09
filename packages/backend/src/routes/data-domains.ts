@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { auditService } from '../services/audit.service';
+import logger from '../lib/logger';
 import { people } from './people';
 import { dataAssets } from './data-assets';
 
@@ -41,6 +43,16 @@ function enrichDomain(domain: StoredDataDomain) {
 }
 
 const router = Router();
+
+/** DELETE /api/v1/data-domains/all — delete all data domains */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = dataDomains.length;
+  dataDomains.splice(0, dataDomains.length);
+  saveStore('dataDomains', dataDomains);
+  auditService.log('system', null, 'DataDomain', '*', 'DELETE_ALL', null, { count });
+  logger.info({ count }, 'Deleted all data domains');
+  res.json({ success: true, deleted: count });
+});
 
 /** GET /api/v1/data-domains — list all (support ?orgId= filter) */
 router.get('/', (req: Request, res: Response) => {

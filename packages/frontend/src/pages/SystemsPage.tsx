@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface SystemEntity {
   id: string;
@@ -66,6 +67,7 @@ export default function SystemsPage() {
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -162,6 +164,14 @@ export default function SystemsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {systems.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAll(true)}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            >
+              Delete All
+            </button>
+          )}
           {systems.length > 0 && (
             <button
               onClick={() => exportCsv('systems.csv', ['Name', 'Type', 'Description'], systems.map((s) => [s.name, s.systemType, s.description]))}
@@ -281,6 +291,20 @@ export default function SystemsPage() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Systems?"
+        message={`This will permanently delete all ${systems.length} systems. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/systems/all');
+          setSelectedIds(new Set());
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>

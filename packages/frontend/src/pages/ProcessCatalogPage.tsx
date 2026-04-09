@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePolling } from '../hooks/usePolling';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 // ── Types ──
 
@@ -413,6 +414,7 @@ export default function ProcessCatalogPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -517,6 +519,10 @@ export default function ProcessCatalogPage() {
         </div>
         {totalNodes > 0 && canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowDeleteAll(true)}
+              style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-error)', border: '1px solid var(--color-error)', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              Delete All Processes
+            </button>
             <button onClick={() => navigate('/processes/visualization')}
               style={{ padding: '8px 16px', background: '#0f4f46', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
               {'\u25A3'} Visualize
@@ -538,6 +544,19 @@ export default function ProcessCatalogPage() {
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Processes?"
+        message={`This will permanently delete all ${totalNodes} process nodes and their flow relationships. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/process-catalog/all');
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* Org restriction notice */}
       {!activeOrgId && (

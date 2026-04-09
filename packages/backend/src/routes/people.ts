@@ -111,6 +111,15 @@ export const people: StoredPerson[] = loadStore<StoredPerson>('people');
 
 const router = Router();
 
+/** DELETE /api/v1/people/all — delete all people */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = people.length;
+  people.splice(0, people.length);
+  saveStore('people', people);
+  logger.info({ count }, 'Deleted all people');
+  res.json({ success: true, deleted: count });
+});
+
 /** GET /api/v1/people */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;

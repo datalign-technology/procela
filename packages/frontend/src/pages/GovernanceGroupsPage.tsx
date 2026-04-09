@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 // ── Types ──
 
@@ -246,6 +247,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
 // ── Main Component ──
 
 export default function GovernanceGroupsPage() {
+  const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
 
   // Data state
@@ -273,6 +275,7 @@ export default function GovernanceGroupsPage() {
   const [form, setForm] = useState<GroupFormData>(emptyForm);
   // When adding a child, restrict the type dropdown to valid child types
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   // ── Data fetching ──
 
@@ -468,6 +471,22 @@ export default function GovernanceGroupsPage() {
         <div style={{ display: 'flex', gap: 6 }}>
           {flatGroups.length > 0 && (
             <button
+              onClick={() => setShowDeleteAll(true)}
+              style={{ ...btnSecondary, color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+            >
+              Delete All
+            </button>
+          )}
+          {flatGroups.length > 0 && (
+            <button
+              onClick={() => navigate('/governance/visualization')}
+              style={btnSecondary}
+            >
+              Visualize
+            </button>
+          )}
+          {flatGroups.length > 0 && (
+            <button
               onClick={() => exportCsv('governance-groups.csv', ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'], flatGroups.map((g) => [
                 g.name,
                 GROUP_TYPE_LABELS[g.type] || g.type,
@@ -485,7 +504,7 @@ export default function GovernanceGroupsPage() {
             onClick={async () => {
               try {
                 await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
-                fetchData();
+                fetchGroups();
               } catch { /* */ }
             }}
             style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
@@ -495,6 +514,21 @@ export default function GovernanceGroupsPage() {
           <button onClick={openAdd} style={btnPrimary}>+ Add Group</button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Governance Groups?"
+        message={`This will permanently delete all ${flatGroups.length} governance groups. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/governance-groups/all');
+          setSelectedGroupId(null);
+          setSelectedGroupDetail(null);
+          fetchGroups();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
 
       {/* DAMA Hierarchy Guidance */}
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>

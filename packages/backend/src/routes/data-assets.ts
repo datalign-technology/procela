@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { auditService } from '../services/audit.service';
+import logger from '../lib/logger';
 import { systems } from './systems';
 import { dataDomains } from './data-domains';
 import { mappings } from './mappings';
@@ -27,6 +29,16 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'];
 
 const router = Router();
+
+/** DELETE /api/v1/data-assets/all — delete all data assets */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = dataAssets.length;
+  dataAssets.splice(0, dataAssets.length);
+  saveStore('dataAssets', dataAssets);
+  auditService.log(DEV_ORG_ID, null, 'DataAsset', '*', 'DELETE_ALL', null, { count });
+  logger.info({ count }, 'Deleted all data assets');
+  res.json({ success: true, deleted: count });
+});
 
 /** GET /api/v1/data-assets */
 router.get('/', (req: Request, res: Response) => {

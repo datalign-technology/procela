@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { auditService } from '../services/audit.service';
+import logger from '../lib/logger';
 import { people } from './people';
 
 export const DAMA_ROLE_TYPES = [
@@ -26,6 +28,16 @@ export interface StoredDamaRole {
 export const damaRoles: StoredDamaRole[] = loadStore<StoredDamaRole>('damaRoles');
 
 const router = Router();
+
+/** DELETE /api/v1/dama-roles/all — delete all DAMA role assignments */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = damaRoles.length;
+  damaRoles.splice(0, damaRoles.length);
+  saveStore('damaRoles', damaRoles);
+  auditService.log('system', null, 'DamaRole', '*', 'DELETE_ALL', null, { count });
+  logger.info({ count }, 'Deleted all DAMA role assignments');
+  res.json({ success: true, deleted: count });
+});
 
 /** GET /api/v1/dama-roles — list all (support ?orgId= and ?personId= filters). Enrich with person name. */
 router.get('/', (req: Request, res: Response) => {

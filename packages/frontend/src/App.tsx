@@ -15,6 +15,7 @@ import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
 import DataDomainsPage from '@/pages/DataDomainsPage';
 import DamaRolesPage from '@/pages/DamaRolesPage';
 import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
+import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/gap-detection" element={<GapDetectionPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
+        <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
         <Route path="/data-domains" element={<DataDomainsPage />} />
         <Route path="/dama-roles" element={<DamaRolesPage />} />
         <Route path="/settings" element={<SettingsPage />} />

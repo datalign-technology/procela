@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { auditService } from '../services/audit.service';
+import logger from '../lib/logger';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 
@@ -71,6 +73,16 @@ function enrichMapping(m: StoredMapping) {
 }
 
 const router = Router();
+
+/** DELETE /api/v1/mappings/all — delete all mappings */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = mappings.length;
+  mappings.splice(0, mappings.length);
+  saveStore('mappings', mappings);
+  auditService.log(DEV_ORG_ID, null, 'Mapping', '*', 'DELETE_ALL', null, { count });
+  logger.info({ count }, 'Deleted all mappings');
+  res.json({ success: true, deleted: count });
+});
 
 /** GET /api/v1/mappings */
 router.get('/', (req: Request, res: Response) => {

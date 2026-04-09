@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 // ── Types ──
 
@@ -207,6 +208,7 @@ export default function OrganizationsPage() {
   const [peopleImportFormat, setPeopleImportFormat] = useState<'csv' | 'json'>('csv');
   const [viewing360, setViewing360] = useState<Person360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
+  const [showDeleteAllPeople, setShowDeleteAllPeople] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -426,6 +428,14 @@ export default function OrganizationsPage() {
                   {selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  {people.length > 0 && (
+                    <button
+                      onClick={() => setShowDeleteAllPeople(true)}
+                      style={{ ...btnSecondary, color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+                    >
+                      Delete All People
+                    </button>
+                  )}
                   {filteredPeople.length > 0 && (
                     <button
                       onClick={() => exportCsv('people.csv', ['Name', 'Email', 'Role', 'Title'], filteredPeople.map((p) => [
@@ -440,6 +450,19 @@ export default function OrganizationsPage() {
                   <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
                 </div>
               </div>
+
+              <ConfirmDialog
+                open={showDeleteAllPeople}
+                title="Delete All People?"
+                message={`This will permanently delete all ${people.length} people across all organizations. This cannot be undone.`}
+                confirmLabel="Delete All"
+                onConfirm={async () => {
+                  setShowDeleteAllPeople(false);
+                  await apiClient.delete('/people/all');
+                  fetchData();
+                }}
+                onCancel={() => setShowDeleteAllPeople(false)}
+              />
 
               {/* Add/Edit Person Form */}
               {showPersonForm && (
