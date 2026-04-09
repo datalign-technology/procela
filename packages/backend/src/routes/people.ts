@@ -2,10 +2,11 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
 import { organizations } from './organizations';
-import { damaRoles } from './dama-roles';
+import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
 import { governanceGroups } from './governance-groups';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
+import { dataDomains } from './data-domains';
 import logger from '../lib/logger';
 
 const ROLES = [
@@ -171,6 +172,15 @@ router.get('/:id/360', (req: Request, res: Response) => {
     .filter((a) => (a.steward === person.id || a.steward === person.name) && a.owner !== person.id && a.owner !== person.name)
     .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'steward' as const }));
 
+  // All governance groups (for checkbox UI)
+  const allGroups = governanceGroups.map((g) => ({ id: g.id, name: g.name, type: g.type }));
+
+  // All data domains (for checkbox UI)
+  const allDomains = dataDomains.map((d) => ({ id: d.id, name: d.name, ownerId: d.ownerId, stewardIds: d.stewardIds }));
+
+  // All DAMA role types
+  const allDamaRoleTypes = [...DAMA_ROLE_TYPES];
+
   res.json({
     success: true,
     data: {
@@ -180,6 +190,9 @@ router.get('/:id/360', (req: Request, res: Response) => {
       governanceGroups: personGroups,
       ownedProcessNodes,
       dataAssets: [...ownedDataAssets, ...stewardedDataAssets],
+      allGroups,
+      allDomains,
+      allDamaRoleTypes,
     },
   });
 });

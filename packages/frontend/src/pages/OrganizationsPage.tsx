@@ -22,11 +22,45 @@ interface Person {
 interface Person360Data {
   person: Person;
   orgAssignments: { id: string; name: string; type: string }[];
-  damaRoles: { id: string; roleType: string; scopeType: string; scopeName: string; since: string }[];
+  damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
   governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
   ownedProcessNodes: { id: string; name: string; level: string; status: string }[];
   dataAssets: { id: string; name: string; governanceTier: string; relation: string }[];
+  allGroups: { id: string; name: string; type: string }[];
+  allDomains: { id: string; name: string; ownerId: string | null; stewardIds: string[] }[];
+  allDamaRoleTypes: string[];
 }
+
+interface GovernanceGroupFull {
+  id: string; name: string; type: string;
+  members: { personId: string; groupRole: string; since: string }[];
+}
+
+interface DataDomainFull {
+  id: string; name: string; ownerId: string | null; stewardIds: string[];
+}
+
+interface DamaRoleFull {
+  id: string; personId: string; roleType: string; scopeType: string; scopeId: string; since: string;
+}
+
+const DAMA_ROLE_LABELS: Record<string, string> = {
+  CDO: 'Chief Data Officer',
+  DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
+  DATA_OWNER: 'Data Owner',
+  DATA_STEWARD: 'Data Steward',
+  DATA_CUSTODIAN: 'Data Custodian',
+  DATA_ARCHITECT: 'Data Architect',
+  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+};
+
+const GROUP_TYPE_LABELS: Record<string, string> = {
+  COUNCIL: 'Council', OFFICE: 'Office', COMMITTEE: 'Committee',
+  STEWARDSHIP_TEAM: 'Stewardship Team', WORKING_GROUP: 'Working Group',
+  COMMUNITY_OF_PRACTICE: 'Community of Practice',
+};
+
+const GROUP_ROLES = ['CHAIR', 'VICE_CHAIR', 'MEMBER', 'SECRETARY', 'ADVISOR'] as const;
 
 // ── Styles ──
 
@@ -208,16 +242,32 @@ export default function OrganizationsPage() {
   const [peopleImportFormat, setPeopleImportFormat] = useState<'csv' | 'json'>('csv');
   const [viewing360, setViewing360] = useState<Person360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
+  const [saving360, setSaving360] = useState(false);
   const [showDeleteAllPeople, setShowDeleteAllPeople] = useState(false);
+
+  // Governance data for summary column and 360 editing
+  const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
+  const [allDamaRoles, setAllDamaRoles] = useState<DamaRoleFull[]>([]);
+  const [allDataDomains, setAllDataDomains] = useState<DataDomainFull[]>([]);
+
+  // DAMA role add form state inside 360 modal
+  const [showAddDamaRole, setShowAddDamaRole] = useState(false);
+  const [newDamaRole, setNewDamaRole] = useState({ roleType: 'CDO', scopeType: 'ORG' as 'ORG' | 'DOMAIN', scopeId: '' });
 
   const fetchData = useCallback(async () => {
     try {
-      const [orgRes, peopleRes] = await Promise.all([
+      const [orgRes, peopleRes, govRes, damaRes, domainRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: Person[]; roles: string[] }>('/people'),
+        apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
+        apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
+        apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
       ]);
       setTree(orgRes.tree || []); setFlatOrgs(orgRes.data || []); setOrgTypes(orgRes.orgTypes || []);
       setPeople(peopleRes.data || []); setRoles(peopleRes.roles || []);
+      setAllGovernanceGroups(govRes.data || []);
+      setAllDamaRoles(damaRes.data || []);
+      setAllDataDomains(domainRes.data || []);
     } catch { /* */ }
     finally { setLoading(false); }
   }, []);
@@ -227,6 +277,17 @@ export default function OrganizationsPage() {
   const peopleCounts: Record<string, number> = {};
   for (const p of people) {
     for (const oid of p.orgIds) peopleCounts[oid] = (peopleCounts[oid] || 0) + 1;
+  }
+
+  // Governance summary counts per person (computed client-side)
+  const govSummary: Record<string, { groups: number; roles: number; domains: number }> = {};
+  for (const p of people) {
+    const groupCount = allGovernanceGroups.filter((g) => g.members?.some((m) => m.personId === p.id)).length;
+    const roleCount = allDamaRoles.filter((r) => r.personId === p.id).length;
+    const domainCount = allDataDomains.filter((d) => d.ownerId === p.id || d.stewardIds?.includes(p.id)).length;
+    if (groupCount || roleCount || domainCount) {
+      govSummary[p.id] = { groups: groupCount, roles: roleCount, domains: domainCount };
+    }
   }
 
   const selectedOrg = flatOrgs.find((o) => o.id === selectedOrgId);
@@ -271,11 +332,120 @@ export default function OrganizationsPage() {
   const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); fetchData(); };
   const openPerson360 = async (id: string) => {
     setLoading360(true);
+    setShowAddDamaRole(false);
+    setNewDamaRole({ roleType: 'CDO', scopeType: 'ORG', scopeId: '' });
     try {
       const res = await apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${id}/360`);
       setViewing360(res.data || null);
     } catch { /* */ }
     finally { setLoading360(false); }
+  };
+
+  // Re-fetch 360 data for current person (after edits)
+  const refresh360 = async () => {
+    if (!viewing360) return;
+    try {
+      const res = await apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${viewing360.person.id}/360`);
+      setViewing360(res.data || null);
+    } catch { /* */ }
+    // Also refresh governance data for summary column
+    try {
+      const [govRes, damaRes, domainRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
+        apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
+        apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
+      ]);
+      setAllGovernanceGroups(govRes.data || []);
+      setAllDamaRoles(damaRes.data || []);
+      setAllDataDomains(domainRes.data || []);
+    } catch { /* */ }
+  };
+
+  // ── Governance Group membership toggle ──
+  const toggleGroupMembership = async (groupId: string, isMember: boolean, role: string = 'MEMBER') => {
+    if (!viewing360) return;
+    setSaving360(true);
+    try {
+      if (isMember) {
+        // Remove membership
+        await apiClient.delete(`/governance-groups/${groupId}/members/${viewing360.person.id}`);
+      } else {
+        // Add membership
+        await apiClient.post(`/governance-groups/${groupId}/members`, {
+          personId: viewing360.person.id, groupRole: role,
+        });
+      }
+      await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  // ── Governance Group role change ──
+  const changeGroupRole = async (groupId: string, newRole: string) => {
+    if (!viewing360) return;
+    setSaving360(true);
+    try {
+      // Remove then re-add with new role
+      await apiClient.delete(`/governance-groups/${groupId}/members/${viewing360.person.id}`);
+      await apiClient.post(`/governance-groups/${groupId}/members`, {
+        personId: viewing360.person.id, groupRole: newRole,
+      });
+      await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  // ── DAMA Role add/remove ──
+  const addDamaRole = async () => {
+    if (!viewing360 || !newDamaRole.roleType || !newDamaRole.scopeId) return;
+    setSaving360(true);
+    try {
+      await apiClient.post('/dama-roles', {
+        personId: viewing360.person.id,
+        roleType: newDamaRole.roleType,
+        scopeType: newDamaRole.scopeType,
+        scopeId: newDamaRole.scopeId,
+      });
+      setShowAddDamaRole(false);
+      setNewDamaRole({ roleType: 'CDO', scopeType: 'ORG', scopeId: '' });
+      await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  const removeDamaRole = async (roleId: string) => {
+    setSaving360(true);
+    try {
+      await apiClient.delete(`/dama-roles/${roleId}`);
+      await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  // ── Data Domain owner/steward toggle ──
+  const toggleDomainOwner = async (domainId: string, isCurrentOwner: boolean) => {
+    if (!viewing360) return;
+    setSaving360(true);
+    try {
+      await apiClient.put(`/data-domains/${domainId}`, {
+        ownerId: isCurrentOwner ? null : viewing360.person.id,
+      });
+      await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  const toggleDomainSteward = async (domainId: string, isSteward: boolean, currentStewardIds: string[]) => {
+    if (!viewing360) return;
+    setSaving360(true);
+    try {
+      const newStewardIds = isSteward
+        ? currentStewardIds.filter((id) => id !== viewing360.person.id)
+        : [...currentStewardIds, viewing360.person.id];
+      await apiClient.put(`/data-domains/${domainId}`, { stewardIds: newStewardIds });
+      await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
   };
   const handlePeopleImport = async () => {
     if (!peopleImportText.trim() || !selectedOrgId) return;
@@ -590,18 +760,31 @@ export default function OrganizationsPage() {
                         <th style={thStyle}>Name</th>
                         <th style={thStyle}>Email</th>
                         <th style={thStyle}>Role</th>
+                        <th style={thStyle}>Governance</th>
                         <th style={thStyle}>Title</th>
                         <th style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredPeople.map((person) => (
+                      {filteredPeople.map((person) => {
+                        const gs = govSummary[person.id];
+                        const govText = gs
+                          ? [gs.groups > 0 && `${gs.groups} group${gs.groups > 1 ? 's' : ''}`, gs.roles > 0 && `${gs.roles} role${gs.roles > 1 ? 's' : ''}`, gs.domains > 0 && `${gs.domains} domain${gs.domains > 1 ? 's' : ''}`].filter(Boolean).join(', ')
+                          : null;
+                        return (
                         <tr key={person.id} style={{ transition: 'background 0.1s' }}
                           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
                           onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
                           <td style={{ ...tdStyle, fontWeight: 500 }}>{person.name}</td>
                           <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>{person.email || '--'}</td>
                           <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
+                          <td style={tdStyle}>
+                            {govText ? (
+                              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '2px 8px', borderRadius: 4 }}>{govText}</span>
+                            ) : (
+                              <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+                            )}
+                          </td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <button style={{ ...btnIcon, color: 'var(--color-text-secondary)' }} onClick={() => openPerson360(person.id)}>View</button>
@@ -609,7 +792,8 @@ export default function OrganizationsPage() {
                             <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => handleDeletePerson(person.id)}>Del</button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -628,7 +812,7 @@ export default function OrganizationsPage() {
         }} onClick={() => { if (!loading360) setViewing360(null); }}>
           <div style={{
             background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-            padding: 24, maxWidth: 700, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
+            padding: 24, maxWidth: 800, width: '90vw', maxHeight: '85vh', overflowY: 'auto',
             boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           }} onClick={(e) => e.stopPropagation()}>
             {loading360 ? (
@@ -667,58 +851,182 @@ export default function OrganizationsPage() {
                   )}
                 </div>
 
-                {/* DAMA Roles */}
+                {/* Governance Groups — Editable */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DAMA Roles ({viewing360.damaRoles.length})</h3>
-                  {viewing360.damaRoles.length === 0 ? (
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Governance Groups ({viewing360.governanceGroups.length} of {viewing360.allGroups.length})
+                  </h3>
+                  {viewing360.allGroups.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No governance groups defined yet</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {viewing360.allGroups.map((group) => {
+                        const membership = viewing360.governanceGroups.find((g) => g.groupId === group.id);
+                        const isMember = !!membership;
+                        return (
+                          <div key={group.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="checkbox" checked={isMember} disabled={saving360}
+                              style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
+                              onChange={() => toggleGroupMembership(group.id, isMember)}
+                            />
+                            <span style={{ fontSize: 12, fontWeight: 500, flex: 1 }}>{group.name}</span>
+                            <span style={{
+                              display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+                              textTransform: 'uppercase',
+                              background: group.type === 'COUNCIL' ? '#fce7f3' : group.type === 'OFFICE' ? '#ede9fe' : '#f1f5f9',
+                              color: group.type === 'COUNCIL' ? '#9d174d' : group.type === 'OFFICE' ? '#5b21b6' : '#64748b',
+                            }}>{GROUP_TYPE_LABELS[group.type] || group.type}</span>
+                            {isMember && (
+                              <select
+                                value={membership.groupRole} disabled={saving360}
+                                style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', appearance: 'auto' as any }}
+                                onChange={(e) => changeGroupRole(group.id, e.target.value)}
+                              >
+                                {GROUP_ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                              </select>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* DAMA Roles — Editable */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DAMA Roles ({viewing360.damaRoles.length})</h3>
+                    <button
+                      style={{ ...btnSecondary, padding: '3px 10px', fontSize: 11 }}
+                      onClick={() => { setShowAddDamaRole(!showAddDamaRole); setNewDamaRole({ roleType: viewing360.allDamaRoleTypes[0] || 'CDO', scopeType: 'ORG', scopeId: '' }); }}
+                    >
+                      {showAddDamaRole ? 'Cancel' : '+ Add Role'}
+                    </button>
+                  </div>
+                  {showAddDamaRole && (
+                    <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                      <div>
+                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Role Type</label>
+                        <select
+                          style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', appearance: 'auto' as any }}
+                          value={newDamaRole.roleType}
+                          onChange={(e) => setNewDamaRole({ ...newDamaRole, roleType: e.target.value })}
+                        >
+                          {(viewing360.allDamaRoleTypes || []).map((rt) => (
+                            <option key={rt} value={rt}>{DAMA_ROLE_LABELS[rt] || rt}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Scope Type</label>
+                        <select
+                          style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', appearance: 'auto' as any }}
+                          value={newDamaRole.scopeType}
+                          onChange={(e) => setNewDamaRole({ ...newDamaRole, scopeType: e.target.value as 'ORG' | 'DOMAIN', scopeId: '' })}
+                        >
+                          <option value="ORG">Organization</option>
+                          <option value="DOMAIN">Data Domain</option>
+                        </select>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>
+                          {newDamaRole.scopeType === 'ORG' ? 'Organization' : 'Data Domain'}
+                        </label>
+                        <select
+                          style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', width: '100%', appearance: 'auto' as any }}
+                          value={newDamaRole.scopeId}
+                          onChange={(e) => setNewDamaRole({ ...newDamaRole, scopeId: e.target.value })}
+                        >
+                          <option value="">-- Select --</option>
+                          {newDamaRole.scopeType === 'ORG'
+                            ? flatOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)
+                            : (viewing360.allDomains || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)
+                          }
+                        </select>
+                      </div>
+                      <button
+                        style={{ ...btnPrimary, padding: '4px 12px', fontSize: 11, opacity: !newDamaRole.scopeId ? 0.5 : 1 }}
+                        disabled={!newDamaRole.scopeId || saving360}
+                        onClick={addDamaRole}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                  {viewing360.damaRoles.length === 0 && !showAddDamaRole ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No DAMA roles assigned</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {viewing360.damaRoles.map((r) => (
-                        <div key={r.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div key={r.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <span style={{
                               display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
                               background: '#dbeafe', color: '#1e40af', marginRight: 8,
-                            }}>{r.roleType.replace(/_/g, ' ')}</span>
+                            }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType.replace(/_/g, ' ')}</span>
                             <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{r.scopeType}: {r.scopeName}</span>
                           </div>
+                          <button
+                            style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 11 }}
+                            disabled={saving360}
+                            onClick={() => removeDamaRole(r.id)}
+                          >
+                            Remove
+                          </button>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {/* Governance Groups */}
+                {/* Data Domains — Editable */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Groups ({viewing360.governanceGroups.length})</h3>
-                  {viewing360.governanceGroups.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Not a member of any governance group</p>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Data Domains ({(viewing360.allDomains || []).filter((d) => d.ownerId === viewing360.person.id || d.stewardIds?.includes(viewing360.person.id)).length} of {(viewing360.allDomains || []).length})
+                  </h3>
+                  {(viewing360.allDomains || []).length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data domains defined yet</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {viewing360.governanceGroups.map((g) => (
-                        <div key={g.groupId} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 500 }}>{g.groupName}</span>
-                          <span style={{
-                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                            background: g.groupRole === 'CHAIR' ? '#fce7f3' : g.groupRole === 'SECRETARY' ? '#dbeafe' : '#f1f5f9',
-                            color: g.groupRole === 'CHAIR' ? '#9d174d' : g.groupRole === 'SECRETARY' ? '#1e40af' : '#64748b',
-                          }}>{g.groupRole}</span>
-                        </div>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {(viewing360.allDomains || []).map((domain) => {
+                        const isOwner = domain.ownerId === viewing360.person.id;
+                        const isSteward = domain.stewardIds?.includes(viewing360.person.id) || false;
+                        return (
+                          <div key={domain.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, flex: 1 }}>{domain.name}</span>
+                            <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                              <input
+                                type="checkbox" checked={isOwner} disabled={saving360}
+                                style={{ accentColor: '#0f4f46' }}
+                                onChange={() => toggleDomainOwner(domain.id, isOwner)}
+                              />
+                              Owner
+                            </label>
+                            <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                              <input
+                                type="checkbox" checked={isSteward} disabled={saving360}
+                                style={{ accentColor: '#1e40af' }}
+                                onChange={() => toggleDomainSteward(domain.id, isSteward, domain.stewardIds || [])}
+                              />
+                              Steward
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
 
-                {/* Owned Processes */}
+                {/* Owned Processes (read-only) */}
                 <div style={{ marginBottom: 16 }}>
                   <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Owned Processes ({viewing360.ownedProcessNodes.length})</h3>
                   {viewing360.ownedProcessNodes.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Does not own any process nodes</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {viewing360.ownedProcessNodes.map((n) => (
-                        <div key={n.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div key={n.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 12 }}>{n.name}</span>
                           <span style={{
                             display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
@@ -730,15 +1038,15 @@ export default function OrganizationsPage() {
                   )}
                 </div>
 
-                {/* Owned/Stewarded Data Assets */}
+                {/* Owned/Stewarded Data Assets (read-only) */}
                 <div style={{ marginBottom: 16 }}>
                   <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Assets ({viewing360.dataAssets.length})</h3>
                   {viewing360.dataAssets.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data assets owned or stewarded</p>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {viewing360.dataAssets.map((a) => (
-                        <div key={a.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div key={a.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 12 }}>{a.name}</span>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                             <span style={{
