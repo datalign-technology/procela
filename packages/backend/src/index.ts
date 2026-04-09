@@ -36,6 +36,7 @@ import tagsRouter from './routes/tags';
 import commentsRouter from './routes/comments';
 import notificationsRouter from './routes/notifications';
 import trendsRouter from './routes/trends';
+import maturityTrendsRouter from './routes/maturity-trends';
 
 const app = express();
 
@@ -76,6 +77,7 @@ app.use('/api/v1/tags', authenticateToken, tagsRouter);
 app.use('/api/v1/comments', authenticateToken, commentsRouter);
 app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
 app.use('/api/v1/trends', authenticateToken, trendsRouter);
+app.use('/api/v1/maturity-trends', authenticateToken, maturityTrendsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -98,6 +100,7 @@ import { auditLogs } from './services/audit.service';
 import { tags } from './routes/tags';
 import { comments } from './routes/comments';
 import { notifications } from './routes/notifications';
+import { maturitySnapshots } from './routes/maturity-trends';
 
 startAutoSave({
   processNodes: () => processNodes,
@@ -115,6 +118,7 @@ startAutoSave({
   tags: () => tags,
   comments: () => comments,
   notifications: () => notifications,
+  maturitySnapshots: () => maturitySnapshots,
 });
 
 // ---------------------------------------------------------------------------
