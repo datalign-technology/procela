@@ -414,51 +414,6 @@ export default function ExecutiveReportPage() {
           )}
         </div>
 
-        {/* Section 6: Recent Activity */}
-        <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>6. Recent Activity</h2>
-          {auditEntries.length === 0 ? (
-            <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0' }}>
-              No recent activity recorded.
-            </div>
-          ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>Time</th>
-                  <th style={thStyle}>Action</th>
-                  <th style={thStyle}>Entity Type</th>
-                  <th style={thStyle}>Name</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditEntries.slice(0, 10).map((entry) => {
-                  const name = (entry.after as any)?.name || (entry.before as any)?.name || entry.entityId.slice(0, 8);
-                  const actionColors: Record<string, string> = {
-                    CREATE: '#22c55e', UPDATE: '#3b82f6', DELETE: '#ef4444',
-                  };
-                  return (
-                    <tr key={entry.id}>
-                      <td style={{ ...tdStyle, fontSize: 12, whiteSpace: 'nowrap' }}>{formatDate(entry.timestamp)}</td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
-                          color: '#fff', background: actionColors[entry.action] || '#9ca3af',
-                          textTransform: 'uppercase',
-                        }}>
-                          {entry.action}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{entry.entityType}</td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{name}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
         {/* Footer */}
         <div style={{
           borderTop: '2px solid var(--color-border, #e5e7eb)',
