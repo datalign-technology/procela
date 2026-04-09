@@ -1,6 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { loadStore, saveStore } from '../lib/persistence';
 import { organizations } from './organizations';
+import { damaRoles } from './dama-roles';
+import { governanceGroups } from './governance-groups';
+import { processNodes } from './process-catalog';
+import { dataAssets } from './data-assets';
 import logger from '../lib/logger';
 
 const ROLES = [
@@ -102,7 +107,7 @@ export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string;
   });
 }
 
-export const people: StoredPerson[] = [];
+export const people: StoredPerson[] = loadStore<StoredPerson>('people');
 
 const router = Router();
 
@@ -111,6 +116,63 @@ router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
   res.json({ success: true, data: filtered, roles: ROLES });
+});
+
+/** GET /api/v1/people/:id/360 — full 360 view of a person */
+router.get('/:id/360', (req: Request, res: Response) => {
+  const person = people.find((p) => p.id === req.params.id);
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+
+  // Org assignments with resolved names
+  const orgAssignments = person.orgIds
+    .map((oid) => organizations.find((o) => o.id === oid))
+    .filter(Boolean)
+    .map((o) => ({ id: o!.id, name: o!.name, type: o!.type }));
+
+  // DAMA roles
+  const personDamaRoles = damaRoles
+    .filter((r) => r.personId === person.id)
+    .map((r) => {
+      let scopeName = r.scopeId;
+      if (r.scopeType === 'ORG') {
+        const org = organizations.find((o) => o.id === r.scopeId);
+        if (org) scopeName = org.name;
+      }
+      return { ...r, scopeName };
+    });
+
+  // Governance group memberships
+  const personGroups = governanceGroups
+    .filter((g) => g.members.some((m) => m.personId === person.id))
+    .map((g) => {
+      const membership = g.members.find((m) => m.personId === person.id)!;
+      return { groupId: g.id, groupName: g.name, groupType: g.type, groupRole: membership.groupRole, since: membership.since };
+    });
+
+  // Process nodes owned
+  const ownedProcessNodes = processNodes
+    .filter((n) => n.ownerId === person.id)
+    .map((n) => ({ id: n.id, name: n.name, level: n.level, status: n.status }));
+
+  // Data assets owned or stewarded
+  const ownedDataAssets = dataAssets
+    .filter((a) => a.owner === person.id || a.owner === person.name)
+    .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'owner' as const }));
+  const stewardedDataAssets = dataAssets
+    .filter((a) => (a.steward === person.id || a.steward === person.name) && a.owner !== person.id && a.owner !== person.name)
+    .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'steward' as const }));
+
+  res.json({
+    success: true,
+    data: {
+      person,
+      orgAssignments,
+      damaRoles: personDamaRoles,
+      governanceGroups: personGroups,
+      ownedProcessNodes,
+      dataAssets: [...ownedDataAssets, ...stewardedDataAssets],
+    },
+  });
 });
 
 /** GET /api/v1/people/:id */
@@ -145,6 +207,7 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   people.push(person);
+  saveStore('people', people);
   res.status(201).json({ success: true, data: person });
 });
 
@@ -168,6 +231,7 @@ router.put('/:id', (req: Request, res: Response) => {
     person.orgIds = newOrgIds;
   }
   person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
   res.json({ success: true, data: person });
 });
 
@@ -176,6 +240,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   const idx = people.findIndex((p) => p.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   people.splice(idx, 1);
+  saveStore('people', people);
   res.status(204).send();
 });
 
@@ -264,6 +329,7 @@ router.post('/import', (req: Request, res: Response) => {
       created.push(person);
     }
 
+    saveStore('people', people);
     logger.info({ created: created.length, skipped: skipped.length, orgId, orgName: org.name }, 'Imported people');
     res.status(201).json({
       success: true,

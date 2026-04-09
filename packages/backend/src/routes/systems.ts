@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
+import { loadStore, saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 interface StoredSystem {
@@ -13,7 +14,7 @@ interface StoredSystem {
   updatedAt: string;
 }
 
-export const systems: StoredSystem[] = [];
+export const systems: StoredSystem[] = loadStore<StoredSystem>('systems');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const SYSTEM_TYPES = [
@@ -49,6 +50,7 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   systems.push(sys);
+  saveStore('systems', systems);
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'CREATE', null, sys);
   res.status(201).json({ success: true, data: sys });
 });
@@ -62,6 +64,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (description !== undefined) sys.description = description;
   if (systemType !== undefined) sys.systemType = systemType;
   sys.updatedAt = new Date().toISOString();
+  saveStore('systems', systems);
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
 });
@@ -72,6 +75,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   if (idx === -1) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   auditService.log(DEV_ORG_ID, null, 'System', systems[idx].id, 'DELETE', systems[idx], null);
   systems.splice(idx, 1);
+  saveStore('systems', systems);
   res.status(204).send();
 });
 
@@ -141,6 +145,7 @@ router.post('/import', (req: Request, res: Response) => {
       created.push(sys);
     }
 
+    saveStore('systems', systems);
     logger.info({ count: created.length, orgId }, 'Imported systems');
     res.status(201).json({ success: true, data: created });
   } catch (err) {

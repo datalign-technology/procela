@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import styles from './Layout.module.css';
+import Breadcrumbs from './Breadcrumbs';
 import ChatPanel from './ChatPanel';
 import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
@@ -366,6 +367,7 @@ export default function Layout() {
           </div>
         </header>
         <main className={styles.content}>
+          <Breadcrumbs />
           <Outlet />
         </main>
         <ChatPanel />

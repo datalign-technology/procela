@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { usePolling } from '../hooks/usePolling';
 
 // ── Types ──
 
@@ -199,7 +200,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -207,6 +208,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   expanded: Set<string>; toggleExpand: (id: string) => void;
   validChildrenMap: Record<string, string[]>;
   flows: FlowRelationship[];
+  siblingIndex: number;
+  siblingCount: number;
+  onReorder: (nodeId: string, direction: 'up' | 'down') => void;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
@@ -350,6 +354,22 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
         </select>
 
         {/* Actions — smart + button */}
+        {/* Reorder buttons */}
+        <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 0, flexShrink: 0 }}>
+          {siblingIndex > 0 ? (
+            <button style={{ ...btnIcon, fontSize: 10, padding: '0 4px', lineHeight: 1, color: 'var(--color-text-muted)' }}
+              onClick={() => onReorder(node.id, 'up')} title="Move up">{'\u25B2'}</button>
+          ) : (
+            <span style={{ display: 'inline-block', width: 22, height: 14 }} />
+          )}
+          {siblingIndex < siblingCount - 1 ? (
+            <button style={{ ...btnIcon, fontSize: 10, padding: '0 4px', lineHeight: 1, color: 'var(--color-text-muted)' }}
+              onClick={() => onReorder(node.id, 'down')} title="Move down">{'\u25BC'}</button>
+          ) : (
+            <span style={{ display: 'inline-block', width: 22, height: 14 }} />
+          )}
+        </span>
+
         {canAddChildren && (
           guidedLevel ? (
             <button style={{
@@ -417,6 +437,8 @@ export default function ProcessCatalogPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  usePolling(fetchData, 30000);
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });

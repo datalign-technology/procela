@@ -2,12 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
   valueStreams: number;
   processes: number;
   subProcesses: number;
   steps: number;
+  activities: number;
   systems: number;
   dataAssets: number;
   mappings: number;
@@ -16,7 +18,13 @@ interface DashboardStats {
   coverage: { mapped: number; unmapped: number; percentage: number };
   governance: { bronze: number; silver: number; gold: number };
   averageHealth: number;
-  gaps: { unmappedSteps: number; ungovernedAssets: number; ownerlessItems: number };
+  gaps: {
+    unmappedSteps: number;
+    unmappedActivities: number;
+    ungovernedAssets: number;
+    ownerlessItems: number;
+    ungovernedDomains: number;
+  };
 }
 
 const cardStyle: React.CSSProperties = {
@@ -343,6 +351,142 @@ function Badge({ label, count, color }: { label: string; count: number; color: s
   );
 }
 
+interface AlertItem {
+  level: 'red' | 'amber' | 'info' | 'green';
+  icon: string;
+  message: string;
+  count: number;
+  link: string;
+}
+
+const ALERT_BORDER_COLORS: Record<string, string> = {
+  red: '#ef4444',
+  amber: '#eab308',
+  info: '#3b82f6',
+  green: '#22c55e',
+};
+
+const ALERT_BG_COLORS: Record<string, string> = {
+  red: '#fef2f2',
+  amber: '#fefce8',
+  info: '#eff6ff',
+  green: '#f0fdf4',
+};
+
+const ALERT_TEXT_COLORS: Record<string, string> = {
+  red: '#991b1b',
+  amber: '#854d0e',
+  info: '#1e40af',
+  green: '#166534',
+};
+
+function DashboardAlerts({ stats }: { stats: DashboardStats }) {
+  const alerts: AlertItem[] = [];
+
+  const unmappedActivities = stats.gaps.unmappedActivities ?? stats.gaps.unmappedSteps ?? 0;
+  if (unmappedActivities > 0) {
+    alerts.push({
+      level: 'red',
+      icon: '\u26A0',
+      message: `${unmappedActivities} process ${unmappedActivities === 1 ? 'activity has' : 'activities have'} no data assets linked`,
+      count: unmappedActivities,
+      link: '/gap-detection',
+    });
+  }
+
+  if (stats.gaps.ungovernedAssets > 0) {
+    alerts.push({
+      level: 'amber',
+      icon: '\u25B3',
+      message: `${stats.gaps.ungovernedAssets} Bronze-tier data ${stats.gaps.ungovernedAssets === 1 ? 'asset' : 'assets'} linked to processes`,
+      count: stats.gaps.ungovernedAssets,
+      link: '/data-assets',
+    });
+  }
+
+  if (stats.gaps.ownerlessItems > 0) {
+    alerts.push({
+      level: 'amber',
+      icon: '\u2639',
+      message: `${stats.gaps.ownerlessItems} value ${stats.gaps.ownerlessItems === 1 ? 'stream/process has' : 'streams/processes have'} no owner`,
+      count: stats.gaps.ownerlessItems,
+      link: '/processes',
+    });
+  }
+
+  const ungovernedDomains = stats.gaps.ungovernedDomains ?? 0;
+  if (ungovernedDomains > 0) {
+    alerts.push({
+      level: 'info',
+      icon: '\u25C8',
+      message: `${ungovernedDomains} data ${ungovernedDomains === 1 ? 'domain has' : 'domains have'} no owner assigned`,
+      count: ungovernedDomains,
+      link: '/data-domains',
+    });
+  }
+
+  if (alerts.length === 0) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '14px 18px',
+        marginBottom: 24,
+        background: ALERT_BG_COLORS.green,
+        borderLeft: `4px solid ${ALERT_BORDER_COLORS.green}`,
+        borderRadius: 'var(--radius-md)',
+        fontSize: 14,
+        fontWeight: 500,
+        color: ALERT_TEXT_COLORS.green,
+      }}>
+        <span style={{ fontSize: 18 }}>{'\u2713'}</span>
+        All clear -- no issues detected across your processes and data.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Alerts</h2>
+      {alerts.map((alert, idx) => (
+        <div
+          key={idx}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 16px',
+            background: ALERT_BG_COLORS[alert.level],
+            borderLeft: `4px solid ${ALERT_BORDER_COLORS[alert.level]}`,
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
+          <span style={{ fontSize: 18, flexShrink: 0 }}>{alert.icon}</span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: ALERT_TEXT_COLORS[alert.level] }}>
+            {alert.message}
+          </span>
+          <Link
+            to={alert.link}
+            style={{
+              padding: '4px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              color: ALERT_TEXT_COLORS[alert.level],
+              border: `1px solid ${ALERT_BORDER_COLORS[alert.level]}`,
+              borderRadius: 'var(--radius-md)',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            View
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -361,6 +505,8 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  usePolling(fetchData, 30000);
 
   if (error) {
     return (
@@ -520,6 +666,10 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <DashboardAlerts stats={stats} />
       </div>
 
       <RecentActivity activeOrgId={activeOrgId} />

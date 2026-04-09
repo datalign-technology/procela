@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { exportCsv } from '../lib/exportCsv';
+import { usePolling } from '../hooks/usePolling';
 
 interface SystemEntity {
   id: string;
@@ -63,6 +65,7 @@ export default function SystemsPage() {
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -75,6 +78,8 @@ export default function SystemsPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  usePolling(fetchData, 30000);
 
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
@@ -120,6 +125,29 @@ export default function SystemsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === systems.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(systems.map((s) => s.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/systems/${id}`)));
+    setSelectedIds(new Set());
+    fetchData();
+  };
+
   return (
     <div>
       {/* Header */}
@@ -134,6 +162,14 @@ export default function SystemsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {systems.length > 0 && (
+            <button
+              onClick={() => exportCsv('systems.csv', ['Name', 'Type', 'Description'], systems.map((s) => [s.name, s.systemType, s.description]))}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              Export CSV
+            </button>
+          )}
           <button onClick={() => setShowImport(true)} style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
             Import Systems
           </button>
@@ -224,6 +260,28 @@ export default function SystemsPage() {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={handleBulkDelete}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
@@ -236,6 +294,9 @@ export default function SystemsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                  <input type="checkbox" checked={systems.length > 0 && selectedIds.size === systems.length} onChange={toggleSelectAll} />
+                </th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Type</th>
                 <th style={thStyle}>Description</th>
@@ -244,9 +305,12 @@ export default function SystemsPage() {
             </thead>
             <tbody>
               {systems.map((sys) => (
-                <tr key={sys.id} style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                <tr key={sys.id} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
+                  onMouseEnter={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = ''; }}>
+                  <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                    <input type="checkbox" checked={selectedIds.has(sys.id)} onChange={() => toggleSelect(sys.id)} />
+                  </td>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{sys.name}</td>
                   <td style={tdStyle}>
                     {sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}

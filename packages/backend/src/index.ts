@@ -30,6 +30,7 @@ import searchRouter from './routes/search';
 import governanceGroupsRouter from './routes/governance-groups';
 import damaRolesRouter from './routes/dama-roles';
 import dataDomainsRouter from './routes/data-domains';
+import docsRouter from './routes/docs';
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use(express.json());
 // ---------------------------------------------------------------------------
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/docs', docsRouter);
 
 // ---------------------------------------------------------------------------
 // Routes — Protected (require valid access token)

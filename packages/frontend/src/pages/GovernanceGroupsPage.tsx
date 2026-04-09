@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { exportCsv } from '../lib/exportCsv';
 
 interface GroupMember {
   personId: string;
@@ -233,9 +234,25 @@ export default function GovernanceGroupsPage() {
             Manage governance councils, committees, and working groups.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add Group
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {groups.length > 0 && (
+            <button
+              onClick={() => exportCsv('governance-groups.csv', ['Name', 'Type', 'Description', 'Members', 'Status'], groups.map((g) => [
+                g.name,
+                TYPE_LABELS[g.type] || g.type,
+                g.description,
+                String(g.members.length),
+                g.status,
+              ]))}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              Export CSV
+            </button>
+          )}
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add Group
+          </button>
+        </div>
       </div>
 
       {/* Add/Edit Form */}

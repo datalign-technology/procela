@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { loadStore, saveStore } from '../lib/persistence';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 
@@ -19,7 +20,7 @@ interface StoredMapping {
   updatedAt: string;
 }
 
-export const mappings: StoredMapping[] = [];
+export const mappings: StoredMapping[] = loadStore<StoredMapping>('mappings');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
@@ -123,6 +124,7 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
   mappings.push(mapping);
+  saveStore('mappings', mappings);
   res.status(201).json({ success: true, data: enrichMapping(mapping) });
 });
 
@@ -148,6 +150,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (aiSuggested !== undefined) mapping.aiSuggested = aiSuggested === true;
   if (userOverridden !== undefined) mapping.userOverridden = userOverridden === true;
   mapping.updatedAt = new Date().toISOString();
+  saveStore('mappings', mappings);
   res.json({ success: true, data: enrichMapping(mapping) });
 });
 
@@ -159,6 +162,7 @@ router.delete('/:id', (req: Request, res: Response) => {
     return;
   }
   mappings.splice(idx, 1);
+  saveStore('mappings', mappings);
   res.status(204).send();
 });
 

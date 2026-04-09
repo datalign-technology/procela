@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { loadStore, saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 export interface StoredOrg {
@@ -16,19 +17,20 @@ export interface StoredOrg {
 
 const ORG_TYPES = ['company', 'division', 'department', 'team', 'unit'] as const;
 
-export const organizations: StoredOrg[] = [
-  {
-    id: '00000000-0000-0000-0000-000000000010',
-    parentId: null,
-    name: 'Default Organization',
-    type: 'company',
-    industry: '',
-    description: '',
-    headCount: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+const DEFAULT_ORG: StoredOrg = {
+  id: '00000000-0000-0000-0000-000000000010',
+  parentId: null,
+  name: 'Default Organization',
+  type: 'company',
+  industry: '',
+  description: '',
+  headCount: 0,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+const loaded = loadStore<StoredOrg>('organizations');
+export const organizations: StoredOrg[] = loaded.length > 0 ? loaded : [DEFAULT_ORG];
 
 // ── Helpers ──
 
@@ -87,6 +89,7 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now, updatedAt: now,
   };
   organizations.push(org);
+  saveStore('organizations', organizations);
   res.status(201).json({ success: true, data: org });
 });
 
@@ -102,6 +105,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (description !== undefined) org.description = description;
   if (headCount !== undefined) org.headCount = headCount;
   org.updatedAt = new Date().toISOString();
+  saveStore('organizations', organizations);
   res.json({ success: true, data: org });
 });
 
@@ -123,6 +127,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   }
   const idx = organizations.findIndex((o) => o.id === req.params.id);
   organizations.splice(idx, 1);
+  saveStore('organizations', organizations);
   res.status(204).send();
 });
 
@@ -208,6 +213,7 @@ router.post('/import', (req: Request, res: Response) => {
       nameToId.set(org.name.toLowerCase(), org.id);
     }
 
+    saveStore('organizations', organizations);
     logger.info({ count: created.length }, 'Imported organizations');
     res.status(201).json({ success: true, data: created, tree: buildTree(organizations) });
   } catch (err) {

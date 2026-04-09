@@ -5,6 +5,7 @@ import { mappings } from './mappings';
 import { systems } from './systems';
 import { organizations } from './organizations';
 import { people } from './people';
+import { dataDomains } from './data-domains';
 
 const router = Router();
 
@@ -57,6 +58,9 @@ router.get('/stats', (req: Request, res: Response) => {
     (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId
   ).length;
 
+  const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
+  const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
+
   res.json({
     success: true,
     data: {
@@ -82,6 +86,7 @@ router.get('/stats', (req: Request, res: Response) => {
         unmappedActivities: unmappedCount,
         ungovernedAssets,
         ownerlessItems,
+        ungovernedDomains,
       },
     },
   });

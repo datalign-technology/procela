@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { exportCsv } from '../lib/exportCsv';
+import { usePolling } from '../hooks/usePolling';
 
 interface DataAssetEntity {
   id: string;
@@ -85,6 +87,15 @@ const TIER_LABELS: Record<string, string> = {
   GOLD: 'Gold',
 };
 
+interface Asset360Data {
+  asset: DataAssetEntity;
+  system: { id: string; name: string; systemType: string } | null;
+  domain: { id: string; name: string; ownerName: string | null; stewards: { id: string; name: string }[] } | null;
+  mappings: { id: string; processStepId: string; linkType: string; notes: string; processPath: string }[];
+  ownerInfo: { id: string | null; name: string } | null;
+  stewardInfo: { id: string | null; name: string } | null;
+}
+
 interface FormData {
   name: string;
   description: string;
@@ -113,6 +124,9 @@ export default function DataAssetsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
+  const [loading360, setLoading360] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -125,6 +139,8 @@ export default function DataAssetsPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  usePolling(fetchData, 30000);
 
   const systemName = (systemId: string) => {
     const sys = systems.find((s) => s.id === systemId);
@@ -179,6 +195,38 @@ export default function DataAssetsPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === assets.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(assets.map((a) => a.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-assets/${id}`)));
+    setSelectedIds(new Set());
+    fetchData();
+  };
+
+  const open360 = async (id: string) => {
+    setLoading360(true);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: Asset360Data }>(`/data-assets/${id}/360`);
+      setViewing360(res.data || null);
+    } catch { /* */ }
+    finally { setLoading360(false); }
+  };
+
   // Stats
   const totalAssets = assets.length;
   const bronzeCount = assets.filter((a) => a.governanceTier === 'BRONZE').length;
@@ -199,9 +247,26 @@ export default function DataAssetsPage() {
             Data assets described in business terms, linked to the systems that hold them.
           </p>
         </div>
-        <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add Data Asset
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {assets.length > 0 && (
+            <button
+              onClick={() => exportCsv('data-assets.csv', ['Name', 'System', 'Governance Tier', 'Health Score', 'Owner', 'Steward'], assets.map((a) => [
+                a.name,
+                systemName(a.systemId),
+                TIER_LABELS[a.governanceTier] || a.governanceTier,
+                String(a.healthScore),
+                a.owner,
+                a.steward,
+              ]))}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              Export CSV
+            </button>
+          )}
+          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add Data Asset
+          </button>
+        </div>
       </div>
 
       {/* Add/Edit Form */}
@@ -333,6 +398,28 @@ export default function DataAssetsPage() {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={handleBulkDelete}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
@@ -345,6 +432,9 @@ export default function DataAssetsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                  <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} />
+                </th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>System</th>
                 <th style={thStyle}>Governance Tier</th>
@@ -359,7 +449,10 @@ export default function DataAssetsPage() {
                 const tierStyle = TIER_COLORS[asset.governanceTier] || TIER_COLORS.BRONZE;
                 const healthColor = asset.healthScore >= 80 ? '#16a34a' : asset.healthScore >= 50 ? '#ca8a04' : '#dc2626';
                 return (
-                  <tr key={asset.id} style={{ transition: 'background 0.1s' }} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                  <tr key={asset.id} style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                      <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelect(asset.id)} />
+                    </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>{asset.name}</td>
                     <td style={tdStyle}>
                       {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
+import { loadStore, saveStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import { organizations } from './organizations';
 
@@ -76,10 +77,10 @@ export interface FlowRelationship {
   createdAt: string;
 }
 
-// ── In-memory stores ──
+// ── Persistent stores ──
 
-export const processNodes: ProcessNode[] = [];
-export const flowRelationships: FlowRelationship[] = [];
+export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
+export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 let activityCounter = 0;
@@ -315,6 +316,7 @@ router.post('/nodes', (req: Request, res: Response) => {
   };
 
   processNodes.push(node);
+  saveStore('processNodes', processNodes);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'CREATE', null, node);
   logger.info({ level, name, parentId }, 'Created process node');
 
@@ -399,6 +401,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   node.updatedAt = new Date().toISOString();
 
+  saveStore('processNodes', processNodes);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'UPDATE', null, node);
   res.json({ success: true, data: node });
 });
@@ -427,6 +430,8 @@ router.delete('/nodes/:id', (req: Request, res: Response) => {
     }
   }
 
+  saveStore('processNodes', processNodes);
+  saveStore('flowRelationships', flowRelationships);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', nodeId, 'DELETE', node, null);
   logger.info({ id: nodeId, level: node.level, descendantsRemoved: descendants.length }, 'Deleted process node');
 
@@ -509,6 +514,7 @@ router.post('/flows', (req: Request, res: Response) => {
   };
 
   flowRelationships.push(flow);
+  saveStore('flowRelationships', flowRelationships);
   logger.info({ from: fromNode.name, to: toNode.name, type: flow.type }, 'Created flow relationship');
 
   res.status(201).json({ success: true, data: flow });
@@ -519,6 +525,7 @@ router.delete('/flows/:id', (req: Request, res: Response) => {
   const idx = flowRelationships.findIndex((f) => f.id === param(req.params.id));
   if (idx === -1) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
   flowRelationships.splice(idx, 1);
+  saveStore('flowRelationships', flowRelationships);
   res.status(204).send();
 });
 
@@ -621,6 +628,8 @@ router.post('/apply-template', (req: Request, res: Response) => {
       }
     }
 
+    saveStore('processNodes', processNodes);
+    saveStore('flowRelationships', flowRelationships);
     logger.info({ count: created.length, industry }, 'Applied template with universal hierarchy');
     res.status(201).json({ success: true, data: created, tree: buildTree(processNodes) });
   } catch (err) {

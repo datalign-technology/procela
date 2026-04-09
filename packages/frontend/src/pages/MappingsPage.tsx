@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { exportCsv } from '../lib/exportCsv';
 
 // ── Types ──
 
@@ -239,9 +240,25 @@ export default function MappingsPage() {
             Link data assets to process steps to track data dependencies across your organization.
           </p>
         </div>
-        <button onClick={openForm} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-          + Add Mapping
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {mappings.length > 0 && (
+            <button
+              onClick={() => exportCsv('mappings.csv', ['Process Step', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'], mappings.map((m) => [
+                m.stepInfo ? formatStepPath(m.stepInfo) : m.processStepId,
+                m.assetInfo ? m.assetInfo.assetName : m.dataAssetId,
+                m.linkType,
+                m.aiSuggested ? 'Yes' : 'No',
+                m.notes,
+              ]))}
+              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              Export CSV
+            </button>
+          )}
+          <button onClick={openForm} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
+            + Add Mapping
+          </button>
+        </div>
       </div>
 
       {/* Add Form */}
