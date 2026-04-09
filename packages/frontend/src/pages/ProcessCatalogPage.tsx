@@ -242,6 +242,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
 }) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const nodeTags = allTags.filter((t) => t.entityId === node.id);
   const isExpanded = expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
@@ -365,27 +366,47 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           </span>
         )}
 
-        {/* Status — blocks ACTIVE on incomplete nodes */}
-        <select value={node.status} onChange={(e) => {
-            if ((e.target.value === 'ACTIVE' || e.target.value === 'APPROVED') && !canBeActive) {
-              alert(`Cannot set to ${e.target.value}. ${node.level === 'VALUE_STREAM' ? 'Value stream needs Process + Activity.' : 'Process needs at least one Activity.'}`);
-              return;
-            }
-            onUpdate(node.id, { status: e.target.value });
-          }}
-          style={{ ...inputStyle, width: 'auto', fontSize: 10, padding: '1px 4px',
-            background: statusColors[node.status]?.bg || '#f1f5f9',
-            color: statusColors[node.status]?.color || '#64748b', fontWeight: 600, border: 'none',
-          }}>
-          {STATUSES.map((s) => {
-            const blocked = (s === 'ACTIVE' || s === 'APPROVED') && !canBeActive;
-            return (
-              <option key={s} value={s} disabled={blocked}>
-                {s}{blocked ? ' (incomplete)' : ''}
-              </option>
-            );
-          })}
-        </select>
+        {/* Status — with confirmation */}
+        {pendingStatus ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fffbeb', border: '1px solid #f59e0b44', borderRadius: 4, padding: '2px 6px' }}>
+            <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+              {node.status} {'\u2192'}
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: statusColors[pendingStatus]?.color || '#64748b' }}>
+              {pendingStatus}
+            </span>
+            <button onClick={() => { onUpdate(node.id, { status: pendingStatus }); setPendingStatus(null); }}
+              style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, padding: '1px 6px', fontSize: 9, fontWeight: 600, cursor: 'pointer' }}>
+              Save
+            </button>
+            <button onClick={() => setPendingStatus(null)}
+              style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 3, padding: '1px 6px', fontSize: 9, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <select value={node.status} onChange={(e) => {
+              if (e.target.value === node.status) return;
+              if ((e.target.value === 'ACTIVE' || e.target.value === 'APPROVED') && !canBeActive) {
+                alert(`Cannot set to ${e.target.value}. ${node.level === 'VALUE_STREAM' ? 'Value stream needs Process + Activity.' : 'Process needs at least one Activity.'}`);
+                return;
+              }
+              setPendingStatus(e.target.value);
+            }}
+            style={{ ...inputStyle, width: 'auto', fontSize: 10, padding: '1px 4px',
+              background: statusColors[node.status]?.bg || '#f1f5f9',
+              color: statusColors[node.status]?.color || '#64748b', fontWeight: 600, border: 'none',
+            }}>
+            {STATUSES.map((s) => {
+              const blocked = (s === 'ACTIVE' || s === 'APPROVED') && !canBeActive;
+              return (
+                <option key={s} value={s} disabled={blocked}>
+                  {s}{blocked ? ' (incomplete)' : ''}
+                </option>
+              );
+            })}
+          </select>
+        )}
 
         {/* Actions — smart + button */}
         {/* Reorder buttons */}
