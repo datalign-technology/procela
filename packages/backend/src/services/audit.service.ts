@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { loadStore, saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 export interface AuditLogEntry {
@@ -13,8 +14,8 @@ export interface AuditLogEntry {
   timestamp: string;
 }
 
-// In-memory audit log (replace with Prisma when DB is connected)
-export const auditLogs: AuditLogEntry[] = [];
+// Persistent audit log (replace with Prisma when DB is connected)
+export const auditLogs: AuditLogEntry[] = loadStore<AuditLogEntry>('auditLogs');
 
 export const auditService = {
   log(
@@ -38,6 +39,7 @@ export const auditService = {
       timestamp: new Date().toISOString(),
     };
     auditLogs.push(entry);
+    saveStore('auditLogs', auditLogs);
     logger.info({ entityType, entityId, action }, `[Audit] ${action} ${entityType}`);
   },
 

@@ -496,6 +496,13 @@ export default function DataAssetsPage() {
                     <td style={tdStyle}>{asset.steward || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <button
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
+                        onClick={() => open360(asset.id)}
+                        title="View 360"
+                      >
+                        View
+                      </button>
+                      <button
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
                         onClick={() => openEdit(asset)}
                         title="Edit"
@@ -517,6 +524,116 @@ export default function DataAssetsPage() {
           </table>
         )}
       </div>
+
+      {/* Data Asset 360 View Modal */}
+      {(viewing360 || loading360) && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={() => { if (!loading360) setViewing360(null); }}>
+          <div style={{
+            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
+            padding: 24, maxWidth: 700, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }} onClick={(e) => e.stopPropagation()}>
+            {loading360 ? (
+              <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
+            ) : viewing360 ? (
+              <>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{viewing360.asset.name}</h2>
+                    {viewing360.asset.description && (
+                      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>{viewing360.asset.description}</p>
+                    )}
+                  </div>
+                  <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
+                </div>
+
+                {/* Asset Info */}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+                  <span style={{
+                    display: 'inline-block', padding: '3px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600,
+                    background: (TIER_COLORS[viewing360.asset.governanceTier] || TIER_COLORS.BRONZE).bg,
+                    color: (TIER_COLORS[viewing360.asset.governanceTier] || TIER_COLORS.BRONZE).color,
+                  }}>
+                    {TIER_LABELS[viewing360.asset.governanceTier] || viewing360.asset.governanceTier}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${viewing360.asset.healthScore}%`, height: '100%', borderRadius: 3,
+                        background: viewing360.asset.healthScore >= 80 ? '#16a34a' : viewing360.asset.healthScore >= 50 ? '#ca8a04' : '#dc2626',
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>{viewing360.asset.healthScore}% Health</span>
+                  </div>
+                  {viewing360.system && (
+                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '3px 10px', borderRadius: 4 }}>
+                      System: {viewing360.system.name} {viewing360.system.systemType ? `(${viewing360.system.systemType})` : ''}
+                    </span>
+                  )}
+                </div>
+
+                {/* Ownership */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ownership</h3>
+                  <div style={{ display: 'flex', gap: 24 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Owner</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{viewing360.ownerInfo?.name || '--'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Steward</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{viewing360.stewardInfo?.name || '--'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Data Domain */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Domain</h3>
+                  {viewing360.domain ? (
+                    <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
+                      <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>{viewing360.domain.name}</div>
+                      {viewing360.domain.ownerName && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Owner: {viewing360.domain.ownerName}</div>}
+                      {viewing360.domain.stewards.length > 0 && (
+                        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Stewards: {viewing360.domain.stewards.map((s) => s.name).join(', ')}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Not assigned to any domain</p>
+                  )}
+                </div>
+
+                {/* Mappings */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Process Mappings ({viewing360.mappings.length})
+                  </h3>
+                  {viewing360.mappings.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No process mappings for this asset</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {viewing360.mappings.map((m) => (
+                        <div key={m.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12 }}>{m.processPath}</span>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500,
+                            background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+                          }}>{m.linkType}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

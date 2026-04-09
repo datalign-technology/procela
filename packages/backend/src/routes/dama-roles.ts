@@ -94,6 +94,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   const idx = damaRoles.findIndex((r) => r.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'DAMA role assignment not found' }); return; }
   damaRoles.splice(idx, 1);
+  saveStore('damaRoles', damaRoles);
   res.status(204).send();
 });
 

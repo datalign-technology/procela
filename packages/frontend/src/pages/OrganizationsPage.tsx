@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
+import { exportCsv } from '../lib/exportCsv';
 
 // ── Types ──
 
@@ -16,6 +17,14 @@ interface OrgFlat {
 }
 interface Person {
   id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
+}
+interface Person360Data {
+  person: Person;
+  orgAssignments: { id: string; name: string; type: string }[];
+  damaRoles: { id: string; roleType: string; scopeType: string; scopeName: string; since: string }[];
+  governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
+  ownedProcessNodes: { id: string; name: string; level: string; status: string }[];
+  dataAssets: { id: string; name: string; governanceTier: string; relation: string }[];
 }
 
 // ── Styles ──
@@ -196,6 +205,8 @@ export default function OrganizationsPage() {
   const [showPeopleImport, setShowPeopleImport] = useState(false);
   const [peopleImportText, setPeopleImportText] = useState('');
   const [peopleImportFormat, setPeopleImportFormat] = useState<'csv' | 'json'>('csv');
+  const [viewing360, setViewing360] = useState<Person360Data | null>(null);
+  const [loading360, setLoading360] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -256,6 +267,14 @@ export default function OrganizationsPage() {
     setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm); fetchData();
   };
   const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); fetchData(); };
+  const openPerson360 = async (id: string) => {
+    setLoading360(true);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${id}/360`);
+      setViewing360(res.data || null);
+    } catch { /* */ }
+    finally { setLoading360(false); }
+  };
   const handlePeopleImport = async () => {
     if (!peopleImportText.trim() || !selectedOrgId) return;
     try {
@@ -552,6 +571,7 @@ export default function OrganizationsPage() {
                           <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            <button style={{ ...btnIcon, color: 'var(--color-text-secondary)' }} onClick={() => openPerson360(person.id)}>View</button>
                             <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={() => openEditPerson(person)}>Edit</button>
                             <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => handleDeletePerson(person.id)}>Del</button>
                           </td>

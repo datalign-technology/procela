@@ -12,6 +12,7 @@ import morgan from 'morgan';
 import compression from 'compression';
 import config from './config';
 import logger from './lib/logger';
+import { startAutoSave } from './lib/persistence';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
@@ -72,6 +73,34 @@ app.use('/api/v1/data-domains', authenticateToken, dataDomainsRouter);
 // Error handling
 // ---------------------------------------------------------------------------
 app.use(errorHandler);
+
+// ---------------------------------------------------------------------------
+// Auto-save persistence
+// ---------------------------------------------------------------------------
+import { processNodes, flowRelationships } from './routes/process-catalog';
+import { systems } from './routes/systems';
+import { dataAssets } from './routes/data-assets';
+import { organizations } from './routes/organizations';
+import { people } from './routes/people';
+import { mappings } from './routes/mappings';
+import { governanceGroups } from './routes/governance-groups';
+import { damaRoles } from './routes/dama-roles';
+import { dataDomains } from './routes/data-domains';
+import { auditLogs } from './services/audit.service';
+
+startAutoSave({
+  processNodes: () => processNodes,
+  flowRelationships: () => flowRelationships,
+  systems: () => systems,
+  dataAssets: () => dataAssets,
+  organizations: () => organizations,
+  people: () => people,
+  mappings: () => mappings,
+  governanceGroups: () => governanceGroups,
+  damaRoles: () => damaRoles,
+  dataDomains: () => dataDomains,
+  auditLogs: () => auditLogs,
+});
 
 // ---------------------------------------------------------------------------
 // Start server

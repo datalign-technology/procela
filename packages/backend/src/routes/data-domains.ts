@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { loadStore, saveStore } from '../lib/persistence';
 import { people } from './people';
 import { dataAssets } from './data-assets';
 
@@ -16,7 +17,7 @@ export interface StoredDataDomain {
   updatedAt: string;
 }
 
-export const dataDomains: StoredDataDomain[] = [];
+export const dataDomains: StoredDataDomain[] = loadStore<StoredDataDomain>('dataDomains');
 
 const VALID_STATUSES = ['ACTIVE', 'DRAFT'];
 
@@ -92,6 +93,7 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
   dataDomains.push(domain);
+  saveStore('dataDomains', dataDomains);
   res.status(201).json({ success: true, data: enrichDomain(domain) });
 });
 
@@ -108,6 +110,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (dataAssetIds !== undefined && Array.isArray(dataAssetIds)) domain.dataAssetIds = dataAssetIds;
   if (status !== undefined && VALID_STATUSES.includes(status)) domain.status = status;
   domain.updatedAt = new Date().toISOString();
+  saveStore('dataDomains', dataDomains);
 
   res.json({ success: true, data: enrichDomain(domain) });
 });
@@ -117,6 +120,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   const idx = dataDomains.findIndex((d) => d.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
   dataDomains.splice(idx, 1);
+  saveStore('dataDomains', dataDomains);
   res.status(204).send();
 });
 
