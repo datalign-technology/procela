@@ -664,6 +664,7 @@ export default function DashboardPage() {
     stats.systems === 0 &&
     stats.dataAssets === 0 &&
     stats.mappings === 0 &&
+    stats.organizations <= 1 &&
     stats.people === 0;
 
   if (allZero) {

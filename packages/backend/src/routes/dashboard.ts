@@ -19,7 +19,7 @@ router.get('/stats', (req: Request, res: Response) => {
   const filteredAssets = oid ? dataAssets.filter((a) => a.orgId === oid) : dataAssets;
   const filteredMappings = oid ? mappings.filter((m) => m.orgId === oid) : mappings;
   const filteredSystems = oid ? systems.filter((s) => s.orgId === oid) : systems;
-  const filteredPeople = oid ? people.filter((p) => p.orgId === oid) : people;
+  const filteredPeople = oid ? people.filter((p) => p.orgIds?.includes(oid)) : people;
   const filteredFlows = oid ? flowRelationships.filter((f) => {
     const from = processNodes.find((n) => n.id === f.fromNodeId);
     return from && (from.orgIds.includes(oid) || from.orgId === oid);
