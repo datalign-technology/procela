@@ -426,6 +426,16 @@ export default function OrganizationsPage() {
                   {selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  {filteredPeople.length > 0 && (
+                    <button
+                      onClick={() => exportCsv('people.csv', ['Name', 'Email', 'Role', 'Title'], filteredPeople.map((p) => [
+                        p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
+                      ]))}
+                      style={btnSecondary}
+                    >
+                      Export CSV
+                    </button>
+                  )}
                   <button onClick={() => setShowPeopleImport(true)} style={btnSecondary}>Import People</button>
                   <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
                 </div>
@@ -585,6 +595,146 @@ export default function OrganizationsPage() {
           )}
         </div>
       </div>
+
+      {/* Person 360 View Modal */}
+      {(viewing360 || loading360) && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }} onClick={() => { if (!loading360) setViewing360(null); }}>
+          <div style={{
+            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
+            padding: 24, maxWidth: 700, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }} onClick={(e) => e.stopPropagation()}>
+            {loading360 ? (
+              <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
+            ) : viewing360 ? (
+              <>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{viewing360.person.name}</h2>
+                    <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                      {viewing360.person.email && <span>{viewing360.person.email}</span>}
+                      {viewing360.person.title && <span>{viewing360.person.email ? ' \u2022 ' : ''}{viewing360.person.title}</span>}
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <span style={roleBadge(viewing360.person.role)}>{ROLE_LABELS[viewing360.person.role] || viewing360.person.role}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
+                </div>
+
+                {/* Organizations */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Organizations ({viewing360.orgAssignments.length})</h3>
+                  {viewing360.orgAssignments.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No organization assignments</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {viewing360.orgAssignments.map((org) => (
+                        <div key={org.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px' }}>
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>{org.name}</span>
+                          <span style={typeBadge(org.type)}>{org.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* DAMA Roles */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DAMA Roles ({viewing360.damaRoles.length})</h3>
+                  {viewing360.damaRoles.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No DAMA roles assigned</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {viewing360.damaRoles.map((r) => (
+                        <div key={r.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <span style={{
+                              display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                              background: '#dbeafe', color: '#1e40af', marginRight: 8,
+                            }}>{r.roleType.replace(/_/g, ' ')}</span>
+                            <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{r.scopeType}: {r.scopeName}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Governance Groups */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Groups ({viewing360.governanceGroups.length})</h3>
+                  {viewing360.governanceGroups.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Not a member of any governance group</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {viewing360.governanceGroups.map((g) => (
+                        <div key={g.groupId} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>{g.groupName}</span>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+                            background: g.groupRole === 'CHAIR' ? '#fce7f3' : g.groupRole === 'SECRETARY' ? '#dbeafe' : '#f1f5f9',
+                            color: g.groupRole === 'CHAIR' ? '#9d174d' : g.groupRole === 'SECRETARY' ? '#1e40af' : '#64748b',
+                          }}>{g.groupRole}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Owned Processes */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Owned Processes ({viewing360.ownedProcessNodes.length})</h3>
+                  {viewing360.ownedProcessNodes.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Does not own any process nodes</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {viewing360.ownedProcessNodes.map((n) => (
+                        <div key={n.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12 }}>{n.name}</span>
+                          <span style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                            background: '#ede9fe', color: '#5b21b6',
+                          }}>{n.level}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Owned/Stewarded Data Assets */}
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Assets ({viewing360.dataAssets.length})</h3>
+                  {viewing360.dataAssets.length === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data assets owned or stewarded</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {viewing360.dataAssets.map((a) => (
+                        <div key={a.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12 }}>{a.name}</span>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <span style={{
+                              display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                              background: a.relation === 'owner' ? '#d1f0eb' : '#dbeafe',
+                              color: a.relation === 'owner' ? '#0f4f46' : '#1e40af',
+                            }}>{a.relation}</span>
+                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{a.governanceTier}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

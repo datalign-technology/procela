@@ -41,3 +41,6 @@ postgres_data/
 
 # Local storage
 storage/
+
+# Procela JSON persistence
+.procela-data/
