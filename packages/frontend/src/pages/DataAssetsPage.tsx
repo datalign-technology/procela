@@ -145,13 +145,18 @@ export default function DataAssetsPage() {
   const [assetComments, setAssetComments] = useState<CommentEntry[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentUserName, setCommentUserName] = useState('');
+  const [peopleList, setPeopleList] = useState<Array<{ id: string; name: string }>>([]);
 
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const res = await apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`);
-      setAssets(res.data || []);
-      setSystems(res.systems || []);
+      const [assetRes, peopleRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>('/people'),
+      ]);
+      setAssets(assetRes.data || []);
+      setSystems(assetRes.systems || []);
+      setPeopleList(peopleRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -404,21 +409,25 @@ export default function DataAssetsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
-              <input
-                style={inputStyle}
+              <select
+                style={{ ...inputStyle, appearance: 'auto' as any }}
                 value={form.owner}
                 onChange={(e) => updateField('owner', e.target.value)}
-                placeholder="Business owner name"
-              />
+              >
+                <option value="">-- Select owner --</option>
+                {peopleList.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Steward</label>
-              <input
-                style={inputStyle}
+              <select
+                style={{ ...inputStyle, appearance: 'auto' as any }}
                 value={form.steward}
                 onChange={(e) => updateField('steward', e.target.value)}
-                placeholder="Data steward name"
-              />
+              >
+                <option value="">-- Select data steward --</option>
+                {peopleList.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
