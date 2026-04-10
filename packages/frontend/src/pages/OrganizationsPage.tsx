@@ -164,27 +164,32 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
 
 // ── Org Tree Node ──
 
-function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>): boolean {
-  // Check if any ancestor of this node is accessible
-  // We check by walking up parentId, but since we only have the node here,
-  // we rely on the accessible set including parent orgs
-  // If accessible set is empty (dev fallback), allow everything
-  if (accessibleIds.size === 0) return true;
-  return false; // only direct membership grants edit access
+function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, allOrgs: OrgFlat[]): boolean {
+  if (accessibleIds.size === 0) return true; // dev fallback
+  // Walk up the parent chain to see if any ancestor is accessible
+  let currentParentId = node.parentId;
+  while (currentParentId) {
+    if (accessibleIds.has(currentParentId)) return true;
+    const parent = allOrgs.find((o) => o.id === currentParentId);
+    if (!parent) break;
+    currentParentId = parent.parentId;
+  }
+  return false;
 }
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, selectedOrgId, expanded, toggleExpand, peopleCounts, accessibleOrgIds }: {
+function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, selectedOrgId, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs }: {
   node: OrgNode; depth: number;
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   onSelectOrg: (id: string) => void; selectedOrgId: string;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
   accessibleOrgIds: Set<string>;
+  allOrgs: OrgFlat[];
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
   const isSelected = selectedOrgId === node.id;
   const count = peopleCounts[node.id] || 0;
-  const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds);
+  const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs);
 
   return (
     <div>
@@ -229,7 +234,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, s
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
           onSelectOrg={onSelectOrg} selectedOrgId={selectedOrgId}
           expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
-          accessibleOrgIds={accessibleOrgIds} />
+          accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs} />
       ))}
     </div>
   );
@@ -600,7 +605,7 @@ export default function OrganizationsPage() {
                   onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
                   onSelectOrg={(id) => setSelectedOrgId(id === selectedOrgId ? '' : id)} selectedOrgId={selectedOrgId}
                   expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
-                  accessibleOrgIds={accessibleOrgIds} />
+                  accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs} />
               ))
             )}
           </div>
