@@ -1,0 +1,26 @@
+Name,Description,Type
+SAP S/4HANA,Enterprise resource planning for finance procurement and manufacturing,ERP
+Salesforce CRM,Customer relationship management for sales and marketing,CRM
+Oracle EBS,Enterprise business suite for supply chain and financials,ERP
+Microsoft Dynamics 365,Business applications for sales service and operations,CRM
+ArcGIS Enterprise,Geographic information system for spatial data and mapping,GIS
+OSIsoft PI (AVEVA),Real-time operational data collection and process monitoring,SCADA
+Maximo,IBM asset management for maintenance and reliability,Asset Management
+Snowflake,Cloud data warehouse for analytics and reporting,Data Warehouse
+Azure Data Lake,Scalable cloud storage for big data analytics,Data Lake
+Power BI,Business intelligence and data visualization platform,Business Intelligence
+Tableau,Interactive data visualization and analytics platform,Business Intelligence
+SharePoint Online,Document management and collaboration platform,Document Management
+Workday HCM,Human capital management for HR and payroll,HRIS
+Oracle Financials Cloud,Cloud-based financial management and accounting,Financial
+ServiceNow,IT service management and workflow automation,Other
+Windchill PLM,Product lifecycle management for engineering data,Other
+JIRA,Project tracking and agile development management,Other
+Confluence,Team knowledge base and documentation platform,Document Management
+SAP BW/4HANA,Business warehousing and advanced analytics,Data Warehouse
+Azure SQL Database,Managed relational database service,Other
+MongoDB Atlas,Cloud-hosted NoSQL document database,Other
+Informatica PowerCenter,Enterprise data integration and ETL platform,Other
+MuleSoft Anypoint,API management and integration platform,Other
+Splunk,Machine data analytics and security monitoring,Other
+DocuSign,Electronic signature and agreement management,Other
