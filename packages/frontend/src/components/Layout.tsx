@@ -268,11 +268,16 @@ export default function Layout() {
 
       // If active org is no longer accessible, clear it
       if (activeOrgId && !options.find((o) => o.id === activeOrgId)) {
-        clearActiveOrg();
+        // Active org no longer accessible — select first available
+        if (options.length > 0) {
+          setActiveOrg(options[0].id, options[0].name, options[0].type);
+        } else {
+          clearActiveOrg();
+        }
       }
 
-      // If only one org is accessible, auto-select it
-      if (options.length === 1 && !activeOrgId) {
+      // Auto-select first org if none is selected
+      if (!activeOrgId && options.length > 0) {
         setActiveOrg(options[0].id, options[0].name, options[0].type);
       }
     } catch { /* */ }
@@ -298,9 +303,16 @@ export default function Layout() {
   };
 
   const handleOrgChange = (id: string) => {
-    if (!id) { clearActiveOrg(); return; }
+    if (!id) return; // Don't allow clearing — must always have an org selected
     const org = orgOptions.find((o) => o.id === id);
-    if (org) setActiveOrg(id, org.name, org.type);
+    if (org) {
+      setActiveOrg(id, org.name, org.type);
+      // Toast feedback
+      try {
+        const { addToast } = require('@/stores/toastStore').useToastStore.getState();
+        addToast('info', `Now working in ${org.name}`);
+      } catch { /* */ }
+    }
   };
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
@@ -404,27 +416,34 @@ export default function Layout() {
                 </div>
               )}
             </div>
-            {orgOptions.length > 0 && (
+            {orgOptions.length > 1 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>Working in:</span>
                 <select
                   value={activeOrgId}
                   onChange={(e) => handleOrgChange(e.target.value)}
                   style={{
-                    padding: '4px 8px', fontSize: 13, fontWeight: 500,
-                    border: '1px solid var(--color-border)', borderRadius: 6,
-                    background: activeOrgId ? 'var(--color-primary-light)' : 'var(--color-surface)',
-                    color: activeOrgId ? 'var(--color-primary)' : 'var(--color-text)',
+                    padding: '6px 10px', fontSize: 13, fontWeight: 600,
+                    border: '2px solid var(--color-primary)', borderRadius: 6,
+                    background: 'var(--color-primary-light)',
+                    color: 'var(--color-primary)',
                     minWidth: 200, maxWidth: '100%', width: 'auto', cursor: 'pointer',
                   }}
                 >
-                  <option value="">All Organizations</option>
+                  {!activeOrgId && <option value="">-- Select Organization --</option>}
                   {orgOptions.map((opt) => (
                     <option key={opt.id} value={opt.id}>{opt.label}</option>
                   ))}
                 </select>
               </div>
-            )}
+            ) : orgOptions.length === 1 ? (
+              <div style={{
+                padding: '4px 12px', fontSize: 13, fontWeight: 600,
+                background: 'var(--color-primary-light)', color: 'var(--color-primary)',
+                borderRadius: 6, border: '1px solid var(--color-primary)',
+              }}>
+                {orgOptions[0].name}
+              </div>
+            ) : null}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* Notification Bell */}
