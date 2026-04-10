@@ -620,24 +620,7 @@ function DashboardAlerts({ stats }: { stats: DashboardStats }) {
   }
 
   if (alerts.length === 0) {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '14px 18px',
-        marginBottom: 24,
-        background: ALERT_BG_COLORS.green,
-        borderLeft: `4px solid ${ALERT_BORDER_COLORS.green}`,
-        borderRadius: 'var(--radius-md)',
-        fontSize: 14,
-        fontWeight: 500,
-        color: ALERT_TEXT_COLORS.green,
-      }}>
-        <span style={{ fontSize: 18 }}>{'\u2713'}</span>
-        All clear -- no issues detected across your processes and data.
-      </div>
-    );
+    return null; // No alerts = don't show the section at all
   }
 
   return (
