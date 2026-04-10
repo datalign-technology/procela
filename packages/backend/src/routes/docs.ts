@@ -22,7 +22,7 @@ const openApiSpec = {
     { name: 'Data Assets', description: 'Data asset CRUD' },
     { name: 'Mappings', description: 'Process-to-data mappings' },
     { name: 'Governance Groups', description: 'Governance group CRUD and membership' },
-    { name: 'DAMA Roles', description: 'DAMA role assignments' },
+    { name: 'Governance Roles', description: 'Governance role assignments' },
     { name: 'Data Domains', description: 'Data domain CRUD and summary' },
     { name: 'Dashboard', description: 'Dashboard statistics' },
     { name: 'Chat', description: 'AI-powered chat assistant' },
@@ -502,45 +502,45 @@ const openApiSpec = {
       },
     },
 
-    // ── DAMA Roles ──
+    // ── Governance Roles ──
     '/dama-roles': {
       get: {
-        summary: 'List all DAMA role assignments',
-        tags: ['DAMA Roles'],
+        summary: 'List all governance role assignments',
+        tags: ['Governance Roles'],
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Array of DAMA role assignments' } },
+        responses: { '200': { description: 'Array of governance role assignments' } },
       },
       post: {
-        summary: 'Create a DAMA role assignment',
-        tags: ['DAMA Roles'],
+        summary: 'Create a governance role assignment',
+        tags: ['Governance Roles'],
         security: [{ bearerAuth: [] }],
-        responses: { '201': { description: 'DAMA role assigned' } },
+        responses: { '201': { description: 'Governance role assigned' } },
       },
     },
     '/dama-roles/{id}': {
       delete: {
-        summary: 'Delete a DAMA role assignment',
-        tags: ['DAMA Roles'],
+        summary: 'Delete a governance role assignment',
+        tags: ['Governance Roles'],
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'DAMA role assignment deleted' } },
+        responses: { '200': { description: 'Governance role assignment deleted' } },
       },
     },
     '/dama-roles/by-person/{personId}': {
       get: {
-        summary: 'Get DAMA roles for a specific person',
-        tags: ['DAMA Roles'],
+        summary: 'Get governance roles for a specific person',
+        tags: ['Governance Roles'],
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'personId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'DAMA roles for the person' } },
+        responses: { '200': { description: 'Governance roles for the person' } },
       },
     },
     '/dama-roles/summary': {
       get: {
-        summary: 'DAMA roles summary with counts',
-        tags: ['DAMA Roles'],
+        summary: 'Governance roles summary with counts',
+        tags: ['Governance Roles'],
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'Summary of DAMA role assignments' } },
+        responses: { '200': { description: 'Summary of governance role assignments' } },
       },
     },
 

@@ -77,7 +77,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADVISOR: 'Advisor',
 };
 
-// ── Badge colors (DAMA) ──
+// ── Badge colors (Governance) ──
 
 const typeBadgeColors: Record<string, { bg: string; color: string }> = {
   COUNCIL: { bg: '#dbeafe', color: '#1e40af' },
@@ -392,7 +392,7 @@ export default function GovernanceGroupsPage() {
     setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null);
     fetchGroups();
     if (selectedGroupId) fetchGroupDetail(selectedGroupId);
-    // Show DAMA recommendation warning if returned
+    // Show governance recommendation warning if returned
     if (res?.warning) {
       setTimeout(() => alert(res.warning), 100);
     }
@@ -515,7 +515,7 @@ export default function GovernanceGroupsPage() {
             }}
             style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
           >
-            Generate DAMA Template
+            Generate Governance Template
           </button>
           <button onClick={openAdd} style={btnPrimary}>+ Add Group</button>
         </div>
@@ -549,9 +549,9 @@ export default function GovernanceGroupsPage() {
         onCancel={() => setConfirmDelete(null)}
       />
 
-      {/* DAMA Hierarchy Guidance */}
+      {/* Governance Hierarchy Guidance */}
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-        <strong>DAMA recommends:</strong> Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
+        <strong>Recommended structure:</strong> Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
       </div>
 
       {/* Stats Bar */}

@@ -870,7 +870,7 @@ export default function OrganizationsPage() {
                 {/* ── GOVERNANCE RESPONSIBILITIES ── */}
                 <div style={{ marginBottom: 8, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
                   <h3 style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Responsibilities</h3>
-                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 10 }}>DAMA roles, governance group memberships, and data domain assignments</p>
+                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 10 }}>Governance roles, governance group memberships, and data domain assignments</p>
                 </div>
 
                 {/* Governance Groups — Editable */}
@@ -918,7 +918,7 @@ export default function OrganizationsPage() {
                 {/* DAMA Roles — Editable */}
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DAMA Roles ({viewing360.damaRoles.length})</h3>
+                    <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Roles ({viewing360.damaRoles.length})</h3>
                     <button
                       style={{ ...btnSecondary, padding: '3px 10px', fontSize: 11 }}
                       onClick={() => { setShowAddDamaRole(!showAddDamaRole); setNewDamaRole({ roleType: viewing360.allDamaRoleTypes[0] || 'CDO', scopeType: 'ORG', scopeId: '' }); }}
@@ -977,7 +977,7 @@ export default function OrganizationsPage() {
                     </div>
                   )}
                   {viewing360.damaRoles.length === 0 && !showAddDamaRole ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No DAMA roles assigned</p>
+                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No governance roles assigned</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {viewing360.damaRoles.map((r) => (

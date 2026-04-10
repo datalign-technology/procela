@@ -34,7 +34,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/governance-groups', label: 'Governance Groups', icon: '\u2637' },
       { to: '/data-domains', label: 'Data Domains', icon: '\u25C8' },
-      { to: '/dama-roles', label: 'DAMA Roles', icon: '\u2606' },
+      { to: '/dama-roles', label: 'Governance Roles', icon: '\u2606' },
       { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
     ],
   },

@@ -5,7 +5,7 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { people } from './people';
 import logger from '../lib/logger';
 
-// DAMA-DMBOK2 Governance Hierarchy Tiers
+// Governance Hierarchy Tiers (aligned with data governance best practices)
 const GROUP_TYPES = [
   'COUNCIL',              // Executive steering — sets strategy, policy, funding
   'OFFICE',               // Data Governance Office — day-to-day program management
@@ -15,7 +15,7 @@ const GROUP_TYPES = [
   'COMMUNITY_OF_PRACTICE', // Knowledge sharing, informal
 ] as const;
 
-// Valid parent-child relationships (DAMA hierarchy)
+// Valid parent-child relationships (governance hierarchy)
 const VALID_CHILDREN: Record<string, string[]> = {
   COUNCIL:               ['OFFICE', 'COMMITTEE', 'WORKING_GROUP'],
   OFFICE:                ['COMMITTEE', 'STEWARDSHIP_TEAM', 'WORKING_GROUP'],
@@ -108,7 +108,7 @@ router.get('/', (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/governance-groups/generate-template
- * Generate a DAMA-standard governance structure as a starting point.
+ * Generate a standard governance structure as a starting point.
  * Must be registered BEFORE /:id to avoid route conflict.
  */
 router.post('/generate-template', (req: Request, res: Response) => {
@@ -142,7 +142,7 @@ router.post('/generate-template', (req: Request, res: Response) => {
   }
 
   saveStore('governanceGroups', governanceGroups);
-  logger.info({ count: created.length, orgId: targetOrgId }, 'Generated DAMA governance template');
+  logger.info({ count: created.length, orgId: targetOrgId }, 'Generated governance template');
   res.status(201).json({ success: true, data: created, tree: buildTree(governanceGroups.filter((g) => g.orgId === targetOrgId)) });
 });
 

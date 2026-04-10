@@ -71,7 +71,7 @@ export default function HelpPage() {
           <li>Select an organization to work in using the "Working in" dropdown in the header</li>
           <li>Define your business processes using the Value Stream Wizard or build them manually</li>
           <li>Register the systems and data assets your organization relies on</li>
-          <li>Set up data governance — create governance groups, data domains, and assign DAMA roles</li>
+          <li>Set up data governance — create governance groups, data domains, and assign governance roles</li>
           <li>Map data assets to process activities to connect your business and data layers</li>
           <li>Review gaps and dashboards to identify areas that need attention</li>
         </ol>
@@ -240,20 +240,20 @@ export default function HelpPage() {
       <div id="data-governance" style={sectionStyle}>
         <h2 style={h2Style}>6. Data Governance</h2>
         <p style={pStyle}>
-          Procela provides a comprehensive data governance framework aligned with DAMA-DMBOK2 standards.
-          Governance is organized into three areas: Governance Groups, Data Domains, and DAMA Roles.
+          Procela provides a comprehensive data governance framework aligned with industry-standard data governance best practices.
+          Governance is organized into three areas: Governance Groups, Data Domains, and Governance Roles.
         </p>
 
         <h3 style={h3Style}>Governance Groups</h3>
         <p style={pStyle}>
           Governance groups form the organizational structure for data governance. They follow a
-          DAMA-aligned hierarchy:
+          Recommended hierarchy:
         </p>
         <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', padding: 16, fontFamily: 'var(--font-mono)', fontSize: 13, marginBottom: 12, color: 'var(--color-text)' }}>
           Council &gt; Office &gt; Committee &gt; Stewardship Team &gt; Working Group &gt; Community of Practice
         </div>
         <ul style={listStyle}>
-          <li>Use "Generate DAMA Template" to create a starter governance structure automatically</li>
+          <li>Use "Generate Governance Template" to create a starter governance structure automatically</li>
           <li>The hierarchy levels are soft recommendations — they are not rigidly enforced</li>
           <li>Each group has members with roles: Chair, Vice Chair, Member, Secretary, or Advisor</li>
           <li>Visualize your governance structure as a diagram and export it to PDF</li>
@@ -270,9 +270,9 @@ export default function HelpPage() {
           <li>Track which domains are fully governed and which have gaps</li>
         </ul>
 
-        <h3 style={h3Style}>DAMA Roles</h3>
+        <h3 style={h3Style}>Governance Roles</h3>
         <p style={pStyle}>
-          DAMA roles define the data management responsibilities held by people in your organization.
+          Governance roles define the data management responsibilities held by people in your organization.
           Procela supports seven role types:
         </p>
         <ul style={listStyle}>
@@ -285,8 +285,8 @@ export default function HelpPage() {
           <li><strong>Data Quality Analyst</strong> — monitors and improves data quality</li>
         </ul>
         <p style={pStyle}>
-          Each DAMA role is scoped to either an Organization or a specific Data Domain. A person can
-          hold multiple DAMA roles across different scopes.
+          Each governance role is scoped to either an Organization or a specific Data Domain. A person can
+          hold multiple governance roles across different scopes.
         </p>
       </div>
 
@@ -490,7 +490,7 @@ export default function HelpPage() {
           <li>Data Assets</li>
           <li>Mappings</li>
           <li>Governance Groups</li>
-          <li>DAMA Roles</li>
+          <li>Governance Roles</li>
           <li>People</li>
         </ul>
 
@@ -540,15 +540,15 @@ export default function HelpPage() {
         <h3 style={h3Style}>Can I export data?</h3>
         <p style={pStyle}>
           Yes. CSV export is available on all major data tables (Systems, Data Assets, Mappings,
-          Governance Groups, DAMA Roles, People). Process and governance visualizations can be
+          Governance Groups, Governance Roles, People). Process and governance visualizations can be
           exported to PDF.
         </p>
 
-        <h3 style={h3Style}>What is DAMA?</h3>
+        <h3 style={h3Style}>What governance framework does Procela follow?</h3>
         <p style={pStyle}>
-          DAMA stands for the Data Management Association. Procela's governance framework follows
-          DAMA-DMBOK2 (the Data Management Body of Knowledge, 2nd edition), which defines best
-          practices for data governance roles, groups, and organizational structures.
+          Procela's governance framework is aligned with industry-standard data governance frameworks
+          and best practices, including principles from the Data Management Body of Knowledge (DMBOK2).
+          It defines roles, groups, and organizational structures for effective data governance.
         </p>
 
         <h3 style={h3Style}>How do I reset everything?</h3>

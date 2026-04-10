@@ -12,7 +12,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'gap-detection': 'Gap Detection',
   'governance-groups': 'Governance Groups',
   'data-domains': 'Data Domains',
-  'dama-roles': 'DAMA Roles',
+  'dama-roles': 'Governance Roles',
   'settings': 'Settings',
   'help': 'Help',
 };

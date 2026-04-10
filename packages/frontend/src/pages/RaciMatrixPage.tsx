@@ -93,7 +93,7 @@ export default function RaciMatrixPage() {
       </div>
 
       <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem', maxWidth: 720 }}>
-        Auto-generated Responsible, Accountable, Consulted, Informed matrix based on process ownership and DAMA role assignments.
+        Auto-generated Responsible, Accountable, Consulted, Informed matrix based on process ownership and governance role assignments.
       </p>
 
       {/* Legend */}
@@ -134,7 +134,7 @@ export default function RaciMatrixPage() {
             No RACI data available.
           </p>
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
-            Define processes and assign DAMA roles to generate the RACI matrix.
+            Define processes and assign governance roles to generate the RACI matrix.
           </p>
         </div>
       )}

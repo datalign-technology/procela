@@ -199,11 +199,11 @@ export default function DamaRolesPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>DAMA Roles</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Roles</h1>
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Assign DAMA data management roles to people across organizations and data domains.
+            Assign data management governance roles to people across organizations and data domains.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -217,7 +217,7 @@ export default function DamaRolesPage() {
           )}
           {roles.length > 0 && (
             <button
-              onClick={() => exportCsv('dama-roles.csv', ['Person', 'DAMA Role', 'Scope Type', 'Scope', 'Since'], roles.map((r) => [
+              onClick={() => exportCsv('governance-roles.csv', ['Person', 'Governance Role', 'Scope Type', 'Scope', 'Since'], roles.map((r) => [
                 r.personName,
                 ROLE_TYPE_LABELS[r.roleType] || r.roleType,
                 r.scopeType,
@@ -257,7 +257,7 @@ export default function DamaRolesPage() {
       {/* Assign Form */}
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Assign DAMA Role</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Assign Governance Role</h3>
           {error && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
               {error}
@@ -272,7 +272,7 @@ export default function DamaRolesPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>DAMA Role *</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Governance Role *</label>
               <select style={selectStyle} value={form.roleType} onChange={(e) => setForm({ ...form, roleType: e.target.value })}>
                 <optgroup label="Executive/Strategic">
                   {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Executive').map((rt) => (
@@ -321,8 +321,8 @@ export default function DamaRolesPage() {
 
       <ConfirmDialog
         open={showDeleteAll}
-        title="Delete All DAMA Roles?"
-        message={`This will permanently delete all ${roles.length} DAMA role assignments. This cannot be undone.`}
+        title="Delete All Governance Roles?"
+        message={`This will permanently delete all ${roles.length} governance role assignments. This cannot be undone.`}
         confirmLabel="Delete All"
         onConfirm={async () => {
           setShowDeleteAll(false);
@@ -334,7 +334,7 @@ export default function DamaRolesPage() {
 
       <ConfirmDialog
         open={confirmDelete !== null}
-        title="Delete DAMA Role?"
+        title="Delete Governance Role?"
         message="This will permanently delete this role assignment. This cannot be undone."
         confirmLabel="Delete"
         onConfirm={async () => {
@@ -352,7 +352,7 @@ export default function DamaRolesPage() {
         ) : roles.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
             <p style={{ color: 'var(--color-text-muted)' }}>
-              No DAMA roles defined yet. Use the + Assign Role button above to get started.
+              No governance roles defined yet. Use the + Assign Role button above to get started.
             </p>
           </div>
         ) : (
@@ -360,7 +360,7 @@ export default function DamaRolesPage() {
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
                 <th style={thStyle}>Person</th>
-                <th style={thStyle}>DAMA Role</th>
+                <th style={thStyle}>Governance Role</th>
                 <th style={thStyle}>Scope Type</th>
                 <th style={thStyle}>Scope</th>
                 <th style={thStyle}>Since</th>
