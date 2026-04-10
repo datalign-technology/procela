@@ -164,16 +164,27 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
 
 // ── Org Tree Node ──
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, selectedOrgId, expanded, toggleExpand, peopleCounts }: {
+function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>): boolean {
+  // Check if any ancestor of this node is accessible
+  // We check by walking up parentId, but since we only have the node here,
+  // we rely on the accessible set including parent orgs
+  // If accessible set is empty (dev fallback), allow everything
+  if (accessibleIds.size === 0) return true;
+  return false; // only direct membership grants edit access
+}
+
+function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, selectedOrgId, expanded, toggleExpand, peopleCounts, accessibleOrgIds }: {
   node: OrgNode; depth: number;
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   onSelectOrg: (id: string) => void; selectedOrgId: string;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
+  accessibleOrgIds: Set<string>;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
   const isSelected = selectedOrgId === node.id;
   const count = peopleCounts[node.id] || 0;
+  const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds);
 
   return (
     <div>
@@ -200,17 +211,25 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, s
             {count > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{count}</span>}
           </div>
         </div>
-        <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 13 }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id); }} title="Add child">+</button>
-        <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
-        {node.id !== '00000000-0000-0000-0000-000000000010' && (
-          <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Delete</button>
+        {canEdit && (
+          <>
+            <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 13 }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id); }} title="Add child">+</button>
+            <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
+            {node.id !== '00000000-0000-0000-0000-000000000010' && (
+              <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Delete</button>
+            )}
+          </>
+        )}
+        {!canEdit && (
+          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>read-only</span>
         )}
       </div>
       {isExpanded && node.children.map((child) => (
         <OrgTreeNode key={child.id} node={child} depth={depth + 1}
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
           onSelectOrg={onSelectOrg} selectedOrgId={selectedOrgId}
-          expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts} />
+          expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
+          accessibleOrgIds={accessibleOrgIds} />
       ))}
     </div>
   );
@@ -221,7 +240,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, s
 // ══════════════════════════════════════════════════════════════
 
 export default function OrganizationsPage() {
-  const { triggerRefresh } = useOrgContext();
+  const { triggerRefresh, orgs: accessibleOrgs } = useOrgContext();
 
   // Org state
   const [tree, setTree] = useState<OrgNode[]>([]);
@@ -300,6 +319,7 @@ export default function OrganizationsPage() {
   const selectedOrg = flatOrgs.find((o) => o.id === selectedOrgId);
   const filteredPeople = selectedOrgId ? people.filter((p) => p.orgIds.includes(selectedOrgId)) : [];
   const orgOptions = flattenTreeForSelect(tree);
+  const accessibleOrgIds = new Set(accessibleOrgs.map((o) => o.id));
 
   // ── Org handlers ──
   const toggleExpand = (id: string) => setExpanded((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -579,7 +599,8 @@ export default function OrganizationsPage() {
                 <OrgTreeNode key={node.id} node={node} depth={0}
                   onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
                   onSelectOrg={(id) => setSelectedOrgId(id === selectedOrgId ? '' : id)} selectedOrgId={selectedOrgId}
-                  expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts} />
+                  expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
+                  accessibleOrgIds={accessibleOrgIds} />
               ))
             )}
           </div>
@@ -623,8 +644,12 @@ export default function OrganizationsPage() {
                       Export CSV
                     </button>
                   )}
-                  <button onClick={() => setShowPeopleImport(true)} style={btnSecondary}>Import People</button>
-                  <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
+                  {(accessibleOrgIds.size === 0 || accessibleOrgIds.has(selectedOrgId)) && (
+                    <>
+                      <button onClick={() => setShowPeopleImport(true)} style={btnSecondary}>Import People</button>
+                      <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
+                    </>
+                  )}
                 </div>
               </div>
 
