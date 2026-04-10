@@ -25,6 +25,7 @@ import DataQualityPage from '@/pages/DataQualityPage';
 import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
 import GovernancePage from '@/pages/GovernancePage';
 import AnalyzePage from '@/pages/AnalyzePage';
+import ConnectionsPage from '@/pages/ConnectionsPage';
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/raci" element={<RaciMatrixPage />} />
         <Route path="/data-lineage" element={<DataLineagePage />} />
         <Route path="/data-quality" element={<DataQualityPage />} />
+        <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

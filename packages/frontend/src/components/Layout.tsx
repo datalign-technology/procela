@@ -38,6 +38,7 @@ const navSections: NavSection[] = [
   {
     label: 'Connect',
     items: [
+      { to: '/connections', label: 'Connections', icon: '\u26A1' },
       { to: '/mappings', label: 'Mappings', icon: '\u2194' },
       { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
     ],

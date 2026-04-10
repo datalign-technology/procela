@@ -40,6 +40,7 @@ import maturityTrendsRouter from './routes/maturity-trends';
 import backupRouter from './routes/backup';
 import dataLineageRouter from './routes/data-lineage';
 import dataQualityRouter from './routes/data-quality';
+import connectionsRouter from './routes/connections';
 
 const app = express();
 
@@ -84,6 +85,7 @@ app.use('/api/v1/maturity-trends', authenticateToken, maturityTrendsRouter);
 app.use('/api/v1/backup', authenticateToken, backupRouter);
 app.use('/api/v1/data-lineage', authenticateToken, dataLineageRouter);
 app.use('/api/v1/data-quality', authenticateToken, dataQualityRouter);
+app.use('/api/v1/connections', authenticateToken, connectionsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -109,6 +111,7 @@ import { notifications } from './routes/notifications';
 import { maturitySnapshots } from './routes/maturity-trends';
 import { dataLineageLinks } from './routes/data-lineage';
 import { dataQualityRules } from './routes/data-quality';
+import { connections } from './routes/connections';
 
 startAutoSave({
   processNodes: () => processNodes,
@@ -129,6 +132,7 @@ startAutoSave({
   maturitySnapshots: () => maturitySnapshots,
   dataLineageLinks: () => dataLineageLinks,
   dataQualityRules: () => dataQualityRules,
+  connections: () => connections,
 });
 
 // ---------------------------------------------------------------------------
