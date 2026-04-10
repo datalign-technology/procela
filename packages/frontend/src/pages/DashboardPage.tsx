@@ -459,6 +459,70 @@ function ActivityTrends() {
   );
 }
 
+interface QuickAction {
+  icon: string;
+  label: string;
+  description: string;
+  link: string;
+}
+
+const quickActions: QuickAction[] = [
+  { icon: '\u2699', label: 'Add System', description: 'Register a new application or platform', link: '/systems-and-data' },
+  { icon: '\u26C1', label: 'Add Data Asset', description: 'Define a new data asset in business terms', link: '/systems-and-data' },
+  { icon: '\u2194', label: 'Create Mapping', description: 'Link data assets to process steps', link: '/mappings' },
+  { icon: '\u2630', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
+  { icon: '\u26A0', label: 'View Gaps', description: 'See unmapped steps and ungoverned assets', link: '/analyze' },
+  { icon: '\u2637', label: 'View Report', description: 'Executive overview of your landscape', link: '/analyze' },
+];
+
+function QuickActions() {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Quick Actions</h2>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+        gap: 12,
+      }}>
+        {quickActions.map((action) => (
+          <Link
+            key={action.label}
+            to={action.link}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: 6,
+              padding: '16px 12px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-sm)',
+              textDecoration: 'none',
+              color: 'var(--color-text)',
+              cursor: 'pointer',
+              transition: 'border-color 0.15s, box-shadow 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-primary)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-md, 0 2px 8px rgba(0,0,0,0.1))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+            }}
+          >
+            <span style={{ fontSize: 24 }}>{action.icon}</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{action.label}</span>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.3 }}>{action.description}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Badge({ label, count, color }: { label: string; count: number; color: string }) {
   return (
     <span
@@ -814,6 +878,8 @@ export default function DashboardPage() {
       <div style={{ marginTop: 24 }}>
         <DashboardAlerts stats={stats} />
       </div>
+
+      <QuickActions />
 
       <RecentActivity activeOrgId={activeOrgId} />
 

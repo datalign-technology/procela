@@ -25,16 +25,13 @@ const navSections: NavSection[] = [
     items: [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/processes', label: 'Processes', icon: '\u2630' },
-      { to: '/systems', label: 'Systems', icon: '\u2699' },
-      { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
+      { to: '/systems-and-data', label: 'Systems & Data', icon: '\u2699' },
     ],
   },
   {
     label: 'Govern',
     items: [
-      { to: '/governance-groups', label: 'Governance Groups', icon: '\u2637' },
-      { to: '/data-domains', label: 'Data Domains', icon: '\u25C8' },
-      { to: '/dama-roles', label: 'Governance Roles', icon: '\u2606' },
+      { to: '/governance', label: 'Governance', icon: '\u2637' },
       { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
     ],
   },
@@ -48,10 +45,7 @@ const navSections: NavSection[] = [
   {
     label: 'Analyze',
     items: [
-      { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
-      { to: '/scorecard', label: 'Scorecard', icon: '\u2605' },
-      { to: '/report', label: 'Report', icon: '\u2637' },
-      { to: '/raci', label: 'RACI Matrix', icon: '\u2611' },
+      { to: '/analyze', label: 'Analyze', icon: '\u26A0' },
     ],
   },
 ];

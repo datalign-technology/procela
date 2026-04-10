@@ -22,6 +22,9 @@ import ComparisonPage from '@/pages/ComparisonPage';
 import RaciMatrixPage from '@/pages/RaciMatrixPage';
 import DataLineagePage from '@/pages/DataLineagePage';
 import DataQualityPage from '@/pages/DataQualityPage';
+import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
+import GovernancePage from '@/pages/GovernancePage';
+import AnalyzePage from '@/pages/AnalyzePage';
 
 export default function App() {
   return (
@@ -33,6 +36,11 @@ export default function App() {
         <Route path="/processes/wizard" element={<ValueStreamWizard />} />
         <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
         <Route path="/processes/compare" element={<ComparisonPage />} />
+        {/* Combined pages */}
+        <Route path="/systems-and-data" element={<SystemsAndDataPage />} />
+        <Route path="/governance" element={<GovernancePage />} />
+        <Route path="/analyze" element={<AnalyzePage />} />
+        {/* Legacy routes — kept for backward compatibility and deep links */}
         <Route path="/data-assets" element={<DataAssetsPage />} />
         <Route path="/systems" element={<SystemsPage />} />
         <Route path="/mappings" element={<MappingsPage />} />
