@@ -187,17 +187,17 @@ router.post('/', (req: Request, res: Response) => {
     if (!parent) { res.status(400).json({ success: false, error: 'Parent group not found' }); return; }
     const recommended = VALID_CHILDREN[parent.type] || [];
     if (!recommended.includes(type)) {
-      warning = `DAMA suggests ${GROUP_TYPE_LABELS[type] || type} typically reports to ${recommended.map((t: string) => GROUP_TYPE_LABELS[t] || t).join(' or ') || 'a higher-level body'}, not ${GROUP_TYPE_LABELS[parent.type] || parent.type}. Saved anyway.`;
+      warning = `Governance best practices suggest ${GROUP_TYPE_LABELS[type] || type} typically reports to ${recommended.map((t: string) => GROUP_TYPE_LABELS[t] || t).join(' or ') || 'a higher-level body'}, not ${GROUP_TYPE_LABELS[parent.type] || parent.type}. Saved anyway.`;
     }
   } else if (type !== 'COUNCIL' && type !== 'OFFICE' && !parentId) {
-    warning = `DAMA recommends ${GROUP_TYPE_LABELS[type] || type} be placed under a higher-level governance body.`;
+    warning = `Governance best practices suggest ${GROUP_TYPE_LABELS[type] || type} be placed under a higher-level governance body.`;
   }
 
   // Check if no top-level council exists
   if (type !== 'COUNCIL' && !parentId) {
     const hasCouncil = governanceGroups.some((g) => g.type === 'COUNCIL');
     if (!hasCouncil && !warning) {
-      warning = 'DAMA recommends establishing a Data Governance Council as the top-level governing body first.';
+      warning = 'Governance best practices suggest establishing a Data Governance Council as the top-level governing body first.';
     }
   }
 
