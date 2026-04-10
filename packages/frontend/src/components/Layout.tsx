@@ -366,7 +366,6 @@ export default function Layout() {
       <div className={styles.main}>
         <header className={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
-            <img src="/procela-logo.png" alt="Procela" className={styles.headerLogo} />
             {/* Global Search */}
             <div className={styles.searchWrapper} ref={searchWrapperRef}>
               <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
