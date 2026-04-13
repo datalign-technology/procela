@@ -1,7 +1,16 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import { AuthenticatedRequest } from '../middleware/auth';
+// Lazy-required inside handlers to avoid the circular import with
+// `routes/people` (which imports the `organizations` array from this file).
+// Using `require` at call-time ensures both modules are fully initialised
+// before `getVisibleOrgIds` is invoked.
+function accessHelpers(): typeof import('./people') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require('./people');
+}
 
 export interface StoredOrg {
   id: string;
@@ -57,7 +66,13 @@ function buildTree(orgs: StoredOrg[]): any[] {
 const router = Router();
 
 /** DELETE /api/v1/organizations/all — delete all organizations except the default org */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', (req: AuthenticatedRequest, res: Response) => {
+  const { getVisibleOrgIds } = accessHelpers();
+  // Bulk-wipe is destructive across tenants — only unrestricted users may run it.
+  if (getVisibleOrgIds(req.user) !== null) {
+    res.status(403).json({ success: false, error: 'Only super admins can delete all organizations' });
+    return;
+  }
   const defaultOrgId = '00000000-0000-0000-0000-000000000010';
   const count = organizations.filter((o) => o.id !== defaultOrgId).length;
   for (let i = organizations.length - 1; i >= 0; i--) {
@@ -73,29 +88,51 @@ router.delete('/all', (_req: Request, res: Response) => {
   res.json({ success: true, deleted: count });
 });
 
-/** GET /api/v1/organizations — returns flat list and tree */
-router.get('/', (_req: Request, res: Response) => {
+/** GET /api/v1/organizations — returns flat list and tree, scoped to the user's visible orgs */
+router.get('/', (req: AuthenticatedRequest, res: Response) => {
+  const { getVisibleOrgIds } = accessHelpers();
+  const visible = getVisibleOrgIds(req.user);
+  const scoped = visible === null
+    ? organizations
+    : organizations.filter((o) => visible.has(o.id));
   res.json({
     success: true,
-    data: organizations,
-    tree: buildTree(organizations),
+    data: scoped,
+    tree: buildTree(scoped),
     orgTypes: ORG_TYPES,
   });
 });
 
 /** GET /api/v1/organizations/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
+  const { canAccessOrg } = accessHelpers();
+  if (!canAccessOrg(req.user, org.id)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this organization' });
+    return;
+  }
   res.json({ success: true, data: org });
 });
 
 /** POST /api/v1/organizations */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', (req: AuthenticatedRequest, res: Response) => {
   const { name, parentId, type, industry, description, headCount } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (parentId && !organizations.find((o) => o.id === parentId)) {
     res.status(400).json({ success: false, error: 'Parent organization not found' });
+    return;
+  }
+  const { getVisibleOrgIds } = accessHelpers();
+  const visible = getVisibleOrgIds(req.user);
+  if (parentId) {
+    if (visible !== null && !visible.has(parentId)) {
+      res.status(403).json({ success: false, error: 'You do not have access to the specified parent organization' });
+      return;
+    }
+  } else if (visible !== null) {
+    // A null parentId means creating a top-level org — reserved for unrestricted users.
+    res.status(403).json({ success: false, error: 'Only super admins can create top-level organizations' });
     return;
   }
   const now = new Date().toISOString();
@@ -111,10 +148,22 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 /** PUT /api/v1/organizations/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
+  const { canAccessOrg } = accessHelpers();
+  if (!canAccessOrg(req.user, org.id)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this organization' });
+    return;
+  }
   const { name, parentId, type, industry, description, headCount } = req.body;
+  // If the caller is trying to reparent, make sure the new parent is also in scope.
+  if (parentId !== undefined && parentId !== org.parentId && parentId !== null) {
+    if (!canAccessOrg(req.user, parentId)) {
+      res.status(403).json({ success: false, error: 'You do not have access to the specified parent organization' });
+      return;
+    }
+  }
   if (name !== undefined) org.name = name;
   if (parentId !== undefined) org.parentId = parentId;
   if (type !== undefined) org.type = type;
@@ -127,9 +176,14 @@ router.put('/:id', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/organizations/:id */
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
+  const { canAccessOrg } = accessHelpers();
+  if (!canAccessOrg(req.user, org.id)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this organization' });
+    return;
+  }
   // Must have at least one org remaining
   const topLevelOrgs = organizations.filter((o) => !o.parentId);
   if (topLevelOrgs.length <= 1 && !org.parentId) {
@@ -155,12 +209,29 @@ router.delete('/:id', (req: Request, res: Response) => {
  * JSON format: { organizations: [{ name, parentName?, type?, industry?, description? }, ...] }
  * CSV format:  { csv: "Name,Parent,Type,Industry,Description\nAcme Corp,,company,..." }
  */
-router.post('/import', (req: Request, res: Response) => {
+router.post('/import', (req: AuthenticatedRequest, res: Response) => {
   try {
     const { organizations: orgList, csv, parentId } = req.body;
     const rootParent = parentId || null;
     const created: StoredOrg[] = [];
     const nameToId = new Map<string, string>();
+
+    const { getVisibleOrgIds } = accessHelpers();
+    const visible = getVisibleOrgIds(req.user);
+
+    // Restricted users must import under an org they have access to. They can
+    // never import rootless (top-level) orgs, and any explicit parentId has
+    // to resolve to an accessible org.
+    if (visible !== null) {
+      if (!rootParent) {
+        res.status(403).json({ success: false, error: 'Only super admins can import top-level organizations' });
+        return;
+      }
+      if (!visible.has(rootParent)) {
+        res.status(403).json({ success: false, error: 'You do not have access to the specified parent organization' });
+        return;
+      }
+    }
 
     // Build map of existing orgs by name
     for (const existing of organizations) {
@@ -210,6 +281,9 @@ router.post('/import', (req: Request, res: Response) => {
     // Process in order — parents should come before children
     const now = new Date().toISOString();
 
+    // Track newly created ids so rows can reference in-scope siblings by name.
+    const newlyCreated = new Set<string>();
+
     for (const row of rows) {
       let pid = rootParent;
       if (row.parentName) {
@@ -217,6 +291,17 @@ router.post('/import', (req: Request, res: Response) => {
         if (nameToId.has(parentKey)) {
           pid = nameToId.get(parentKey)!;
         }
+      }
+
+      // For restricted users, the resolved parent must be an accessible org
+      // (or an org created earlier in this same import, which by construction
+      // sits under an accessible root).
+      if (visible !== null && pid && !visible.has(pid) && !newlyCreated.has(pid)) {
+        res.status(403).json({
+          success: false,
+          error: `Row "${row.name}" resolves to a parent outside your accessible scope`,
+        });
+        return;
       }
 
       const org: StoredOrg = {
@@ -227,6 +312,7 @@ router.post('/import', (req: Request, res: Response) => {
       };
       organizations.push(org);
       created.push(org);
+      newlyCreated.add(org.id);
       nameToId.set(org.name.toLowerCase(), org.id);
     }
 

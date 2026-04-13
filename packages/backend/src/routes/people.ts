@@ -31,7 +31,7 @@ export interface StoredPerson {
 
 // ── Org access resolution ──
 
-function getDescendantOrgIds(orgId: string): string[] {
+export function getDescendantOrgIds(orgId: string): string[] {
   const ids: string[] = [];
   const children = organizations.filter((o) => o.parentId === orgId);
   for (const child of children) {
@@ -105,6 +105,53 @@ export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string;
     const org = organizations.find((o) => o.id === id)!;
     return { id: org.id, name: org.name, type: org.type };
   });
+}
+
+/**
+ * Returns the full set of org IDs the authenticated user is allowed to see,
+ * or `null` when the user has unrestricted access (SUPER_ADMIN, or a user
+ * with no matching people record — the dev fallback).
+ *
+ * The visible set is derived from `computeAccessibleOrgs` and then expanded
+ * to include every descendant (of any org type) under each accessible
+ * working-level org. This ensures a user scoped to, e.g., "Newport News
+ * Shipbuilding" cannot see sibling divisions or other unrelated companies,
+ * but can still see the departments/teams/units beneath NNS.
+ */
+export function getVisibleOrgIds(
+  user: { email?: string; role?: string } | undefined | null,
+): Set<string> | null {
+  if (!user) return null;
+  if (user.role === 'SUPER_ADMIN') return null;
+
+  const person = people.find(
+    (p) => p.email.toLowerCase() === (user.email || '').toLowerCase(),
+  );
+  // No matching people record — dev fallback, unrestricted.
+  if (!person) return null;
+  if (person.role === 'SUPER_ADMIN') return null;
+
+  const visible = new Set<string>();
+  for (const o of computeAccessibleOrgs(person)) {
+    visible.add(o.id);
+    for (const descId of getDescendantOrgIds(o.id)) {
+      visible.add(descId);
+    }
+  }
+  return visible;
+}
+
+/**
+ * Returns true if the user is allowed to access the given org.
+ * An unrestricted user (SUPER_ADMIN / dev fallback) always passes.
+ */
+export function canAccessOrg(
+  user: { email?: string; role?: string } | undefined | null,
+  orgId: string,
+): boolean {
+  const visible = getVisibleOrgIds(user);
+  if (visible === null) return true;
+  return visible.has(orgId);
 }
 
 export const people: StoredPerson[] = loadStore<StoredPerson>('people');
