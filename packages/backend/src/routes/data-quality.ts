@@ -8,10 +8,12 @@ import { connections } from './connections';
 import {
   evaluateRule,
   suggestTemplates,
+  describeRule,
   RULE_TEMPLATES,
   RuleType,
   RuleParameters,
   RuleRunResult,
+  DescribeContext,
 } from '../services/dq-engine';
 
 interface DataQualityRule {
@@ -37,8 +39,27 @@ interface DataQualityRule {
 }
 
 const VALID_RULE_TYPES: RuleType[] = [
-  'NOT_NULL', 'UNIQUE', 'REGEX_MATCH', 'IN_SET', 'NUMERIC_RANGE', 'LENGTH_RANGE',
+  'NOT_NULL', 'UNIQUE', 'REGEX_MATCH', 'IN_SET', 'NUMERIC_RANGE', 'LENGTH_RANGE', 'CUSTOM',
 ];
+
+/**
+ * Build the DescribeContext for a rule by looking up its Data Asset and the
+ * source connection. Returns an empty context when the asset / connection
+ * can't be resolved so placeholders are used in the rendered definition.
+ */
+function contextForRule(rule: DataQualityRule): DescribeContext {
+  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+  if (!asset) return {};
+  const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+  return {
+    connectionType: conn?.connectionType,
+    storageType: conn?.config?.storageType,
+    dbType: conn?.config?.dbType,
+    sourceAsset: asset.sourceAsset,
+    sourceColumn: asset.sourceColumn,
+    originalFileName: conn?.config?.originalFileName,
+  };
+}
 
 export const dataQualityRules: DataQualityRule[] = loadStore<DataQualityRule>('dataQualityRules');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
@@ -72,9 +93,13 @@ router.get('/', (req: Request, res: Response) => {
 
   const enriched = filtered.map((rule) => {
     const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+    const definition = rule.ruleType
+      ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule))
+      : null;
     return {
       ...rule,
       dataAssetName: asset?.name || '',
+      definition,
     };
   });
 
@@ -126,7 +151,10 @@ router.get('/by-asset/:assetId', (req: Request, res: Response) => {
 
   const enriched = rules.map((rule) => {
     const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
-    return { ...rule, dataAssetName: asset?.name || '' };
+    const definition = rule.ruleType
+      ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule))
+      : null;
+    return { ...rule, dataAssetName: asset?.name || '', definition };
   });
 
   res.json({ success: true, data: enriched });
@@ -260,16 +288,36 @@ router.delete('/:id', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/v1/data-quality/templates?column=<name>
+ * GET /api/v1/data-quality/templates?column=<name>&assetId=<id>
  *
  * Returns the OOTB rule template catalog, split into `suggested` (templates
  * whose column-name heuristic matches the requested column) and `generic`
- * (applicable to any column). If no column is supplied, everything is
- * returned as `generic`.
+ * (applicable to any column). When `assetId` is provided each template
+ * also carries a `definition` showing the concrete SQL / JS / pseudocode
+ * that would run against the asset's bound source.
  */
 router.get('/templates', (req: Request, res: Response) => {
   const column = typeof req.query.column === 'string' ? req.query.column : undefined;
+  const assetId = typeof req.query.assetId === 'string' ? req.query.assetId : undefined;
   const { suggested, generic } = suggestTemplates(column);
+
+  // Resolve the describe context once if the caller provided an assetId.
+  let ctx: DescribeContext = {};
+  if (assetId) {
+    const asset = dataAssets.find((a) => a.id === assetId);
+    if (asset) {
+      const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+      ctx = {
+        connectionType: conn?.connectionType,
+        storageType: conn?.config?.storageType,
+        dbType: conn?.config?.dbType,
+        sourceAsset: asset.sourceAsset,
+        sourceColumn: asset.sourceColumn,
+        originalFileName: conn?.config?.originalFileName,
+      };
+    }
+  }
+
   const project = (t: typeof RULE_TEMPLATES[number]) => ({
     id: t.id,
     ruleType: t.ruleType,
@@ -277,6 +325,7 @@ router.get('/templates', (req: Request, res: Response) => {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
+    definition: describeRule(t.ruleType, t.parameters, ctx),
   });
   res.json({
     success: true,

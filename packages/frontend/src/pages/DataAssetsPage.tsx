@@ -788,7 +788,34 @@ export default function DataAssetsPage() {
 // Data Quality Rules modal
 // ──────────────────────────────────────────────────────────────────────────
 
-type RuleType = 'NOT_NULL' | 'UNIQUE' | 'REGEX_MATCH' | 'IN_SET' | 'NUMERIC_RANGE' | 'LENGTH_RANGE';
+/**
+ * Renders the concrete "definition" of a rule — the SQL a database driver
+ * would run, the JS an in-process engine applies to a file, or the
+ * pseudocode shown when no driver exists for the source.
+ */
+function DefinitionBlock({ def, label = 'Definition' }: { def: RuleDefinition | null | undefined; label?: string }) {
+  if (!def) return null;
+  const tag = def.language.toUpperCase();
+  const tagColor = def.language === 'sql' ? '#1e40af' : def.language === 'js' ? '#0f4f46' : '#64748b';
+  return (
+    <div style={{ marginTop: 6, padding: '6px 8px', background: '#0b1220', color: '#d1d5db', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 11, overflow: 'auto', whiteSpace: 'pre' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, fontFamily: 'inherit', fontSize: 10, color: '#9ca3af' }}>
+        <span style={{ padding: '1px 5px', borderRadius: 3, background: tagColor, color: '#fff', fontWeight: 600, letterSpacing: '0.04em' }}>{tag}</span>
+        <span>{label}</span>
+        {!def.executable && <span style={{ color: '#f59e0b' }}>\u2014 not executable here (display only)</span>}
+      </div>
+      <code style={{ color: '#e5e7eb' }}>{def.body}</code>
+    </div>
+  );
+}
+
+type RuleType = 'NOT_NULL' | 'UNIQUE' | 'REGEX_MATCH' | 'IN_SET' | 'NUMERIC_RANGE' | 'LENGTH_RANGE' | 'CUSTOM';
+
+interface RuleDefinition {
+  language: 'sql' | 'js' | 'pseudo';
+  body: string;
+  executable: boolean;
+}
 
 interface RuleTemplate {
   id: string;
@@ -797,6 +824,7 @@ interface RuleTemplate {
   name: string;
   description: string;
   parameters: Record<string, any>;
+  definition?: RuleDefinition;
 }
 
 interface DQRule {
@@ -811,6 +839,7 @@ interface DQRule {
   lastMeasured: string | null;
   ruleType?: RuleType;
   parameters?: Record<string, any>;
+  definition?: RuleDefinition | null;
   lastRun?: {
     ranAt: string;
     simulated: boolean;
@@ -839,10 +868,16 @@ function DataQualityRulesModal({ asset, onClose, onAfterChange }: {
 
   const load = async () => {
     try {
+      // Pass `assetId` so templates come back with definitions rendered for
+      // this exact source (concrete SQL for a DB-backed asset, JS for LOCAL).
+      const tmplQuery = [
+        columnName ? `column=${encodeURIComponent(columnName)}` : '',
+        `assetId=${encodeURIComponent(asset.id)}`,
+      ].filter(Boolean).join('&');
       const [rulesRes, tmplRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DQRule[] }>(`/data-quality/by-asset/${asset.id}`),
         apiClient.get<{ success: boolean; data: { suggested: RuleTemplate[]; generic: RuleTemplate[] } }>(
-          `/data-quality/templates${columnName ? `?column=${encodeURIComponent(columnName)}` : ''}`,
+          `/data-quality/templates?${tmplQuery}`,
         ),
       ]);
       setRules(rulesRes.data || []);
@@ -857,6 +892,7 @@ function DataQualityRulesModal({ asset, onClose, onAfterChange }: {
     if (t.ruleType === 'IN_SET') return !t.parameters.allowedValues || t.parameters.allowedValues.length === 0;
     if (t.ruleType === 'NUMERIC_RANGE') return t.parameters.min === undefined && t.parameters.max === undefined;
     if (t.ruleType === 'LENGTH_RANGE') return t.parameters.minLength === undefined && t.parameters.maxLength === undefined;
+    if (t.ruleType === 'CUSTOM') return !t.parameters.body || !String(t.parameters.body).trim();
     return false;
   };
 
@@ -912,12 +948,14 @@ function DataQualityRulesModal({ asset, onClose, onAfterChange }: {
     return (
       <div key={t.id} style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{t.name}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{t.description}</div>
             <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
               {t.ruleType}{t.parameters.pattern ? ` /${t.parameters.pattern}/` : ''}
             </div>
+            {/* Show the concrete definition the engine / driver would execute. */}
+            {t.definition && <DefinitionBlock def={t.definition} label="Would execute" />}
           </div>
           <button
             onClick={() => handleAddClick(t)}
@@ -974,6 +1012,46 @@ function DataQualityRulesModal({ asset, onClose, onAfterChange }: {
                   <input type="number" style={{ ...inputStyle, fontSize: 12 }}
                     value={configParams.maxLength ?? ''}
                     onChange={(e) => setConfigParams({ ...configParams, maxLength: e.target.value === '' ? undefined : Number(e.target.value) })} />
+                </div>
+              </div>
+            )}
+            {t.ruleType === 'CUSTOM' && (
+              <div>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 8, fontSize: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name={`lang-${t.id}`}
+                      checked={(configParams.language || 'js') === 'js'}
+                      onChange={() => setConfigParams({ ...configParams, language: 'js' })}
+                    />
+                    JS (executes on LOCAL files)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name={`lang-${t.id}`}
+                      checked={configParams.language === 'sql'}
+                      onChange={() => setConfigParams({ ...configParams, language: 'sql' })}
+                    />
+                    SQL (display-only, simulated)
+                  </label>
+                </div>
+                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                  {(configParams.language || 'js') === 'js'
+                    ? 'Expression (runs once per value — the current value is bound to `value`)'
+                    : 'SQL query'}
+                </label>
+                <textarea
+                  style={{ ...inputStyle, fontSize: 12, fontFamily: 'var(--font-mono)', minHeight: 70, whiteSpace: 'pre' }}
+                  placeholder={(configParams.language || 'js') === 'js'
+                    ? "value !== null && /^HII-\\d+$/.test(value)"
+                    : 'SELECT COUNT(*) FILTER (WHERE my_column IS NULL) AS fail_count, COUNT(*) AS total FROM my_table;'}
+                  value={configParams.body || ''}
+                  onChange={(e) => setConfigParams({ ...configParams, body: e.target.value })}
+                />
+                <div style={{ fontSize: 10, color: '#92400e', marginTop: 4 }}>
+                  Heads up: JS expressions run server-side via `new Function()`. Fine in this prototype; real deployments need a proper sandbox.
                 </div>
               </div>
             )}
@@ -1048,6 +1126,8 @@ function DataQualityRulesModal({ asset, onClose, onAfterChange }: {
                       <td style={tdStyle}>
                         <div style={{ fontWeight: 500 }}>{r.name}</div>
                         {r.description && <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{r.description}</div>}
+                        {/* Show the concrete definition the engine actually runs. */}
+                        <DefinitionBlock def={r.definition} label="Engine runs" />
                       </td>
                       <td style={{ ...tdStyle, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{r.ruleType || '\u2014'}</td>
                       <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>

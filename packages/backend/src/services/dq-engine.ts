@@ -22,7 +22,8 @@ export type RuleType =
   | 'REGEX_MATCH'
   | 'IN_SET'
   | 'NUMERIC_RANGE'
-  | 'LENGTH_RANGE';
+  | 'LENGTH_RANGE'
+  | 'CUSTOM';
 
 export interface RuleParameters {
   pattern?: string;              // REGEX_MATCH
@@ -31,6 +32,8 @@ export interface RuleParameters {
   max?: number;                  // NUMERIC_RANGE
   minLength?: number;            // LENGTH_RANGE
   maxLength?: number;            // LENGTH_RANGE
+  language?: 'js' | 'sql';       // CUSTOM
+  body?: string;                 // CUSTOM
 }
 
 export interface RuleRunResult {
@@ -208,6 +211,45 @@ function evaluateValues(
       return finaliseResult(total, fails, failures, now,
         `${total - fails}/${total} rows are ${rangeLabel}`);
     }
+
+    case 'CUSTOM': {
+      // Execute the user's JS expression once per value. The expression is
+      // either a bare expression ("value.startsWith('HII-')") or a full
+      // statement block ("return value > 0;"). Syntax errors fail upfront;
+      // per-value runtime errors count as failures.
+      //
+      // SECURITY: `new Function` runs in the Node process. In this prototype
+      // that's acceptable because the app is single-tenant and the users
+      // creating rules are trusted. For any multi-tenant deployment this
+      // must be swapped for a real sandbox (isolated-vm or similar).
+      if (params.language === 'sql') {
+        // SQL custom rules have no executor here — they're display-only.
+        return emptyFailure('SQL custom rules have no local executor; execution is simulated when the source is a database.', false);
+      }
+      if (!params.body || !params.body.trim()) {
+        return emptyFailure('CUSTOM requires a `body` expression', false);
+      }
+      let fn: (value: unknown) => unknown;
+      try {
+        const trimmed = params.body.trim();
+        const wrapped = /\breturn\b|;/.test(trimmed) ? trimmed : `return (${trimmed});`;
+        fn = new Function('value', wrapped) as (value: unknown) => unknown;
+      } catch (err) {
+        return emptyFailure(`Invalid expression: ${err instanceof Error ? err.message : String(err)}`, false);
+      }
+      const failures: string[] = [];
+      let fails = 0;
+      for (const v of values) {
+        let ok = false;
+        try { ok = !!fn(v); } catch { ok = false; }
+        if (!ok) {
+          fails++;
+          if (failures.length < 5 && v !== null) failures.push(v);
+        }
+      }
+      return finaliseResult(total, fails, failures, now,
+        `${total - fails}/${total} rows satisfied the expression`);
+    }
   }
 }
 
@@ -284,6 +326,7 @@ const RULE_PASS_BANDS: Record<RuleType, { min: number; max: number }> = {
   IN_SET: { min: 88, max: 100 },
   NUMERIC_RANGE: { min: 90, max: 100 },
   LENGTH_RANGE: { min: 90, max: 100 },
+  CUSTOM: { min: 70, max: 100 },
 };
 
 // ── Out-of-the-box rule templates ─────────────────────────────────────────
@@ -389,7 +432,144 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
     description: 'Fails on values whose character length is outside the min/max you supply.',
     parameters: {},
   },
+  {
+    id: 'custom',
+    ruleType: 'CUSTOM',
+    dimension: 'VALIDITY',
+    name: 'Custom rule',
+    description: 'Write your own expression. Use "js" to evaluate per-value on local files; use "sql" for a database query (display-only here — simulated until a driver is wired).',
+    parameters: { language: 'js', body: '' },
+  },
 ];
+
+// ── Rule definition describer ────────────────────────────────────────────
+
+export interface DescribeContext {
+  connectionType?: string;
+  storageType?: string;
+  dbType?: string;
+  sourceAsset?: string;   // table / file / endpoint / sheet
+  sourceColumn?: string;
+  originalFileName?: string;
+}
+
+export interface RuleDefinition {
+  /** 'sql' for database-style rules, 'js' for per-row file evaluation, 'pseudo' for descriptive-only. */
+  language: 'sql' | 'js' | 'pseudo';
+  /** The concrete body a driver would execute, or pseudocode if no driver applies. */
+  body: string;
+  /** True when the definition could actually be executed by the engine for this source. */
+  executable: boolean;
+}
+
+/**
+ * Render the concrete "definition" of a rule for its bound source — the SQL
+ * a database driver would run, the JS an in-process engine applies to a file,
+ * or pseudocode when no real executor exists for the source. Placeholders
+ * like `{table}` and `{column}` appear when the asset isn't bound to a
+ * specific table / column yet.
+ */
+export function describeRule(
+  ruleType: RuleType,
+  params: RuleParameters,
+  ctx: DescribeContext,
+): RuleDefinition {
+  const table = ctx.sourceAsset || '{table}';
+  const col = ctx.sourceColumn || '{column}';
+  const file = ctx.originalFileName || '{file}';
+  const isDb = ctx.connectionType === 'DATABASE' || ctx.connectionType === 'DATA_WAREHOUSE';
+  const isLocal = ctx.connectionType === 'FILE_STORAGE' && ctx.storageType === 'LOCAL';
+  const regexOp = ctx.dbType === 'MYSQL' ? 'NOT REGEXP' : '!~';
+
+  const sql = (body: string): RuleDefinition => ({ language: 'sql', body, executable: false });
+  const js = (body: string, executable: boolean): RuleDefinition => ({ language: 'js', body, executable });
+  const pseudo = (body: string): RuleDefinition => ({ language: 'pseudo', body, executable: false });
+
+  if (isDb) {
+    switch (ruleType) {
+      case 'NOT_NULL':
+        return sql(`SELECT COUNT(*) FILTER (WHERE ${col} IS NULL) AS fail_count,\n       COUNT(*)                              AS total\nFROM ${table};`);
+      case 'UNIQUE':
+        return sql(`SELECT COUNT(*) - COUNT(DISTINCT ${col}) AS duplicate_count,\n       COUNT(DISTINCT ${col})            AS distinct_count,\n       COUNT(*)                          AS total\nFROM ${table};`);
+      case 'REGEX_MATCH':
+        return sql(`SELECT COUNT(*) FILTER (WHERE ${col} ${regexOp} '${params.pattern || '{pattern}'}') AS fail_count,\n       COUNT(*) AS total\nFROM ${table};`);
+      case 'IN_SET': {
+        const vals = (params.allowedValues && params.allowedValues.length > 0 ? params.allowedValues : ['{v1}', '{v2}'])
+          .map((v) => `'${String(v).replace(/'/g, "''")}'`).join(', ');
+        return sql(`SELECT COUNT(*) FILTER (WHERE ${col} NOT IN (${vals})) AS fail_count,\n       COUNT(*) AS total\nFROM ${table};`);
+      }
+      case 'NUMERIC_RANGE': {
+        const bits: string[] = [];
+        if (params.min !== undefined) bits.push(`${col} < ${params.min}`);
+        if (params.max !== undefined) bits.push(`${col} > ${params.max}`);
+        const where = bits.length > 0 ? bits.join(' OR ') : 'FALSE /* set min and/or max */';
+        return sql(`SELECT COUNT(*) FILTER (WHERE ${where}) AS fail_count,\n       COUNT(*) AS total\nFROM ${table};`);
+      }
+      case 'LENGTH_RANGE': {
+        const bits: string[] = [];
+        if (params.minLength !== undefined) bits.push(`LENGTH(${col}) < ${params.minLength}`);
+        if (params.maxLength !== undefined) bits.push(`LENGTH(${col}) > ${params.maxLength}`);
+        const where = bits.length > 0 ? bits.join(' OR ') : 'FALSE /* set minLength and/or maxLength */';
+        return sql(`SELECT COUNT(*) FILTER (WHERE ${where}) AS fail_count,\n       COUNT(*) AS total\nFROM ${table};`);
+      }
+      case 'CUSTOM':
+        return {
+          language: (params.language as 'sql' | 'js') || 'sql',
+          body: params.body || '-- paste custom SQL',
+          executable: false, // real DB driver not wired
+        };
+    }
+  }
+
+  if (isLocal) {
+    switch (ruleType) {
+      case 'NOT_NULL':
+        return js(`// For each row of ${file}:\n//   fail if ${col} is null or empty\nvalues.filter(v => v === null || v === '').length   // failures`, true);
+      case 'UNIQUE':
+        return js(`const counts = new Map();\nfor (const v of values) counts.set(v, (counts.get(v) || 0) + 1);\nconst duplicates = [...counts].filter(([, c]) => c > 1);\n// fail = sum of the row counts of each duplicate value`, true);
+      case 'REGEX_MATCH':
+        return js(`const re = /${params.pattern || '{pattern}'}/;\nvalues.filter(v => v === null || !re.test(v)).length  // failures`, true);
+      case 'IN_SET': {
+        const vals = JSON.stringify(params.allowedValues || []);
+        return js(`const allowed = new Set(${vals});\nvalues.filter(v => v === null || !allowed.has(v)).length  // failures`, true);
+      }
+      case 'NUMERIC_RANGE': {
+        const parts: string[] = [`v === null`, `Number.isNaN(Number(v))`];
+        if (params.min !== undefined) parts.push(`Number(v) < ${params.min}`);
+        if (params.max !== undefined) parts.push(`Number(v) > ${params.max}`);
+        return js(`values.filter(v => ${parts.join(' || ')}).length  // failures`, true);
+      }
+      case 'LENGTH_RANGE': {
+        const parts: string[] = [];
+        if (params.minLength !== undefined) parts.push(`(v?.length ?? 0) < ${params.minLength}`);
+        if (params.maxLength !== undefined) parts.push(`(v?.length ?? 0) > ${params.maxLength}`);
+        return js(`values.filter(v => ${parts.length ? parts.join(' || ') : 'false /* set minLength/maxLength */'}).length  // failures`, true);
+      }
+      case 'CUSTOM': {
+        const lang = params.language === 'sql' ? 'sql' : 'js';
+        const body = params.body || '// e.g. value.startsWith("HII-")';
+        // SQL against a LOCAL file isn't executable here.
+        return { language: lang, body, executable: lang === 'js' };
+      }
+    }
+  }
+
+  // Fallback: API / SPREADSHEET / cloud FILE_STORAGE / unknown — pseudocode.
+  const summary = (() => {
+    switch (ruleType) {
+      case 'NOT_NULL': return `Count rows in ${table} where ${col} is null or empty.`;
+      case 'UNIQUE': return `Count duplicate values of ${col} in ${table}.`;
+      case 'REGEX_MATCH': return `Count values of ${col} in ${table} that do not match /${params.pattern || '{pattern}'}/.`;
+      case 'IN_SET': return `Count values of ${col} in ${table} that are not in the allowed list.`;
+      case 'NUMERIC_RANGE': return `Count values of ${col} in ${table} outside ${params.min ?? '-\u221E'}..${params.max ?? '+\u221E'}.`;
+      case 'LENGTH_RANGE': return `Count values of ${col} in ${table} whose length is outside ${params.minLength ?? 0}..${params.maxLength ?? '+\u221E'}.`;
+      case 'CUSTOM': return params.body || 'Custom expression (provide body).';
+    }
+  })();
+  return pseudo(`${summary}\n(No driver is wired for ${ctx.connectionType || 'this connection type'} \u2014 execution is simulated.)`);
+}
+
+// ── Templates ────────────────────────────────────────────────────────────
 
 /**
  * Return templates applicable to a column. Templates with a matching

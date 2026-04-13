@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { evaluateRule, suggestTemplates, RULE_TEMPLATES } from '../services/dq-engine';
+import { evaluateRule, suggestTemplates, describeRule, RULE_TEMPLATES } from '../services/dq-engine';
 
 describe('dq-engine: real evaluation against LOCAL files', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'procela-dq-'));
@@ -170,5 +170,130 @@ describe('suggestTemplates', () => {
       assert.ok(t.name);
       assert.strictEqual(typeof t.parameters, 'object');
     }
+  });
+});
+
+describe('describeRule', () => {
+  it('renders SQL with COUNT(*) FILTER for a DB-backed NOT_NULL', () => {
+    const d = describeRule('NOT_NULL', {}, {
+      connectionType: 'DATABASE', dbType: 'POSTGRESQL',
+      sourceAsset: 'customers', sourceColumn: 'email',
+    });
+    assert.strictEqual(d.language, 'sql');
+    assert.match(d.body, /FROM customers/);
+    assert.match(d.body, /email IS NULL/);
+    assert.strictEqual(d.executable, false); // no driver wired
+  });
+
+  it('uses NOT REGEXP for MySQL REGEX_MATCH', () => {
+    const d = describeRule('REGEX_MATCH', { pattern: '^[a-z]+$' }, {
+      connectionType: 'DATABASE', dbType: 'MYSQL',
+      sourceAsset: 't', sourceColumn: 'c',
+    });
+    assert.match(d.body, /NOT REGEXP/);
+  });
+
+  it('defaults to !~ for PostgreSQL-style REGEX_MATCH', () => {
+    const d = describeRule('REGEX_MATCH', { pattern: '^x$' }, {
+      connectionType: 'DATABASE', dbType: 'POSTGRESQL',
+      sourceAsset: 't', sourceColumn: 'c',
+    });
+    assert.match(d.body, /!~/);
+    assert.ok(!/NOT REGEXP/.test(d.body));
+  });
+
+  it('emits executable JS for a LOCAL NOT_NULL rule', () => {
+    const d = describeRule('NOT_NULL', {}, {
+      connectionType: 'FILE_STORAGE', storageType: 'LOCAL',
+      sourceAsset: 'customers.csv', sourceColumn: 'email',
+      originalFileName: 'customers.csv',
+    });
+    assert.strictEqual(d.language, 'js');
+    assert.strictEqual(d.executable, true);
+    assert.match(d.body, /filter/);
+  });
+
+  it('uses {table} / {column} placeholders when context is empty', () => {
+    const d = describeRule('UNIQUE', {}, {
+      connectionType: 'DATABASE',
+    });
+    assert.match(d.body, /\{table\}/);
+    assert.match(d.body, /\{column\}/);
+  });
+
+  it('emits pseudocode for connection types without a driver', () => {
+    const d = describeRule('IN_SET', { allowedValues: ['a', 'b'] }, {
+      connectionType: 'API',
+      sourceAsset: '/api/users', sourceColumn: 'status',
+    });
+    assert.strictEqual(d.language, 'pseudo');
+    assert.strictEqual(d.executable, false);
+    assert.match(d.body, /simulated/i);
+  });
+
+  it('quotes IN_SET values safely (escapes single quotes) for SQL', () => {
+    const d = describeRule('IN_SET', { allowedValues: ["O'Brien", 'normal'] }, {
+      connectionType: 'DATABASE', sourceAsset: 't', sourceColumn: 'name',
+    });
+    assert.match(d.body, /'O''Brien'/);
+  });
+});
+
+describe('CUSTOM rule evaluation', () => {
+  const fs = require('fs') as typeof import('fs');
+  const os = require('os') as typeof import('os');
+  const path = require('path') as typeof import('path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'procela-custom-'));
+  const csv = path.join(tmp, 'parts.csv');
+  fs.writeFileSync(csv, 'id,code\n1,HII-001\n2,hii-002\n3,OTHER\n4,HII-9\n');
+
+  function subj(ruleId: string) {
+    return {
+      connectionType: 'FILE_STORAGE', storageType: 'LOCAL',
+      localFilePath: csv, sourceColumn: 'code',
+      assetId: 'a', ruleId,
+    };
+  }
+
+  it('executes a bare JS expression per value', () => {
+    const r = evaluateRule('CUSTOM', { language: 'js', body: "value?.startsWith('HII-')" }, subj('r1'));
+    assert.strictEqual(r.simulated, false);
+    // HII-001 and HII-9 pass; hii-002 and OTHER fail
+    assert.strictEqual(r.passCount, 2);
+    assert.strictEqual(r.failCount, 2);
+  });
+
+  it('accepts a statement form with an explicit return', () => {
+    const r = evaluateRule('CUSTOM', { language: 'js', body: "return value && value.length > 5;" }, subj('r2'));
+    assert.strictEqual(r.simulated, false);
+    // HII-001 (7), hii-002 (7), OTHER (5) -> fails, HII-9 (5) -> fails
+    assert.strictEqual(r.passCount, 2);
+    assert.strictEqual(r.failCount, 2);
+  });
+
+  it('treats per-row runtime errors as failures, not crashes', () => {
+    const r = evaluateRule('CUSTOM', { language: 'js', body: 'value.toUpperCase().nonExistent.x' }, subj('r3'));
+    assert.strictEqual(r.failCount, 4);
+    assert.strictEqual(r.passCount, 0);
+  });
+
+  it('surfaces a clear error for invalid JS syntax', () => {
+    const r = evaluateRule('CUSTOM', { language: 'js', body: 'value ===' }, subj('r4'));
+    assert.strictEqual(r.totalRows, 0);
+    assert.match(r.message, /invalid expression/i);
+  });
+
+  it('refuses to locally execute a SQL-language CUSTOM rule', () => {
+    const r = evaluateRule('CUSTOM', { language: 'sql', body: 'SELECT 1' }, subj('r5'));
+    assert.strictEqual(r.totalRows, 0);
+    assert.match(r.message, /no local executor/i);
+  });
+
+  it('simulates when the source is not LOCAL', () => {
+    const r = evaluateRule('CUSTOM', { language: 'sql', body: 'SELECT COUNT(*) FROM t' }, {
+      connectionType: 'DATABASE', assetId: 'a', ruleId: 'r6',
+    });
+    assert.strictEqual(r.simulated, true);
+    assert.match(r.message, /simulated/i);
   });
 });
