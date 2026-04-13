@@ -143,3 +143,65 @@ function buildJsonAnalysis(rows: any[]): FileAnalysis {
   }
   return { rowCount: rows.length, columns: Array.from(columnSet) };
 }
+
+// ── Column reader for DQ rule execution ───────────────────────────────────
+
+/**
+ * Read every value for a single column out of an uploaded file. Used by the
+ * data-quality rule engine to evaluate rules (NOT_NULL, UNIQUE, REGEX, …)
+ * against a specific data point. Missing keys in JSON produce `null`;
+ * unknown columns throw so the caller can surface a clear error.
+ */
+export function readColumnValues(absPath: string, columnName: string): Array<string | null> {
+  const ext = path.extname(absPath).toLowerCase();
+  const text = fs.readFileSync(absPath, 'utf-8');
+  switch (ext) {
+    case '.csv': return readDelimitedColumn(text, ',', columnName);
+    case '.tsv': return readDelimitedColumn(text, '\t', columnName);
+    case '.jsonl':
+    case '.ndjson': return readJsonLinesColumn(text, columnName);
+    case '.json': return readJsonColumn(text, columnName);
+    default:
+      throw new Error(`Unsupported file type: ${ext || '(no extension)'}`);
+  }
+}
+
+function readDelimitedColumn(text: string, delimiter: string, columnName: string): Array<string | null> {
+  const clean = text.replace(/^\uFEFF/, '');
+  const lines = clean.split(/\r?\n/).filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+  const header = splitDelimitedRow(lines[0], delimiter).map((c) => c.trim());
+  const idx = header.indexOf(columnName);
+  if (idx === -1) {
+    throw new Error(`Column "${columnName}" not found in file (available: ${header.join(', ')})`);
+  }
+  const out: Array<string | null> = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = splitDelimitedRow(lines[i], delimiter);
+    const v = cols[idx];
+    out.push(v === undefined || v === '' ? null : v);
+  }
+  return out;
+}
+
+function readJsonColumn(text: string, columnName: string): Array<string | null> {
+  const parsed = JSON.parse(text);
+  const rows: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : (parsed && typeof parsed === 'object' && Array.isArray((parsed as any).data))
+      ? (parsed as any).data
+      : [];
+  return rows.map((r) => extractJsonValue(r, columnName));
+}
+
+function readJsonLinesColumn(text: string, columnName: string): Array<string | null> {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  return lines.map((l) => extractJsonValue(JSON.parse(l), columnName));
+}
+
+function extractJsonValue(row: unknown, columnName: string): string | null {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const v = (row as Record<string, unknown>)[columnName];
+  if (v === undefined || v === null) return null;
+  return typeof v === 'string' ? v : JSON.stringify(v);
+}

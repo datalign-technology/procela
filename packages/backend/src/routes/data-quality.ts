@@ -4,6 +4,15 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { dataAssets } from './data-assets';
+import { connections } from './connections';
+import {
+  evaluateRule,
+  suggestTemplates,
+  RULE_TEMPLATES,
+  RuleType,
+  RuleParameters,
+  RuleRunResult,
+} from '../services/dq-engine';
 
 interface DataQualityRule {
   id: string;
@@ -17,9 +26,19 @@ interface DataQualityRule {
   weight: number;
   status: 'PASSING' | 'FAILING' | 'WARNING' | 'NOT_MEASURED';
   lastMeasured: string | null;
+  // Typed-rule extensions. Older rules (without these) still work as
+  // manual "set a score" rows; new rules created from templates carry a
+  // concrete ruleType + params and can be executed by the DQ engine.
+  ruleType?: RuleType;
+  parameters?: RuleParameters;
+  lastRun?: RuleRunResult;
   createdAt: string;
   updatedAt: string;
 }
+
+const VALID_RULE_TYPES: RuleType[] = [
+  'NOT_NULL', 'UNIQUE', 'REGEX_MATCH', 'IN_SET', 'NUMERIC_RANGE', 'LENGTH_RANGE',
+];
 
 export const dataQualityRules: DataQualityRule[] = loadStore<DataQualityRule>('dataQualityRules');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
@@ -154,7 +173,8 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-quality — create rule */
 router.post('/', (req: Request, res: Response) => {
-  const { dataAssetId, dimension, name, description, threshold, currentScore, weight, orgId } = req.body;
+  const { dataAssetId, dimension, name, description, threshold, currentScore, weight, orgId,
+    ruleType, parameters } = req.body;
 
   if (!dataAssetId || !name) {
     res.status(400).json({ success: false, error: 'dataAssetId and name are required' });
@@ -165,6 +185,7 @@ router.post('/', (req: Request, res: Response) => {
   const validThreshold = typeof threshold === 'number' ? Math.max(0, Math.min(100, threshold)) : 80;
   const validScore = typeof currentScore === 'number' ? Math.max(0, Math.min(100, currentScore)) : 0;
   const validWeight = typeof weight === 'number' ? Math.max(1, Math.min(10, weight)) : 5;
+  const validRuleType: RuleType | undefined = ruleType && VALID_RULE_TYPES.includes(ruleType) ? ruleType : undefined;
 
   const status = validScore > 0 ? computeStatus(validScore, validThreshold) : 'NOT_MEASURED';
 
@@ -181,6 +202,8 @@ router.post('/', (req: Request, res: Response) => {
     weight: validWeight,
     status,
     lastMeasured: validScore > 0 ? now : null,
+    ...(validRuleType ? { ruleType: validRuleType } : {}),
+    ...(parameters && typeof parameters === 'object' ? { parameters } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -196,7 +219,8 @@ router.put('/:id', (req: Request, res: Response) => {
   const rule = dataQualityRules.find((r) => r.id === req.params.id);
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
 
-  const { dataAssetId, dimension, name, description, threshold, currentScore, weight } = req.body;
+  const { dataAssetId, dimension, name, description, threshold, currentScore, weight,
+    ruleType, parameters } = req.body;
 
   if (dataAssetId !== undefined) rule.dataAssetId = dataAssetId;
   if (dimension !== undefined && QUALITY_DIMENSIONS.includes(dimension)) rule.dimension = dimension;
@@ -204,6 +228,8 @@ router.put('/:id', (req: Request, res: Response) => {
   if (description !== undefined) rule.description = description;
   if (threshold !== undefined && typeof threshold === 'number') rule.threshold = Math.max(0, Math.min(100, threshold));
   if (weight !== undefined && typeof weight === 'number') rule.weight = Math.max(1, Math.min(10, weight));
+  if (ruleType !== undefined && VALID_RULE_TYPES.includes(ruleType)) rule.ruleType = ruleType;
+  if (parameters !== undefined && typeof parameters === 'object' && parameters !== null) rule.parameters = parameters;
 
   if (currentScore !== undefined && typeof currentScore === 'number') {
     rule.currentScore = Math.max(0, Math.min(100, currentScore));
@@ -231,6 +257,84 @@ router.delete('/:id', (req: Request, res: Response) => {
   dataQualityRules.splice(idx, 1);
   saveStore('dataQualityRules', dataQualityRules);
   res.status(204).send();
+});
+
+/**
+ * GET /api/v1/data-quality/templates?column=<name>
+ *
+ * Returns the OOTB rule template catalog, split into `suggested` (templates
+ * whose column-name heuristic matches the requested column) and `generic`
+ * (applicable to any column). If no column is supplied, everything is
+ * returned as `generic`.
+ */
+router.get('/templates', (req: Request, res: Response) => {
+  const column = typeof req.query.column === 'string' ? req.query.column : undefined;
+  const { suggested, generic } = suggestTemplates(column);
+  const project = (t: typeof RULE_TEMPLATES[number]) => ({
+    id: t.id,
+    ruleType: t.ruleType,
+    dimension: t.dimension,
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+  });
+  res.json({
+    success: true,
+    data: {
+      suggested: suggested.map(project),
+      generic: generic.map(project),
+    },
+  });
+});
+
+/**
+ * POST /api/v1/data-quality/:id/run
+ *
+ * Execute the rule against its Data Asset's source. For assets imported
+ * from a FILE_STORAGE/LOCAL connection column we read the uploaded file
+ * and compute real pass/fail numbers; every other connection type returns
+ * a clearly-labelled simulated result.
+ */
+router.post('/:id/run', (req: Request, res: Response) => {
+  const rule = dataQualityRules.find((r) => r.id === req.params.id);
+  if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
+  if (!rule.ruleType) {
+    res.status(400).json({ success: false, error: 'This rule has no ruleType — it was created as a manual score rather than a typed DQ rule.' });
+    return;
+  }
+
+  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+  if (!asset) { res.status(404).json({ success: false, error: 'Linked data asset not found' }); return; }
+
+  // Resolve the source connection (if any) so the engine can decide
+  // whether to run for real (LOCAL file) or simulate.
+  const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+
+  const result = evaluateRule(rule.ruleType, rule.parameters || {}, {
+    connectionType: conn?.connectionType,
+    storageType: conn?.config?.storageType,
+    localFilePath: conn?.config?.localFilePath,
+    sourceColumn: asset.sourceColumn,
+    originalFileName: conn?.config?.originalFileName,
+    assetId: asset.id,
+    ruleId: rule.id,
+  });
+
+  rule.lastRun = result;
+  rule.currentScore = result.passRate;
+  rule.lastMeasured = result.ranAt;
+  rule.status = computeStatus(result.passRate, rule.threshold);
+  rule.updatedAt = result.ranAt;
+  saveStore('dataQualityRules', dataQualityRules);
+
+  auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'RUN', null, {
+    simulated: result.simulated,
+    passRate: result.passRate,
+    totalRows: result.totalRows,
+  });
+  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows }, 'DQ rule run');
+
+  res.json({ success: true, data: result });
 });
 
 export default router;
