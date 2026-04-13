@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -13,6 +13,12 @@ interface SystemEntity {
   systemType: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ConnectionSummary {
+  id: string;
+  systemId: string;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNTESTED';
 }
 
 const inputStyle: React.CSSProperties = {
@@ -56,7 +62,9 @@ const emptyForm: FormData = { name: '', description: '', systemType: '' };
 
 export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
+  const navigate = useNavigate();
   const [systems, setSystems] = useState<SystemEntity[]>([]);
+  const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -74,9 +82,15 @@ export default function SystemsPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const res = await apiClient.get<{ success: boolean; data: SystemEntity[]; systemTypes: string[] }>(`/systems${query}`);
-      setSystems(res.data || []);
-      setSystemTypes(res.systemTypes || []);
+      const [sysRes, connRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: SystemEntity[]; systemTypes: string[] }>(`/systems${query}`),
+        // Connections power the per-row count + shortcut; this fetch is
+        // best-effort — a failure here must not block the systems list.
+        apiClient.get<{ success: boolean; data: ConnectionSummary[] }>(`/connections${query}`).catch(() => ({ data: [] as ConnectionSummary[] })),
+      ]);
+      setSystems(sysRes.data || []);
+      setSystemTypes(sysRes.systemTypes || []);
+      setConnections(connRes.data || []);
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -351,30 +365,54 @@ export default function SystemsPage() {
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Type</th>
                 <th style={thStyle}>Description</th>
+                <th style={{ ...thStyle, width: 140 }}>Connections</th>
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {systems.map((sys) => (
-                <tr key={sys.id} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
-                  onMouseEnter={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                  onMouseLeave={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = ''; }}>
-                  <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                    <input type="checkbox" checked={selectedIds.has(sys.id)} onChange={() => toggleSelect(sys.id)} />
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>{sys.name}</td>
-                  <td style={tdStyle}>
-                    {sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                  </td>
-                  <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
-                    {sys.description || '--'}
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEdit(sys)}>Edit</button>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => setConfirmDelete(sys.id)}>Delete</button>
-                  </td>
-                </tr>
-              ))}
+              {systems.map((sys) => {
+                const sysConnections = connections.filter((c) => c.systemId === sys.id);
+                const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
+                return (
+                  <tr key={sys.id} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
+                    onMouseEnter={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = ''; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                      <input type="checkbox" checked={selectedIds.has(sys.id)} onChange={() => toggleSelect(sys.id)} />
+                    </td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }}>{sys.name}</td>
+                    <td style={tdStyle}>
+                      {sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                    </td>
+                    <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
+                      {sys.description || '--'}
+                    </td>
+                    <td style={tdStyle}>
+                      {sysConnections.length > 0 ? (
+                        <button
+                          onClick={() => navigate(`/systems-and-data?tab=connections&systemId=${encodeURIComponent(sys.id)}`)}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, textDecoration: 'underline' }}
+                          title="View connections for this system"
+                        >
+                          {sysConnections.length} configured{connectedCount > 0 ? ` · ${connectedCount} live` : ''}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate(`/systems-and-data?tab=connections&systemId=${encodeURIComponent(sys.id)}&open=1`)}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12 }}
+                          title="Add a connection for this system"
+                        >
+                          + Add
+                        </button>
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEdit(sys)}>Edit</button>
+                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => setConfirmDelete(sys.id)}>Delete</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

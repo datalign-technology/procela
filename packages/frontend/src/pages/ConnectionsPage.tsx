@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -152,6 +152,17 @@ function timeAgo(iso: string | null): string {
 export default function ConnectionsPage() {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // System filter read from / synced to the URL so Systems-tab shortcuts
+  // (`?systemId=<id>`) and in-page dropdown changes share a single source
+  // of truth.
+  const systemFilter = searchParams.get('systemId') || '';
+  const setSystemFilter = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next) params.set('systemId', next); else params.delete('systemId');
+    params.delete('open');
+    setSearchParams(params, { replace: true });
+  };
 
   const [connections, setConnections] = useState<ConnectionProfile[]>([]);
   const [systems, setSystems] = useState<SystemEntity[]>([]);
@@ -207,11 +218,31 @@ export default function ConnectionsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
   usePolling(fetchData, 30000);
 
+  // When we arrive with `?open=1`, auto-open the Add form with the system
+  // pre-selected (from `?systemId=`). We clear `open` afterwards so a page
+  // reload doesn't re-trigger the form.
+  useEffect(() => {
+    if (searchParams.get('open') === '1') {
+      setForm({ ...emptyForm, systemId: searchParams.get('systemId') || '' });
+      setEditingId(null);
+      setShowForm(true);
+      const params = new URLSearchParams(searchParams);
+      params.delete('open');
+      setSearchParams(params, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   // -----------------------------------------------------------------------
   // CRUD
   // -----------------------------------------------------------------------
 
-  const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
+  const openAdd = () => {
+    // Pre-fill systemId from the active filter so "+ Add Connection" under a
+    // System filter keeps the user's context.
+    setForm({ ...emptyForm, systemId: systemFilter });
+    setEditingId(null);
+    setShowForm(true);
+  };
 
   const openEdit = (conn: ConnectionProfile) => {
     setForm({
@@ -322,12 +353,18 @@ export default function ConnectionsPage() {
   };
 
   // -----------------------------------------------------------------------
-  // Stats
+  // Filtering + Stats
   // -----------------------------------------------------------------------
 
-  const connectedCount = connections.filter((c) => c.status === 'CONNECTED').length;
-  const errorCount = connections.filter((c) => c.status === 'ERROR' || c.status === 'DISCONNECTED').length;
-  const untestedCount = connections.filter((c) => c.status === 'UNTESTED').length;
+  // Stats and the table both operate on the system-filtered view so the
+  // numbers line up with what the user is looking at.
+  const visibleConnections = systemFilter
+    ? connections.filter((c) => c.systemId === systemFilter)
+    : connections;
+  const connectedCount = visibleConnections.filter((c) => c.status === 'CONNECTED').length;
+  const errorCount = visibleConnections.filter((c) => c.status === 'ERROR' || c.status === 'DISCONNECTED').length;
+  const untestedCount = visibleConnections.filter((c) => c.status === 'UNTESTED').length;
+  const filterSystem = systemFilter ? systems.find((s) => s.id === systemFilter) : null;
 
   // -----------------------------------------------------------------------
   // Form fields by connection type
@@ -451,10 +488,21 @@ export default function ConnectionsPage() {
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Connect to external data sources to discover and import data assets.
+            {filterSystem
+              ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
+              : 'Connect to external data sources to discover and import data assets.'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>System:</label>
+          <select
+            style={{ ...selectStyle, padding: '6px 10px', fontSize: 13, width: 'auto', minWidth: 180 }}
+            value={systemFilter}
+            onChange={(e) => setSystemFilter(e.target.value)}
+          >
+            <option value="">All systems</option>
+            {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
+          </select>
           {connections.length > 0 && (
             <button
               onClick={() => setShowDeleteAll(true)}
@@ -470,10 +518,10 @@ export default function ConnectionsPage() {
       </div>
 
       {/* Stats */}
-      {connections.length > 0 && (
+      {visibleConnections.length > 0 && (
         <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
           <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{connections.length}</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{visibleConnections.length}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Connections</div>
           </div>
           <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
@@ -565,9 +613,13 @@ export default function ConnectionsPage() {
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
-        ) : connections.length === 0 && !showForm ? (
+        ) : visibleConnections.length === 0 && !showForm ? (
           <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>No connections configured yet.</p>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              {filterSystem
+                ? `No connections configured for ${filterSystem.name} yet.`
+                : 'No connections configured yet.'}
+            </p>
             <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Use the "+ Add Connection" button above to connect to your data sources.</p>
           </div>
         ) : (
@@ -584,7 +636,7 @@ export default function ConnectionsPage() {
               </tr>
             </thead>
             <tbody>
-              {connections.map((conn) => {
+              {visibleConnections.map((conn) => {
                 const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
                 const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
                 const isTesting = testingIds.has(conn.id);

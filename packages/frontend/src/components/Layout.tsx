@@ -26,6 +26,7 @@ const navSections: NavSection[] = [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/systems-and-data', label: 'Systems & Data', icon: '\u2699' },
+      { to: '/systems-and-data?tab=connections', label: 'Connections', icon: '\u26A1' },
     ],
   },
   {
@@ -38,7 +39,6 @@ const navSections: NavSection[] = [
   {
     label: 'Connect',
     items: [
-      { to: '/connections', label: 'Connections', icon: '\u26A1' },
       { to: '/mappings', label: 'Mappings', icon: '\u2194' },
       { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
     ],
@@ -331,20 +331,38 @@ export default function Layout() {
               {section.label && !sidebarCollapsed && (
                 <div className={styles.navGroupLabel}>{section.label}</div>
               )}
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) =>
-                    clsx(styles.navLink, isActive && styles.navLinkActive)
-                  }
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <span className={styles.navIcon}>{item.icon}</span>
-                  {!sidebarCollapsed && item.label}
-                </NavLink>
-              ))}
+              {section.items.map((item) => {
+                // Compute active state manually so that links sharing a
+                // pathname but differing by `?tab=` (e.g. Systems & Data vs
+                // Connections) don't both light up simultaneously.
+                const [itemPath, itemSearch = ''] = item.to.split('?');
+                const itemTab = new URLSearchParams(itemSearch).get('tab');
+                const currentTab = new URLSearchParams(location.search).get('tab');
+                const pathMatches = itemPath === '/'
+                  ? location.pathname === '/'
+                  : location.pathname === itemPath;
+                const tabMatches = itemTab
+                  ? currentTab === itemTab
+                  // A plain entry (no ?tab=) is active only when no tab is
+                  // selected or when the selected tab is not one owned by a
+                  // sibling nav entry. For /systems-and-data the plain entry
+                  // covers 'systems' and 'data-assets'; Connections owns
+                  // 'connections'.
+                  : currentTab !== 'connections';
+                const isActive = pathMatches && tabMatches;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={clsx(styles.navLink, isActive && styles.navLinkActive)}
+                    title={sidebarCollapsed ? item.label : undefined}
+                  >
+                    <span className={styles.navIcon}>{item.icon}</span>
+                    {!sidebarCollapsed && item.label}
+                  </NavLink>
+                );
+              })}
             </div>
           ))}
 
