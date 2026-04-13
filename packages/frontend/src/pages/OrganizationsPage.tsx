@@ -245,7 +245,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelectOrg, s
 // ══════════════════════════════════════════════════════════════
 
 export default function OrganizationsPage() {
-  const { triggerRefresh, orgs: accessibleOrgs } = useOrgContext();
+  const { triggerRefresh, orgs: accessibleOrgs, activeOrgId } = useOrgContext();
 
   // Org state
   const [tree, setTree] = useState<OrgNode[]>([]);
@@ -287,21 +287,27 @@ export default function OrganizationsPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      // Scope the org tree to the active "Working In" context so siblings
+      // and ancestors are hidden even when the user has broader permissions.
+      const orgQuery = activeOrgId ? `?scopeOrgId=${encodeURIComponent(activeOrgId)}` : '';
       const [orgRes, peopleRes, govRes, damaRes, domainRes] = await Promise.all([
-        apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>('/organizations'),
+        apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>(`/organizations${orgQuery}`),
         apiClient.get<{ success: boolean; data: Person[]; roles: string[] }>('/people'),
         apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
         apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
         apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
       ]);
-      setTree(orgRes.tree || []); setFlatOrgs(orgRes.data || []); setOrgTypes(orgRes.orgTypes || []);
+      const nextFlat = orgRes.data || [];
+      setTree(orgRes.tree || []); setFlatOrgs(nextFlat); setOrgTypes(orgRes.orgTypes || []);
+      // Clear any stale selection that fell outside the new scope.
+      setSelectedOrgId((prev) => (prev && nextFlat.some((o) => o.id === prev) ? prev : ''));
       setPeople(peopleRes.data || []); setRoles(peopleRes.roles || []);
       setAllGovernanceGroups(govRes.data || []);
       setAllDamaRoles(damaRes.data || []);
       setAllDataDomains(domainRes.data || []);
     } catch { /* */ }
     finally { setLoading(false); }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

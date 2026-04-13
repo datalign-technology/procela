@@ -88,13 +88,36 @@ router.delete('/all', (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, deleted: count });
 });
 
-/** GET /api/v1/organizations — returns flat list and tree, scoped to the user's visible orgs */
+/**
+ * GET /api/v1/organizations — returns flat list and tree, scoped to the
+ * user's visible orgs and (optionally) narrowed to a subtree rooted at
+ * `?scopeOrgId=<id>`. The frontend passes its active "Working In" context
+ * as `scopeOrgId` so the user only sees the org they're currently working in
+ * and its descendants.
+ */
 router.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const { getVisibleOrgIds } = accessHelpers();
+  const { getVisibleOrgIds, getDescendantOrgIds } = accessHelpers();
   const visible = getVisibleOrgIds(req.user);
-  const scoped = visible === null
+  let scoped = visible === null
     ? organizations
     : organizations.filter((o) => visible.has(o.id));
+
+  const scopeOrgId = typeof req.query.scopeOrgId === 'string' ? req.query.scopeOrgId : null;
+  if (scopeOrgId) {
+    const scopeRoot = organizations.find((o) => o.id === scopeOrgId);
+    if (!scopeRoot) {
+      res.status(404).json({ success: false, error: 'Scope organization not found' });
+      return;
+    }
+    // Security: the scope must be in the user's visible set.
+    if (visible !== null && !visible.has(scopeOrgId)) {
+      res.status(403).json({ success: false, error: 'You do not have access to the specified scope organization' });
+      return;
+    }
+    const subtreeIds = new Set<string>([scopeOrgId, ...getDescendantOrgIds(scopeOrgId)]);
+    scoped = scoped.filter((o) => subtreeIds.has(o.id));
+  }
+
   res.json({
     success: true,
     data: scoped,
