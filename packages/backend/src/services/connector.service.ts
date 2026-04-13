@@ -11,6 +11,7 @@
  */
 
 import fs from 'fs';
+import net from 'net';
 import { analyzeLocalFile } from '../lib/local-file-connector';
 
 export interface ConnectorResult {
@@ -57,57 +58,217 @@ export interface ConnectionProfileLike {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Real "reachability" tests
+// ---------------------------------------------------------------------------
+// These tests verify that the configured endpoint is reachable from the
+// backend — they do NOT authenticate or query data. A real credential-
+// validating test would need a per-type driver (pg, mysql2, snowflake-sdk,
+// @aws-sdk/client-s3, …) which is intentionally out of scope for this
+// prototype. Error messages surface timeouts, DNS failures, connection
+// refused, and HTTP status codes directly.
+
+const DB_DEFAULT_PORTS: Record<string, number> = {
+  POSTGRESQL: 5432,
+  MYSQL: 3306,
+  SQLSERVER: 1433,
+  ORACLE: 1521,
+  MONGODB: 27017,
+};
+
+const TCP_TIMEOUT_MS = 5000;
+const HTTP_TIMEOUT_MS = 10000;
+
+function tcpProbe(host: string, port: number, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host, port });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`Connection to ${host}:${port} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    socket.once('connect', () => {
+      clearTimeout(timer);
+      socket.end();
+      resolve();
+    });
+    socket.once('error', (err) => {
+      clearTimeout(timer);
+      socket.destroy();
+      reject(err);
+    });
+  });
+}
+
+async function httpProbe(url: string, timeoutMs: number, method: 'GET' | 'HEAD' = 'HEAD'): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { method, signal: ctrl.signal, redirect: 'follow' });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Derive the probe URL for a cloud file-storage bucket. Returns null for
+ * unsupported storage types (the caller falls back to a different strategy).
+ */
+export function resolveCloudFileUrl(storageType: string | undefined, bucket: string): string | null {
+  switch (storageType) {
+    case 'S3': return `https://${bucket}.s3.amazonaws.com`;
+    case 'AZURE_BLOB': return `https://${bucket}.blob.core.windows.net`;
+    case 'GCS': return `https://storage.googleapis.com/${bucket}`;
+    default: return null;
+  }
+}
+
+/**
+ * Derive the probe URL for a data warehouse. Snowflake auto-completes
+ * `<account>.snowflakecomputing.com`; BigQuery uses a fixed endpoint; other
+ * warehouses accept either a raw host or a full URL in `account`.
+ */
+export function resolveDataWarehouseUrl(warehouseType: string | undefined, account: string): string {
+  switch (warehouseType) {
+    case 'SNOWFLAKE':
+      return account.includes('.') ? `https://${account}` : `https://${account}.snowflakecomputing.com`;
+    case 'BIGQUERY':
+      return 'https://bigquery.googleapis.com';
+    case 'REDSHIFT':
+    case 'DATABRICKS':
+    default:
+      return /^https?:\/\//i.test(account) ? account : `https://${account}`;
+  }
+}
+
+async function testDatabase(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  const { host, port, dbType } = profile.config;
+  const start = Date.now();
+  if (!host) return { success: false, message: 'No host configured', latencyMs: 0 };
+  const resolvedPort = port || DB_DEFAULT_PORTS[dbType || ''] || 0;
+  if (!resolvedPort) {
+    return { success: false, message: 'No port configured and no default for this database type', latencyMs: 0 };
+  }
+  try {
+    await tcpProbe(host, resolvedPort, TCP_TIMEOUT_MS);
+    return {
+      success: true,
+      message: `Reached ${host}:${resolvedPort} — TCP connection opened (credentials not verified)`,
+      latencyMs: Date.now() - start,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : String(err),
+      latencyMs: Date.now() - start,
+    };
+  }
+}
+
+async function testApi(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  const { baseUrl } = profile.config;
+  const start = Date.now();
+  if (!baseUrl) return { success: false, message: 'No base URL configured', latencyMs: 0 };
+  try {
+    // GET is more widely supported than HEAD across API gateways. A 2xx/3xx
+    // is clearly healthy; 4xx is still a reachable endpoint so we surface
+    // it as a warning-level success. 5xx or network errors are failures.
+    const res = await httpProbe(baseUrl, HTTP_TIMEOUT_MS, 'GET');
+    const reachable = res.status < 500;
+    return {
+      success: reachable,
+      message: reachable
+        ? `Reached ${baseUrl} — HTTP ${res.status}${res.status >= 400 ? ' (auth/permission may be required)' : ''}`
+        : `HTTP ${res.status} from ${baseUrl}`,
+      latencyMs: Date.now() - start,
+    };
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : String(err), latencyMs: Date.now() - start };
+  }
+}
+
+async function testDataWarehouse(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  const { warehouseType, account } = profile.config;
+  const start = Date.now();
+  if (!account) return { success: false, message: 'No account configured', latencyMs: 0 };
+  const url = resolveDataWarehouseUrl(warehouseType, account);
+  try {
+    const res = await httpProbe(url, HTTP_TIMEOUT_MS, 'HEAD');
+    return {
+      success: res.status < 500,
+      message: `Reached ${url} — HTTP ${res.status} (credentials not verified)`,
+      latencyMs: Date.now() - start,
+    };
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : String(err), latencyMs: Date.now() - start };
+  }
+}
+
+async function testCloudFileStorage(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  const { storageType, bucket } = profile.config;
+  const start = Date.now();
+  if (!bucket) return { success: false, message: 'No bucket/container configured', latencyMs: 0 };
+
+  // SFTP uses a different transport — probe port 22 on the configured host
+  // (we re-use the `bucket` field as the hostname, matching the UI label).
+  if (storageType === 'SFTP') {
+    try {
+      await tcpProbe(bucket, 22, TCP_TIMEOUT_MS);
+      return {
+        success: true,
+        message: `Reached ${bucket}:22 — SFTP port open (credentials not verified)`,
+        latencyMs: Date.now() - start,
+      };
+    } catch (err) {
+      return { success: false, message: err instanceof Error ? err.message : String(err), latencyMs: Date.now() - start };
+    }
+  }
+
+  const url = resolveCloudFileUrl(storageType, bucket);
+  if (!url) {
+    return { success: false, message: `Unsupported storage type: ${storageType || '(none)'}`, latencyMs: 0 };
+  }
+  try {
+    const res = await httpProbe(url, HTTP_TIMEOUT_MS, 'HEAD');
+    // S3/Azure/GCS typically return 403/404 for bucket-level HEAD without
+    // credentials — that still proves the endpoint resolved and is live.
+    return {
+      success: res.status < 500,
+      message: `Reached ${url} — HTTP ${res.status} (credentials not verified)`,
+      latencyMs: Date.now() - start,
+    };
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : String(err), latencyMs: Date.now() - start };
+  }
+}
+
+async function testSpreadsheet(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  const { documentUrl } = profile.config;
+  const start = Date.now();
+  if (!documentUrl) return { success: false, message: 'No document URL configured', latencyMs: 0 };
+  try {
+    const res = await httpProbe(documentUrl, HTTP_TIMEOUT_MS, 'HEAD');
+    return {
+      success: res.status < 500,
+      message: `Reached document — HTTP ${res.status} (credentials not verified)`,
+      latencyMs: Date.now() - start,
+    };
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : String(err), latencyMs: Date.now() - start };
+  }
+}
+
 export async function testConnection(profile: ConnectionProfileLike): Promise<ConnectorResult> {
-  // Real test for LOCAL file uploads: read the file and confirm we can parse it.
-  if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'LOCAL') {
-    return testLocalFile(profile);
+  switch (profile.connectionType) {
+    case 'FILE_STORAGE':
+      if (profile.config.storageType === 'LOCAL') return testLocalFile(profile);
+      return testCloudFileStorage(profile);
+    case 'DATABASE': return testDatabase(profile);
+    case 'API': return testApi(profile);
+    case 'DATA_WAREHOUSE': return testDataWarehouse(profile);
+    case 'SPREADSHEET': return testSpreadsheet(profile);
+    default:
+      return { success: false, message: `Unsupported connection type: ${profile.connectionType}`, latencyMs: 0 };
   }
-
-  // Simulate connection test with 200-800ms delay
-  await new Promise((r) => setTimeout(r, 200 + Math.random() * 600));
-
-  const hasEndpoint =
-    profile.config.host ||
-    profile.config.baseUrl ||
-    profile.config.bucket ||
-    profile.config.documentUrl ||
-    profile.config.account;
-
-  if (!hasEndpoint) {
-    return { success: false, message: 'No connection endpoint configured', latencyMs: 0 };
-  }
-
-  // Simulate occasional failures (10% chance)
-  if (Math.random() < 0.1) {
-    return { success: false, message: 'Connection timed out', latencyMs: 5000 };
-  }
-
-  const target =
-    profile.config.host ||
-    profile.config.baseUrl ||
-    profile.config.bucket ||
-    profile.config.account ||
-    profile.config.documentUrl;
-
-  const versionMap: Record<string, string> = {
-    POSTGRESQL: 'PostgreSQL 16.2',
-    MYSQL: 'MySQL 8.0.36',
-    SQLSERVER: 'SQL Server 2022',
-    ORACLE: 'Oracle 23c',
-    MONGODB: 'MongoDB 7.0',
-  };
-
-  return {
-    success: true,
-    message: `Successfully connected to ${target}`,
-    latencyMs: Math.round(200 + Math.random() * 600),
-    details: {
-      version:
-        profile.connectionType === 'DATABASE' && profile.config.dbType
-          ? versionMap[profile.config.dbType] || 'Unknown'
-          : undefined,
-    },
-  };
 }
 
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
@@ -170,7 +331,7 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
 
   return {
     success: true,
-    message: `Discovered ${mockAssets.length} assets`,
+    message: `Discovered ${mockAssets.length} sample assets (simulated — real discovery requires a ${profile.connectionType} driver)`,
     latencyMs: Math.round(500 + Math.random() * 1000),
     details: { tableCount: mockAssets.length, assets: mockAssets },
   };
