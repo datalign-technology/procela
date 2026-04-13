@@ -16,7 +16,15 @@ interface ConnectionProfile {
   systemId: string;
   name: string;
   connectionType: string;
-  config: Record<string, any>;
+  config: Record<string, any> & {
+    // LOCAL file storage fields populated by the upload endpoint
+    localFilePath?: string;
+    originalFileName?: string;
+    fileSize?: number;
+    rowCount?: number;
+    columns?: string[];
+    lastUploadedAt?: string;
+  };
   credentials: Record<string, any>;
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNTESTED';
   lastTestedAt: string | null;
@@ -117,6 +125,14 @@ const emptyForm: FormData = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function formatBytes(bytes: number | undefined): string {
+  if (!bytes || bytes < 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
 function configSummary(conn: ConnectionProfile): string {
   const c = conn.config;
   if (conn.connectionType === 'DATABASE') {
@@ -124,6 +140,11 @@ function configSummary(conn: ConnectionProfile): string {
     return parts.join('') || '--';
   }
   if (conn.connectionType === 'FILE_STORAGE') {
+    if (c.storageType === 'LOCAL') {
+      return c.originalFileName
+        ? `LOCAL://${c.originalFileName} (${formatBytes(c.fileSize)})`
+        : 'LOCAL (no file uploaded)';
+    }
     return c.bucket ? `${c.storageType || ''}://${c.bucket}${c.path ? '/' + c.path : ''}` : '--';
   }
   if (conn.connectionType === 'API') return c.baseUrl || '--';
@@ -170,6 +191,10 @@ export default function ConnectionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  // Local-file upload staging — the File is attached to the form but not sent
+  // until Save (we need the connection id the POST/PUT returns).
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
   const [discoveringId, setDiscoveringId] = useState<string | null>(null);
   const [discoveredAssets, setDiscoveredAssets] = useState<DiscoveredAsset[]>([]);
@@ -241,6 +266,7 @@ export default function ConnectionsPage() {
     // System filter keeps the user's context.
     setForm({ ...emptyForm, systemId: systemFilter });
     setEditingId(null);
+    setPendingFile(null);
     setShowForm(true);
   };
 
@@ -253,22 +279,53 @@ export default function ConnectionsPage() {
       credentials: { ...conn.credentials },
     });
     setEditingId(conn.id);
+    setPendingFile(null);
     setShowForm(true);
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
     try {
+      setUploading(!!pendingFile);
+      let savedId: string | null = editingId;
       if (editingId) {
         await apiClient.put(`/connections/${editingId}`, form);
         addToast('success', 'Connection profile updated');
       } else {
-        await apiClient.post('/connections', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+        // New connections don't have an id yet; grab it from the response so
+        // a staged local file can be uploaded against the right profile.
+        const res = await apiClient.post<{ success: boolean; data: ConnectionProfile }>(
+          '/connections',
+          { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) },
+        );
+        savedId = res.data?.id || null;
         addToast('success', 'Connection profile created');
       }
-      setShowForm(false); setEditingId(null); setForm(emptyForm); fetchData();
+
+      // Upload the staged file for LOCAL file-storage connections after the
+      // profile exists, so the backend has an id to key the upload dir on.
+      if (pendingFile && savedId && form.connectionType === 'FILE_STORAGE' && form.config.storageType === 'LOCAL') {
+        try {
+          const uploadRes = await apiClient.upload<{ success: boolean; data: { parseError: string | null } }>(
+            `/connections/${savedId}/upload`,
+            pendingFile,
+          );
+          if (uploadRes.data?.parseError) {
+            addToast('error', `File saved but parse failed: ${uploadRes.data.parseError}`);
+          } else {
+            addToast('success', `Uploaded ${pendingFile.name}`);
+          }
+        } catch (e) {
+          addToast('error', e instanceof Error ? e.message : 'Upload failed');
+        }
+      }
+
+      setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null);
+      fetchData();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -288,7 +345,7 @@ export default function ConnectionsPage() {
     } catch { addToast('error', 'Delete all failed'); }
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null); };
 
   // -----------------------------------------------------------------------
   // Test
@@ -400,7 +457,9 @@ export default function ConnectionsPage() {
           </>
         );
 
-      case 'FILE_STORAGE':
+      case 'FILE_STORAGE': {
+        const isLocal = form.config.storageType === 'LOCAL';
+        const existingFile = form.config.originalFileName;
         return (
           <>
             {fieldRow('Storage Type', (
@@ -409,11 +468,62 @@ export default function ConnectionsPage() {
                 {storageTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             ))}
-            {fieldRow('Bucket / Container', <input style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
-            {fieldRow('Path', <input style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
-            {fieldRow('API Key / Access Key', <input style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
+            {isLocal ? (
+              fieldRow('File', (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      id="local-file-input"
+                      type="file"
+                      accept=".csv,.tsv,.json,.jsonl,.ndjson,text/csv,application/json"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) setPendingFile(f);
+                        // Reset the input so picking the same file again re-fires onChange.
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }}
+                      onClick={() => document.getElementById('local-file-input')?.click()}
+                    >
+                      {pendingFile || existingFile ? 'Choose Different File' : 'Browse\u2026'}
+                    </button>
+                    {pendingFile ? (
+                      <span style={{ fontSize: 12, color: 'var(--color-text)' }}>
+                        <strong>{pendingFile.name}</strong> ({formatBytes(pendingFile.size)})
+                        <span style={{ color: 'var(--color-text-muted)', marginLeft: 6 }}>— will upload on Save</span>
+                      </span>
+                    ) : existingFile ? (
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        Current: <strong>{existingFile}</strong>
+                        {form.config.fileSize != null && ` (${formatBytes(form.config.fileSize)})`}
+                        {form.config.rowCount != null && ` — ${form.config.rowCount.toLocaleString()} rows`}
+                        {form.config.columns && form.config.columns.length > 0 && ` × ${form.config.columns.length} columns`}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No file selected yet. CSV, TSV, JSON, JSONL up to 50 MB.</span>
+                    )}
+                  </div>
+                  {form.config.columns && form.config.columns.length > 0 && !pendingFile && (
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      Columns: {form.config.columns.slice(0, 10).join(', ')}{form.config.columns.length > 10 ? `, +${form.config.columns.length - 10} more` : ''}
+                    </div>
+                  )}
+                </div>
+              ), true)
+            ) : (
+              <>
+                {fieldRow('Bucket / Container', <input style={inputStyle} value={form.config.bucket || ''} onChange={(e) => updateConfig('bucket', e.target.value)} placeholder="e.g. my-data-bucket" />)}
+                {fieldRow('Path', <input style={inputStyle} value={form.config.path || ''} onChange={(e) => updateConfig('path', e.target.value)} placeholder="e.g. /data/exports" />)}
+                {fieldRow('API Key / Access Key', <input style={inputStyle} type="password" value={form.credentials.apiKey || ''} onChange={(e) => updateCreds('apiKey', e.target.value)} placeholder={editingId ? '(unchanged if left blank)' : 'Access key'} />)}
+              </>
+            )}
           </>
         );
+      }
 
       case 'API':
         return (
@@ -582,9 +692,13 @@ export default function ConnectionsPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={handleSave}>
-              {editingId ? 'Save Changes' : 'Add Connection'}
+            <button style={btnSecondary} onClick={handleCancel} disabled={uploading}>Cancel</button>
+            <button
+              style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1 }}
+              disabled={!form.name.trim() || uploading}
+              onClick={handleSave}
+            >
+              {uploading ? 'Uploading\u2026' : editingId ? 'Save Changes' : 'Add Connection'}
             </button>
           </div>
         </div>

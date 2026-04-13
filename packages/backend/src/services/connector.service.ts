@@ -1,9 +1,17 @@
 /**
  * Mock Connector Service
  *
- * Simulates connecting to external data sources and discovering assets.
- * In production this would use real drivers (pg, mysql2, @azure/storage-blob, etc.).
+ * Simulates connecting to external data sources and discovering assets for
+ * most connection types. The LOCAL file-storage subtype is the exception —
+ * for uploaded files we actually read the bytes from disk and surface real
+ * row/column counts to the user.
+ *
+ * In production the cloud/database/warehouse branches would use real drivers
+ * (pg, mysql2, @azure/storage-blob, etc.).
  */
+
+import fs from 'fs';
+import { analyzeLocalFile } from '../lib/local-file-connector';
 
 export interface ConnectorResult {
   success: boolean;
@@ -12,7 +20,7 @@ export interface ConnectorResult {
   details?: {
     version?: string;
     tableCount?: number;
-    assets?: Array<{ name: string; type: string; rowCount?: number; lastModified?: string }>;
+    assets?: Array<{ name: string; type: string; rowCount?: number; lastModified?: string; columns?: string[] }>;
   };
 }
 
@@ -34,6 +42,12 @@ export interface ConnectionProfileLike {
     warehouse?: string;
     spreadsheetType?: string;
     documentUrl?: string;
+    // LOCAL file-storage-specific
+    localFilePath?: string;
+    originalFileName?: string;
+    fileSize?: number;
+    rowCount?: number;
+    columns?: string[];
   };
   credentials?: {
     username?: string;
@@ -44,6 +58,11 @@ export interface ConnectionProfileLike {
 }
 
 export async function testConnection(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  // Real test for LOCAL file uploads: read the file and confirm we can parse it.
+  if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'LOCAL') {
+    return testLocalFile(profile);
+  }
+
   // Simulate connection test with 200-800ms delay
   await new Promise((r) => setTimeout(r, 200 + Math.random() * 600));
 
@@ -92,6 +111,12 @@ export async function testConnection(profile: ConnectionProfileLike): Promise<Co
 }
 
 export async function discoverAssets(profile: ConnectionProfileLike): Promise<ConnectorResult> {
+  // Real discovery for LOCAL file uploads: surface the file as a single
+  // asset with its parsed columns attached.
+  if (profile.connectionType === 'FILE_STORAGE' && profile.config.storageType === 'LOCAL') {
+    return discoverLocalFile(profile);
+  }
+
   // Simulate discovery with delay
   await new Promise((r) => setTimeout(r, 500 + Math.random() * 1000));
 
@@ -149,4 +174,76 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
     latencyMs: Math.round(500 + Math.random() * 1000),
     details: { tableCount: mockAssets.length, assets: mockAssets },
   };
+}
+
+// ── LOCAL file-storage helpers ────────────────────────────────────────────
+
+function testLocalFile(profile: ConnectionProfileLike): ConnectorResult {
+  const start = Date.now();
+  const { localFilePath, originalFileName } = profile.config;
+
+  if (!localFilePath) {
+    return { success: false, message: 'No file uploaded yet. Use the Browse button to pick a file.', latencyMs: 0 };
+  }
+  if (!fs.existsSync(localFilePath)) {
+    return { success: false, message: 'Uploaded file is missing on disk. Please re-upload.', latencyMs: Date.now() - start };
+  }
+
+  try {
+    const { rowCount, columns } = analyzeLocalFile(localFilePath);
+    return {
+      success: true,
+      message: `Read ${originalFileName || 'file'}: ${rowCount.toLocaleString()} rows × ${columns.length} column${columns.length === 1 ? '' : 's'}`,
+      latencyMs: Date.now() - start,
+      details: {
+        assets: [{
+          name: originalFileName || 'uploaded-file',
+          type: 'FILE',
+          rowCount,
+          columns,
+        }],
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to read file',
+      latencyMs: Date.now() - start,
+    };
+  }
+}
+
+function discoverLocalFile(profile: ConnectionProfileLike): ConnectorResult {
+  const start = Date.now();
+  const { localFilePath, originalFileName } = profile.config;
+
+  if (!localFilePath || !fs.existsSync(localFilePath)) {
+    return { success: false, message: 'No file uploaded yet. Use the Browse button to pick a file.', latencyMs: 0 };
+  }
+
+  try {
+    const { rowCount, columns } = analyzeLocalFile(localFilePath);
+    const stat = fs.statSync(localFilePath);
+    // The file is the asset; columns are attached as metadata so the UI can
+    // show the inferred schema when the user imports it as a Data Asset.
+    const asset = {
+      name: originalFileName || 'uploaded-file',
+      type: 'FILE',
+      rowCount,
+      columns,
+      lastModified: stat.mtime.toISOString(),
+    };
+    return {
+      success: true,
+      message: `Discovered 1 asset with ${columns.length} column${columns.length === 1 ? '' : 's'}`,
+      latencyMs: Date.now() - start,
+      details: { tableCount: 1, assets: [asset] },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to read file',
+      latencyMs: Date.now() - start,
+    };
+  }
 }

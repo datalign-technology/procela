@@ -1,8 +1,11 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, raw } from 'express';
+import path from 'path';
+import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
 import { testConnection, discoverAssets } from '../services/connector.service';
+import { analyzeLocalFile, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
 import logger from '../lib/logger';
 
 // ---------------------------------------------------------------------------
@@ -28,6 +31,14 @@ interface ConnectionProfile {
     storageType?: 'S3' | 'AZURE_BLOB' | 'GCS' | 'SFTP' | 'LOCAL';
     bucket?: string;
     path?: string;
+
+    // LOCAL file uploads (populated by the /upload endpoint)
+    localFilePath?: string;       // absolute path on disk
+    originalFileName?: string;
+    fileSize?: number;
+    rowCount?: number;
+    columns?: string[];
+    lastUploadedAt?: string;
 
     // API
     baseUrl?: string;
@@ -109,9 +120,12 @@ const router = Router();
 /** DELETE /api/v1/connections/all — delete all connection profiles */
 router.delete('/all', (_req: Request, res: Response) => {
   const count = connections.length;
+  const removedIds = connections.map((c) => c.id);
   connections.splice(0, connections.length);
   saveStore('connections', connections);
   auditService.log(DEV_ORG_ID, null, 'ConnectionProfile', '*', 'DELETE_ALL', null, { count });
+  // Clean up every connection's upload dir alongside its profile.
+  for (const id of removedIds) deleteLocalFileDir(id);
   logger.info({ count }, 'Deleted all connection profiles');
   res.json({ success: true, deleted: count });
 });
@@ -216,6 +230,8 @@ router.delete('/:id', (req: Request, res: Response) => {
   auditService.log(removed.orgId, null, 'ConnectionProfile', removed.id, 'DELETE', toPublic(removed), null);
   connections.splice(idx, 1);
   saveStore('connections', connections);
+  // Clean up any locally-uploaded file for this connection.
+  deleteLocalFileDir(removed.id);
   res.status(204).send();
 });
 
@@ -265,5 +281,93 @@ router.post('/:id/discover', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Asset discovery failed' });
   }
 });
+
+/**
+ * POST /api/v1/connections/:id/upload?filename=foo.csv
+ *
+ * Accepts the raw bytes of a local file for FILE_STORAGE/LOCAL connections.
+ * The file is stored under `.procela-data/uploads/<connId>/<filename>`, parsed
+ * to extract row count + column names, and the connection's config is updated
+ * with the resulting metadata. Only one file is stored per connection — an
+ * existing upload is replaced.
+ */
+router.post(
+  '/:id/upload',
+  raw({ type: '*/*', limit: '50mb' }),
+  async (req: Request, res: Response) => {
+    const conn = connections.find((c) => c.id === req.params.id);
+    if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+
+    if (conn.connectionType !== 'FILE_STORAGE' || conn.config.storageType !== 'LOCAL') {
+      res.status(400).json({ success: false, error: 'File upload only supported for FILE_STORAGE connections with storageType=LOCAL' });
+      return;
+    }
+
+    const rawName = typeof req.query.filename === 'string' ? req.query.filename : '';
+    const safeName = path.basename(rawName).replace(/[^\w.\-]+/g, '_');
+    if (!safeName) {
+      res.status(400).json({ success: false, error: 'filename query parameter is required' });
+      return;
+    }
+
+    const body = req.body;
+    if (!body || !(body instanceof Buffer) || body.length === 0) {
+      res.status(400).json({ success: false, error: 'Empty upload body' });
+      return;
+    }
+
+    // One file per connection — clear any prior upload first.
+    deleteLocalFileDir(conn.id);
+    const connDir = getUploadsDir(conn.id);
+    fs.mkdirSync(connDir, { recursive: true });
+    const absPath = path.join(connDir, safeName);
+    fs.writeFileSync(absPath, body);
+
+    let rowCount: number | undefined;
+    let columns: string[] | undefined;
+    let parseError: string | undefined;
+    try {
+      const analysis = analyzeLocalFile(absPath);
+      rowCount = analysis.rowCount;
+      columns = analysis.columns;
+    } catch (err) {
+      parseError = err instanceof Error ? err.message : 'Parse failed';
+    }
+
+    conn.config.localFilePath = absPath;
+    conn.config.originalFileName = safeName;
+    conn.config.fileSize = body.length;
+    conn.config.rowCount = rowCount;
+    conn.config.columns = columns;
+    conn.config.lastUploadedAt = new Date().toISOString();
+    // Clear cloud-storage fields that don't apply to a local upload.
+    delete conn.config.bucket;
+    delete conn.config.path;
+
+    // Uploading a new file invalidates any prior test result.
+    conn.status = 'UNTESTED';
+    conn.lastTestedAt = null;
+    conn.lastTestResult = parseError ? `Upload stored but parse failed: ${parseError}` : null;
+    conn.updatedAt = conn.config.lastUploadedAt;
+    saveStore('connections', connections);
+
+    auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'UPLOAD', null, {
+      fileName: safeName,
+      fileSize: body.length,
+      rowCount,
+      columns: columns?.length,
+      parseError,
+    });
+    logger.info({ id: conn.id, file: safeName, size: body.length, rowCount, parseError }, 'Uploaded connection file');
+
+    res.json({
+      success: true,
+      data: {
+        profile: toPublic(conn),
+        parseError: parseError || null,
+      },
+    });
+  },
+);
 
 export default router;
