@@ -292,40 +292,58 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
     return { success: false, message: 'No connection endpoint configured', latencyMs: 0 };
   }
 
-  // Generate mock discovered assets based on connection type
-  const mockAssets: Array<{ name: string; type: string; rowCount?: number; lastModified?: string }> = [];
+  // Generate mock discovered assets based on connection type. Each asset
+  // carries a `columns` list so the UI can let the user drill down to a
+  // specific data point (column/field) rather than just the whole table.
+  const mockAssets: Array<{ name: string; type: string; rowCount?: number; lastModified?: string; columns?: string[] }> = [];
   const now = new Date().toISOString();
 
   if (profile.connectionType === 'DATABASE') {
     mockAssets.push(
-      { name: 'customers', type: 'TABLE', rowCount: 45230, lastModified: now },
-      { name: 'orders', type: 'TABLE', rowCount: 128450, lastModified: now },
-      { name: 'products', type: 'TABLE', rowCount: 3200, lastModified: now },
-      { name: 'customer_view', type: 'VIEW', rowCount: 45230 },
+      { name: 'customers', type: 'TABLE', rowCount: 45230, lastModified: now,
+        columns: ['customer_id', 'first_name', 'last_name', 'email', 'phone', 'created_at', 'updated_at'] },
+      { name: 'orders', type: 'TABLE', rowCount: 128450, lastModified: now,
+        columns: ['order_id', 'customer_id', 'order_date', 'total_amount', 'status', 'shipped_at'] },
+      { name: 'products', type: 'TABLE', rowCount: 3200, lastModified: now,
+        columns: ['product_id', 'sku', 'name', 'price', 'category', 'in_stock'] },
+      { name: 'customer_view', type: 'VIEW', rowCount: 45230,
+        columns: ['customer_id', 'full_name', 'lifetime_value', 'last_order_date'] },
     );
   } else if (profile.connectionType === 'FILE_STORAGE') {
     mockAssets.push(
-      { name: 'reports/monthly_sales.csv', type: 'FILE', lastModified: now },
-      { name: 'exports/customer_data.parquet', type: 'FILE', lastModified: now },
-      { name: 'raw/transactions_2024.json', type: 'FILE', lastModified: now },
+      { name: 'reports/monthly_sales.csv', type: 'FILE', lastModified: now,
+        columns: ['month', 'region', 'product', 'units_sold', 'revenue'] },
+      { name: 'exports/customer_data.parquet', type: 'FILE', lastModified: now,
+        columns: ['customer_id', 'segment', 'churn_risk', 'annual_spend'] },
+      { name: 'raw/transactions_2024.json', type: 'FILE', lastModified: now,
+        columns: ['transaction_id', 'account_id', 'amount', 'currency', 'timestamp'] },
     );
   } else if (profile.connectionType === 'API') {
     mockAssets.push(
-      { name: '/api/customers', type: 'ENDPOINT' },
-      { name: '/api/orders', type: 'ENDPOINT' },
-      { name: '/api/products', type: 'ENDPOINT' },
+      { name: '/api/customers', type: 'ENDPOINT',
+        columns: ['id', 'name', 'email', 'phone', 'tier'] },
+      { name: '/api/orders', type: 'ENDPOINT',
+        columns: ['id', 'customer_id', 'total', 'status'] },
+      { name: '/api/products', type: 'ENDPOINT',
+        columns: ['id', 'sku', 'name', 'price'] },
     );
   } else if (profile.connectionType === 'DATA_WAREHOUSE') {
     mockAssets.push(
-      { name: 'analytics.fact_sales', type: 'TABLE', rowCount: 2450000, lastModified: now },
-      { name: 'analytics.dim_customer', type: 'TABLE', rowCount: 89200, lastModified: now },
-      { name: 'staging.raw_events', type: 'TABLE', rowCount: 15000000, lastModified: now },
-      { name: 'reporting.monthly_kpi', type: 'VIEW', rowCount: 360 },
+      { name: 'analytics.fact_sales', type: 'TABLE', rowCount: 2450000, lastModified: now,
+        columns: ['sale_id', 'customer_key', 'product_key', 'date_key', 'quantity', 'gross_revenue', 'discount', 'net_revenue'] },
+      { name: 'analytics.dim_customer', type: 'TABLE', rowCount: 89200, lastModified: now,
+        columns: ['customer_key', 'customer_id', 'name', 'segment', 'country', 'signup_date'] },
+      { name: 'staging.raw_events', type: 'TABLE', rowCount: 15000000, lastModified: now,
+        columns: ['event_id', 'user_id', 'event_type', 'event_payload', 'timestamp'] },
+      { name: 'reporting.monthly_kpi', type: 'VIEW', rowCount: 360,
+        columns: ['month', 'metric', 'value', 'yoy_change'] },
     );
   } else if (profile.connectionType === 'SPREADSHEET') {
     mockAssets.push(
-      { name: 'Sheet1 - Revenue Tracker', type: 'SHEET', rowCount: 1200 },
-      { name: 'Sheet2 - Cost Breakdown', type: 'SHEET', rowCount: 340 },
+      { name: 'Sheet1 - Revenue Tracker', type: 'SHEET', rowCount: 1200,
+        columns: ['Date', 'Region', 'Salesperson', 'Amount', 'Notes'] },
+      { name: 'Sheet2 - Cost Breakdown', type: 'SHEET', rowCount: 340,
+        columns: ['Category', 'Vendor', 'Amount', 'Month'] },
     );
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -45,6 +45,7 @@ interface DiscoveredAsset {
   type: string;
   rowCount?: number;
   lastModified?: string;
+  columns?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +203,10 @@ export default function ConnectionsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [importingAsset, setImportingAsset] = useState<string | null>(null);
+  // Which assets in the Discover modal are expanded to show their columns,
+  // and a `${assetName}.${columnName}` key marking the in-flight column import.
+  const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
+  const [importingColumn, setImportingColumn] = useState<string | null>(null);
 
   // Connection type options from server
   const [connectionTypes, setConnectionTypes] = useState<string[]>([]);
@@ -399,6 +404,9 @@ export default function ConnectionsPage() {
         systemId: discoverModal.systemId,
         governanceTier: 'BRONZE',
         healthScore: 50,
+        // Provenance so the asset can be traced back to its source.
+        sourceConnectionId: discoverModal.connId,
+        sourceAsset: asset.name,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
       });
       addToast('success', `Imported "${asset.name}" as data asset`);
@@ -407,6 +415,40 @@ export default function ConnectionsPage() {
     } finally {
       setImportingAsset(null);
     }
+  };
+
+  // Import a single column of a discovered asset as its own Data Asset. This
+  // is the "specific data point" granularity — e.g. `customers.email`.
+  const handleImportColumn = async (asset: DiscoveredAsset, columnName: string) => {
+    if (!discoverModal) return;
+    const key = `${asset.name}.${columnName}`;
+    setImportingColumn(key);
+    try {
+      await apiClient.post('/data-assets', {
+        name: `${asset.name}.${columnName}`,
+        description: `${columnName} column from ${asset.name} (${discoverModal.systemName})`,
+        systemId: discoverModal.systemId,
+        governanceTier: 'BRONZE',
+        healthScore: 50,
+        sourceConnectionId: discoverModal.connId,
+        sourceAsset: asset.name,
+        sourceColumn: columnName,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
+      });
+      addToast('success', `Imported ${key} as data asset`);
+    } catch {
+      addToast('error', `Failed to import ${key}`);
+    } finally {
+      setImportingColumn(null);
+    }
+  };
+
+  const toggleAssetExpanded = (assetName: string) => {
+    setExpandedAssets((prev) => {
+      const next = new Set(prev);
+      if (next.has(assetName)) next.delete(assetName); else next.add(assetName);
+      return next;
+    });
   };
 
   // -----------------------------------------------------------------------
@@ -825,7 +867,7 @@ export default function ConnectionsPage() {
       {discoverModal && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); }}
+          onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }}
         >
           <div
             style={{ background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.15)', padding: 24, maxWidth: 640, width: '100%', maxHeight: '80vh', overflowY: 'auto' }}
@@ -834,7 +876,7 @@ export default function ConnectionsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 600 }}>Discovered Assets — {discoverModal.systemName}</h3>
               <button
-                onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); }}
+                onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}
               >
                 &times;
@@ -850,48 +892,99 @@ export default function ConnectionsPage() {
                 No assets discovered.
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Type</th>
-                    <th style={thStyle}>Rows</th>
-                    <th style={thStyle}>Last Modified</th>
-                    <th style={{ ...thStyle, textAlign: 'center' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {discoveredAssets.map((asset) => (
-                    <tr key={asset.name}>
-                      <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{asset.name}</td>
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: '#f1f5f9', color: '#64748b' }}>
-                          {asset.type}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                        {asset.rowCount != null ? asset.rowCount.toLocaleString() : '--'}
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                        {asset.lastModified ? timeAgo(asset.lastModified) : '--'}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <button
-                          style={{
-                            ...btnPrimary,
-                            padding: '4px 10px', fontSize: 11,
-                            opacity: importingAsset === asset.name ? 0.6 : 1,
-                          }}
-                          disabled={importingAsset === asset.name}
-                          onClick={() => handleImportAsDataAsset(asset)}
-                        >
-                          {importingAsset === asset.name ? 'Importing...' : 'Import as Data Asset'}
-                        </button>
-                      </td>
+              <>
+                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                  Click an asset to drill into its columns. Import the whole asset, or pick a single column as its own data asset.
+                </p>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg)' }}>
+                      <th style={{ ...thStyle, width: 28 }}></th>
+                      <th style={thStyle}>Name</th>
+                      <th style={thStyle}>Type</th>
+                      <th style={thStyle}>Rows</th>
+                      <th style={thStyle}>Columns</th>
+                      <th style={{ ...thStyle, textAlign: 'center' }}>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {discoveredAssets.map((asset) => {
+                      const isExpanded = expandedAssets.has(asset.name);
+                      const columns = asset.columns || [];
+                      const hasColumns = columns.length > 0;
+                      return (
+                        <React.Fragment key={asset.name}>
+                          <tr
+                            onClick={() => hasColumns && toggleAssetExpanded(asset.name)}
+                            style={{ cursor: hasColumns ? 'pointer' : 'default' }}
+                          >
+                            <td style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 10, userSelect: 'none' }}>
+                              {hasColumns ? (isExpanded ? '\u25BC' : '\u25B6') : ''}
+                            </td>
+                            <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{asset.name}</td>
+                            <td style={tdStyle}>
+                              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: '#f1f5f9', color: '#64748b' }}>
+                                {asset.type}
+                              </span>
+                            </td>
+                            <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                              {asset.rowCount != null ? asset.rowCount.toLocaleString() : '--'}
+                            </td>
+                            <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                              {hasColumns ? columns.length : '--'}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                style={{
+                                  ...btnPrimary,
+                                  padding: '4px 10px', fontSize: 11,
+                                  opacity: importingAsset === asset.name ? 0.6 : 1,
+                                }}
+                                disabled={importingAsset === asset.name}
+                                onClick={() => handleImportAsDataAsset(asset)}
+                                title="Import the whole asset as a data asset"
+                              >
+                                {importingAsset === asset.name ? 'Importing\u2026' : 'Import Whole'}
+                              </button>
+                            </td>
+                          </tr>
+                          {isExpanded && columns.map((col) => {
+                            const key = `${asset.name}.${col}`;
+                            const isImporting = importingColumn === key;
+                            return (
+                              <tr key={key} style={{ background: '#fafafa' }}>
+                                <td style={{ ...tdStyle, border: 'none' }}></td>
+                                <td
+                                  style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, paddingLeft: 24, color: 'var(--color-text)', border: 'none' }}
+                                  colSpan={4}
+                                >
+                                  <span style={{ color: 'var(--color-text-muted)', marginRight: 6 }}>\u21B3</span>
+                                  <strong>{col}</strong>
+                                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>column</span>
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: 'center', border: 'none' }}>
+                                  <button
+                                    style={{
+                                      ...btnSecondary,
+                                      padding: '4px 10px', fontSize: 11,
+                                      opacity: isImporting ? 0.6 : 1,
+                                    }}
+                                    disabled={isImporting}
+                                    onClick={() => handleImportColumn(asset, col)}
+                                    title={`Import ${col} as its own data asset`}
+                                  >
+                                    {isImporting ? 'Importing\u2026' : '+ Select'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>

@@ -19,6 +19,12 @@ interface StoredDataAsset {
   steward: string;
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore: number;
+  // Optional provenance: set when the asset was imported from a discovered
+  // connection column. Enables "where did this come from?" and later
+  // re-sync against the source.
+  sourceConnectionId?: string;
+  sourceAsset?: string;   // table / file / endpoint / sheet name in the source
+  sourceColumn?: string;  // the specific column, null if the whole asset was imported
   createdAt: string;
   updatedAt: string;
 }
@@ -114,7 +120,8 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-assets */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemId, owner, steward, governanceTier, healthScore, orgId } = req.body;
+  const { name, description, systemId, owner, steward, governanceTier, healthScore, orgId,
+    sourceConnectionId, sourceAsset, sourceColumn } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
 
   const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
@@ -129,6 +136,9 @@ router.post('/', (req: Request, res: Response) => {
     steward: steward || '',
     governanceTier: tier,
     healthScore: score,
+    ...(sourceConnectionId ? { sourceConnectionId } : {}),
+    ...(sourceAsset ? { sourceAsset } : {}),
+    ...(sourceColumn ? { sourceColumn } : {}),
     createdAt: now, updatedAt: now,
   };
   dataAssets.push(asset);
@@ -141,7 +151,8 @@ router.put('/:id', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
-  const { name, description, systemId, owner, steward, governanceTier, healthScore } = req.body;
+  const { name, description, systemId, owner, steward, governanceTier, healthScore,
+    sourceConnectionId, sourceAsset, sourceColumn } = req.body;
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
   if (systemId !== undefined) asset.systemId = systemId;
@@ -149,6 +160,9 @@ router.put('/:id', (req: Request, res: Response) => {
   if (steward !== undefined) asset.steward = steward;
   if (governanceTier !== undefined && VALID_TIERS.includes(governanceTier)) asset.governanceTier = governanceTier;
   if (healthScore !== undefined && typeof healthScore === 'number') asset.healthScore = Math.max(0, Math.min(100, healthScore));
+  if (sourceConnectionId !== undefined) asset.sourceConnectionId = sourceConnectionId || undefined;
+  if (sourceAsset !== undefined) asset.sourceAsset = sourceAsset || undefined;
+  if (sourceColumn !== undefined) asset.sourceColumn = sourceColumn || undefined;
   asset.updatedAt = new Date().toISOString();
   saveStore('dataAssets', dataAssets);
   res.json({ success: true, data: asset });

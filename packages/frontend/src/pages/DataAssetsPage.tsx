@@ -15,6 +15,10 @@ interface DataAssetEntity {
   steward: string;
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore: number;
+  // Populated when the asset was imported from a connection column.
+  sourceConnectionId?: string;
+  sourceAsset?: string;
+  sourceColumn?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -547,6 +551,7 @@ export default function DataAssetsPage() {
                 </th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>System</th>
+                <th style={thStyle}>Source</th>
                 <th style={thStyle}>Governance Tier</th>
                 <th style={thStyle}>Health Score</th>
                 <th style={thStyle}>Owner</th>
@@ -566,6 +571,16 @@ export default function DataAssetsPage() {
                     <td style={{ ...tdStyle, fontWeight: 500 }}>{asset.name}</td>
                     <td style={tdStyle}>
                       {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                    </td>
+                    <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                      {asset.sourceAsset ? (
+                        <span title="Discovered from a connection">
+                          {asset.sourceAsset}
+                          {asset.sourceColumn && <><span style={{ color: 'var(--color-text-muted)' }}>.</span>{asset.sourceColumn}</>}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+                      )}
                     </td>
                     <td style={tdStyle}>
                       <span style={{
