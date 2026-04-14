@@ -34,6 +34,16 @@ interface DataQualityRule {
   ruleType?: RuleType;
   parameters?: RuleParameters;
   lastRun?: RuleRunResult;
+  // Stable id of the OOTB template this rule was created from (e.g.
+  // 'not-null', 'regex-email'). Empty / undefined when the rule was
+  // hand-built via the CUSTOM template or migrated from legacy data.
+  // Used to hide already-used templates from the templates list.
+  templateId?: string;
+  // Schedule — when set, a backend tick auto-runs this rule on the
+  // chosen cadence and updates `nextRunAt`. 'NEVER' (or undefined) is
+  // a manual-only rule.
+  scheduleFrequency?: 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
+  nextRunAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,6 +51,27 @@ interface DataQualityRule {
 const VALID_RULE_TYPES: RuleType[] = [
   'NOT_NULL', 'UNIQUE', 'REGEX_MATCH', 'IN_SET', 'NUMERIC_RANGE', 'LENGTH_RANGE', 'CUSTOM',
 ];
+
+const VALID_SCHEDULE_FREQUENCIES = ['NEVER', 'HOURLY', 'DAILY', 'WEEKLY'] as const;
+type ScheduleFrequency = typeof VALID_SCHEDULE_FREQUENCIES[number];
+
+/**
+ * Roll the `nextRunAt` timestamp forward by one cadence interval. Returns
+ * an ISO string. NEVER yields null (meaning "do not auto-run").
+ *
+ * Cadences are deliberately wall-clock simple: from `from`, advance by
+ * one hour / day / week. No timezone arithmetic.
+ */
+function computeNextRunAt(freq: ScheduleFrequency, from: string | Date): string | null {
+  if (freq === 'NEVER') return null;
+  const fromDate = typeof from === 'string' ? new Date(from) : from;
+  const ms =
+    freq === 'HOURLY' ? 60 * 60 * 1000 :
+    freq === 'DAILY' ? 24 * 60 * 60 * 1000 :
+    freq === 'WEEKLY' ? 7 * 24 * 60 * 60 * 1000 :
+    0;
+  return new Date(fromDate.getTime() + ms).toISOString();
+}
 
 /**
  * Build the DescribeContext for a rule by looking up its Data Asset and the
@@ -263,7 +294,7 @@ router.get('/:id', (req: Request, res: Response) => {
 /** POST /api/v1/data-quality — create rule */
 router.post('/', (req: Request, res: Response) => {
   const { dataAssetId, dimension, name, description, threshold, currentScore, weight, orgId,
-    ruleType, parameters } = req.body;
+    ruleType, parameters, templateId, scheduleFrequency } = req.body;
 
   if (!dataAssetId || !name) {
     res.status(400).json({ success: false, error: 'dataAssetId and name are required' });
@@ -275,6 +306,7 @@ router.post('/', (req: Request, res: Response) => {
   const validScore = typeof currentScore === 'number' ? Math.max(0, Math.min(100, currentScore)) : 0;
   const validWeight = typeof weight === 'number' ? Math.max(1, Math.min(10, weight)) : 5;
   const validRuleType: RuleType | undefined = ruleType && VALID_RULE_TYPES.includes(ruleType) ? ruleType : undefined;
+  const validSchedule = VALID_SCHEDULE_FREQUENCIES.includes(scheduleFrequency) ? scheduleFrequency : 'NEVER';
 
   const status = validScore > 0 ? computeStatus(validScore, validThreshold) : 'NOT_MEASURED';
 
@@ -293,6 +325,9 @@ router.post('/', (req: Request, res: Response) => {
     lastMeasured: validScore > 0 ? now : null,
     ...(validRuleType ? { ruleType: validRuleType } : {}),
     ...(parameters && typeof parameters === 'object' ? { parameters } : {}),
+    ...(typeof templateId === 'string' && templateId ? { templateId } : {}),
+    scheduleFrequency: validSchedule,
+    nextRunAt: validSchedule === 'NEVER' ? null : computeNextRunAt(validSchedule, now),
     createdAt: now,
     updatedAt: now,
   };
@@ -309,7 +344,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
 
   const { dataAssetId, dimension, name, description, threshold, currentScore, weight,
-    ruleType, parameters } = req.body;
+    ruleType, parameters, templateId, scheduleFrequency } = req.body;
 
   if (dataAssetId !== undefined) rule.dataAssetId = dataAssetId;
   if (dimension !== undefined && QUALITY_DIMENSIONS.includes(dimension)) rule.dimension = dimension;
@@ -319,6 +354,13 @@ router.put('/:id', (req: Request, res: Response) => {
   if (weight !== undefined && typeof weight === 'number') rule.weight = Math.max(1, Math.min(10, weight));
   if (ruleType !== undefined && VALID_RULE_TYPES.includes(ruleType)) rule.ruleType = ruleType;
   if (parameters !== undefined && typeof parameters === 'object' && parameters !== null) rule.parameters = parameters;
+  if (templateId !== undefined) rule.templateId = templateId || undefined;
+  if (scheduleFrequency !== undefined && VALID_SCHEDULE_FREQUENCIES.includes(scheduleFrequency)) {
+    rule.scheduleFrequency = scheduleFrequency;
+    // Re-derive nextRunAt from "now" so the cadence starts fresh on
+    // change. NEVER clears the schedule entirely.
+    rule.nextRunAt = scheduleFrequency === 'NEVER' ? null : computeNextRunAt(scheduleFrequency, new Date());
+  }
 
   if (currentScore !== undefined && typeof currentScore === 'number') {
     rule.currentScore = Math.max(0, Math.min(100, currentScore));
@@ -364,14 +406,26 @@ router.post('/:id/run', (req: Request, res: Response) => {
     return;
   }
 
-  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
-  if (!asset) { res.status(404).json({ success: false, error: 'Linked data asset not found' }); return; }
+  const result = runRuleNow(rule);
+  if (!result) { res.status(404).json({ success: false, error: 'Linked data asset not found' }); return; }
+  res.json({ success: true, data: result.engineResult });
+});
 
-  // Resolve the source connection (if any) so the engine can decide
-  // whether to run for real (LOCAL file) or simulate.
+/**
+ * Execute a single rule against its asset, persist the result, advance
+ * the schedule cursor if any, recompute the asset health score, and
+ * audit the run. Used by both the manual /run route and the scheduler
+ * tick so the side effects stay in one place.
+ *
+ * Returns null if the linked asset can't be found (orphaned rule).
+ */
+function runRuleNow(rule: DataQualityRule): { engineResult: RuleRunResult; assetHealth: number } | null {
+  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+  if (!asset) return null;
+
   const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
 
-  const result = evaluateRule(rule.ruleType, rule.parameters || {}, {
+  const result = evaluateRule(rule.ruleType!, rule.parameters || {}, {
     connectionType: conn?.connectionType,
     storageType: conn?.config?.storageType,
     localFilePath: conn?.config?.localFilePath,
@@ -386,12 +440,12 @@ router.post('/:id/run', (req: Request, res: Response) => {
   rule.lastMeasured = result.ranAt;
   rule.status = computeStatus(result.passRate, rule.threshold);
   rule.updatedAt = result.ranAt;
+  if (rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER') {
+    rule.nextRunAt = computeNextRunAt(rule.scheduleFrequency as ScheduleFrequency, result.ranAt);
+  }
   saveStore('dataQualityRules', dataQualityRules);
 
-  // Auto-recompute the asset's health score from the weighted average of
-  // all its rules' current scores. Mirrors POST /compute-health/:assetId
-  // so the asset card stays in sync the moment a rule runs — no separate
-  // "Compute Health" click required.
+  // Auto-recompute the asset's health score from the weighted average.
   const assetRules = dataQualityRules.filter((r) => r.dataAssetId === asset.id);
   const totalWeight = assetRules.reduce((sum, r) => sum + r.weight, 0);
   const weightedSum = assetRules.reduce((sum, r) => sum + r.currentScore * r.weight, 0);
@@ -410,7 +464,31 @@ router.post('/:id/run', (req: Request, res: Response) => {
   });
   logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: newAssetHealth }, 'DQ rule run');
 
-  res.json({ success: true, data: result });
-});
+  return { engineResult: result, assetHealth: newAssetHealth };
+}
+
+// ── Scheduler ────────────────────────────────────────────────────────────
+//
+// Tick once a minute. Runs any scheduled rule whose `nextRunAt` is in
+// the past (or null/undefined for a freshly-scheduled rule that hasn't
+// rolled forward yet). Skips legacy / typeless rules. The setInterval
+// is unref'd so it doesn't keep test processes alive when the only
+// thing pinning the event loop is the scheduler.
+const SCHEDULER_TICK_MS = 60 * 1000;
+function tickScheduler(): void {
+  const now = new Date();
+  for (const rule of dataQualityRules) {
+    if (!rule.ruleType) continue;
+    if (!rule.scheduleFrequency || rule.scheduleFrequency === 'NEVER') continue;
+    const due = !rule.nextRunAt || new Date(rule.nextRunAt) <= now;
+    if (!due) continue;
+    try { runRuleNow(rule); }
+    catch (err) {
+      logger.error({ err, ruleId: rule.id }, 'Scheduled DQ rule run failed');
+    }
+  }
+}
+const schedulerHandle = setInterval(tickScheduler, SCHEDULER_TICK_MS);
+if (typeof schedulerHandle.unref === 'function') schedulerHandle.unref();
 
 export default router;

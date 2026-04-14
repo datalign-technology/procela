@@ -36,6 +36,16 @@ function request(port: number, method: string, path: string, body?: unknown): Pr
   });
 }
 
+// Tests share the disk-backed persistence stores with previous runs, so
+// rules from earlier sessions can leak into the in-memory dataQualityRules
+// array and pollute health-score arithmetic. Strip everything pointing at
+// the test seed before running.
+function pruneRulesForAsset(assetId: string): void {
+  for (let i = dataQualityRules.length - 1; i >= 0; i--) {
+    if (dataQualityRules[i].dataAssetId === assetId) dataQualityRules.splice(i, 1);
+  }
+}
+
 describe('/data-quality routing', () => {
   let server: http.Server;
   let port: number;
@@ -75,6 +85,60 @@ describe('/data-quality routing', () => {
     assert.strictEqual(res.status, 404);
   });
 
+  it('POST / persists templateId and scheduleFrequency', async () => {
+    // Need an asset to attach the rule to.
+    const now = new Date().toISOString();
+    const seedAsset = {
+      id: 'test-tpl-asset', orgId: 'test-org',
+      name: 'Tpl seed', description: '', systemId: '',
+      owner: '', steward: '', governanceTier: 'BRONZE', healthScore: 0,
+      createdAt: now, updatedAt: now,
+    };
+    // Strip any stale rows (incl. asset itself) from earlier sessions —
+    // the JSON persistence files survive between test runs.
+    pruneRulesForAsset(seedAsset.id);
+    for (let i = dataAssets.length - 1; i >= 0; i--) {
+      if (dataAssets[i].id === seedAsset.id) dataAssets.splice(i, 1);
+    }
+    dataAssets.push(seedAsset);
+    try {
+      const res = await request(port, 'POST', '/data-quality', {
+        dataAssetId: seedAsset.id,
+        name: 'Tpl test', ruleType: 'NOT_NULL',
+        templateId: 'not-null',
+        scheduleFrequency: 'DAILY',
+        threshold: 95, weight: 5,
+      });
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(res.body.data.templateId, 'not-null');
+      assert.strictEqual(res.body.data.scheduleFrequency, 'DAILY');
+      // nextRunAt should be set ~1 day in the future for DAILY.
+      assert.ok(res.body.data.nextRunAt);
+      const dt = new Date(res.body.data.nextRunAt).getTime() - Date.now();
+      // Allow some clock skew either way; the value must be in the
+      // 23.5h..24.5h window.
+      assert.ok(dt > 23 * 60 * 60 * 1000 && dt < 25 * 60 * 60 * 1000,
+        `expected nextRunAt ~24h out, got ${dt}ms`);
+
+      // Manual /run on a scheduled rule should advance nextRunAt one
+      // cadence forward (so the scheduler doesn't immediately re-run it).
+      const before = new Date(res.body.data.nextRunAt).getTime();
+      const ruleId = res.body.data.id;
+      const run = await request(port, 'POST', `/data-quality/${ruleId}/run`);
+      assert.strictEqual(run.status, 200);
+      const updated = dataQualityRules.find((r: any) => r.id === ruleId);
+      assert.ok(updated?.nextRunAt);
+      assert.ok(new Date(updated.nextRunAt).getTime() > before,
+        'nextRunAt should advance after a run');
+    } finally {
+      const ai = dataAssets.indexOf(seedAsset);
+      if (ai !== -1) dataAssets.splice(ai, 1);
+      for (let i = dataQualityRules.length - 1; i >= 0; i--) {
+        if (dataQualityRules[i].dataAssetId === seedAsset.id) dataQualityRules.splice(i, 1);
+      }
+    }
+  });
+
   it('POST /:id/run also auto-recomputes the asset healthScore', async () => {
     // Seed an asset directly into the in-memory store (no other route
     // mounted here so we can't go through POST /data-assets). Health
@@ -91,6 +155,12 @@ describe('/data-quality routing', () => {
       healthScore: 0,
       createdAt: now, updatedAt: now,
     };
+    // Strip any stale rows (incl. asset itself) from earlier sessions —
+    // the JSON persistence files survive between test runs.
+    pruneRulesForAsset(seedAsset.id);
+    for (let i = dataAssets.length - 1; i >= 0; i--) {
+      if (dataAssets[i].id === seedAsset.id) dataAssets.splice(i, 1);
+    }
     dataAssets.push(seedAsset);
 
     try {

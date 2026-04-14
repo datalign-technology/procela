@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
+import { useToastStore } from '../stores/toastStore';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Data Quality Rules modal — shared between DataAssetsPage (legacy entry)
@@ -24,6 +25,8 @@ interface RuleTemplate {
   definition?: RuleDefinition;
 }
 
+type ScheduleFrequency = 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
+
 interface DQRule {
   id: string;
   dataAssetId: string;
@@ -37,6 +40,9 @@ interface DQRule {
   ruleType?: RuleType;
   parameters?: Record<string, any>;
   definition?: RuleDefinition | null;
+  templateId?: string;
+  scheduleFrequency?: ScheduleFrequency;
+  nextRunAt?: string | null;
   lastRun?: {
     ranAt: string;
     simulated: boolean;
@@ -105,6 +111,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
   onClose: () => void;
   onAfterChange: () => void;
 }) {
+  const addToast = useToastStore((s) => s.addToast);
   const [rules, setRules] = useState<DQRule[]>([]);
   const [suggested, setSuggested] = useState<RuleTemplate[]>([]);
   const [generic, setGeneric] = useState<RuleTemplate[]>([]);
@@ -170,12 +177,18 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
         ruleType: t.ruleType,
         parameters,
         threshold: 95,
+        // Stamp the template id so the templates list can hide ones
+        // that are already in use for this asset.
+        templateId: t.id,
       });
+      addToast('success', `Added rule "${t.name}"`);
       setConfiguringTemplateId(null);
       setConfigParams({});
       await load();
       onAfterChange();
-    } catch { /* */ }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to add rule');
+    }
   };
 
   const handleAddClick = (t: RuleTemplate) => {
@@ -190,11 +203,42 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
   const runRule = async (rule: DQRule) => {
     setRunningId(rule.id);
     try {
-      await apiClient.post(`/data-quality/${rule.id}/run`);
+      const res = await apiClient.post<{ success: boolean; data: DQRule['lastRun'] }>(`/data-quality/${rule.id}/run`);
+      const result = res.data;
+      // Visible confirmation that the run completed — modal stays open
+      // and the result row updates, but a toast removes the "did it
+      // actually go?" guesswork.
+      if (result) {
+        const verdict = result.passRate >= 95 ? 'success' : result.passRate >= 80 ? 'info' : 'error';
+        const sim = result.simulated ? ' (simulated)' : '';
+        addToast(
+          verdict as 'success' | 'info' | 'error',
+          `${rule.name}: ${result.passRate}% pass${sim}`,
+        );
+      } else {
+        addToast('success', `${rule.name}: run complete`);
+      }
       await load();
       onAfterChange();
-    } catch { /* */ } finally {
+    } catch (e) {
+      addToast('error', `${rule.name}: ${e instanceof Error ? e.message : 'run failed'}`);
+    } finally {
       setRunningId(null);
+    }
+  };
+
+  const updateSchedule = async (rule: DQRule, scheduleFrequency: ScheduleFrequency) => {
+    try {
+      await apiClient.put(`/data-quality/${rule.id}`, { scheduleFrequency });
+      addToast('success',
+        scheduleFrequency === 'NEVER'
+          ? `${rule.name}: schedule cleared`
+          : `${rule.name}: scheduled ${scheduleFrequency.toLowerCase()}`,
+      );
+      await load();
+      onAfterChange();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to update schedule');
     }
   };
 
@@ -421,6 +465,25 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                           )}
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          {/* Schedule selector — kept compact so it doesn't
+                              dominate the row. NEVER means manual-only. */}
+                          <select
+                            value={r.scheduleFrequency || 'NEVER'}
+                            disabled={!r.ruleType}
+                            onChange={(e) => updateSchedule(r, e.target.value as ScheduleFrequency)}
+                            title={r.nextRunAt ? `Next auto-run: ${new Date(r.nextRunAt).toLocaleString()}` : 'Manual only'}
+                            style={{
+                              fontSize: 10, padding: '2px 4px', marginRight: 6,
+                              border: '1px solid var(--color-border)', borderRadius: 4,
+                              background: 'var(--color-surface)', color: 'var(--color-text)',
+                              appearance: 'auto' as any,
+                            }}
+                          >
+                            <option value="NEVER">Manual</option>
+                            <option value="HOURLY">Hourly</option>
+                            <option value="DAILY">Daily</option>
+                            <option value="WEEKLY">Weekly</option>
+                          </select>
                           <button
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: 11, marginRight: 4 }}
                             onClick={() => toggleExpanded(r.id)}
@@ -472,24 +535,43 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
           )}
         </div>
 
-        {/* Templates */}
+        {/* Templates — hide ones already in use for this asset.
+            CUSTOM is exempt because users typically write multiple
+            distinct custom expressions per asset. */}
         <div style={{ marginTop: 20 }}>
-          {suggested.length > 0 && (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                Suggested for {columnName ? <code>{columnName}</code> : 'this asset'}
-              </div>
-              <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, marginBottom: 16 }}>
-                {suggested.map(templateRow)}
-              </div>
-            </>
-          )}
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-            All rule templates
-          </div>
-          <div style={{ border: '1px solid var(--color-border)', borderRadius: 4 }}>
-            {generic.map(templateRow)}
-          </div>
+          {(() => {
+            const usedTemplateIds = new Set(rules.map((r) => r.templateId).filter(Boolean) as string[]);
+            const isAvailable = (t: RuleTemplate) => t.id === 'custom' || !usedTemplateIds.has(t.id);
+            const suggestedAvailable = suggested.filter(isAvailable);
+            const genericAvailable = generic.filter(isAvailable);
+            const noneLeft = suggestedAvailable.length === 0 && genericAvailable.length === 0;
+            return (
+              <>
+                {suggestedAvailable.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                      Suggested for {columnName ? <code>{columnName}</code> : 'this asset'}
+                    </div>
+                    <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, marginBottom: 16 }}>
+                      {suggestedAvailable.map(templateRow)}
+                    </div>
+                  </>
+                )}
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                  All rule templates
+                </div>
+                {noneLeft ? (
+                  <div style={{ padding: '12px 14px', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    All built-in templates are already in use for this asset. Use the Custom rule template to add another bespoke check.
+                  </div>
+                ) : (
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: 4 }}>
+                    {genericAvailable.map(templateRow)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
