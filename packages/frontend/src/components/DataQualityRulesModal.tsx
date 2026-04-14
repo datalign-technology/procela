@@ -119,6 +119,15 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+  // Per-template expand state — same idea: hide the "Would execute"
+  // command unless the user explicitly asks to see it. Keyed by template
+  // id which is stable across renders.
+  const [expandedTemplateIds, setExpandedTemplateIds] = useState<Set<string>>(new Set());
+  const toggleTemplateExpanded = (id: string) => setExpandedTemplateIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const columnName = asset.sourceColumn;
 
@@ -199,16 +208,30 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
 
   const templateRow = (t: RuleTemplate) => {
     const isConfiguring = configuringTemplateId === t.id;
+    const showCommand = expandedTemplateIds.has(t.id);
     return (
       <div key={t.id} style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{t.name}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{t.description}</div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-              {t.ruleType}{t.parameters.pattern ? ` /${t.parameters.pattern}/` : ''}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                {t.ruleType}{t.parameters.pattern ? ` /${t.parameters.pattern}/` : ''}
+              </span>
+              {/* Engine command stays hidden by default — same pattern as
+                  the active-rules table. Users opt into the detail. */}
+              {t.definition && (
+                <button
+                  type="button"
+                  onClick={() => toggleTemplateExpanded(t.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 10, padding: 0, textDecoration: 'underline' }}
+                >
+                  {showCommand ? 'Hide command' : 'View command'}
+                </button>
+              )}
             </div>
-            {t.definition && <DefinitionBlock def={t.definition} label="Would execute" />}
+            {showCommand && t.definition && <DefinitionBlock def={t.definition} label="Would execute" />}
           </div>
           <button
             onClick={() => handleAddClick(t)}
