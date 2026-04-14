@@ -202,11 +202,8 @@ export default function ConnectionsPage() {
   const [discoverModal, setDiscoverModal] = useState<{ connId: string; systemId: string; systemName: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
-  const [importingAsset, setImportingAsset] = useState<string | null>(null);
-  // Which assets in the Discover modal are expanded to show their columns,
-  // and a `${assetName}.${columnName}` key marking the in-flight column import.
+  // Which assets in the Discover modal are expanded to show their columns.
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
-  const [importingColumn, setImportingColumn] = useState<string | null>(null);
 
   // Connection type options from server
   const [connectionTypes, setConnectionTypes] = useState<string[]>([]);
@@ -394,54 +391,9 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleImportAsDataAsset = async (asset: DiscoveredAsset) => {
-    if (!discoverModal) return;
-    setImportingAsset(asset.name);
-    try {
-      await apiClient.post('/data-assets', {
-        name: asset.name,
-        description: `Discovered ${asset.type.toLowerCase()} from ${discoverModal.systemName}${asset.rowCount ? ` (${asset.rowCount.toLocaleString()} rows)` : ''}`,
-        systemId: discoverModal.systemId,
-        governanceTier: 'BRONZE',
-        healthScore: 50,
-        // Provenance so the asset can be traced back to its source.
-        sourceConnectionId: discoverModal.connId,
-        sourceAsset: asset.name,
-        ...(activeOrgId ? { orgId: activeOrgId } : {}),
-      });
-      addToast('success', `Imported "${asset.name}" as data asset`);
-    } catch {
-      addToast('error', `Failed to import "${asset.name}"`);
-    } finally {
-      setImportingAsset(null);
-    }
-  };
-
-  // Import a single column of a discovered asset as its own Data Asset. This
-  // is the "specific data point" granularity — e.g. `customers.email`.
-  const handleImportColumn = async (asset: DiscoveredAsset, columnName: string) => {
-    if (!discoverModal) return;
-    const key = `${asset.name}.${columnName}`;
-    setImportingColumn(key);
-    try {
-      await apiClient.post('/data-assets', {
-        name: `${asset.name}.${columnName}`,
-        description: `${columnName} column from ${asset.name} (${discoverModal.systemName})`,
-        systemId: discoverModal.systemId,
-        governanceTier: 'BRONZE',
-        healthScore: 50,
-        sourceConnectionId: discoverModal.connId,
-        sourceAsset: asset.name,
-        sourceColumn: columnName,
-        ...(activeOrgId ? { orgId: activeOrgId } : {}),
-      });
-      addToast('success', `Imported ${key} as data asset`);
-    } catch {
-      addToast('error', `Failed to import ${key}`);
-    } finally {
-      setImportingColumn(null);
-    }
-  };
+  // Note: the Discover modal is informational only now. Creating Data
+  // Assets + binding them to a column happens from DataAssetsPage via
+  // the Link flow, so there's no import/select shortcut here anymore.
 
   const toggleAssetExpanded = (assetName: string) => {
     setExpandedAssets((prev) => {
@@ -894,7 +846,7 @@ export default function ConnectionsPage() {
             ) : (
               <>
                 <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                  Click an asset to drill into its columns. Import the whole asset, or pick a single column as its own data asset.
+                  Click an asset to drill into its columns. To link a column to a Data Asset, go to Data Assets \u2192 Link.
                 </p>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -904,7 +856,6 @@ export default function ConnectionsPage() {
                       <th style={thStyle}>Type</th>
                       <th style={thStyle}>Rows</th>
                       <th style={thStyle}>Columns</th>
-                      <th style={{ ...thStyle, textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -933,52 +884,20 @@ export default function ConnectionsPage() {
                             <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
                               {hasColumns ? columns.length : '--'}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                              <button
-                                style={{
-                                  ...btnPrimary,
-                                  padding: '4px 10px', fontSize: 11,
-                                  opacity: importingAsset === asset.name ? 0.6 : 1,
-                                }}
-                                disabled={importingAsset === asset.name}
-                                onClick={() => handleImportAsDataAsset(asset)}
-                                title="Import the whole asset as a data asset"
-                              >
-                                {importingAsset === asset.name ? 'Importing\u2026' : 'Import Whole'}
-                              </button>
-                            </td>
                           </tr>
-                          {isExpanded && columns.map((col) => {
-                            const key = `${asset.name}.${col}`;
-                            const isImporting = importingColumn === key;
-                            return (
-                              <tr key={key} style={{ background: '#fafafa' }}>
-                                <td style={{ ...tdStyle, border: 'none' }}></td>
-                                <td
-                                  style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, paddingLeft: 24, color: 'var(--color-text)', border: 'none' }}
-                                  colSpan={4}
-                                >
-                                  <span style={{ color: 'var(--color-text-muted)', marginRight: 6 }}>\u21B3</span>
-                                  <strong>{col}</strong>
-                                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>column</span>
-                                </td>
-                                <td style={{ ...tdStyle, textAlign: 'center', border: 'none' }}>
-                                  <button
-                                    style={{
-                                      ...btnSecondary,
-                                      padding: '4px 10px', fontSize: 11,
-                                      opacity: isImporting ? 0.6 : 1,
-                                    }}
-                                    disabled={isImporting}
-                                    onClick={() => handleImportColumn(asset, col)}
-                                    title={`Import ${col} as its own data asset`}
-                                  >
-                                    {isImporting ? 'Importing\u2026' : '+ Select'}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {isExpanded && columns.map((col) => (
+                            <tr key={`${asset.name}.${col}`} style={{ background: '#fafafa' }}>
+                              <td style={{ ...tdStyle, border: 'none' }}></td>
+                              <td
+                                style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, paddingLeft: 24, color: 'var(--color-text)', border: 'none' }}
+                                colSpan={4}
+                              >
+                                <span style={{ color: 'var(--color-text-muted)', marginRight: 6 }}>\u21B3</span>
+                                <strong>{col}</strong>
+                                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>column</span>
+                              </td>
+                            </tr>
+                          ))}
                         </React.Fragment>
                       );
                     })}

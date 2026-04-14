@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LinkConnectionModal from '../components/LinkConnectionModal';
 
 interface DataAssetEntity {
   id: string;
@@ -133,21 +134,65 @@ export default function DataAssetsPage() {
   const [assetComments, setAssetComments] = useState<CommentEntry[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentUserName, setCommentUserName] = useState('');
-  const [peopleList, setPeopleList] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Binding state: one primary binding per asset is the common case. We
+  // fetch them in one roundtrip keyed by asset id and expose tiny bits
+  // (connection name + column) inline on each row.
+  interface BindingRow {
+    id: string;
+    connectionId: string;
+    sourceAsset: string;
+    sourceColumn?: string;
+    isPrimary: boolean;
+  }
+  const [bindingsByAsset, setBindingsByAsset] = useState<Record<string, BindingRow[]>>({});
+  const [connectionNameById, setConnectionNameById] = useState<Record<string, string>>({});
+  const [linkModalAsset, setLinkModalAsset] = useState<DataAssetEntity | null>(null);
+  const [linkModalMode, setLinkModalMode] = useState<'new' | 'change'>('new');
 
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [assetRes, peopleRes] = await Promise.all([
+      const [assetRes, connRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
-        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>('/people'),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/connections${query}`),
       ]);
-      setAssets(assetRes.data || []);
+      const nextAssets = assetRes.data || [];
+      setAssets(nextAssets);
       setSystems(assetRes.systems || []);
-      setPeopleList(peopleRes.data || []);
+      // Build a lookup of connection names so the binding column can show
+      // "<conn-name> / <asset>.<col>" without a second trip per row.
+      const cmap: Record<string, string> = {};
+      for (const c of connRes.data || []) cmap[c.id] = c.name;
+      setConnectionNameById(cmap);
+      // Fan-out: fetch bindings per asset in parallel. Small N in practice;
+      // if this grows we'll add a bulk endpoint.
+      const entries = await Promise.all(nextAssets.map(async (a) => {
+        try {
+          const res = await apiClient.get<{ success: boolean; data: BindingRow[] }>(`/data-assets/${a.id}/bindings`);
+          return [a.id, res.data || []] as const;
+        } catch { return [a.id, [] as BindingRow[]] as const; }
+      }));
+      const map: Record<string, BindingRow[]> = {};
+      for (const [id, bs] of entries) map[id] = bs;
+      setBindingsByAsset(map);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
+
+  const primaryBindingOf = (assetId: string): BindingRow | undefined => {
+    const list = bindingsByAsset[assetId] || [];
+    return list.find((b) => b.isPrimary) || list[0];
+  };
+
+  const unlinkPrimary = async (asset: DataAssetEntity) => {
+    const b = primaryBindingOf(asset.id);
+    if (!b) return;
+    try {
+      await apiClient.delete(`/data-assets/${asset.id}/bindings/${b.id}`);
+      fetchData();
+    } catch { /* */ }
+  };
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -464,12 +509,14 @@ export default function DataAssetsPage() {
                 </th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>System</th>
-                <th style={thStyle}>Source</th>
-                <th style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
+                <th style={thStyle}>Binding</th>
+                <th style={{ ...thStyle, width: 220, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {assets.map((asset) => {
+                const binding = primaryBindingOf(asset.id);
+                const connName = binding ? connectionNameById[binding.connectionId] : undefined;
                 return (
                   <tr key={asset.id} style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
@@ -479,14 +526,17 @@ export default function DataAssetsPage() {
                     <td style={tdStyle}>
                       {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                     </td>
-                    <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-secondary)' }}>
-                      {asset.sourceAsset ? (
-                        <span title="Discovered from a connection">
-                          {asset.sourceAsset}
-                          {asset.sourceColumn && <><span style={{ color: 'var(--color-text-muted)' }}>.</span>{asset.sourceColumn}</>}
+                    <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                      {binding ? (
+                        <span title={`Linked to connection ${connName || binding.connectionId}`}>
+                          <strong style={{ color: 'var(--color-text)' }}>{connName || '(unknown connection)'}</strong>
+                          {' \u2192 '}
+                          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                            {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
+                          </code>
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+                        <span style={{ color: 'var(--color-text-muted)' }}>Not linked</span>
                       )}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
@@ -497,6 +547,32 @@ export default function DataAssetsPage() {
                       >
                         View
                       </button>
+                      {binding ? (
+                        <>
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
+                            onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }}
+                            title="Point this asset at a different connection or column"
+                          >
+                            Change
+                          </button>
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
+                            onClick={() => unlinkPrimary(asset)}
+                            title="Detach this asset from its current location"
+                          >
+                            Unlink
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4, fontWeight: 500 }}
+                          onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }}
+                          title="Link this asset to a connection"
+                        >
+                          Link
+                        </button>
+                      )}
                       <button
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
                         onClick={() => openEdit(asset)}
@@ -662,6 +738,18 @@ export default function DataAssetsPage() {
         </div>
       )}
 
+      {linkModalAsset && (
+        <LinkConnectionModal
+          asset={{ id: linkModalAsset.id, name: linkModalAsset.name }}
+          activeOrgId={activeOrgId}
+          existingBinding={linkModalMode === 'change' ? (() => {
+            const b = primaryBindingOf(linkModalAsset.id);
+            return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn } : undefined;
+          })() : undefined}
+          onClose={() => setLinkModalAsset(null)}
+          onLinked={fetchData}
+        />
+      )}
     </div>
   );
 }
