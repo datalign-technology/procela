@@ -271,11 +271,34 @@ export default function PeoplePage() {
 
   // ── People handlers ──
   const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgIds: selectedOrgId ? [selectedOrgId] : [] }); setEditingPersonId(null); setShowPersonForm(true); };
-  const openEditPerson = (person: Person) => { setPersonForm({ orgIds: person.orgIds || [], name: person.name, email: person.email, role: person.role, title: person.title, accessibleOrgIds: person.accessibleOrgIds || [] }); setEditingPersonId(person.id); setShowPersonForm(true); };
+  const openEditPerson = (person: Person) => {
+    // Edit only allows name/email/title — orgs and role live under Manage.
+    // We still seed the full state from the existing record so the
+    // PersonFormData type stays uniform; the UI just hides the rest.
+    setPersonForm({
+      orgIds: person.orgIds || [], name: person.name, email: person.email,
+      role: person.role, title: person.title,
+      accessibleOrgIds: person.accessibleOrgIds || [],
+    });
+    setEditingPersonId(person.id);
+    setShowPersonForm(true);
+  };
   const handleSavePerson = async () => {
-    if (!personForm.name.trim() || personForm.orgIds.length === 0) return;
-    if (editingPersonId) await apiClient.put(`/people/${editingPersonId}`, personForm);
-    else await apiClient.post('/people', personForm);
+    if (!personForm.name.trim()) return;
+    if (editingPersonId) {
+      // Edit: send only the identity fields. Skipping orgIds / role /
+      // accessibleOrgIds means the backend leaves them untouched, so
+      // changes made under Manage aren't clobbered.
+      await apiClient.put(`/people/${editingPersonId}`, {
+        name: personForm.name,
+        email: personForm.email,
+        title: personForm.title,
+      });
+    } else {
+      // Add still needs orgIds (backend requires non-empty) and role.
+      if (personForm.orgIds.length === 0) return;
+      await apiClient.post('/people', personForm);
+    }
     setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm); fetchData();
   };
   const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); fetchData(); };
@@ -367,6 +390,37 @@ export default function PeoplePage() {
     try {
       await apiClient.delete(`/dama-roles/${roleId}`);
       await refresh360();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  // ── Person identity (org + role) editing inside the Manage modal ──
+  // These live here (not in the Edit form) so users edit "who they are"
+  // separately from "what access / responsibilities they have".
+
+  const togglePersonOrgAssignment = async (orgId: string) => {
+    if (!viewing360) return;
+    const current = viewing360.person.orgIds || [];
+    const next = current.includes(orgId)
+      ? current.filter((id) => id !== orgId)
+      : [...current, orgId];
+    if (next.length === 0) return; // backend requires at least one assignment
+    setSaving360(true);
+    try {
+      await apiClient.put(`/people/${viewing360.person.id}`, { orgIds: next });
+      await refresh360();
+      fetchData();
+    } catch { /* */ }
+    finally { setSaving360(false); }
+  };
+
+  const changePersonRole = async (newRole: string) => {
+    if (!viewing360) return;
+    setSaving360(true);
+    try {
+      await apiClient.put(`/people/${viewing360.person.id}`, { role: newRole });
+      await refresh360();
+      fetchData();
     } catch { /* */ }
     finally { setSaving360(false); }
   };
@@ -523,7 +577,12 @@ export default function PeoplePage() {
               {/* Add/Edit Person Form */}
               {showPersonForm && (
                 <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 10, boxShadow: 'var(--shadow-sm)' }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>{editingPersonId ? 'Edit Person' : 'Add Person'}</h3>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{editingPersonId ? 'Edit Person' : 'Add Person'}</h3>
+                  <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+                    {editingPersonId
+                      ? 'Edit identity fields here. Org assignments and application role live under Manage.'
+                      : 'Create the person and assign them to an org. Refine details and governance roles via Manage afterwards.'}
+                  </p>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Name *</label>
@@ -533,80 +592,63 @@ export default function PeoplePage() {
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Email</label>
                       <input style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
                     </div>
-                    <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assigned Organizations *</label>
-                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                        Select all org levels this person belongs to. They will appear in each org's people list.
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0' }}>
-                        {orgOptions.map((opt) => {
-                          const checked = personForm.orgIds.includes(opt.id);
-                          return (
-                            <label key={opt.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', paddingLeft: opt.depth * 20 }}>
-                              <input type="checkbox" checked={checked}
-                                onChange={() => setPersonForm({
-                                  ...personForm,
-                                  orgIds: checked ? personForm.orgIds.filter((id) => id !== opt.id) : [...personForm.orgIds, opt.id],
-                                })}
-                                style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
-                              />
-                              <span style={{ whiteSpace: 'nowrap' }}>{opt.name}</span>
-                              <span style={{ fontSize: 9, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>({opt.type.charAt(0).toUpperCase() + opt.type.slice(1)})</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Application Role</label>
-                      <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
-                        {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                      </select>
-                      <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 2 }}>Controls platform permissions. Governance roles are assigned separately.</div>
-                    </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Title</label>
                       <input style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
                     </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Additional Org Access</label>
-                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                        Grant access to additional organizations beyond what their role and assignment provide. Only company and division levels shown.
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {orgOptions.filter((o) => o.type === 'company' || o.type === 'division').map((opt) => {
-                          const isGranted = personForm.accessibleOrgIds.includes(opt.id);
-                          const isAssigned = personForm.orgIds.includes(opt.id);
-                          return (
-                            <label key={opt.id} style={{
-                              fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: isAssigned ? 'default' : 'pointer',
-                              opacity: isAssigned ? 0.5 : 1,
-                            }}>
-                              <input type="checkbox" checked={isGranted || isAssigned} disabled={isAssigned}
-                                onChange={() => {
-                                  if (isAssigned) return;
-                                  setPersonForm({
-                                    ...personForm,
-                                    accessibleOrgIds: isGranted
-                                      ? personForm.accessibleOrgIds.filter((id) => id !== opt.id)
-                                      : [...personForm.accessibleOrgIds, opt.id],
-                                  });
-                                }}
-                                style={{ accentColor: 'var(--color-primary)' }}
-                              />
-                              {opt.name}
-                              {isAssigned && <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>(assigned)</span>}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    {/* The Add form keeps an Assigned Organization picker so
+                        the new person lands in at least one org and is
+                        immediately visible. Edit doesn't show this — those
+                        live under Manage now. */}
+                    {!editingPersonId && (
+                      <>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assign to Organizations *</label>
+                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                            Select all org levels this person belongs to. You can refine these later via Manage.
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0', maxHeight: 240, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4 }}>
+                            {orgOptions.map((opt) => {
+                              const checked = personForm.orgIds.includes(opt.id);
+                              return (
+                                <label key={opt.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', paddingLeft: 8 + opt.depth * 20, paddingTop: 2, paddingBottom: 2 }}>
+                                  <input type="checkbox" checked={checked}
+                                    onChange={() => setPersonForm({
+                                      ...personForm,
+                                      orgIds: checked ? personForm.orgIds.filter((id) => id !== opt.id) : [...personForm.orgIds, opt.id],
+                                    })}
+                                    style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
+                                  />
+                                  <span style={{ whiteSpace: 'nowrap' }}>{opt.name}</span>
+                                  <span style={{ fontSize: 9, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>({opt.type.charAt(0).toUpperCase() + opt.type.slice(1)})</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Application Role</label>
+                          <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
+                            {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                          </select>
+                          <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 2 }}>Controls platform permissions. Governance roles are assigned separately.</div>
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
                     <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); }}>Cancel</button>
-                    <button style={{ ...btnPrimary, opacity: !personForm.name.trim() || personForm.orgIds.length === 0 ? 0.6 : 1 }} disabled={!personForm.name.trim() || personForm.orgIds.length === 0} onClick={handleSavePerson}>
-                      {editingPersonId ? 'Save' : 'Add'}
-                    </button>
+                    {(() => {
+                      // Add requires both a name and at least one org;
+                      // Edit only requires a non-empty name (orgs/role
+                      // are managed separately).
+                      const invalid = !personForm.name.trim() || (!editingPersonId && personForm.orgIds.length === 0);
+                      return (
+                        <button style={{ ...btnPrimary, opacity: invalid ? 0.6 : 1 }} disabled={invalid} onClick={handleSavePerson}>
+                          {editingPersonId ? 'Save' : 'Add'}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -733,40 +775,65 @@ export default function PeoplePage() {
                   <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
                 </div>
 
-                {/* ── ORGANIZATIONS ── */}
+                {/* ── ASSIGNED ORGANIZATIONS (editable, tree) ── */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Organizations ({viewing360.orgAssignments.length})</h3>
-                  {viewing360.orgAssignments.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No organization assignments</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {viewing360.orgAssignments.map((org) => (
-                        <div key={org.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px' }}>
-                          <span style={{ fontSize: 12, fontWeight: 500 }}>{org.name}</span>
-                          <span style={typeBadge(org.type)}>{org.type}</span>
-                          {/* Cross-link to Organizations page — closes the
-                              360 so the route change isn't shadowed by the
-                              modal still being mounted. */}
-                          <Link
-                            to="/organizations"
-                            onClick={() => setViewing360(null)}
-                            style={{ fontSize: 10, color: 'var(--color-primary)', textDecoration: 'none' }}
-                            title="View this org on the Organizations page"
-                          >
-                            View org \u2192
-                          </Link>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Assigned Organizations ({(viewing360.person.orgIds || []).length})
+                  </h3>
+                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>
+                    Toggle membership across the org hierarchy. The person must remain assigned to at least one org.
+                  </p>
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', gap: 1,
+                    border: '1px solid var(--color-border)', borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    maxHeight: 280, overflowY: 'auto',
+                  }}>
+                    {orgOptions.map((opt) => {
+                      const personOrgIds = viewing360.person.orgIds || [];
+                      const checked = personOrgIds.includes(opt.id);
+                      const isOnlyAssignment = checked && personOrgIds.length === 1;
+                      return (
+                        <label
+                          key={opt.id}
+                          title={isOnlyAssignment ? 'Cannot unassign the last org' : undefined}
+                          style={{
+                            fontSize: 11, display: 'flex', alignItems: 'center', gap: 6,
+                            cursor: saving360 || isOnlyAssignment ? 'default' : 'pointer',
+                            padding: '4px 8px',
+                            paddingLeft: 8 + opt.depth * 18,
+                            borderBottom: '1px solid var(--color-border)',
+                            background: checked ? '#eff6ff' : undefined,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={saving360 || isOnlyAssignment}
+                            onChange={() => togglePersonOrgAssignment(opt.id)}
+                            style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
+                          />
+                          <span style={{ whiteSpace: 'nowrap', fontWeight: checked ? 500 : 400 }}>{opt.name}</span>
+                          <span style={typeBadge(opt.type)}>{opt.type}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* ── APPLICATION ACCESS ── */}
+                {/* ── APPLICATION ACCESS (editable) ── */}
                 <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
                   <h3 style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Application Access</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Platform role:</span>
-                    <span style={roleBadge(viewing360.person.role)}>{ROLE_LABELS[viewing360.person.role] || viewing360.person.role}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <label style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Platform role:</label>
+                    <select
+                      value={viewing360.person.role}
+                      onChange={(e) => changePersonRole(e.target.value)}
+                      disabled={saving360}
+                      style={{ ...inputStyle, width: 'auto', appearance: 'auto' as any, fontSize: 12, padding: '4px 8px' }}
+                    >
+                      {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                    </select>
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Controls what this person can do in the application</span>
                   </div>
                 </div>
