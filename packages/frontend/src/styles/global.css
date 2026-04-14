@@ -97,3 +97,24 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Print defaults — applied globally so any page that uses window.print()
+ * (i.e. the "Export PDF" / "Print" buttons that drive browser
+ * Save-as-PDF) produces colour output. Without these, browsers strip
+ * background colours and tend to greyscale coloured text to save ink.
+ *
+ * All three properties are kept because:
+ *   - `print-color-adjust: exact`      current spec (Firefox, newer Chrome)
+ *   - `-webkit-print-color-adjust`     Safari, older Chrome/Edge
+ *   - `color-adjust: exact`            legacy name still honoured by some
+ * The `!important` is needed so per-page @media print rules that set
+ * backgrounds can't accidentally re-trigger the ink-saving default.
+ * ─────────────────────────────────────────────────────────────────────── */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
