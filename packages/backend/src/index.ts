@@ -97,7 +97,7 @@ app.use(errorHandler);
 // ---------------------------------------------------------------------------
 import { processNodes, flowRelationships, processVersions } from './routes/process-catalog';
 import { systems } from './routes/systems';
-import { dataAssets } from './routes/data-assets';
+import { dataAssets, dataAssetBindings } from './routes/data-assets';
 import { organizations } from './routes/organizations';
 import { people } from './routes/people';
 import { mappings } from './routes/mappings';
@@ -119,6 +119,7 @@ startAutoSave({
   processVersions: () => processVersions,
   systems: () => systems,
   dataAssets: () => dataAssets,
+  dataAssetBindings: () => dataAssetBindings,
   organizations: () => organizations,
   people: () => people,
   mappings: () => mappings,

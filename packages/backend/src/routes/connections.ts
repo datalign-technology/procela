@@ -126,7 +126,12 @@ router.delete('/all', (_req: Request, res: Response) => {
   auditService.log(DEV_ORG_ID, null, 'ConnectionProfile', '*', 'DELETE_ALL', null, { count });
   // Clean up every connection's upload dir alongside its profile.
   for (const id of removedIds) deleteLocalFileDir(id);
-  logger.info({ count }, 'Deleted all connection profiles');
+  // Cascade: any bindings pointing at deleted connections are now orphans.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { purgeBindingsForConnection } = require('./data-assets') as typeof import('./data-assets');
+  let removedBindings = 0;
+  for (const id of removedIds) removedBindings += purgeBindingsForConnection(id);
+  logger.info({ count, removedBindings }, 'Deleted all connection profiles');
   res.json({ success: true, deleted: count });
 });
 
@@ -232,6 +237,14 @@ router.delete('/:id', (req: Request, res: Response) => {
   saveStore('connections', connections);
   // Clean up any locally-uploaded file for this connection.
   deleteLocalFileDir(removed.id);
+  // Cascade: any DataAssetBindings pointing at this connection become
+  // orphaned — unlink them so the asset falls back to "not linked".
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { purgeBindingsForConnection } = require('./data-assets') as typeof import('./data-assets');
+  const removedBindings = purgeBindingsForConnection(removed.id);
+  if (removedBindings > 0) {
+    logger.info({ connectionId: removed.id, removedBindings }, 'Cascaded binding removal for deleted connection');
+  }
   res.status(204).send();
 });
 

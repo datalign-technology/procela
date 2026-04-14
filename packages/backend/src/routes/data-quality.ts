@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
-import { dataAssets } from './data-assets';
+import { dataAssets, getPrimaryBinding } from './data-assets';
 import { connections } from './connections';
 import {
   evaluateRule,
@@ -50,13 +50,18 @@ const VALID_RULE_TYPES: RuleType[] = [
 function contextForRule(rule: DataQualityRule): DescribeContext {
   const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
   if (!asset) return {};
-  const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+  // Prefer the asset's primary binding. Fall back to the legacy shadow
+  // fields (`asset.sourceConnectionId` etc.) so pre-binding rows still
+  // resolve correctly until they're migrated.
+  const binding = getPrimaryBinding(asset.id);
+  const connId = binding?.connectionId || asset.sourceConnectionId;
+  const conn = connId ? connections.find((c) => c.id === connId) : undefined;
   return {
     connectionType: conn?.connectionType,
     storageType: conn?.config?.storageType,
     dbType: conn?.config?.dbType,
-    sourceAsset: asset.sourceAsset,
-    sourceColumn: asset.sourceColumn,
+    sourceAsset: binding?.sourceAsset || asset.sourceAsset,
+    sourceColumn: binding?.sourceColumn || asset.sourceColumn,
     originalFileName: conn?.config?.originalFileName,
   };
 }
@@ -210,17 +215,21 @@ router.get('/templates', (req: Request, res: Response) => {
   const { suggested, generic } = suggestTemplates(column);
 
   // Resolve the describe context once if the caller provided an assetId.
+  // Prefer the asset's primary binding (new model); fall back to the
+  // legacy shadow fields for un-migrated rows.
   let ctx: DescribeContext = {};
   if (assetId) {
     const asset = dataAssets.find((a) => a.id === assetId);
     if (asset) {
-      const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+      const binding = getPrimaryBinding(asset.id);
+      const connId = binding?.connectionId || asset.sourceConnectionId;
+      const conn = connId ? connections.find((c) => c.id === connId) : undefined;
       ctx = {
         connectionType: conn?.connectionType,
         storageType: conn?.config?.storageType,
         dbType: conn?.config?.dbType,
-        sourceAsset: asset.sourceAsset,
-        sourceColumn: asset.sourceColumn,
+        sourceAsset: binding?.sourceAsset || asset.sourceAsset,
+        sourceColumn: binding?.sourceColumn || asset.sourceColumn,
         originalFileName: conn?.config?.originalFileName,
       };
     }
