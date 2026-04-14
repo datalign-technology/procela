@@ -10,6 +10,7 @@ import SettingsPage from '@/pages/SettingsPage';
 import HelpPage from '@/pages/HelpPage';
 import ValueStreamWizard from '@/pages/ValueStreamWizard';
 import OrganizationsPage from '@/pages/OrganizationsPage';
+import PeoplePage from '@/pages/PeoplePage';
 import GapDetectionPage from '@/pages/GapDetectionPage';
 import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
 import DataDomainsPage from '@/pages/DataDomainsPage';
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/mappings" element={<MappingsPage />} />
         <Route path="/gap-detection" element={<GapDetectionPage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
+        <Route path="/people" element={<PeoplePage />} />
         <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
         <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
         <Route path="/data-domains" element={<DataDomainsPage />} />
