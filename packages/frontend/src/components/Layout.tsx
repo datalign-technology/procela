@@ -123,6 +123,8 @@ export default function Layout() {
   const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; label: string }>>([]);
 
+  // Sidebar collapse state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Notification state
   const [notifCount, setNotifCount] = useState(0);
@@ -320,26 +322,28 @@ export default function Layout() {
 
   return (
     <div className={styles.shell}>
-      {/* Sidebar — icons only. Each NavLink renders the icon plus a
-          hidden label that the CSS reveals as a floating tooltip on
-          hover (see Layout.module.css `.navLabel`). */}
-      <aside className={styles.sidebar}>
+      {/* Sidebar */}
+      <aside className={clsx(styles.sidebar, sidebarCollapsed && styles.sidebarCollapsed)}>
         <div className={styles.sidebarBrand}>
           <img src="/procela-icon.png" alt="Procela" className={styles.brandIcon} />
+          {!sidebarCollapsed && <span>Procela</span>}
         </div>
         <nav className={styles.sidebarNav}>
           {navSections.map((section, sIdx) => (
             <div key={sIdx} className={styles.navGroup}>
+              {section.label && !sidebarCollapsed && (
+                <div className={styles.navGroupLabel}>{section.label}</div>
+              )}
               {section.items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.to === '/'}
                   className={({ isActive }) => clsx(styles.navLink, isActive && styles.navLinkActive)}
-                  aria-label={item.label}
+                  title={sidebarCollapsed ? item.label : undefined}
                 >
                   <span className={styles.navIcon}>{item.icon}</span>
-                  <span className={styles.navLabel}>{item.label}</span>
+                  {!sidebarCollapsed && item.label}
                 </NavLink>
               ))}
             </div>
@@ -355,13 +359,20 @@ export default function Layout() {
               className={({ isActive }) =>
                 clsx(styles.navLink, isActive && styles.navLinkActive)
               }
-              aria-label={item.label}
+              title={sidebarCollapsed ? item.label : undefined}
             >
               <span className={styles.navIcon}>{item.icon}</span>
-              <span className={styles.navLabel}>{item.label}</span>
+              {!sidebarCollapsed && item.label}
             </NavLink>
           ))}
         </nav>
+        <button
+          className={styles.sidebarToggle}
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {'\u2630'}
+        </button>
       </aside>
 
       {/* Main content area */}
