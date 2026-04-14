@@ -389,8 +389,42 @@ export default function Layout() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }}
-                style={{ maxWidth: 'min(220px, 40vw)' }}
+                onKeyDown={(e) => {
+                  // Escape clears the query AND closes the dropdown — common
+                  // expectation for search inputs and mirrors the X button.
+                  if (e.key === 'Escape' && searchQuery) {
+                    e.preventDefault();
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    setSearchOpen(false);
+                  }
+                }}
+                style={{ maxWidth: 'min(220px, 40vw)', paddingRight: searchQuery ? 28 : undefined }}
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                    setSearchOpen(false);
+                  }}
+                  aria-label="Clear search"
+                  title="Clear search (Esc)"
+                  style={{
+                    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                    width: 18, height: 18, padding: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-muted)', fontSize: 14, lineHeight: 1,
+                    borderRadius: 4,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+                >
+                  &times;
+                </button>
+              )}
               {searchOpen && (
                 <div className={styles.searchDropdown}>
                   {searchLoading && (
