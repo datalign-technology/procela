@@ -6,6 +6,7 @@ import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
+import IconButton from '../components/IconButton';
 import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
 
 // Assets tab: we need more than just {id,name} to display source provenance
@@ -377,15 +378,11 @@ export default function DataQualityPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {rules.length > 0 && (
-            <button
-              onClick={() => setShowDeleteAll(true)}
-              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-            >
-              Delete All
-            </button>
+            <IconButton icon="trash" label="Delete all rules" variant="danger"
+              onClick={() => setShowDeleteAll(true)} />
           )}
           {rules.length > 0 && (
-            <button
+            <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-quality-rules.csv', ['Data Asset', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'], rules.map((r) => [
                 r.dataAssetName,
                 r.name,
@@ -395,15 +392,9 @@ export default function DataQualityPage() {
                 String(r.weight),
                 r.status,
                 r.lastMeasured || '',
-              ]))}
-              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-            >
-              Export CSV
-            </button>
+              ]))} />
           )}
-          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            + Add Rule
-          </button>
+          <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
         </div>
       </div>
 

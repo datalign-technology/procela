@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import IconButton from '../components/IconButton';
 
 interface DashboardStats {
   valueStreams: number;
@@ -192,21 +193,7 @@ export default function ExecutiveReportPage() {
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
           <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
         </div>
-        <button
-          onClick={() => window.print()}
-          style={{
-            padding: '10px 24px',
-            fontSize: 14,
-            fontWeight: 600,
-            background: 'var(--color-primary, #0f4f46)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 'var(--radius-md, 8px)',
-            cursor: 'pointer',
-          }}
-        >
-          Export PDF
-        </button>
+        <IconButton icon="download" label="Export PDF" variant="primary" onClick={() => window.print()} />
       </div>
 
       <div className="report-content" style={{

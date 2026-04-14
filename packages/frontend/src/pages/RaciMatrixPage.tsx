@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import IconButton from '../components/IconButton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,8 +144,8 @@ export default function RaciMatrixPage() {
         <>
           {/* Export buttons */}
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button onClick={handleExportCsv} style={exportBtnStyle}>Export CSV</button>
-            <button onClick={handlePrint} style={exportBtnStyle}>Export PDF</button>
+            <IconButton icon="download" label="Export CSV" onClick={handleExportCsv} />
+            <IconButton icon="download" label="Export PDF" variant="primary" onClick={handlePrint} />
           </div>
 
           {/* Table container */}

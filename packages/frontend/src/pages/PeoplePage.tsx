@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
+import IconButton from '../components/IconButton';
 
 // ── Types ──
 
@@ -532,32 +533,19 @@ export default function PeoplePage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {people.length > 0 && (
-                    <button
-                      onClick={() => setShowDeleteAllPeople(true)}
-                      style={{ ...btnSecondary, color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-                    >
-                      Delete All People
-                    </button>
+                    <IconButton icon="trash" label="Delete all people" variant="danger"
+                      onClick={() => setShowDeleteAllPeople(true)} />
                   )}
                   {filteredPeople.length > 0 && (
-                    <button
+                    <IconButton icon="download" label="Export CSV"
                       onClick={() => exportCsv('people.csv', ['Name', 'Email', 'Role', 'Title'], filteredPeople.map((p) => [
                         p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
-                      ]))}
-                      style={btnSecondary}
-                    >
-                      Export CSV
-                    </button>
+                      ]))} />
                   )}
-                  {/* Always available — the form + import modal ask for
-                      the target org(s) and honour the user's accessible-orgs
-                      scope, so we no longer gate these on having an active
-                      filter. */}
-                  <button
-                    onClick={() => { setPeopleImportOrgId(selectedOrgId); setShowPeopleImport(true); }}
-                    style={btnSecondary}
-                  >Import People</button>
-                  <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
+                  <IconButton icon="upload" label="Import people"
+                    onClick={() => { setPeopleImportOrgId(selectedOrgId); setShowPeopleImport(true); }} />
+                  <IconButton icon="plus" label="Add person" variant="primary"
+                    onClick={openAddPerson} />
                 </div>
               </div>
 

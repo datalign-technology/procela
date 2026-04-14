@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import IconButton from '../components/IconButton';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -193,7 +194,7 @@ export default function AgentsPage() {
             <option value="">All organizations</option>
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          <button onClick={openAdd} style={btnPrimary}>+ Add Agent</button>
+          <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />
         </div>
       </div>
 

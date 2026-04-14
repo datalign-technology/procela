@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
+import IconButton from '../components/IconButton';
 
 // ── Types ──
 
@@ -266,8 +267,8 @@ export default function OrganizationsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => setShowImport(true)} style={btnSecondary}>Import Orgs</button>
-          <button onClick={() => openAddOrg(null)} style={btnPrimary}>+ Add Org</button>
+          <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
+          <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />
         </div>
       </div>
 
