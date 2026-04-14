@@ -188,6 +188,10 @@ export default function PeoplePage() {
   const [showPeopleImport, setShowPeopleImport] = useState(false);
   const [peopleImportText, setPeopleImportText] = useState('');
   const [peopleImportFormat, setPeopleImportFormat] = useState<'csv' | 'json'>('csv');
+  // Target org for import — defaults to the active filter so "import into
+  // <currently-filtered org>" is a single click, but the user can change it
+  // to any org they have access to in the dropdown.
+  const [peopleImportOrgId, setPeopleImportOrgId] = useState('');
   const [viewing360, setViewing360] = useState<Person360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [saving360, setSaving360] = useState(false);
@@ -393,12 +397,14 @@ export default function PeoplePage() {
     finally { setSaving360(false); }
   };
   const handlePeopleImport = async () => {
-    if (!peopleImportText.trim() || !selectedOrgId) return;
+    const orgId = peopleImportOrgId || selectedOrgId;
+    if (!peopleImportText.trim() || !orgId) return;
     try {
-      const body: any = { orgId: selectedOrgId };
+      const body: any = { orgId };
       if (peopleImportFormat === 'csv') body.csv = peopleImportText; else body.people = JSON.parse(peopleImportText);
       await apiClient.post('/people/import', body);
-      setShowPeopleImport(false); setPeopleImportText(''); fetchData();
+      setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId('');
+      fetchData();
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
   };
 
@@ -489,12 +495,15 @@ export default function PeoplePage() {
                       Export CSV
                     </button>
                   )}
-                  {(accessibleOrgIds.size === 0 || accessibleOrgIds.has(selectedOrgId)) && (
-                    <>
-                      <button onClick={() => setShowPeopleImport(true)} style={btnSecondary}>Import People</button>
-                      <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
-                    </>
-                  )}
+                  {/* Always available — the form + import modal ask for
+                      the target org(s) and honour the user's accessible-orgs
+                      scope, so we no longer gate these on having an active
+                      filter. */}
+                  <button
+                    onClick={() => { setPeopleImportOrgId(selectedOrgId); setShowPeopleImport(true); }}
+                    style={btnSecondary}
+                  >Import People</button>
+                  <button onClick={openAddPerson} style={btnPrimary}>+ Add Person</button>
                 </div>
               </div>
 
@@ -606,11 +615,22 @@ export default function PeoplePage() {
               {showPeopleImport && (
                 <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 10, boxShadow: 'var(--shadow-sm)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People into {selectedOrg?.name}</h3>
+                    <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People</h3>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={peopleImportFormat === 'csv'} onChange={() => setPeopleImportFormat('csv')} /> CSV</label>
                       <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={peopleImportFormat === 'json'} onChange={() => setPeopleImportFormat('json')} /> JSON</label>
                     </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                    <label style={{ fontSize: 11, fontWeight: 500 }}>Assign to organization *</label>
+                    <select
+                      style={{ ...inputStyle, width: 'auto', minWidth: 220, appearance: 'auto' as any, fontSize: 12 }}
+                      value={peopleImportOrgId}
+                      onChange={(e) => setPeopleImportOrgId(e.target.value)}
+                    >
+                      <option value="">-- Select an organization --</option>
+                      {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                    </select>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
                     <FilePicker accept={peopleImportFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onFileRead={(content, fn) => { setPeopleImportText(content); if (fn.endsWith('.json')) setPeopleImportFormat('json'); if (fn.endsWith('.csv')) setPeopleImportFormat('csv'); }} />
@@ -619,8 +639,12 @@ export default function PeoplePage() {
                   <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
                     placeholder={peopleImportFormat === 'csv' ? 'Name,Email,Role,Title\nJane Smith,jane@co.com,PROCESS_OWNER,Director' : '[{ "name": "Jane Smith", "role": "PROCESS_OWNER" }]'} />
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-                    <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); }}>Cancel</button>
-                    <button style={{ ...btnPrimary, opacity: !peopleImportText.trim() ? 0.6 : 1 }} disabled={!peopleImportText.trim()} onClick={handlePeopleImport}>Import</button>
+                    <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }}>Cancel</button>
+                    <button
+                      style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1 }}
+                      disabled={!peopleImportText.trim() || !peopleImportOrgId}
+                      onClick={handlePeopleImport}
+                    >Import</button>
                   </div>
                 </div>
               )}
