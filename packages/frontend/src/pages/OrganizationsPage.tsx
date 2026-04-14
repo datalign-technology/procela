@@ -6,6 +6,8 @@ import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
+import { useToastStore } from '../stores/toastStore';
 
 // ── Types ──
 
@@ -213,6 +215,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
 
 export default function OrganizationsPage() {
   const { triggerRefresh, orgs: accessibleOrgs, activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
   const navigate = useNavigate();
 
   // Org state
@@ -301,10 +304,9 @@ export default function OrganizationsPage() {
   };
   const handleBulkDeleteOrgs = async () => {
     if (selectedIds.size === 0) return;
-    // Fire deletes sequentially so a parent's deletion doesn't conflict
-    // with a child's by the time we get to it. The backend handles
-    // cascading children, so picking off ancestors first is safest.
-    const ids = Array.from(selectedIds);
+    // Snapshot the records we're about to delete so we can offer Undo.
+    const toDelete = flatOrgs.filter((o) => selectedIds.has(o.id));
+    const ids = toDelete.map((o) => o.id);
     let failures = 0;
     for (const id of ids) {
       try { await apiClient.delete(`/organizations/${id}`); }
@@ -313,7 +315,34 @@ export default function OrganizationsPage() {
     setSelectedIds(new Set());
     fetchData();
     triggerRefresh();
-    if (failures > 0) alert(`${failures} organization${failures === 1 ? '' : 's'} could not be deleted (likely already removed by a parent delete).`);
+    const count = ids.length - failures;
+    if (count > 0) {
+      addToast('success', `Deleted ${count} organization${count === 1 ? '' : 's'}`, {
+        action: {
+          label: 'Undo',
+          // Recreate each deleted record. Parents first so children can
+          // reattach via `parentId`. We don't rebuild sub-trees that
+          // were also selected — the user can re-select to include them.
+          handler: async () => {
+            const sortedByDepth = [...toDelete].sort((a, b) => {
+              // company < division < department < team < unit (rough proxy for depth)
+              const rank = (t: string) => ['company', 'division', 'department', 'team', 'unit'].indexOf(t);
+              return rank(a.type) - rank(b.type);
+            });
+            for (const o of sortedByDepth) {
+              await apiClient.post('/organizations', {
+                name: o.name, parentId: o.parentId, type: o.type,
+                industry: o.industry, description: o.description,
+              }).catch(() => {});
+            }
+            fetchData();
+            triggerRefresh();
+            addToast('success', 'Restored.');
+          },
+        },
+      });
+    }
+    if (failures > 0) addToast('info', `${failures} org${failures === 1 ? '' : 's'} were already removed by cascade.`);
   };
   const handleImport = async () => {
     if (!importText.trim()) return;
@@ -523,9 +552,13 @@ export default function OrganizationsPage() {
         {/* Tree — uses full page width */}
         <div style={{ maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
           {tree.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No organizations yet.</p>
-            </div>
+            <EmptyState
+              icon="\u2616"
+              title="No organizations yet"
+              description="Define your company, its divisions, and sub-teams. Most of Procela is scoped to the org you select at the top of the page, so this is the first thing to set up."
+              action={{ label: '+ Add Organization', onClick: () => openAddOrg(null) }}
+              secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
+            />
           ) : (
             tree.map((node) => (
               <OrgTreeNode key={node.id} node={node} depth={0}

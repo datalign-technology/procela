@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
 
 interface DataDomain {
   id: string;
@@ -444,11 +445,12 @@ export default function DataDomainsPage() {
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : domains.length === 0 && !showForm ? (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>
-              No data domains defined yet. Use the + Add Domain button above to get started.
-            </p>
-          </div>
+          <EmptyState
+            icon="\u2637"
+            title="No data domains defined yet"
+            description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies. Start with the big buckets (Customer, Finance, Product) and refine later."
+            action={{ label: '+ Add Domain', onClick: openAdd }}
+          />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

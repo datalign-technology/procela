@@ -6,6 +6,10 @@ import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
+import { useToastStore } from '../stores/toastStore';
 
 interface SystemEntity {
   id: string;
@@ -63,6 +67,7 @@ const emptyForm: FormData = { name: '', description: '', systemType: '' };
 
 export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
   const navigate = useNavigate();
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
@@ -162,10 +167,43 @@ export default function SystemsPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/systems/${id}`)));
+    // Snapshot the systems we're about to delete so we can offer Undo.
+    const toDelete = systems.filter((s) => selectedIds.has(s.id));
+    const count = toDelete.length;
+    await Promise.all(toDelete.map((s) => apiClient.delete(`/systems/${s.id}`)));
     setSelectedIds(new Set());
     fetchData();
+    addToast('success', `Deleted ${count} system${count === 1 ? '' : 's'}`, {
+      action: {
+        label: 'Undo',
+        // Restore by POSTing each record back. Since deletes cascade
+        // connections in some backends, Undo only revives the systems
+        // themselves — callers can reconnect afterwards.
+        handler: async () => {
+          await Promise.all(toDelete.map((s) =>
+            apiClient.post('/systems', {
+              name: s.name, description: s.description, systemType: s.systemType,
+              ...(activeOrgId ? { orgId: activeOrgId } : {}),
+            }).catch(() => {}),
+          ));
+          fetchData();
+          addToast('success', 'Restored.');
+        },
+      },
+    });
   };
+
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    systems,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      type: (a, b) => (a.systemType || '').localeCompare(b.systemType || ''),
+      description: (a, b) => (a.description || '').localeCompare(b.description || ''),
+      updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
+    },
+    'name',
+  );
 
   return (
     <div>
@@ -341,25 +379,29 @@ export default function SystemsPage() {
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : systems.length === 0 && !showForm ? (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>No systems defined yet. Use the + Add System button above to get started.</p>
-          </div>
+          <EmptyState
+            icon="\u2699"
+            title="No systems defined yet"
+            description="Systems are the applications and platforms where your data lives — ERP, CRM, GIS, and so on. Define them first so you can connect and map data assets to each one."
+            action={{ label: '+ Add System', onClick: openAdd }}
+            secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
+          />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
                 <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={systems.length > 0 && selectedIds.size === systems.length} onChange={toggleSelectAll} />
+                  <input type="checkbox" checked={systems.length > 0 && selectedIds.size === systems.length} onChange={toggleSelectAll} aria-label="Select all systems" />
                 </th>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Description</th>
+                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
+                <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
+                <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
                 <th style={{ ...thStyle, width: 140 }}>Connections</th>
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {systems.map((sys) => {
+              {sorted.map((sys) => {
                 const sysConnections = connections.filter((c) => c.systemId === sys.id);
                 const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
                 return (

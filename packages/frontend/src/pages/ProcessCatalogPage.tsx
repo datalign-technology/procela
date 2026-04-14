@@ -65,15 +65,11 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
   EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', required: false, icon: '\u2318', hint: 'System or automation that executes a task' },
 };
 
+import { getStatusColor } from '@/lib/statusBadge';
+
 const STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
-const statusColors: Record<string, { bg: string; color: string }> = {
-  DRAFT: { bg: '#f1f5f9', color: '#64748b' },
-  PROPOSED: { bg: '#dbeafe', color: '#1e40af' },
-  UNDER_REVIEW: { bg: '#fef3c7', color: '#92400e' },
-  APPROVED: { bg: '#ede9fe', color: '#5b21b6' },
-  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
-  DEPRECATED: { bg: '#fce7f3', color: '#9d174d' },
-};
+// Use the shared status palette so DRAFT/ACTIVE/etc. match the rest of the app.
+const statusColors = Object.fromEntries(STATUSES.map((s) => [s, getStatusColor(s)]));
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,

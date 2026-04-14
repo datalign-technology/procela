@@ -7,6 +7,7 @@ import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
 import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
 
 // Assets tab: we need more than just {id,name} to display source provenance
@@ -691,17 +692,25 @@ export default function DataQualityPage() {
 
       {/* Table */}
       {filteredRules.length === 0 ? (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 40,
-          textAlign: 'center',
-          color: 'var(--color-text-muted)',
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u2713'}</div>
-          <div>{rules.length === 0 ? 'No quality rules defined yet. Click "+ Add Rule" to get started.' : 'No rules match the current filters.'}</div>
-        </div>
+        rules.length === 0 ? (
+          <EmptyState
+            icon="\u2713"
+            title="No quality rules yet"
+            description="Quality rules validate your data — uniqueness, non-null, regex match, value ranges. Pick an asset, attach a rule, and Procela will run it and score the asset's health."
+            action={{ label: '+ Add Rule', onClick: openAdd }}
+          />
+        ) : (
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            padding: 40,
+            textAlign: 'center',
+            color: 'var(--color-text-muted)',
+          }}>
+            <div style={{ fontSize: 14 }}>No rules match the current filters.</div>
+          </div>
+        )
       ) : (
         <div style={{
           background: 'var(--color-surface)',

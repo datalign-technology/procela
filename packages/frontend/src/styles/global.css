@@ -118,3 +118,28 @@ body {
     print-color-adjust: exact !important;
   }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Accessibility — visible focus outlines for keyboard users only.
+ * `:focus-visible` shows the ring on Tab/keyboard focus but not on click,
+ * so the experience stays clean for mouse users.
+ * ─────────────────────────────────────────────────────────────────────── */
+*:focus {
+  outline: none;
+}
+*:focus-visible {
+  outline: 2px solid var(--color-primary, #1a7a6d);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+button:focus-visible,
+a:focus-visible {
+  outline-offset: 3px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+  outline-width: 2px;
+}

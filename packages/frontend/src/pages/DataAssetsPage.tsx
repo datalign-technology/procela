@@ -6,6 +6,7 @@ import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
 import LinkConnectionModal from '../components/LinkConnectionModal';
 
 interface DataAssetEntity {
@@ -488,9 +489,12 @@ export default function DataAssetsPage() {
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : assets.length === 0 && !showForm ? (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>No data assets defined yet. Use the + Add Data Asset button above to get started.</p>
-          </div>
+          <EmptyState
+            icon="\u26C1"
+            title="No data assets yet"
+            description="Data assets describe your information in business terms — customer accounts, billing records, inventory levels. Define them first, then link each one to where the data actually lives."
+            action={{ label: '+ Add Data Asset', onClick: openAdd }}
+          />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

@@ -13,6 +13,8 @@ export default function ToastContainer() {
 
   return (
     <div
+      role="region"
+      aria-label="Notifications"
       style={{
         position: 'fixed',
         bottom: 80,
@@ -21,12 +23,13 @@ export default function ToastContainer() {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
-        maxWidth: 360,
+        maxWidth: 380,
       }}
     >
       {toasts.map((toast) => (
         <div
           key={toast.id}
+          role={toast.type === 'error' ? 'alert' : 'status'}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -43,15 +46,37 @@ export default function ToastContainer() {
           }}
         >
           <span style={{ flex: 1 }}>{toast.message}</span>
+          {toast.action && (
+            <button
+              onClick={() => {
+                toast.action!.handler();
+                removeToast(toast.id);
+              }}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--color-primary)',
+                color: 'var(--color-primary)',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '4px 10px',
+                borderRadius: 4,
+                flexShrink: 0,
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
           <button
             onClick={() => removeToast(toast.id)}
+            aria-label="Dismiss"
             style={{
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               fontSize: 16,
               color: 'var(--color-text-muted)',
-              padding: '0 0 0 8px',
+              padding: '0 0 0 4px',
               lineHeight: 1,
               flexShrink: 0,
             }}

@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
 
 // ── Types ──
 
@@ -543,11 +544,12 @@ export default function MappingsPage() {
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : mappings.length === 0 && !showForm ? (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>
-              No mappings defined yet. Use the + Add Mapping button above to get started.
-            </p>
-          </div>
+          <EmptyState
+            icon="\u2194"
+            title="No mappings yet"
+            description="Mappings link your data assets to the process steps they support. They're how Procela knows which processes a piece of data flows through (and where the gaps are)."
+            action={{ label: '+ Add Mapping', onClick: openForm }}
+          />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>

@@ -6,9 +6,11 @@ import Breadcrumbs from './Breadcrumbs';
 import ChatPanel from './ChatPanel';
 import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
+import ShortcutsModal from './ShortcutsModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { apiClient } from '@/api/client';
+import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 
 type NavItem = { to: string; label: string; icon: string };
 type NavSection = { label: string | null; items: NavItem[] };
@@ -140,6 +142,47 @@ export default function Layout() {
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchWrapperRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Shortcuts modal state
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // Global keyboard shortcuts. Cmd/Ctrl+K and `/` both focus the search.
+  // `?` opens the shortcuts modal. `g` followed by a letter goes somewhere
+  // (handled separately so the second key isn't a chord).
+  useKeyboardShortcut('k', () => searchInputRef.current?.focus(), { mod: true });
+  useKeyboardShortcut('/', () => searchInputRef.current?.focus());
+  useKeyboardShortcut('?', () => setShortcutsOpen(true), { shift: true });
+
+  // Two-key "go to" sequences. Track the timestamp of the last `g` press;
+  // if a navigation key arrives within 1.5s, treat it as a chord.
+  const lastGRef = useRef<number>(0);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const now = Date.now();
+      if (e.key === 'g' && !e.shiftKey) {
+        lastGRef.current = now;
+        return;
+      }
+      if (now - lastGRef.current < 1500) {
+        const map: Record<string, string> = {
+          d: '/', o: '/organizations', p: '/people', c: '/processes', a: '/data-assets',
+          s: '/systems', q: '/data-quality', l: '/data-lineage', m: '/mappings',
+        };
+        const route = map[e.key];
+        if (route) {
+          e.preventDefault();
+          lastGRef.current = 0;
+          navigate(route);
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navigate]);
 
   // Search debounce
   useEffect(() => {
@@ -383,9 +426,10 @@ export default function Layout() {
             <div className={styles.searchWrapper} ref={searchWrapperRef}>
               <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
               <input
+                ref={searchInputRef}
                 type="text"
                 className={styles.searchInput}
-                placeholder="Search..."
+                placeholder="Search... (press / or Ctrl+K)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }}
@@ -622,13 +666,27 @@ export default function Layout() {
             </button>
           </div>
         </header>
-        <main className={styles.content}>
+        <a
+          href="#main-content"
+          style={{
+            position: 'absolute', left: -9999, top: 8,
+            background: 'var(--color-primary)', color: '#fff',
+            padding: '6px 14px', borderRadius: 4, zIndex: 1200,
+            fontSize: 13, fontWeight: 500,
+          }}
+          onFocus={(e) => { e.currentTarget.style.left = '8px'; }}
+          onBlur={(e) => { e.currentTarget.style.left = '-9999px'; }}
+        >
+          Skip to main content
+        </a>
+        <main id="main-content" className={styles.content}>
           <Breadcrumbs />
           <Outlet />
         </main>
         <ChatPanel />
         <SessionTimeout />
         <ToastContainer />
+        <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       </div>
     </div>
   );

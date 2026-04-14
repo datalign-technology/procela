@@ -41,14 +41,11 @@ const LEVEL_VISUAL: Record<NodeLevel, { bg: string; border: string; width: numbe
   EXECUTION:    { bg: '#e2e8f0', border: '#475569', width: 180, label: 'System/Execution', icon: '\u2318' },
 };
 
-const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  DRAFT: { bg: '#f1f5f9', color: '#64748b' },
-  PROPOSED: { bg: '#dbeafe', color: '#1e40af' },
-  UNDER_REVIEW: { bg: '#fef3c7', color: '#92400e' },
-  APPROVED: { bg: '#ede9fe', color: '#5b21b6' },
-  ACTIVE: { bg: '#d1f0eb', color: '#0f4f46' },
-  DEPRECATED: { bg: '#fce7f3', color: '#9d174d' },
-};
+// Use the shared status palette — identical colors across every page now.
+import { getStatusColor as _getStatusColor } from '@/lib/statusBadge';
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = Object.fromEntries(
+  ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'].map((s) => [s, _getStatusColor(s)]),
+);
 
 const ALL_OPTIONAL_LEVELS: NodeLevel[] = ['DOMAIN', 'CAPABILITY', 'SUBPROCESS', 'TASK', 'EXECUTION'];
 

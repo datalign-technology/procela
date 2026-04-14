@@ -199,6 +199,7 @@ export default function PeoplePage() {
   const [showDeleteAllPeople, setShowDeleteAllPeople] = useState(false);
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
+  const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
 
   // Governance data for summary column and 360 editing
   const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
@@ -599,6 +600,19 @@ export default function PeoplePage() {
                 onCancel={() => setConfirmBulkDeletePeople(false)}
               />
 
+              <ConfirmDialog
+                open={confirmDeletePerson !== null}
+                title="Delete Person?"
+                message="This will permanently remove this person. This cannot be undone."
+                confirmLabel="Delete"
+                onConfirm={async () => {
+                  const id = confirmDeletePerson;
+                  setConfirmDeletePerson(null);
+                  if (id) await handleDeletePerson(id);
+                }}
+                onCancel={() => setConfirmDeletePerson(null)}
+              />
+
               {/* Bulk Action Bar */}
               {selectedPersonIds.size > 0 && (
                 <div style={{
@@ -790,7 +804,7 @@ export default function PeoplePage() {
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => openPerson360(person.id)} />
                               <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
-                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => handleDeletePerson(person.id)} />
+                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeletePerson(person.id)} />
                             </div>
                           </td>
                         </tr>

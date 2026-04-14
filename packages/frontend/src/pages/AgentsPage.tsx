@@ -4,6 +4,9 @@ import { apiClient } from '../api/client';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -210,6 +213,18 @@ export default function AgentsPage() {
       fetchData();
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
   };
+  // Sort — URL-persisted via ?sort=&dir=.
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    filtered,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      type: (a, b) => a.agentType.localeCompare(b.agentType),
+      provider: (a, b) => (a.provider || '').localeCompare(b.provider || ''),
+      status: (a, b) => a.status.localeCompare(b.status),
+    },
+    'name',
+  );
+
   const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -442,11 +457,13 @@ export default function AgentsPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {filtered.length === 0 ? (
-          <div style={{ padding: '3rem 1rem', textAlign: 'center' }}>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>
-              {selectedOrgId ? 'No agents assigned to this organization yet.' : 'No agents defined yet.'}
-            </p>
-          </div>
+          <EmptyState
+            icon="\u2734"
+            title={selectedOrgId ? 'No agents in this organization yet' : 'No agents defined yet'}
+            description="Agents are non-human actors — AI models, service accounts, pipelines, bots — that participate in your org alongside people."
+            action={{ label: '+ Add Agent', onClick: openAdd }}
+            secondaryAction={{ label: 'Import from CSV', onClick: () => { setImportOrgId(selectedOrgId); setShowImport(true); } }}
+          />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -454,19 +471,19 @@ export default function AgentsPage() {
                 <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                    onChange={toggleSelectAll} />
+                    onChange={toggleSelectAll} aria-label="Select all agents" />
                 </th>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Provider</th>
-                <th style={thStyle}>Status</th>
+                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
+                <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
+                <SortableTh sortKey="provider" active={sortKey} dir={sortDir} onClick={toggleSort}>Provider</SortableTh>
+                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
                 <th style={thStyle}>Organizations</th>
                 <th style={thStyle}>Responsible</th>
                 <th style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => {
+              {sorted.map((a) => {
                 const tb = TYPE_BADGES[a.agentType] || TYPE_BADGES.OTHER;
                 const sb = STATUS_BADGES[a.status] || STATUS_BADGES.ACTIVE;
                 const isSelected = selectedIds.has(a.id);
