@@ -1,50 +1,34 @@
-import { useSearchParams } from 'react-router-dom';
-import SystemsPage from './SystemsPage';
-import DataAssetsPage from './DataAssetsPage';
-import ConnectionsPage from './ConnectionsPage';
+import { Navigate, useSearchParams } from 'react-router-dom';
 
-type Tab = 'systems' | 'data-assets' | 'connections';
-
-const VALID_TABS: Tab[] = ['systems', 'data-assets', 'connections'];
-
-const tabStyle = (active: boolean): React.CSSProperties => ({
-  padding: '10px 20px',
-  fontSize: 14,
-  fontWeight: active ? 600 : 400,
-  cursor: 'pointer',
-  border: 'none',
-  background: 'none',
-  color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
-  borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-});
-
+/**
+ * Compatibility redirect — the combined `/systems-and-data` page was split
+ * into three top-level routes (/systems, /data-assets, /connections). This
+ * component maps any lingering deep link at the old URL to the new route:
+ *
+ *   /systems-and-data                         → /systems
+ *   /systems-and-data?tab=systems             → /systems
+ *   /systems-and-data?tab=data-assets         → /data-assets
+ *   /systems-and-data?tab=connections&…       → /connections?…  (filters preserved)
+ *
+ * When/if the redirect is no longer used (enough time has passed for
+ * bookmarks to be updated), this component + its route in App.tsx can be
+ * deleted.
+ */
 export default function SystemsAndDataPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const raw = searchParams.get('tab');
-  const tab: Tab = VALID_TABS.includes(raw as Tab) ? (raw as Tab) : 'systems';
+  const [searchParams] = useSearchParams();
+  const tab = searchParams.get('tab');
 
-  const setTab = (next: Tab) => {
-    const params = new URLSearchParams(searchParams);
-    params.set('tab', next);
-    // Drop system-scoped params when leaving the Connections tab so they
-    // don't leak into Systems/Data Assets filtering.
-    if (next !== 'connections') {
-      params.delete('systemId');
-      params.delete('open');
-    }
-    setSearchParams(params, { replace: true });
-  };
+  const targetPath =
+    tab === 'connections' ? '/connections' :
+    tab === 'data-assets' ? '/data-assets' :
+    '/systems';
 
-  return (
-    <div>
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
-        <button style={tabStyle(tab === 'systems')} onClick={() => setTab('systems')}>Systems</button>
-        <button style={tabStyle(tab === 'data-assets')} onClick={() => setTab('data-assets')}>Data Assets</button>
-        <button style={tabStyle(tab === 'connections')} onClick={() => setTab('connections')}>Connections</button>
-      </div>
-      {tab === 'systems' && <SystemsPage />}
-      {tab === 'data-assets' && <DataAssetsPage />}
-      {tab === 'connections' && <ConnectionsPage />}
-    </div>
-  );
+  // Preserve any other query params (e.g. systemId, open) on the redirect
+  // so Connections-tab deep links that filter by system still work.
+  const carryParams = new URLSearchParams(searchParams);
+  carryParams.delete('tab');
+  const query = carryParams.toString();
+  const to = query ? `${targetPath}?${query}` : targetPath;
+
+  return <Navigate to={to} replace />;
 }

@@ -390,7 +390,7 @@ export default function SystemsPage() {
                     <td style={tdStyle}>
                       {sysConnections.length > 0 ? (
                         <button
-                          onClick={() => navigate(`/systems-and-data?tab=connections&systemId=${encodeURIComponent(sys.id)}`)}
+                          onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}`)}
                           style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, textDecoration: 'underline' }}
                           title="View connections for this system"
                         >
@@ -398,7 +398,7 @@ export default function SystemsPage() {
                         </button>
                       ) : (
                         <button
-                          onClick={() => navigate(`/systems-and-data?tab=connections&systemId=${encodeURIComponent(sys.id)}&open=1`)}
+                          onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}&open=1`)}
                           style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12 }}
                           title="Add a connection for this system"
                         >

@@ -467,8 +467,8 @@ interface QuickAction {
 }
 
 const quickActions: QuickAction[] = [
-  { icon: '\u2699', label: 'Add System', description: 'Register a new application or platform', link: '/systems-and-data' },
-  { icon: '\u26C1', label: 'Add Data Asset', description: 'Define a new data asset in business terms', link: '/systems-and-data' },
+  { icon: '\u2699', label: 'Add System', description: 'Register a new application or platform', link: '/systems' },
+  { icon: '\u26C1', label: 'Add Data Asset', description: 'Define a new data asset in business terms', link: '/data-assets' },
   { icon: '\u2194', label: 'Create Mapping', description: 'Link data assets to process steps', link: '/mappings' },
   { icon: '\u2630', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
   { icon: '\u26A0', label: 'View Gaps', description: 'See unmapped steps and ungoverned assets', link: '/analyze' },
