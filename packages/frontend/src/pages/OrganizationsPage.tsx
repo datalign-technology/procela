@@ -140,6 +140,11 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
           borderBottom: '1px solid var(--color-border)',
           background: isSelected ? '#f0f9ff' : undefined,
           transition: 'background 0.1s',
+          // Allow the row to shrink with its container so a long
+          // description or industry chip can't push the row wider
+          // than the card and trigger a horizontal scrollbar.
+          minWidth: 0,
+          overflow: 'hidden',
         }}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
@@ -554,8 +559,12 @@ export default function OrganizationsPage() {
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
         </div>
 
-        {/* Tree — uses full page width */}
-        <div style={{ maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
+        {/* Tree — uses full page width. No inner scroll container:
+            the page itself scrolls, which avoids the double-scrollbar
+            issue that `overflowY: auto` creates (it also implicitly
+            sets overflow-x to auto, triggering a spurious horizontal
+            scrollbar on any tiny width overshoot). */}
+        <div>
           {tree.length === 0 ? (
             <EmptyState
               icon="\u2616"
