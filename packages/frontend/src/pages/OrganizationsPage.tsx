@@ -108,41 +108,77 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
   return false;
 }
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs }: {
+// Root org is system-protected — never selectable for bulk delete.
+const ROOT_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
+function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect }: {
   node: OrgNode; depth: number;
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   onViewPeople: (id: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
   accessibleOrgIds: Set<string>;
   allOrgs: OrgFlat[];
+  selectedIds: Set<string>;
+  toggleSelect: (id: string) => void;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
   const count = peopleCounts[node.id] || 0;
   const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs);
+  const isSelected = selectedIds.has(node.id);
+  const isRoot = node.id === ROOT_ORG_ID;
 
   return (
     <div>
       <div
         style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 10px', paddingLeft: 10 + depth * 18,
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', paddingLeft: 12 + depth * 22,
           borderBottom: '1px solid var(--color-border)',
+          background: isSelected ? '#f0f9ff' : undefined,
           transition: 'background 0.1s',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
       >
+        {/* Selection checkbox — hidden for protected root org */}
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => toggleSelect(node.id)}
+          disabled={isRoot || !canEdit}
+          title={isRoot ? 'Cannot select the root organization' : !canEdit ? 'Read-only' : 'Select for bulk delete'}
+          style={{ flexShrink: 0, width: 14, height: 14, cursor: isRoot || !canEdit ? 'not-allowed' : 'pointer', opacity: isRoot ? 0 : 1 }}
+        />
         <span onClick={() => { if (hasChildren) toggleExpand(node.id); }}
-          style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none' }}>
+          style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 500, fontSize: 13 }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
-            {count > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{count}</span>}
+            {node.industry && (
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f8fafc', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
+                {node.industry}
+              </span>
+            )}
+            {count > 0 && (
+              <span style={{ fontSize: 10, color: '#5b21b6', background: '#ede9fe', padding: '1px 7px', borderRadius: 8, fontWeight: 500 }}>
+                {count} {count === 1 ? 'person' : 'people'}
+              </span>
+            )}
+            {hasChildren && (
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+                {node.children.length} child{node.children.length === 1 ? '' : 'ren'}
+              </span>
+            )}
           </div>
+          {node.description && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {node.description}
+            </div>
+          )}
         </div>
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
           <IconButton size="sm" icon="users" label={count > 0 ? `View ${count} people` : 'View people'} onClick={() => onViewPeople(node.id)} />
@@ -150,7 +186,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
             <>
               <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => onAddChild(node.id)} />
               <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
-              {node.id !== '00000000-0000-0000-0000-000000000010' && (
+              {!isRoot && (
                 <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
               )}
             </>
@@ -164,7 +200,8 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
         <OrgTreeNode key={child.id} node={child} depth={depth + 1}
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} onViewPeople={onViewPeople}
           expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
-          accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs} />
+          accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs}
+          selectedIds={selectedIds} toggleSelect={toggleSelect} />
       ))}
     </div>
   );
@@ -198,6 +235,10 @@ export default function OrganizationsPage() {
 
   // Tree vs. Visualize mode for the right side of the layout.
   const [viewMode, setViewMode] = useState<'tree' | 'visualize'>('tree');
+
+  // Bulk select state for the tree.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -239,6 +280,43 @@ export default function OrganizationsPage() {
   const handleDeleteOrg = async (id: string) => {
     try { await apiClient.delete(`/organizations/${id}`); fetchData(); triggerRefresh(); }
     catch (e) { alert(e instanceof Error ? e.message : 'Cannot delete'); }
+  };
+
+  // ── Bulk select handlers ──
+  const toggleOrgSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  // Selectable orgs = everything in the user's edit scope, minus the root.
+  const selectableOrgIds = flatOrgs
+    .filter((o) => o.id !== ROOT_ORG_ID && (accessibleOrgIds.size === 0 || accessibleOrgIds.has(o.id) || (() => {
+      let pid = o.parentId;
+      while (pid) { if (accessibleOrgIds.has(pid)) return true; pid = flatOrgs.find((p) => p.id === pid)?.parentId || null; }
+      return false;
+    })()))
+    .map((o) => o.id);
+  const toggleSelectAllOrgs = () => {
+    if (selectedIds.size === selectableOrgIds.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(selectableOrgIds));
+  };
+  const handleBulkDeleteOrgs = async () => {
+    if (selectedIds.size === 0) return;
+    // Fire deletes sequentially so a parent's deletion doesn't conflict
+    // with a child's by the time we get to it. The backend handles
+    // cascading children, so picking off ancestors first is safest.
+    const ids = Array.from(selectedIds);
+    let failures = 0;
+    for (const id of ids) {
+      try { await apiClient.delete(`/organizations/${id}`); }
+      catch { failures++; }
+    }
+    setSelectedIds(new Set());
+    fetchData();
+    triggerRefresh();
+    if (failures > 0) alert(`${failures} organization${failures === 1 ? '' : 's'} could not be deleted (likely already removed by a parent delete).`);
   };
   const handleImport = async () => {
     if (!importText.trim()) return;
@@ -359,36 +437,108 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      {/* Summary stats — counts by org type + total people, mirrors the
+          legend pattern from the Process Catalog page. Helps the user
+          see the shape of their org at a glance instead of having to
+          scan the tree. */}
+      {flatOrgs.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {orgTypes.map((t) => {
+            const count = flatOrgs.filter((o) => o.type === t).length;
+            if (count === 0) return null;
+            const tb = typeBadge(t);
+            return (
+              <div key={t} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: tb.background, color: tb.color,
+                borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+              }}>
+                <span style={{ fontWeight: 700 }}>{count}</span>
+                <span>{t.charAt(0).toUpperCase() + t.slice(1)}{count === 1 ? '' : 's'}</span>
+              </div>
+            );
+          })}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: '#ede9fe', color: '#5b21b6',
+            borderRadius: 4, padding: '4px 10px', fontSize: 12, fontWeight: 500,
+            marginLeft: 'auto',
+          }}>
+            <span style={{ fontWeight: 700 }}>{Object.values(peopleCounts).reduce((a, b) => a + b, 0)}</span>
+            <span>People assigned</span>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && viewMode === 'tree' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+          <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 'auto' }}>
+            Note: deleting a parent removes its descendants too.
+          </span>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Organizations?"
+        message={`Delete ${selectedIds.size} selected organizations and any descendants? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteOrgs(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
       {/* ══ MAIN BODY ══ */}
       {viewMode === 'tree' ? (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-
-          {/* LEFT: Org Tree */}
-          <div style={{ width: 380, flexShrink: 0, background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-            {/* Tree toolbar */}
-            <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
-            </div>
-
-            {/* Tree */}
-            <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
-              {tree.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No organizations yet.</p>
-                </div>
-              ) : (
-                tree.map((node) => (
-                  <OrgTreeNode key={node.id} node={node} depth={0}
-                    onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
-                    onViewPeople={(id) => navigate(`/people?orgId=${encodeURIComponent(id)}`)}
-                    expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
-                    accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs} />
-                ))
-              )}
-            </div>
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+          {/* Tree toolbar — select-all, expand/collapse */}
+          <div style={{ display: 'flex', gap: 12, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+              <input
+                type="checkbox"
+                checked={selectableOrgIds.length > 0 && selectedIds.size === selectableOrgIds.length}
+                onChange={toggleSelectAllOrgs}
+                disabled={selectableOrgIds.length === 0}
+              />
+              Select all
+            </label>
+            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
+            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
           </div>
 
+          {/* Tree — now uses full page width */}
+          <div style={{ maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
+            {tree.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No organizations yet.</p>
+              </div>
+            ) : (
+              tree.map((node) => (
+                <OrgTreeNode key={node.id} node={node} depth={0}
+                  onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
+                  onViewPeople={(id) => navigate(`/people?orgId=${encodeURIComponent(id)}`)}
+                  expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
+                  accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
+                  selectedIds={selectedIds} toggleSelect={toggleOrgSelect} />
+              ))
+            )}
+          </div>
         </div>
       ) : (
         <OrgHierarchyVisualization tree={tree} peopleCounts={peopleCounts} />

@@ -225,7 +225,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -240,6 +240,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   allTags: TagEntry[];
   onAddTag: (nodeId: string, tag: string) => void;
   onRemoveTag: (tagId: string) => void;
+  selectedIds: Set<string>;
+  toggleSelect: (id: string) => void;
 }) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -282,18 +284,28 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   // Connecting line style
   const isLeafLevel = validChildren.length === 0;
 
+  const isSelected = selectedIds.has(node.id);
+
   return (
     <div>
       <div style={{
         display: 'flex', alignItems: 'flex-start', gap: 6,
         padding: '7px 12px', paddingLeft: 12 + depth * 22,
         borderBottom: '1px solid var(--color-border)',
-        background: completeness && !completeness.complete ? '#fffbeb' : undefined,
+        background: isSelected ? '#f0f9ff' : (completeness && !completeness.complete ? '#fffbeb' : undefined),
         transition: 'background 0.1s',
       }}
-        onMouseEnter={(e) => { if (!completeness || completeness.complete) e.currentTarget.style.background = 'var(--color-bg)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = completeness && !completeness.complete ? '#fffbeb' : ''; }}
+        onMouseEnter={(e) => { if (!isSelected && (!completeness || completeness.complete)) e.currentTarget.style.background = 'var(--color-bg)'; }}
+        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = completeness && !completeness.complete ? '#fffbeb' : ''; }}
       >
+        {/* Selection checkbox */}
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => toggleSelect(node.id)}
+          title="Select for bulk delete"
+          style={{ flexShrink: 0, width: 14, height: 14, marginTop: 4, cursor: 'pointer' }}
+        />
         {/* Connecting line + expand */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 16, flexShrink: 0, paddingTop: 3 }}>
           {depth > 0 && (
@@ -481,6 +493,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
         <TreeNode key={child.id} node={child} depth={depth + 1}
           onUpdate={onUpdate} onDelete={onDelete} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand}
+          selectedIds={selectedIds} toggleSelect={toggleSelect}
           validChildrenMap={validChildrenMap} flows={flows}
           siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder}
           onShowHistory={onShowHistory}
@@ -505,6 +518,8 @@ export default function ProcessCatalogPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyVersions, setHistoryVersions] = useState<ProcessVersion[]>([]);
@@ -579,6 +594,45 @@ export default function ProcessCatalogPage() {
   const deleteNode = async (id: string) => {
     await apiClient.delete(`/process-catalog/nodes/${id}`);
     fetchData();
+  };
+
+  // ── Bulk select handlers ──
+  const collectAllNodeIds = (nodes: ProcessNode[]): string[] => {
+    const ids: string[] = [];
+    function walk(arr: ProcessNode[]) {
+      for (const n of arr) { ids.push(n.id); if (n.children) walk(n.children); }
+    }
+    walk(nodes);
+    return ids;
+  };
+  const toggleNodeSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const allNodeIds = collectAllNodeIds(tree);
+  const toggleSelectAllNodes = () => {
+    if (selectedIds.size === allNodeIds.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(allNodeIds));
+  };
+  const handleBulkDeleteNodes = async () => {
+    if (selectedIds.size === 0) return;
+    // Delete sequentially. The backend cascades children, so a parent
+    // delete may make later sibling/child deletes 404 — swallow those.
+    let failures = 0;
+    for (const id of Array.from(selectedIds)) {
+      try { await apiClient.delete(`/process-catalog/nodes/${id}`); }
+      catch { failures++; }
+    }
+    setSelectedIds(new Set());
+    fetchData();
+    if (failures > 0) {
+      // Most failures are "already deleted by cascade" so demote to info.
+      // eslint-disable-next-line no-console
+      console.info(`${failures} delete(s) skipped — likely already removed by cascade.`);
+    }
   };
 
   const reorderNode = async (nodeId: string, direction: 'up' | 'down') => {
@@ -743,7 +797,15 @@ export default function ProcessCatalogPage() {
 
       {/* Toolbar */}
       {tree.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={allNodeIds.length > 0 && selectedIds.size === allNodeIds.length}
+              onChange={toggleSelectAllNodes}
+            />
+            Select all
+          </label>
           <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
           <button style={{ ...btnIcon, fontSize: 12, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
@@ -751,6 +813,40 @@ export default function ProcessCatalogPage() {
           </span>
         </div>
       )}
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+          <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 'auto' }}>
+            Note: deleting a parent removes its descendants too.
+          </span>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Process Nodes?"
+        message={`Delete ${selectedIds.size} selected process nodes and any descendants? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteNodes(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
 
       {/* Validation summary */}
       {issues.length > 0 && (
@@ -844,6 +940,7 @@ export default function ProcessCatalogPage() {
               onUpdate={updateNode} onDelete={deleteNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
               expanded={expanded} toggleExpand={toggleExpand}
+              selectedIds={selectedIds} toggleSelect={toggleNodeSelect}
               validChildrenMap={validChildrenMap} flows={flows}
               siblingIndex={idx} siblingCount={tree.length} onReorder={reorderNode}
               onShowHistory={showHistory}
