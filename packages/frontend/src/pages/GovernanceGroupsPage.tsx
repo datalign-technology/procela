@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
+import IconButton from '../components/IconButton';
 
 // ── Types ──
 
@@ -476,23 +477,15 @@ export default function GovernanceGroupsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {flatGroups.length > 0 && (
-            <button
-              onClick={() => setShowDeleteAll(true)}
-              style={{ ...btnSecondary, color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-            >
-              Delete All
-            </button>
+            <IconButton icon="trash" label="Delete all groups" variant="danger"
+              onClick={() => setShowDeleteAll(true)} />
           )}
           {flatGroups.length > 0 && (
-            <button
-              onClick={() => navigate('/governance/visualization')}
-              style={btnSecondary}
-            >
-              Visualize
-            </button>
+            <IconButton icon="eye" label="Visualize"
+              onClick={() => navigate('/governance/visualization')} />
           )}
           {flatGroups.length > 0 && (
-            <button
+            <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('governance-groups.csv', ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'], flatGroups.map((g) => [
                 g.name,
                 GROUP_TYPE_LABELS[g.type] || g.type,
@@ -500,24 +493,16 @@ export default function GovernanceGroupsPage() {
                 g.description,
                 String(g.members.length),
                 g.status,
-              ]))}
-              style={btnSecondary}
-            >
-              Export CSV
-            </button>
+              ]))} />
           )}
-          <button
+          <IconButton icon="settings" label="Generate governance template"
             onClick={async () => {
               try {
                 await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
                 fetchGroups();
               } catch { /* */ }
-            }}
-            style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-          >
-            Generate Governance Template
-          </button>
-          <button onClick={openAdd} style={btnPrimary}>+ Add Group</button>
+            }} />
+          <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
         </div>
       </div>
 

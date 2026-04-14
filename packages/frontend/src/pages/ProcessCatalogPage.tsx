@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
+import IconButton from '../components/IconButton';
 
 // ── Types ──
 
@@ -666,42 +667,28 @@ export default function ProcessCatalogPage() {
           </p>
         </div>
         {totalNodes > 0 && canCreateValueStreams && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setShowDeleteAll(true)}
-              style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-error)', border: '1px solid var(--color-error)', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-              Delete All Processes
-            </button>
-            <button onClick={() => navigate('/processes/visualization')}
-              style={{ padding: '8px 16px', background: '#0f4f46', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {'\u25A3'} Visualize
-            </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <IconButton icon="trash" label="Delete all processes" variant="danger"
+              onClick={() => setShowDeleteAll(true)} />
+            <IconButton icon="eye" label="Visualize"
+              onClick={() => navigate('/processes/visualization')} />
             {(byLevel.VALUE_STREAM || 0) >= 2 && (
-              <button onClick={() => navigate('/processes/compare')}
-                style={{ padding: '8px 16px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {'\u2194'} Compare
-              </button>
+              <IconButton icon="refresh" label="Compare value streams"
+                onClick={() => navigate('/processes/compare')} />
             )}
-            <button onClick={() => navigate('/processes/wizard')}
-              style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-              Generate from Template
-            </button>
-            <button onClick={() => setAddingTo('__root__')}
-              style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
-              + Add Value Stream
-            </button>
+            <IconButton icon="settings" label="Generate from template"
+              onClick={() => navigate('/processes/wizard')} />
+            <IconButton icon="plus" label="Add value stream" variant="primary"
+              onClick={() => setAddingTo('__root__')} />
           </div>
         )}
         {totalNodes > 0 && !canCreateValueStreams && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => navigate('/processes/visualization')}
-              style={{ padding: '8px 16px', background: '#0f4f46', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {'\u25A3'} Visualize
-            </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <IconButton icon="eye" label="Visualize"
+              onClick={() => navigate('/processes/visualization')} />
             {(byLevel.VALUE_STREAM || 0) >= 2 && (
-              <button onClick={() => navigate('/processes/compare')}
-                style={{ padding: '8px 16px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {'\u2194'} Compare
-              </button>
+              <IconButton icon="refresh" label="Compare value streams"
+                onClick={() => navigate('/processes/compare')} />
             )}
           </div>
         )}

@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
+import IconButton from '../components/IconButton';
 
 interface DataDomain {
   id: string;
@@ -206,16 +207,10 @@ export default function DataDomainsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {domains.length > 0 && (
-            <button
-              onClick={() => setShowDeleteAll(true)}
-              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-            >
-              Delete All
-            </button>
+            <IconButton icon="trash" label="Delete all domains" variant="danger"
+              onClick={() => setShowDeleteAll(true)} />
           )}
-          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            + Add Domain
-          </button>
+          <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />
         </div>
       </div>
 

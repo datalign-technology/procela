@@ -6,6 +6,7 @@ import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
+import IconButton from '../components/IconButton';
 
 interface LineageLink {
   id: string;
@@ -310,15 +311,11 @@ export default function DataLineagePage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {links.length > 0 && (
-            <button
-              onClick={() => setShowDeleteAll(true)}
-              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
-            >
-              Delete All
-            </button>
+            <IconButton icon="trash" label="Delete all flows" variant="danger"
+              onClick={() => setShowDeleteAll(true)} />
           )}
           {links.length > 0 && (
-            <button
+            <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-lineage.csv', ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'], links.map((l) => [
                 l.sourceSystemName,
                 l.targetSystemName,
@@ -327,21 +324,11 @@ export default function DataLineagePage() {
                 l.frequency,
                 l.status,
                 l.description,
-              ]))}
-              style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-            >
-              Export CSV
-            </button>
+              ]))} />
           )}
-          <button
-            onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')}
-            style={{ ...btnSecondary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-          >
-            {viewMode === 'table' ? 'Visualize' : 'Table View'}
-          </button>
-          <button onClick={openAdd} style={{ ...btnPrimary, padding: '0.5rem 1rem', fontSize: '0.875rem' }}>
-            + Add Flow
-          </button>
+          <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
+            onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
+          <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />
         </div>
       </div>
 
