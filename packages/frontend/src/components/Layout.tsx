@@ -25,6 +25,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/people', label: 'People', icon: '\u263B' },
+      { to: '/agents', label: 'Agents', icon: '\u2734' },
       { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/systems-and-data', label: 'Systems & Data', icon: '\u2699' },
       { to: '/systems-and-data?tab=connections', label: 'Connections', icon: '\u26A1' },

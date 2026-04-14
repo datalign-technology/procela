@@ -23,6 +23,7 @@ import systemsRouter from './routes/systems';
 import dataAssetsRouter from './routes/data-assets';
 import organizationsRouter from './routes/organizations';
 import peopleRouter from './routes/people';
+import agentsRouter from './routes/agents';
 import mappingsRouter from './routes/mappings';
 import dashboardRouter from './routes/dashboard';
 import chatRouter from './routes/chat';
@@ -65,6 +66,7 @@ app.use('/api/v1/docs', docsRouter);
 // ---------------------------------------------------------------------------
 app.use('/api/v1/organizations', authenticateToken, organizationsRouter);
 app.use('/api/v1/people', authenticateToken, peopleRouter);
+app.use('/api/v1/agents', authenticateToken, agentsRouter);
 app.use('/api/v1/process-catalog', authenticateToken, processCatalogRouter);
 app.use('/api/v1/data-assets', authenticateToken, dataAssetsRouter);
 app.use('/api/v1/systems', authenticateToken, systemsRouter);
@@ -100,6 +102,7 @@ import { systems } from './routes/systems';
 import { dataAssets, dataAssetBindings } from './routes/data-assets';
 import { organizations } from './routes/organizations';
 import { people } from './routes/people';
+import { agents } from './routes/agents';
 import { mappings } from './routes/mappings';
 import { governanceGroups } from './routes/governance-groups';
 import { damaRoles } from './routes/dama-roles';
@@ -122,6 +125,7 @@ startAutoSave({
   dataAssetBindings: () => dataAssetBindings,
   organizations: () => organizations,
   people: () => people,
+  agents: () => agents,
   mappings: () => mappings,
   governanceGroups: () => governanceGroups,
   damaRoles: () => damaRoles,
