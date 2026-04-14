@@ -396,8 +396,10 @@ export default function SystemsPage() {
                       )}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }} onClick={() => openEdit(sys)}>Edit</button>
-                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }} onClick={() => setConfirmDelete(sys.id)}>Delete</button>
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sys)} />
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(sys.id)} />
+                      </div>
                     </td>
                   </tr>
                 );

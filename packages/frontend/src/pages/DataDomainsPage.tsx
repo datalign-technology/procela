@@ -499,28 +499,12 @@ export default function DataDomainsPage() {
                   <td style={tdStyle} onClick={() => openDetail(domain)}>
                     <span style={statusBadge(domain.status)}>{domain.status}</span>
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <button
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                      onClick={() => openDetail(domain)}
-                      title="Details"
-                    >
-                      Details
-                    </button>
-                    <button
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                      onClick={() => openEdit(domain)}
-                      title="Edit"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }}
-                      onClick={() => setConfirmDelete(domain.id)}
-                      title="Delete"
-                    >
-                      Delete
-                    </button>
+                  <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <IconButton size="sm" icon="eye" label="Details" onClick={() => openDetail(domain)} />
+                      <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
+                      <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(domain.id)} />
+                    </div>
                   </td>
                 </tr>
                 );

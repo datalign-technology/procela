@@ -232,9 +232,11 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
             {memberCount > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{memberCount}</span>}
           </div>
         </div>
-        <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 13 }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id, node.type); }} title="Add child group">+</button>
-        <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
-        <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Delete</button>
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          <IconButton size="sm" icon="plus" label="Add child group" variant="primary" onClick={() => onAddChild(node.id, node.type)} />
+          <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
+          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
+        </div>
       </div>
       {isExpanded && node.children.map((child) => (
         <GroupTreeNode key={child.id} node={child} depth={depth + 1}

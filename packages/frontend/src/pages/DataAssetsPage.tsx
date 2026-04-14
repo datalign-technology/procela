@@ -531,53 +531,19 @@ export default function DataAssetsPage() {
                       )}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                        onClick={() => open360(asset.id)}
-                        title="View 360"
-                      >
-                        View
-                      </button>
-                      {binding ? (
-                        <>
-                          <button
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                            onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }}
-                            title="Point this asset at a different connection or column"
-                          >
-                            Change
-                          </button>
-                          <button
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                            onClick={() => unlinkPrimary(asset)}
-                            title="Detach this asset from its current location"
-                          >
-                            Unlink
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4, fontWeight: 500 }}
-                          onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }}
-                          title="Link this asset to a connection"
-                        >
-                          Link
-                        </button>
-                      )}
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                        onClick={() => openEdit(asset)}
-                        title="Edit"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }}
-                        onClick={() => setConfirmDelete(asset.id)}
-                        title="Delete"
-                      >
-                        Delete
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        <IconButton size="sm" icon="eye" label="View 360" onClick={() => open360(asset.id)} />
+                        {binding ? (
+                          <>
+                            <IconButton size="sm" icon="refresh" label="Change connection or column" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }} />
+                            <IconButton size="sm" icon="unlink" label="Unlink from location" onClick={() => unlinkPrimary(asset)} />
+                          </>
+                        ) : (
+                          <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
+                        )}
+                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(asset)} />
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(asset.id)} />
+                      </div>
                     </td>
                   </tr>
                 );

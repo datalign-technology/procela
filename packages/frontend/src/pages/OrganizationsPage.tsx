@@ -144,22 +144,18 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
             {count > 0 && <span style={{ fontSize: 9, color: 'var(--color-text-muted)', background: '#f1f5f9', padding: '0px 5px', borderRadius: 8 }}>{count}</span>}
           </div>
         </div>
-        <button
-          style={{ ...btnIcon, color: '#5b21b6' }}
-          onClick={(e) => { e.stopPropagation(); onViewPeople(node.id); }}
-          title="View people assigned to this org"
-        >
-          People{count > 0 ? ` (${count})` : ''}
-        </button>
-        {canEdit && (
-          <>
-            <button style={{ ...btnIcon, color: 'var(--color-primary)', fontSize: 13 }} onClick={(e) => { e.stopPropagation(); onAddChild(node.id); }} title="Add child">+</button>
-            <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={(e) => { e.stopPropagation(); onEdit(node); }} title="Edit">Edit</button>
-            {node.id !== '00000000-0000-0000-0000-000000000010' && (
-              <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={(e) => { e.stopPropagation(); onDelete(node.id); }} title="Delete">Delete</button>
-            )}
-          </>
-        )}
+        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          <IconButton size="sm" icon="users" label={count > 0 ? `View ${count} people` : 'View people'} onClick={() => onViewPeople(node.id)} />
+          {canEdit && (
+            <>
+              <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => onAddChild(node.id)} />
+              <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
+              {node.id !== '00000000-0000-0000-0000-000000000010' && (
+                <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => onDelete(node.id)} />
+              )}
+            </>
+          )}
+        </div>
         {!canEdit && (
           <span style={{ fontSize: 9, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>read-only</span>
         )}

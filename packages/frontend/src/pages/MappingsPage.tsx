@@ -624,20 +624,7 @@ export default function MappingsPage() {
                     {m.notes || '--'}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <button
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--color-error)',
-                        fontSize: 12,
-                        padding: '2px 6px',
-                      }}
-                      onClick={() => setConfirmDelete(m.id)}
-                      title="Delete"
-                    >
-                      Delete
-                    </button>
+                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} />
                   </td>
                 </tr>
               ))}

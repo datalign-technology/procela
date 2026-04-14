@@ -565,18 +565,10 @@ export default function DataLineagePage() {
                         {link.description || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button
-                          onClick={() => openEdit(link)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--color-primary)', padding: '2px 6px' }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setConfirmDelete(link.id)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#dc2626', padding: '2px 6px' }}
-                        >
-                          Delete
-                        </button>
+                        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(link)} />
+                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(link.id)} />
+                        </div>
                       </td>
                     </tr>
                     );

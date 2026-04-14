@@ -757,18 +757,10 @@ export default function DataQualityPage() {
                     {rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--'}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button
-                      onClick={() => openEdit(rule)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--color-primary)', padding: '2px 6px' }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete(rule.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#dc2626', padding: '2px 6px' }}
-                    >
-                      Delete
-                    </button>
+                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(rule)} />
+                      <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(rule.id)} />
+                    </div>
                   </td>
                 </tr>
                 );

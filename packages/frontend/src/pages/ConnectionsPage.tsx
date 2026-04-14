@@ -836,35 +836,17 @@ export default function ConnectionsPage() {
                       {timeAgo(conn.lastTestedAt)}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: isTesting ? 'default' : 'pointer', color: isTesting ? 'var(--color-text-muted)' : '#0f766e', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                        onClick={() => !isTesting && handleTest(conn.id)}
-                        disabled={isTesting}
-                        title="Test connection"
-                      >
-                        {isTesting ? 'Testing...' : 'Test'}
-                      </button>
-                      {conn.status === 'CONNECTED' && (
-                        <button
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5b21b6', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                          onClick={() => handleDiscover(conn)}
-                          title="Discover assets"
-                        >
-                          Discover
-                        </button>
-                      )}
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, padding: '2px 6px', marginRight: 4 }}
-                        onClick={() => openEdit(conn)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 12, padding: '2px 6px' }}
-                        onClick={() => setConfirmDelete(conn.id)}
-                      >
-                        Delete
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
+                          label={isTesting ? 'Testing...' : 'Test connection'}
+                          disabled={isTesting}
+                          onClick={() => !isTesting && handleTest(conn.id)} />
+                        {conn.status === 'CONNECTED' && (
+                          <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
+                        )}
+                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(conn)} />
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(conn.id)} />
+                      </div>
                     </td>
                   </tr>
                 );

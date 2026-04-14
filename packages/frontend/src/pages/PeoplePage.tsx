@@ -787,9 +787,11 @@ export default function PeoplePage() {
                           </td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
-                            <button style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }} onClick={() => openPerson360(person.id)} title="Manage governance roles, groups, and domains">Manage</button>
-                            <button style={{ ...btnIcon, color: 'var(--color-primary)' }} onClick={() => openEditPerson(person)}>Edit</button>
-                            <button style={{ ...btnIcon, color: 'var(--color-error)' }} onClick={() => handleDeletePerson(person.id)}>Delete</button>
+                            <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                              <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => openPerson360(person.id)} />
+                              <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
+                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => handleDeletePerson(person.id)} />
+                            </div>
                           </td>
                         </tr>
                         );

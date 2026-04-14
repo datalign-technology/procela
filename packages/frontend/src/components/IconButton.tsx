@@ -12,6 +12,10 @@ import React from 'react';
 
 export type IconButtonVariant = 'primary' | 'secondary' | 'danger';
 
+// Two sizes: 'md' is the default page-header variant (34x34); 'sm' is for
+// per-row table actions (24x24) where vertical real estate is tight.
+export type IconButtonSize = 'sm' | 'md';
+
 export type IconName =
   | 'plus'
   | 'upload'
@@ -22,13 +26,18 @@ export type IconName =
   | 'refresh'
   | 'play'
   | 'settings'
-  | 'check';
+  | 'check'
+  | 'search'
+  | 'link'
+  | 'unlink'
+  | 'users';
 
 interface IconButtonProps {
   icon: IconName;
   label: string;
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   variant?: IconButtonVariant;
+  size?: IconButtonSize;
   disabled?: boolean;
   type?: 'button' | 'submit';
 }
@@ -45,8 +54,10 @@ const variantStyles: Record<IconButtonVariant, React.CSSProperties> = {
   },
 };
 
-export default function IconButton({ icon, label, onClick, variant = 'secondary', disabled, type = 'button' }: IconButtonProps) {
+export default function IconButton({ icon, label, onClick, variant = 'secondary', size = 'md', disabled, type = 'button' }: IconButtonProps) {
   const v = variantStyles[variant];
+  const dims = size === 'sm' ? 24 : 34;
+  const iconSize = size === 'sm' ? 14 : 18;
   return (
     <button
       type={type}
@@ -57,13 +68,14 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
       // tooltip below has an anchor.
       style={{
         position: 'relative',
-        width: 34, height: 34, padding: 0,
+        width: dims, height: dims, padding: 0,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         border: `1px solid ${v.borderColor}`, borderRadius: 'var(--radius-md)',
         background: v.background, color: v.color,
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         transition: 'background-color 0.12s, border-color 0.12s, transform 0.05s',
+        verticalAlign: 'middle',
       }}
       // Tiny press feedback so the click feels real even without the verb.
       onMouseDown={(e) => { if (!disabled) e.currentTarget.style.transform = 'scale(0.96)'; }}
@@ -82,7 +94,7 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
         if (tip) { tip.style.opacity = '0'; tip.style.visibility = 'hidden'; }
       }}
     >
-      <Icon name={icon} />
+      <Icon name={icon} size={iconSize} />
       <span
         data-tooltip
         style={{
@@ -107,9 +119,9 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
 // Inline SVG set. Outline style matches the bell icon in the header.
 // ──────────────────────────────────────────────────────────────────────────
 
-function Icon({ name }: { name: IconName }) {
+function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const common = {
-    width: 18, height: 18, viewBox: '0 0 24 24',
+    width: size, height: size, viewBox: '0 0 24 24',
     fill: 'none', stroke: 'currentColor', strokeWidth: 1.8,
     strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
     'aria-hidden': true, focusable: false,
@@ -135,6 +147,14 @@ function Icon({ name }: { name: IconName }) {
       return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
     case 'check':
       return <svg {...common}><polyline points="20 6 9 17 4 12" /></svg>;
+    case 'search':
+      return <svg {...common}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>;
+    case 'link':
+      return <svg {...common}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>;
+    case 'unlink':
+      return <svg {...common}><path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71" /><line x1="8" y1="2" x2="8" y2="5" /><line x1="2" y1="8" x2="5" y2="8" /><line x1="16" y1="19" x2="16" y2="22" /><line x1="19" y1="16" x2="22" y2="16" /></svg>;
+    case 'users':
+      return <svg {...common}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
     default:
       return null;
   }
