@@ -468,22 +468,38 @@ export default function Layout() {
             <div ref={notifWrapperRef} style={{ position: 'relative' }}>
               <button
                 onClick={handleNotifToggle}
+                aria-label="Notifications"
+                aria-expanded={notifOpen}
                 style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 18, position: 'relative', padding: '4px 8px',
+                  background: notifOpen ? 'var(--color-bg)' : 'none',
+                  border: 'none', cursor: 'pointer',
+                  position: 'relative', padding: 6,
                   color: 'var(--color-text-secondary)',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 }}
                 title="Notifications"
               >
-                N
+                {/* Outline bell — inherits currentColor from the button so it
+                    matches the rest of the header text, and stays crisp on
+                    high-DPI screens where a Unicode glyph would go fuzzy. */}
+                <svg
+                  width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  aria-hidden="true" focusable="false"
+                >
+                  <path d="M15 17h5l-1.4-1.9a2 2 0 0 1-.4-1.2V10a6.2 6.2 0 0 0-5-6.08V3.5a1.2 1.2 0 1 0-2.4 0v.42A6.2 6.2 0 0 0 5.8 10v3.9a2 2 0 0 1-.4 1.2L4 17h5" />
+                  <path d="M10 20a2 2 0 0 0 4 0" />
+                </svg>
                 {notifCount > 0 && (
                   <span style={{
-                    position: 'absolute', top: 0, right: 2,
+                    position: 'absolute', top: -2, right: -2,
                     background: '#ef4444', color: '#fff', fontSize: 9,
                     fontWeight: 700, borderRadius: '50%',
-                    width: 16, height: 16, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                    lineHeight: 1,
+                    minWidth: 16, height: 16, padding: '0 4px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    lineHeight: 1, boxShadow: '0 0 0 2px var(--color-surface)',
                   }}>
                     {notifCount > 99 ? '99+' : notifCount}
                   </span>
