@@ -192,6 +192,58 @@ router.post('/compute-health/:assetId', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * GET /api/v1/data-quality/templates?column=<name>&assetId=<id>
+ *
+ * Returns the OOTB rule template catalog, split into `suggested` (templates
+ * whose column-name heuristic matches the requested column) and `generic`
+ * (applicable to any column). When `assetId` is provided each template
+ * also carries a `definition` showing the concrete SQL / JS / pseudocode
+ * that would run against the asset's bound source.
+ *
+ * IMPORTANT: must be declared before `GET /:id` — otherwise Express
+ * matches this request against the `:id` route and returns a 404.
+ */
+router.get('/templates', (req: Request, res: Response) => {
+  const column = typeof req.query.column === 'string' ? req.query.column : undefined;
+  const assetId = typeof req.query.assetId === 'string' ? req.query.assetId : undefined;
+  const { suggested, generic } = suggestTemplates(column);
+
+  // Resolve the describe context once if the caller provided an assetId.
+  let ctx: DescribeContext = {};
+  if (assetId) {
+    const asset = dataAssets.find((a) => a.id === assetId);
+    if (asset) {
+      const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+      ctx = {
+        connectionType: conn?.connectionType,
+        storageType: conn?.config?.storageType,
+        dbType: conn?.config?.dbType,
+        sourceAsset: asset.sourceAsset,
+        sourceColumn: asset.sourceColumn,
+        originalFileName: conn?.config?.originalFileName,
+      };
+    }
+  }
+
+  const project = (t: typeof RULE_TEMPLATES[number]) => ({
+    id: t.id,
+    ruleType: t.ruleType,
+    dimension: t.dimension,
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    definition: describeRule(t.ruleType, t.parameters, ctx),
+  });
+  res.json({
+    success: true,
+    data: {
+      suggested: suggested.map(project),
+      generic: generic.map(project),
+    },
+  });
+});
+
 /** GET /api/v1/data-quality/:id */
 router.get('/:id', (req: Request, res: Response) => {
   const rule = dataQualityRules.find((r) => r.id === req.params.id);
@@ -285,55 +337,6 @@ router.delete('/:id', (req: Request, res: Response) => {
   dataQualityRules.splice(idx, 1);
   saveStore('dataQualityRules', dataQualityRules);
   res.status(204).send();
-});
-
-/**
- * GET /api/v1/data-quality/templates?column=<name>&assetId=<id>
- *
- * Returns the OOTB rule template catalog, split into `suggested` (templates
- * whose column-name heuristic matches the requested column) and `generic`
- * (applicable to any column). When `assetId` is provided each template
- * also carries a `definition` showing the concrete SQL / JS / pseudocode
- * that would run against the asset's bound source.
- */
-router.get('/templates', (req: Request, res: Response) => {
-  const column = typeof req.query.column === 'string' ? req.query.column : undefined;
-  const assetId = typeof req.query.assetId === 'string' ? req.query.assetId : undefined;
-  const { suggested, generic } = suggestTemplates(column);
-
-  // Resolve the describe context once if the caller provided an assetId.
-  let ctx: DescribeContext = {};
-  if (assetId) {
-    const asset = dataAssets.find((a) => a.id === assetId);
-    if (asset) {
-      const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
-      ctx = {
-        connectionType: conn?.connectionType,
-        storageType: conn?.config?.storageType,
-        dbType: conn?.config?.dbType,
-        sourceAsset: asset.sourceAsset,
-        sourceColumn: asset.sourceColumn,
-        originalFileName: conn?.config?.originalFileName,
-      };
-    }
-  }
-
-  const project = (t: typeof RULE_TEMPLATES[number]) => ({
-    id: t.id,
-    ruleType: t.ruleType,
-    dimension: t.dimension,
-    name: t.name,
-    description: t.description,
-    parameters: t.parameters,
-    definition: describeRule(t.ruleType, t.parameters, ctx),
-  });
-  res.json({
-    success: true,
-    data: {
-      suggested: suggested.map(project),
-      generic: generic.map(project),
-    },
-  });
 });
 
 /**
