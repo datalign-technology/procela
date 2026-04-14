@@ -6,6 +6,28 @@ import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
+import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
+
+// Assets tab: we need more than just {id,name} to display source provenance
+// and per-asset stewardship / health — the backend already returns these on
+// GET /data-assets.
+interface DataAssetFull {
+  id: string;
+  name: string;
+  description: string;
+  systemId: string;
+  owner?: string;
+  steward?: string;
+  healthScore?: number;
+  sourceConnectionId?: string;
+  sourceAsset?: string;
+  sourceColumn?: string;
+}
+
+interface SystemRef {
+  id: string;
+  name: string;
+}
 
 interface QualityRule {
   id: string;
@@ -172,16 +194,25 @@ export default function DataQualityPage() {
   const [filterAssetId, setFilterAssetId] = useState('');
   const [filterDimension, setFilterDimension] = useState('');
   const [computingHealth, setComputingHealth] = useState<string | null>(null);
+  // New: per-asset view with Manage Rules modal lives under the Assets tab.
+  const [tab, setTab] = useState<'assets' | 'rules'>('assets');
+  const [fullAssets, setFullAssets] = useState<DataAssetFull[]>([]);
+  const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
+  const [rulesModalAsset, setRulesModalAsset] = useState<RulesModalAsset | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const [rulesRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: QualityRule[] }>(`/data-quality${query}`),
-        apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${query}`),
+        apiClient.get<{ success: boolean; data: DataAssetFull[]; systems: SystemRef[] }>(`/data-assets${query}`),
       ]);
       setRules(rulesRes.data || []);
-      setAssetsList(assetsRes.data || []);
+      const assets = assetsRes.data || [];
+      setFullAssets(assets);
+      setSystemsList(assetsRes.systems || []);
+      // Keep the legacy ref list in sync for the existing Rules-tab filter.
+      setAssetsList(assets.map((a) => ({ id: a.id, name: a.name })));
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -285,8 +316,54 @@ export default function DataQualityPage() {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading...</div>;
   }
 
+  // Per-asset aggregate view (used by the Assets tab). Groups rules by
+  // dataAssetId and pulls latest run info so the user sees per-asset health
+  // at a glance and can jump into the Manage Rules modal.
+  const rulesByAsset = new Map<string, QualityRule[]>();
+  for (const r of rules) {
+    const list = rulesByAsset.get(r.dataAssetId) || [];
+    list.push(r);
+    rulesByAsset.set(r.dataAssetId, list);
+  }
+  const systemNameById: Record<string, string> = {};
+  for (const s of systemsList) systemNameById[s.id] = s.name;
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    padding: '10px 20px',
+    fontSize: 14,
+    fontWeight: active ? 600 : 400,
+    cursor: 'pointer',
+    border: 'none',
+    background: 'none',
+    color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
+    borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
+  });
+
   return (
     <div>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
+        <button style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
+        <button style={tabStyle(tab === 'rules')} onClick={() => setTab('rules')}>Rules</button>
+      </div>
+
+      {tab === 'assets' && (
+        <AssetsTab
+          assets={fullAssets}
+          rulesByAsset={rulesByAsset}
+          systemNameById={systemNameById}
+          onManageRules={(a) => setRulesModalAsset({ id: a.id, name: a.name, sourceAsset: a.sourceAsset, sourceColumn: a.sourceColumn })}
+        />
+      )}
+
+      {rulesModalAsset && (
+        <DataQualityRulesModal
+          asset={rulesModalAsset}
+          onClose={() => setRulesModalAsset(null)}
+          onAfterChange={fetchData}
+        />
+      )}
+
+      {tab === 'rules' && (<>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
@@ -642,6 +719,117 @@ export default function DataQualityPage() {
           </table>
         </div>
       )}
+      </>)}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Assets tab — per-asset view with Manage Rules entry point.
+// ──────────────────────────────────────────────────────────────────────────
+
+function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
+  assets: DataAssetFull[];
+  rulesByAsset: Map<string, QualityRule[]>;
+  systemNameById: Record<string, string>;
+  onManageRules: (asset: DataAssetFull) => void;
+}) {
+  const tdLocal: React.CSSProperties = {
+    padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
+  };
+  const thLocal: React.CSSProperties = {
+    textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
+    color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
+  };
+
+  if (assets.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+        <p style={{ color: 'var(--color-text-muted)' }}>No data assets yet. Import a column from Connections to get started.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+        Each data asset with its current health (derived from rule pass rates), ownership,
+        and rule count. Click <strong>Manage Rules</strong> to add typed DQ rules from the
+        catalog (with OOTB suggestions by column name) or write a custom expression.
+      </p>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--color-bg)' }}>
+              <th style={thLocal}>Asset</th>
+              <th style={thLocal}>System</th>
+              <th style={thLocal}>Source</th>
+              <th style={thLocal}>Owner</th>
+              <th style={thLocal}>Steward</th>
+              <th style={thLocal}>Health</th>
+              <th style={thLocal}>Rules</th>
+              <th style={{ ...thLocal, width: 150, textAlign: 'center' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {assets.map((a) => {
+              const rs = rulesByAsset.get(a.id) || [];
+              const passing = rs.filter((r) => r.status === 'PASSING').length;
+              const failing = rs.filter((r) => r.status === 'FAILING').length;
+              const warn = rs.filter((r) => r.status === 'WARNING').length;
+              const score = a.healthScore ?? 0;
+              const healthColor = score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
+              return (
+                <tr key={a.id}>
+                  <td style={{ ...tdLocal, fontWeight: 500 }}>{a.name}</td>
+                  <td style={tdLocal}>
+                    {systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                  </td>
+                  <td style={{ ...tdLocal, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                    {a.sourceAsset ? (
+                      <>{a.sourceAsset}{a.sourceColumn && <><span style={{ color: 'var(--color-text-muted)' }}>.</span>{a.sourceColumn}</>}</>
+                    ) : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                  </td>
+                  <td style={tdLocal}>{a.owner || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                  <td style={tdLocal}>{a.steward || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                  <td style={tdLocal}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
+                        <div style={{ width: `${score}%`, height: '100%', borderRadius: 3, background: healthColor }} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: healthColor }}>{score}%</span>
+                    </div>
+                  </td>
+                  <td style={{ ...tdLocal, fontSize: 12 }}>
+                    {rs.length === 0 ? (
+                      <span style={{ color: 'var(--color-text-muted)' }}>No rules</span>
+                    ) : (
+                      <span>
+                        {rs.length} total
+                        {passing > 0 && <span style={{ color: '#16a34a', marginLeft: 6 }}>\u2714 {passing}</span>}
+                        {warn > 0 && <span style={{ color: '#ca8a04', marginLeft: 6 }}>\u26A0 {warn}</span>}
+                        {failing > 0 && <span style={{ color: '#dc2626', marginLeft: 6 }}>\u2716 {failing}</span>}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ ...tdLocal, textAlign: 'center' }}>
+                    <button
+                      onClick={() => onManageRules(a)}
+                      style={{
+                        padding: '4px 10px', fontSize: 11, fontWeight: 500,
+                        background: 'var(--color-primary)', color: '#fff',
+                        border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                      }}
+                    >
+                      Manage Rules
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
