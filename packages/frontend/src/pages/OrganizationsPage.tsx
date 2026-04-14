@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
@@ -7,6 +7,7 @@ import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
 
 // ── Types ──
@@ -363,7 +364,11 @@ export default function OrganizationsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Organizations</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <HelpPopover id="orgs-overview" title="Organizations">
+              The hierarchy of company → division → department → team. The
+              "Working in" selector at the top of every page scopes most of
+              the app to the org you pick — change it to switch context.
+            </HelpPopover>
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             The organization hierarchy. Click <em>People</em> on a row to manage assignments for that org.

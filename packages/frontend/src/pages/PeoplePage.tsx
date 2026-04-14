@@ -6,6 +6,8 @@ import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import { errorToast } from '../lib/errorToast';
+import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 
 // ── Types ──
 
@@ -200,6 +202,7 @@ export default function PeoplePage() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
+  const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
 
   // Governance data for summary column and 360 editing
   const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
@@ -289,21 +292,33 @@ export default function PeoplePage() {
   };
   const handleSavePerson = async () => {
     if (!personForm.name.trim()) return;
-    if (editingPersonId) {
-      // Edit: send only the identity fields. Skipping orgIds / role /
-      // accessibleOrgIds means the backend leaves them untouched, so
-      // changes made under Manage aren't clobbered.
-      await apiClient.put(`/people/${editingPersonId}`, {
-        name: personForm.name,
-        email: personForm.email,
-        title: personForm.title,
-      });
-    } else {
-      // Add still needs orgIds (backend requires non-empty) and role.
-      if (personForm.orgIds.length === 0) return;
-      await apiClient.post('/people', personForm);
+    setPersonFormSave('saving');
+    try {
+      if (editingPersonId) {
+        // Edit: send only the identity fields. Skipping orgIds / role /
+        // accessibleOrgIds means the backend leaves them untouched, so
+        // changes made under Manage aren't clobbered.
+        await apiClient.put(`/people/${editingPersonId}`, {
+          name: personForm.name,
+          email: personForm.email,
+          title: personForm.title,
+        });
+      } else {
+        // Add still needs orgIds (backend requires non-empty) and role.
+        if (personForm.orgIds.length === 0) { setPersonFormSave('idle'); return; }
+        await apiClient.post('/people', personForm);
+      }
+      setPersonFormSave('saved');
+      // Brief moment so users see the indicator before the form closes.
+      setTimeout(() => {
+        setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm);
+        setPersonFormSave('idle');
+        fetchData();
+      }, 600);
+    } catch (err) {
+      setPersonFormSave('error');
+      errorToast(err, 'Failed to save person');
     }
-    setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm); fetchData();
   };
   const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); fetchData(); };
 
@@ -374,7 +389,7 @@ export default function PeoplePage() {
         });
       }
       await refresh360();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to update group membership'); }
     finally { setSaving360(false); }
   };
 
@@ -389,7 +404,7 @@ export default function PeoplePage() {
         personId: viewing360.person.id, groupRole: newRole,
       });
       await refresh360();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to change group role'); }
     finally { setSaving360(false); }
   };
 
@@ -407,7 +422,7 @@ export default function PeoplePage() {
       setShowAddDamaRole(false);
       setNewDamaRole({ roleType: 'CDO', scopeType: 'ORG', scopeId: '' });
       await refresh360();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to assign governance role'); }
     finally { setSaving360(false); }
   };
 
@@ -416,7 +431,7 @@ export default function PeoplePage() {
     try {
       await apiClient.delete(`/dama-roles/${roleId}`);
       await refresh360();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to remove governance role'); }
     finally { setSaving360(false); }
   };
 
@@ -436,7 +451,7 @@ export default function PeoplePage() {
       await apiClient.put(`/people/${viewing360.person.id}`, { orgIds: next });
       await refresh360();
       fetchData();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to update org assignment'); }
     finally { setSaving360(false); }
   };
 
@@ -447,7 +462,7 @@ export default function PeoplePage() {
       await apiClient.put(`/people/${viewing360.person.id}`, { role: newRole });
       await refresh360();
       fetchData();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to change application role'); }
     finally { setSaving360(false); }
   };
 
@@ -460,7 +475,7 @@ export default function PeoplePage() {
         ownerId: isCurrentOwner ? null : viewing360.person.id,
       });
       await refresh360();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to update data domain owner'); }
     finally { setSaving360(false); }
   };
 
@@ -473,7 +488,7 @@ export default function PeoplePage() {
         : [...currentStewardIds, viewing360.person.id];
       await apiClient.put(`/data-domains/${domainId}`, { stewardIds: newStewardIds });
       await refresh360();
-    } catch { /* */ }
+    } catch (err) { errorToast(err, 'Failed to update steward'); }
     finally { setSaving360(false); }
   };
   const handlePeopleImport = async () => {
@@ -697,13 +712,14 @@ export default function PeoplePage() {
                       </>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
-                    <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); }}>Cancel</button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <SaveIndicator state={personFormSave} />
+                    <button style={btnSecondary} onClick={() => { setShowPersonForm(false); setEditingPersonId(null); setPersonFormSave('idle'); }}>Cancel</button>
                     {(() => {
                       // Add requires both a name and at least one org;
                       // Edit only requires a non-empty name (orgs/role
                       // are managed separately).
-                      const invalid = !personForm.name.trim() || (!editingPersonId && personForm.orgIds.length === 0);
+                      const invalid = !personForm.name.trim() || (!editingPersonId && personForm.orgIds.length === 0) || personFormSave === 'saving';
                       return (
                         <button style={{ ...btnPrimary, opacity: invalid ? 0.6 : 1 }} disabled={invalid} onClick={handleSavePerson}>
                           {editingPersonId ? 'Save' : 'Add'}

@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import HelpPopover from '../components/HelpPopover';
 
 // ── Types ──
 
@@ -710,7 +711,12 @@ export default function ProcessCatalogPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process Catalog</h1>
-            <Link to="/help#process-catalog" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <HelpPopover id="process-catalog-overview" title="Process hierarchy">
+              The required path is Value Stream → Process → Activity. Optional
+              levels (Domain, Capability, Sub-Process, Task) sit between for
+              detail when you need it. A Value Stream can't go ACTIVE until at
+              least one Process and one Activity exist underneath.
+            </HelpPopover>
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>

@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -7,6 +6,9 @@ import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import SortableTh from '../components/SortableTh';
+import HelpPopover from '../components/HelpPopover';
+import { useSortedList } from '../hooks/useSortedList';
 import LinkConnectionModal from '../components/LinkConnectionModal';
 
 interface DataAssetEntity {
@@ -205,6 +207,17 @@ export default function DataAssetsPage() {
     return sys ? sys.name : '';
   };
 
+  // URL-persisted sort.
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    assets,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      system: (a, b) => systemName(a.systemId).localeCompare(systemName(b.systemId)),
+      updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
+    },
+    'name',
+  );
+
   const openAdd = () => {
     setForm(emptyForm);
     setEditingId(null);
@@ -328,7 +341,12 @@ export default function DataAssetsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <HelpPopover id="data-assets-overview" title="Data assets">
+              Define your data in business terms first ("Customer accounts",
+              "Billing records") — then link each one to where it actually
+              lives via a connection. Asset identity stays stable even when
+              the storage location changes.
+            </HelpPopover>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Data assets described in business terms, linked to the systems that hold them.
@@ -500,16 +518,16 @@ export default function DataAssetsPage() {
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
                 <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                  <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} />
+                  <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} aria-label="Select all assets" />
                 </th>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>System</th>
+                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
+                <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
                 <th style={thStyle}>Binding</th>
                 <th style={{ ...thStyle, width: 220, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {assets.map((asset) => {
+              {sorted.map((asset) => {
                 const binding = primaryBindingOf(asset.id);
                 const connName = binding ? connectionNameById[binding.connectionId] : undefined;
                 return (
