@@ -1054,6 +1054,20 @@ export default function PeoplePage() {
                     </div>
                   )}
                 </div>
+                {/* Footer Close — explicit affordance for keyboard / mobile
+                    users who may not discover the header X or backdrop click. */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <button
+                    onClick={() => setViewing360(null)}
+                    style={{
+                      padding: '6px 14px', background: 'var(--color-bg)', color: 'var(--color-text)',
+                      border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                      fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
               </>
             ) : null}
           </div>

@@ -732,6 +732,21 @@ export default function DataAssetsPage() {
                     </div>
                   </div>
                 </div>
+                {/* Footer Close — keyboard / mobile users may not discover
+                    the header X or backdrop click; an explicit button is
+                    the predictable affordance. */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <button
+                    onClick={() => setViewing360(null)}
+                    style={{
+                      padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+                      border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                      fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
               </>
             ) : null}
           </div>
