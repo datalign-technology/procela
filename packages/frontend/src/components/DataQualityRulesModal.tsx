@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -111,6 +111,14 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
   const [runningId, setRunningId] = useState<string | null>(null);
   const [configuringTemplateId, setConfiguringTemplateId] = useState<string | null>(null);
   const [configParams, setConfigParams] = useState<Record<string, any>>({});
+  // Per-rule expand state for the "View" toggle. Engine command, message,
+  // and failure samples live here so the table itself stays clean.
+  const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpandedRuleIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const columnName = asset.sourceColumn;
 
@@ -366,50 +374,74 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                 {rules.map((r) => {
                   const pr = r.lastRun?.passRate;
                   const prColor = pr === undefined ? '#64748b' : pr >= 95 ? '#16a34a' : pr >= 80 ? '#ca8a04' : '#dc2626';
+                  const isExpanded = expandedRuleIds.has(r.id);
                   return (
-                    <tr key={r.id}>
-                      <td style={tdStyle}>
-                        <div style={{ fontWeight: 500 }}>{r.name}</div>
-                        {r.description && <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{r.description}</div>}
-                        <DefinitionBlock def={r.definition} label="Engine runs" />
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{r.ruleType || '\u2014'}</td>
-                      <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        {r.lastRun ? new Date(r.lastRun.ranAt).toLocaleString() : 'Never'}
-                        {r.lastRun?.simulated && <span style={{ marginLeft: 4, fontSize: 10, color: '#92400e' }}>(simulated)</span>}
-                      </td>
-                      <td style={tdStyle}>
-                        {r.lastRun ? (
-                          <div>
-                            <div style={{ fontWeight: 600, color: prColor, fontSize: 13 }}>
-                              {r.lastRun.passRate}% pass ({r.lastRun.passCount.toLocaleString()}/{r.lastRun.totalRows.toLocaleString()})
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{r.lastRun.message}</div>
-                            {r.lastRun.failureSamples.length > 0 && (
-                              <div style={{ fontSize: 10, color: '#7f1d1d', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-                                Samples: {r.lastRun.failureSamples.slice(0, 3).join(', ')}{r.lastRun.failureSamples.length > 3 ? '\u2026' : ''}
+                    <React.Fragment key={r.id}>
+                      <tr>
+                        {/* Name only — description and engine command moved
+                            behind the View toggle so the row reads at a
+                            glance. */}
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>{r.name}</td>
+                        <td style={{ ...tdStyle, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{r.ruleType || '\u2014'}</td>
+                        <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                          {r.lastRun ? new Date(r.lastRun.ranAt).toLocaleString() : 'Never'}
+                          {r.lastRun?.simulated && <span style={{ marginLeft: 4, fontSize: 10, color: '#92400e' }}>(simulated)</span>}
+                        </td>
+                        <td style={tdStyle}>
+                          {/* Just the verdict: pass rate %. The engine
+                              message + failure samples live in the
+                              expanded view. */}
+                          {r.lastRun ? (
+                            <span style={{ fontWeight: 600, color: prColor, fontSize: 13 }}>{r.lastRun.passRate}%</span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Not yet run</span>
+                          )}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: 11, marginRight: 4 }}
+                            onClick={() => toggleExpanded(r.id)}
+                            title="Show the engine command, message, and any failure samples"
+                          >
+                            {isExpanded ? 'Hide' : 'View'}
+                          </button>
+                          <button
+                            style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, marginRight: 4, opacity: !r.ruleType || runningId === r.id ? 0.6 : 1 }}
+                            disabled={!r.ruleType || runningId === r.id}
+                            onClick={() => runRule(r)}
+                            title={r.ruleType ? 'Run rule against the data' : 'Legacy rule \u2014 no typed execution'}
+                          >
+                            {runningId === r.id ? 'Running\u2026' : 'Run'}
+                          </button>
+                          <button
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11 }}
+                            onClick={() => deleteRule(r)}
+                          >Delete</button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={5} style={{ ...tdStyle, background: 'var(--color-bg)', padding: 12 }}>
+                            {r.description && (
+                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 6 }}>{r.description}</div>
+                            )}
+                            <DefinitionBlock def={r.definition} label="Engine runs" />
+                            {r.lastRun && (
+                              <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                                {r.lastRun.passCount.toLocaleString()} of {r.lastRun.totalRows.toLocaleString()} rows passed
+                                {' \u00B7 '}
+                                {r.lastRun.message}
                               </div>
                             )}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Not yet run</span>
-                        )}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <button
-                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, marginRight: 4, opacity: !r.ruleType || runningId === r.id ? 0.6 : 1 }}
-                          disabled={!r.ruleType || runningId === r.id}
-                          onClick={() => runRule(r)}
-                          title={r.ruleType ? 'Run rule against the data' : 'Legacy rule \u2014 no typed execution'}
-                        >
-                          {runningId === r.id ? 'Running\u2026' : 'Run'}
-                        </button>
-                        <button
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11 }}
-                          onClick={() => deleteRule(r)}
-                        >Delete</button>
-                      </td>
-                    </tr>
+                            {r.lastRun && r.lastRun.failureSamples.length > 0 && (
+                              <div style={{ marginTop: 6, fontSize: 11, color: '#7f1d1d', fontFamily: 'var(--font-mono)' }}>
+                                Failure samples: {r.lastRun.failureSamples.slice(0, 5).join(', ')}{r.lastRun.failureSamples.length > 5 ? '\u2026' : ''}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

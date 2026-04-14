@@ -388,12 +388,27 @@ router.post('/:id/run', (req: Request, res: Response) => {
   rule.updatedAt = result.ranAt;
   saveStore('dataQualityRules', dataQualityRules);
 
+  // Auto-recompute the asset's health score from the weighted average of
+  // all its rules' current scores. Mirrors POST /compute-health/:assetId
+  // so the asset card stays in sync the moment a rule runs — no separate
+  // "Compute Health" click required.
+  const assetRules = dataQualityRules.filter((r) => r.dataAssetId === asset.id);
+  const totalWeight = assetRules.reduce((sum, r) => sum + r.weight, 0);
+  const weightedSum = assetRules.reduce((sum, r) => sum + r.currentScore * r.weight, 0);
+  const newAssetHealth = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
+  if (asset.healthScore !== newAssetHealth) {
+    asset.healthScore = newAssetHealth;
+    asset.updatedAt = result.ranAt;
+    saveStore('dataAssets', dataAssets);
+  }
+
   auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'RUN', null, {
     simulated: result.simulated,
     passRate: result.passRate,
     totalRows: result.totalRows,
+    assetHealthScore: newAssetHealth,
   });
-  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows }, 'DQ rule run');
+  logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: newAssetHealth }, 'DQ rule run');
 
   res.json({ success: true, data: result });
 });
