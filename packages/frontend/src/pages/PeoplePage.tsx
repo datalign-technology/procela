@@ -439,12 +439,34 @@ export default function PeoplePage() {
               {/* Active filter / counts header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <h2 style={{ fontSize: 16, fontWeight: 600 }}>
                       {selectedOrgId ? selectedOrg?.name : 'All people'}
                     </h2>
                     {selectedOrgId && selectedOrg && <span style={typeBadge(selectedOrg.type || '')}>{selectedOrg.type}</span>}
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{filteredPeople.length} {filteredPeople.length === 1 ? 'person' : 'people'}</span>
+                    {selectedOrgId && (
+                      // Active-filter chip with an x to clear — mirrors the
+                      // dropdown at the top so users see at a glance that
+                      // they're looking at a subset.
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '2px 4px 2px 8px', borderRadius: 999,
+                        background: '#eff6ff', color: '#1e40af',
+                        fontSize: 11, fontWeight: 500,
+                      }}>
+                        Filter: {selectedOrg?.name || selectedOrgId}
+                        <button
+                          onClick={() => applyOrgFilter('')}
+                          aria-label="Clear org filter"
+                          title="Clear filter"
+                          style={{
+                            border: 'none', background: 'transparent', cursor: 'pointer',
+                            color: '#1e40af', fontSize: 14, lineHeight: 1, padding: '0 4px',
+                          }}
+                        >&times;</button>
+                      </span>
+                    )}
                   </div>
                   {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
@@ -698,6 +720,17 @@ export default function PeoplePage() {
                         <div key={org.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px' }}>
                           <span style={{ fontSize: 12, fontWeight: 500 }}>{org.name}</span>
                           <span style={typeBadge(org.type)}>{org.type}</span>
+                          {/* Cross-link to Organizations page — closes the
+                              360 so the route change isn't shadowed by the
+                              modal still being mounted. */}
+                          <Link
+                            to="/organizations"
+                            onClick={() => setViewing360(null)}
+                            style={{ fontSize: 10, color: 'var(--color-primary)', textDecoration: 'none' }}
+                            title="View this org on the Organizations page"
+                          >
+                            View org \u2192
+                          </Link>
                         </div>
                       ))}
                     </div>
