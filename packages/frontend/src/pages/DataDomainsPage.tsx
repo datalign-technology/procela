@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
+import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 
@@ -87,6 +88,8 @@ export default function DataDomainsPage() {
   const [selectedDomain, setSelectedDomain] = useState<DataDomain | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Detail editing state
   const [detailOwnerId, setDetailOwnerId] = useState<string>('');
@@ -157,6 +160,27 @@ export default function DataDomainsPage() {
     fetchData();
   };
 
+  // ── Bulk select handlers ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === domains.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(domains.map((d) => d.id)));
+  };
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-domains/${id}`)));
+    addToast('success', `Deleted ${selectedIds.size} data domains`);
+    setSelectedIds(new Set());
+    setSelectedDomain(null);
+    fetchData();
+  };
+
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
   const handleDetailSave = async () => {
@@ -210,6 +234,17 @@ export default function DataDomainsPage() {
             <IconButton icon="trash" label="Delete all domains" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
           )}
+          {domains.length > 0 && (
+            <IconButton icon="download" label="Export CSV"
+              onClick={() => exportCsv('data-domains.csv', ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'], domains.map((d) => [
+                d.name,
+                d.description,
+                d.ownerName || '',
+                d.stewards.map((s) => s.name).join('; '),
+                d.assets.map((a) => a.name).join('; '),
+                d.status,
+              ]))} />
+          )}
           <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -243,10 +278,42 @@ export default function DataDomainsPage() {
           setShowDeleteAll(false);
           await apiClient.delete('/data-domains/all');
           setSelectedDomain(null);
+          setSelectedIds(new Set());
           fetchData();
         }}
         onCancel={() => setShowDeleteAll(false)}
       />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Data Domains?"
+        message={`Delete ${selectedIds.size} selected data domains? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -386,6 +453,11 @@ export default function DataDomainsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                  <input type="checkbox"
+                    checked={domains.length > 0 && selectedIds.size === domains.length}
+                    onChange={toggleSelectAll} />
+                </th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Description</th>
                 <th style={thStyle}>Owner</th>
@@ -396,8 +468,15 @@ export default function DataDomainsPage() {
               </tr>
             </thead>
             <tbody>
-              {domains.map((domain) => (
-                <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer' }} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+              {domains.map((domain) => {
+                const isSelected = selectedIds.has(domain.id);
+                return (
+                <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : '' }}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                  <td style={{ ...tdStyle, textAlign: 'center', width: 32 }} onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(domain.id)} />
+                  </td>
                   <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>{domain.name}</td>
                   <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => openDetail(domain)}>
                     {domain.description || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
@@ -444,7 +523,8 @@ export default function DataDomainsPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}

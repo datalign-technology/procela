@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { exportCsv } from '../lib/exportCsv';
+import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -98,6 +100,14 @@ export default function AgentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
+  const [importOrgId, setImportOrgId] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedOrgId = searchParams.get('orgId') || '';
   const applyOrgFilter = (id: string) => {
@@ -169,6 +179,50 @@ export default function AgentsPage() {
     }));
   };
 
+  // ── Bulk select handlers ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map((a) => a.id)));
+  };
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/agents/${id}`)));
+    setSelectedIds(new Set());
+    fetchData();
+  };
+
+  // ── Import handlers ──
+  const handleImport = async () => {
+    const orgId = importOrgId || selectedOrgId;
+    if (!importText.trim() || !orgId) { alert('Select an organization and provide data to import.'); return; }
+    try {
+      const body: any = { orgId };
+      if (importFormat === 'csv') body.csv = importText; else body.agents = JSON.parse(importText);
+      await apiClient.post('/agents/import', body);
+      setShowImport(false); setImportText(''); setImportOrgId('');
+      fetchData();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+  };
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImportText(reader.result as string);
+      if (file.name.endsWith('.json')) setImportFormat('json');
+      if (file.name.endsWith('.csv')) setImportFormat('csv');
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading\u2026</p>;
 
   return (
@@ -194,9 +248,71 @@ export default function AgentsPage() {
             <option value="">All organizations</option>
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
+          {agents.length > 0 && (
+            <IconButton icon="trash" label="Delete all agents" variant="danger" onClick={() => setShowDeleteAll(true)} />
+          )}
+          {filtered.length > 0 && (
+            <IconButton icon="download" label="Export CSV"
+              onClick={() => exportCsv('agents.csv', ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'], filtered.map((a) => [
+                a.name,
+                a.agentType,
+                a.provider,
+                a.status,
+                a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join('; '),
+                personNameById[a.ownerPersonId] || '',
+                a.description,
+              ]))} />
+          )}
+          <IconButton icon="upload" label="Import agents"
+            onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
           <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />
         </div>
       </div>
+
+      {/* Import Panel */}
+      {showImport && (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Agents</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'csv'} onChange={() => setImportFormat('csv')} /> CSV</label>
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'json'} onChange={() => setImportFormat('json')} /> JSON</label>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <label style={{ fontSize: 11, fontWeight: 500 }}>Assign to organization *</label>
+            <select
+              style={{ ...inputStyle, width: 'auto', minWidth: 220, appearance: 'auto' as any, fontSize: 12 }}
+              value={importOrgId}
+              onChange={(e) => setImportOrgId(e.target.value)}
+            >
+              <option value="">-- Select an organization --</option>
+              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+            <input ref={fileInputRef} type="file" accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onChange={handleFileRead} style={{ display: 'none' }} />
+            <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below. Columns: Name (required), Type, Provider, Description</span>
+          </div>
+          <textarea
+            style={{ ...inputStyle, width: '100%', minHeight: 100, fontFamily: 'var(--font-mono)', fontSize: 11 }}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder={importFormat === 'csv'
+              ? 'Name,Type,Provider,Description\nNightly Billing ETL,PIPELINE,Airflow,Loads billing data nightly'
+              : '[{ "name": "Nightly Billing ETL", "agentType": "PIPELINE", "provider": "Airflow" }]'}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); setImportOrgId(''); }}>Cancel</button>
+            <button
+              style={{ ...btnPrimary, opacity: !importText.trim() || !(importOrgId || selectedOrgId) ? 0.6 : 1 }}
+              disabled={!importText.trim() || !(importOrgId || selectedOrgId)}
+              onClick={handleImport}
+            >Import</button>
+          </div>
+        </div>
+      )}
 
       {/* Active filter chip */}
       {selectedOrgId && (
@@ -275,6 +391,54 @@ export default function AgentsPage() {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={showDeleteAll}
+        title="Delete All Agents?"
+        message={`This will permanently delete all ${agents.length} agents. This cannot be undone.`}
+        confirmLabel="Delete All"
+        onConfirm={async () => {
+          setShowDeleteAll(false);
+          await apiClient.delete('/agents/all');
+          setSelectedIds(new Set());
+          fetchData();
+        }}
+        onCancel={() => setShowDeleteAll(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Agents?"
+        message={`Delete ${selectedIds.size} selected agents? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => {
+          setConfirmBulkDelete(false);
+          await handleBulkDelete();
+        }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {filtered.length === 0 ? (
@@ -287,6 +451,11 @@ export default function AgentsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                  <input type="checkbox"
+                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                    onChange={toggleSelectAll} />
+                </th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Type</th>
                 <th style={thStyle}>Provider</th>
@@ -300,8 +469,14 @@ export default function AgentsPage() {
               {filtered.map((a) => {
                 const tb = TYPE_BADGES[a.agentType] || TYPE_BADGES.OTHER;
                 const sb = STATUS_BADGES[a.status] || STATUS_BADGES.ACTIVE;
+                const isSelected = selectedIds.has(a.id);
                 return (
-                  <tr key={a.id}>
+                  <tr key={a.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(a.id)} />
+                    </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
                       {a.name}
                       {a.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.description}</div>}

@@ -191,6 +191,8 @@ export default function DataLineagePage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Visualization data
   const [visNodes, setVisNodes] = useState<VisNode[]>([]);
@@ -279,6 +281,31 @@ export default function DataLineagePage() {
       if (viewMode === 'visualization') fetchVisualization();
     } catch {
       addToast('error', 'Failed to delete lineage flow');
+    }
+  };
+
+  // ── Bulk select handlers ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === links.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(links.map((l) => l.id)));
+  };
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-lineage/${id}`)));
+      addToast('success', `Deleted ${selectedIds.size} lineage flows`);
+      setSelectedIds(new Set());
+      fetchData();
+      if (viewMode === 'visualization') fetchVisualization();
+    } catch {
+      addToast('error', 'Bulk delete failed');
     }
   };
 
@@ -422,6 +449,7 @@ export default function DataLineagePage() {
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/data-lineage/all');
+          setSelectedIds(new Set());
           fetchData();
           if (viewMode === 'visualization') fetchVisualization();
         }}
@@ -435,6 +463,36 @@ export default function DataLineagePage() {
         onConfirm={() => { if (confirmDelete) handleDelete(confirmDelete); setConfirmDelete(null); }}
         onCancel={() => setConfirmDelete(null)}
       />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Lineage Flows?"
+        message={`Delete ${selectedIds.size} selected flows? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && viewMode === 'table' && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
 
       {viewMode === 'table' ? (
         <>
@@ -462,6 +520,11 @@ export default function DataLineagePage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={links.length > 0 && selectedIds.size === links.length}
+                        onChange={toggleSelectAll} />
+                    </th>
                     <th style={thStyle}>Source System</th>
                     <th style={thStyle}>Target System</th>
                     <th style={thStyle}>Data Asset</th>
@@ -473,8 +536,13 @@ export default function DataLineagePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {links.map((link) => (
-                    <tr key={link.id}>
+                  {links.map((link) => {
+                    const isSelected = selectedIds.has(link.id);
+                    return (
+                    <tr key={link.id} style={{ background: isSelected ? '#f0f9ff' : '' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(link.id)} />
+                      </td>
                       <td style={tdStyle}>{link.sourceSystemName || link.sourceSystemId}</td>
                       <td style={tdStyle}>{link.targetSystemName || link.targetSystemId}</td>
                       <td style={tdStyle}>
@@ -511,7 +579,8 @@ export default function DataLineagePage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

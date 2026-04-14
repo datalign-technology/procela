@@ -192,6 +192,8 @@ export default function DataQualityPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterAssetId, setFilterAssetId] = useState('');
   const [filterDimension, setFilterDimension] = useState('');
   const [computingHealth, setComputingHealth] = useState<string | null>(null);
@@ -282,6 +284,26 @@ export default function DataQualityPage() {
       fetchData();
     } catch {
       addToast('error', 'Failed to delete quality rule');
+    }
+  };
+
+  // ── Bulk select handlers ──
+  const toggleRuleSelect = (id: string) => {
+    setSelectedRuleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const handleBulkDeleteRules = async () => {
+    if (selectedRuleIds.size === 0) return;
+    try {
+      await Promise.all(Array.from(selectedRuleIds).map((id) => apiClient.delete(`/data-quality/${id}`)));
+      addToast('success', `Deleted ${selectedRuleIds.size} quality rules`);
+      setSelectedRuleIds(new Set());
+      fetchData();
+    } catch {
+      addToast('error', 'Bulk delete failed');
     }
   };
 
@@ -623,6 +645,7 @@ export default function DataQualityPage() {
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/data-quality/all');
+          setSelectedRuleIds(new Set());
           fetchData();
         }}
         onCancel={() => setShowDeleteAll(false)}
@@ -635,6 +658,36 @@ export default function DataQualityPage() {
         onConfirm={() => { if (confirmDelete) handleDelete(confirmDelete); setConfirmDelete(null); }}
         onCancel={() => setConfirmDelete(null)}
       />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Quality Rules?"
+        message={`Delete ${selectedRuleIds.size} selected rules? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteRules(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk Action Bar */}
+      {selectedRuleIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedRuleIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedRuleIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       {filteredRules.length === 0 ? (
@@ -660,6 +713,14 @@ export default function DataQualityPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                  <input type="checkbox"
+                    checked={filteredRules.length > 0 && selectedRuleIds.size === filteredRules.length}
+                    onChange={() => {
+                      if (selectedRuleIds.size === filteredRules.length) setSelectedRuleIds(new Set());
+                      else setSelectedRuleIds(new Set(filteredRules.map((r) => r.id)));
+                    }} />
+                </th>
                 <th style={thStyle}>Data Asset</th>
                 <th style={thStyle}>Rule Name</th>
                 <th style={thStyle}>Dimension</th>
@@ -672,8 +733,13 @@ export default function DataQualityPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredRules.map((rule) => (
-                <tr key={rule.id}>
+              {filteredRules.map((rule) => {
+                const isSelected = selectedRuleIds.has(rule.id);
+                return (
+                <tr key={rule.id} style={{ background: isSelected ? '#f0f9ff' : '' }}>
+                  <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                    <input type="checkbox" checked={isSelected} onChange={() => toggleRuleSelect(rule.id)} />
+                  </td>
                   <td style={tdStyle}>{rule.dataAssetName || rule.dataAssetId}</td>
                   <td style={tdStyle}>{rule.name}</td>
                   <td style={tdStyle}>
@@ -705,7 +771,8 @@ export default function DataQualityPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

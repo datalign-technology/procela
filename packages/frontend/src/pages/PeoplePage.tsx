@@ -197,6 +197,8 @@ export default function PeoplePage() {
   const [loading360, setLoading360] = useState(false);
   const [saving360, setSaving360] = useState(false);
   const [showDeleteAllPeople, setShowDeleteAllPeople] = useState(false);
+  const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
 
   // Governance data for summary column and 360 editing
   const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
@@ -303,6 +305,28 @@ export default function PeoplePage() {
     setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm); fetchData();
   };
   const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); fetchData(); };
+
+  // ── Bulk select handlers ──
+  const togglePersonSelect = (id: string) => {
+    setSelectedPersonIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const togglePeopleSelectAll = () => {
+    if (selectedPersonIds.size === filteredPeople.length) {
+      setSelectedPersonIds(new Set());
+    } else {
+      setSelectedPersonIds(new Set(filteredPeople.map((p) => p.id)));
+    }
+  };
+  const handleBulkDeletePeople = async () => {
+    if (selectedPersonIds.size === 0) return;
+    await Promise.all(Array.from(selectedPersonIds).map((id) => apiClient.delete(`/people/${id}`)));
+    setSelectedPersonIds(new Set());
+    fetchData();
+  };
   const openPerson360 = async (id: string) => {
     setLoading360(true);
     setShowAddDamaRole(false);
@@ -557,10 +581,45 @@ export default function PeoplePage() {
                 onConfirm={async () => {
                   setShowDeleteAllPeople(false);
                   await apiClient.delete('/people/all');
+                  setSelectedPersonIds(new Set());
                   fetchData();
                 }}
                 onCancel={() => setShowDeleteAllPeople(false)}
               />
+
+              <ConfirmDialog
+                open={confirmBulkDeletePeople}
+                title="Delete Selected People?"
+                message={`Delete ${selectedPersonIds.size} selected people? This cannot be undone.`}
+                confirmLabel="Delete Selected"
+                onConfirm={async () => {
+                  setConfirmBulkDeletePeople(false);
+                  await handleBulkDeletePeople();
+                }}
+                onCancel={() => setConfirmBulkDeletePeople(false)}
+              />
+
+              {/* Bulk Action Bar */}
+              {selectedPersonIds.size > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+                  background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+                }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedPersonIds.size} selected</span>
+                  <button
+                    onClick={() => setConfirmBulkDeletePeople(true)}
+                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+                  >
+                    Delete Selected
+                  </button>
+                  <button
+                    onClick={() => setSelectedPersonIds(new Set())}
+                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              )}
 
               {/* Add/Edit Person Form */}
               {showPersonForm && (
@@ -689,6 +748,11 @@ export default function PeoplePage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
+                        <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                          <input type="checkbox"
+                            checked={filteredPeople.length > 0 && selectedPersonIds.size === filteredPeople.length}
+                            onChange={togglePeopleSelectAll} />
+                        </th>
                         <th style={thStyle}>Name</th>
                         <th style={thStyle}>Email</th>
                         <th style={thStyle}>App Role</th>
@@ -703,10 +767,14 @@ export default function PeoplePage() {
                         const govText = gs
                           ? [gs.groups > 0 && `${gs.groups} group${gs.groups > 1 ? 's' : ''}`, gs.roles > 0 && `${gs.roles} role${gs.roles > 1 ? 's' : ''}`, gs.domains > 0 && `${gs.domains} domain${gs.domains > 1 ? 's' : ''}`].filter(Boolean).join(', ')
                           : null;
+                        const isSelected = selectedPersonIds.has(person.id);
                         return (
-                        <tr key={person.id} style={{ transition: 'background 0.1s' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = '')}>
+                        <tr key={person.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                          <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                            <input type="checkbox" checked={isSelected} onChange={() => togglePersonSelect(person.id)} />
+                          </td>
                           <td style={{ ...tdStyle, fontWeight: 500 }}>{person.name}</td>
                           <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>{person.email || '--'}</td>
                           <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>

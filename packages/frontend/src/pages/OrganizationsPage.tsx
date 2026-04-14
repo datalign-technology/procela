@@ -200,6 +200,9 @@ export default function OrganizationsPage() {
   // People API in a single call — no full person records kept here.
   const [peopleCounts, setPeopleCounts] = useState<Record<string, number>>({});
 
+  // Tree vs. Visualize mode for the right side of the layout.
+  const [viewMode, setViewMode] = useState<'tree' | 'visualize'>('tree');
+
   const fetchData = useCallback(async () => {
     try {
       // Scope the org tree to the active "Working In" context so siblings
@@ -267,6 +270,22 @@ export default function OrganizationsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <IconButton
+            icon="eye"
+            label={viewMode === 'tree' ? 'Visualize hierarchy' : 'Tree view'}
+            onClick={() => setViewMode((m) => (m === 'tree' ? 'visualize' : 'tree'))}
+          />
+          {flatOrgs.length > 0 && (
+            <IconButton icon="download" label="Export CSV"
+              onClick={() => exportCsv('organizations.csv', ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'], flatOrgs.map((o) => [
+                o.name,
+                o.type,
+                flatOrgs.find((p) => p.id === o.parentId)?.name || '',
+                o.industry,
+                o.description,
+                String(peopleCounts[o.id] || 0),
+              ]))} />
+          )}
           <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
           <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />
         </div>
@@ -344,37 +363,176 @@ export default function OrganizationsPage() {
         </div>
       )}
 
-      {/* ══ SIDE-BY-SIDE LAYOUT ══ */}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      {/* ══ MAIN BODY ══ */}
+      {viewMode === 'tree' ? (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
 
-        {/* LEFT: Org Tree */}
-        <div style={{ width: 380, flexShrink: 0, background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-          {/* Tree toolbar */}
-          <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
+          {/* LEFT: Org Tree */}
+          <div style={{ width: 380, flexShrink: 0, background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+            {/* Tree toolbar */}
+            <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
+              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
+            </div>
+
+            {/* Tree */}
+            <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
+              {tree.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No organizations yet.</p>
+                </div>
+              ) : (
+                tree.map((node) => (
+                  <OrgTreeNode key={node.id} node={node} depth={0}
+                    onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
+                    onViewPeople={(id) => navigate(`/people?orgId=${encodeURIComponent(id)}`)}
+                    expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
+                    accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs} />
+                ))
+              )}
+            </div>
           </div>
 
-          {/* Tree */}
-          <div style={{ maxHeight: 'calc(100vh - 300px)', overflowY: 'auto' }}>
-            {tree.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No organizations yet.</p>
-              </div>
-            ) : (
-              tree.map((node) => (
-                <OrgTreeNode key={node.id} node={node} depth={0}
-                  onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
-                  onViewPeople={(id) => navigate(`/people?orgId=${encodeURIComponent(id)}`)}
-                  expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
-                  accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs} />
-              ))
-            )}
-          </div>
         </div>
+      ) : (
+        <OrgHierarchyVisualization tree={tree} peopleCounts={peopleCounts} />
+      )}
 
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Visualization — top-down SVG hierarchy. Lays out each subtree
+// using a simple post-order width calculation: a leaf occupies
+// one slot, a parent's width is the sum of its children's widths.
+// Good enough for prototype-scale orgs (hundreds of nodes); for
+// thousands of nodes a proper layout library would kick in.
+// ══════════════════════════════════════════════════════════════
+
+interface LayoutNode {
+  id: string; name: string; type: string;
+  x: number; y: number; width: number;
+  children: LayoutNode[];
+}
+
+const ORG_TYPE_COLORS: Record<string, string> = {
+  company: '#1e40af', division: '#5b21b6', department: '#0f4f46',
+  team: '#92400e', unit: '#64748b',
+};
+
+function layoutTree(node: OrgNode, depth: number, xOffset: number, slotW: number, levelH: number): LayoutNode {
+  if (node.children.length === 0) {
+    return {
+      id: node.id, name: node.name, type: node.type,
+      x: xOffset + slotW / 2, y: depth * levelH + 40, width: slotW,
+      children: [],
+    };
+  }
+  let runningX = xOffset;
+  const laidOutChildren: LayoutNode[] = [];
+  for (const child of node.children) {
+    const childLayout = layoutTree(child, depth + 1, runningX, slotW, levelH);
+    runningX += childLayout.width;
+    laidOutChildren.push(childLayout);
+  }
+  const subtreeWidth = runningX - xOffset;
+  return {
+    id: node.id, name: node.name, type: node.type,
+    x: xOffset + subtreeWidth / 2, y: depth * levelH + 40, width: subtreeWidth,
+    children: laidOutChildren,
+  };
+}
+
+function flattenLayout(node: LayoutNode, acc: LayoutNode[] = []): LayoutNode[] {
+  acc.push(node);
+  for (const c of node.children) flattenLayout(c, acc);
+  return acc;
+}
+
+function OrgHierarchyVisualization({ tree, peopleCounts }: { tree: OrgNode[]; peopleCounts: Record<string, number> }) {
+  if (tree.length === 0) {
+    return (
+      <div style={{
+        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)', padding: 40, textAlign: 'center', color: 'var(--color-text-muted)',
+      }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u2302'}</div>
+        <div>No organizations to visualize yet.</div>
       </div>
+    );
+  }
 
+  const SLOT_W = 170;
+  const LEVEL_H = 110;
+  const BOX_W = 150;
+  const BOX_H = 56;
+
+  // Lay each top-level node out side-by-side, then concatenate.
+  let xCursor = 20;
+  const layouts: LayoutNode[] = [];
+  for (const root of tree) {
+    const laid = layoutTree(root, 0, xCursor, SLOT_W, LEVEL_H);
+    layouts.push(laid);
+    xCursor += laid.width;
+  }
+  const allNodes = layouts.flatMap((l) => flattenLayout(l));
+  const svgW = Math.max(xCursor + 40, 600);
+  const maxDepth = allNodes.reduce((m, n) => Math.max(m, n.y), 0);
+  const svgH = maxDepth + BOX_H + 60;
+
+  // Build edges: each child links to its parent.
+  const edges: { from: LayoutNode; to: LayoutNode }[] = [];
+  function collectEdges(node: LayoutNode) {
+    for (const c of node.children) {
+      edges.push({ from: node, to: c });
+      collectEdges(c);
+    }
+  }
+  for (const l of layouts) collectEdges(l);
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)', overflow: 'auto', boxShadow: 'var(--shadow-sm)', padding: 8,
+    }}>
+      <svg width={svgW} height={svgH} style={{ display: 'block' }}>
+        {/* Edges first so they render under nodes */}
+        {edges.map((e, i) => {
+          const x1 = e.from.x;
+          const y1 = e.from.y + BOX_H / 2;
+          const x2 = e.to.x;
+          const y2 = e.to.y - BOX_H / 2;
+          const midY = (y1 + y2) / 2;
+          // Orthogonal connector: down -> across -> down.
+          const path = `M ${x1} ${y1} V ${midY} H ${x2} V ${y2}`;
+          return <path key={i} d={path} stroke="#cbd5e1" strokeWidth={1.5} fill="none" />;
+        })}
+        {/* Nodes */}
+        {allNodes.map((n) => {
+          const color = ORG_TYPE_COLORS[n.type] || '#64748b';
+          const count = peopleCounts[n.id] || 0;
+          return (
+            <g key={n.id} transform={`translate(${n.x - BOX_W / 2}, ${n.y - BOX_H / 2})`}>
+              <rect width={BOX_W} height={BOX_H} rx={6} ry={6}
+                fill="#fff" stroke={color} strokeWidth={1.5} />
+              <text x={BOX_W / 2} y={20} textAnchor="middle" fontSize={12} fontWeight={600} fill="#0f172a">
+                {n.name.length > 20 ? `${n.name.slice(0, 19)}...` : n.name}
+              </text>
+              <text x={BOX_W / 2} y={36} textAnchor="middle" fontSize={9} fill={color}
+                style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                {n.type}
+              </text>
+              {count > 0 && (
+                <g transform={`translate(${BOX_W - 36}, ${BOX_H - 16})`}>
+                  <rect width={28} height={12} rx={6} ry={6} fill="#f1f5f9" />
+                  <text x={14} y={9} textAnchor="middle" fontSize={9} fill="#475569">{count}</text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

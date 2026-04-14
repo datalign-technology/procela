@@ -203,6 +203,8 @@ export default function ConnectionsPage() {
   const [discoverModal, setDiscoverModal] = useState<{ connId: string; systemId: string; systemName: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // Which assets in the Discover modal are expanded to show their columns.
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
 
@@ -343,9 +345,28 @@ export default function ConnectionsPage() {
   const handleDeleteAll = async () => {
     try {
       await apiClient.delete('/connections/all');
+      setSelectedIds(new Set());
       addToast('success', 'All connections deleted');
       fetchData();
     } catch { addToast('error', 'Delete all failed'); }
+  };
+
+  // ── Bulk select handlers ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/connections/${id}`)));
+      addToast('success', `Deleted ${selectedIds.size} connections`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch { addToast('error', 'Bulk delete failed'); }
   };
 
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null); };
@@ -712,6 +733,37 @@ export default function ConnectionsPage() {
         onCancel={() => setConfirmDelete(null)}
       />
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Connections?"
+        message={`Delete ${selectedIds.size} selected connections? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
@@ -729,6 +781,14 @@ export default function ConnectionsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                  <input type="checkbox"
+                    checked={visibleConnections.length > 0 && selectedIds.size === visibleConnections.length}
+                    onChange={() => {
+                      if (selectedIds.size === visibleConnections.length) setSelectedIds(new Set());
+                      else setSelectedIds(new Set(visibleConnections.map((c) => c.id)));
+                    }} />
+                </th>
                 <th style={thStyle}>System</th>
                 <th style={thStyle}>Connection Name</th>
                 <th style={thStyle}>Type</th>
@@ -743,14 +803,18 @@ export default function ConnectionsPage() {
                 const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
                 const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
                 const isTesting = testingIds.has(conn.id);
+                const isSelected = selectedIds.has(conn.id);
 
                 return (
                   <tr
                     key={conn.id}
-                    style={{ transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+                    style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
                   >
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(conn.id)} />
+                    </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
                       {systemNameMap[conn.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                     </td>
