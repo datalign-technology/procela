@@ -12,7 +12,7 @@ import morgan from 'morgan';
 import compression from 'compression';
 import config from './config';
 import logger from './lib/logger';
-import { startAutoSave } from './lib/persistence';
+import { startAutoSave, flushStores } from './lib/persistence';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
@@ -116,7 +116,7 @@ import { dataLineageLinks } from './routes/data-lineage';
 import { dataQualityRules } from './routes/data-quality';
 import { connections } from './routes/connections';
 
-startAutoSave({
+const stores = {
   processNodes: () => processNodes,
   flowRelationships: () => flowRelationships,
   processVersions: () => processVersions,
@@ -138,15 +138,60 @@ startAutoSave({
   dataLineageLinks: () => dataLineageLinks,
   dataQualityRules: () => dataQualityRules,
   connections: () => connections,
-});
+};
+const autoSaveHandle = startAutoSave(stores);
 
 // ---------------------------------------------------------------------------
 // Start server
 // ---------------------------------------------------------------------------
 const PORT = config.port;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info({ port: PORT, env: config.nodeEnv }, 'Procela server started');
 });
+
+// Friendly handler for the most common dev-time crash: a previous
+// instance still has the port. The default Node error here is a
+// stack trace that buries the actionable bit ("port 3001 is taken"),
+// so we replace it with a one-line hint and exit non-zero.
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    logger.error(
+      { port: PORT },
+      `Port ${PORT} is already in use. Another Procela instance is probably running.\n` +
+      `  - Quick fix:  npx kill-port ${PORT}\n` +
+      `  - Or:         taskkill /F /IM node.exe   (Windows)\n` +
+      `                lsof -ti :${PORT} | xargs kill -9   (macOS / Linux)\n` +
+      `  - Or set a different port:  PORT=3002 npm run dev`,
+    );
+    process.exit(1);
+  }
+  logger.error({ err }, 'HTTP server error');
+  process.exit(1);
+});
+
+// Graceful shutdown — close the HTTP server, stop the autosave timer,
+// and run one final flush so the latest in-memory state hits disk
+// before exit. Triggered by Ctrl+C (SIGINT) or `kill <pid>` (SIGTERM)
+// and by the nodemon-like restart that tsx --watch does internally.
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, 'Shutting down');
+  clearInterval(autoSaveHandle);
+  flushStores(stores);
+  server.close((err) => {
+    if (err) logger.error({ err }, 'Error closing HTTP server');
+    process.exit(err ? 1 : 0);
+  });
+  // Hard exit if close() hangs (e.g. a long-poll never finishes).
+  setTimeout(() => {
+    logger.warn('Force-exiting after 5s shutdown timeout');
+    process.exit(1);
+  }, 5000).unref();
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 export default app;

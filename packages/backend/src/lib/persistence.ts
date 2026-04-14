@@ -24,12 +24,28 @@ export function loadStore<T>(name: string): T[] {
   }
 }
 
-// Auto-save on interval
-export function startAutoSave(stores: Record<string, () => any[]>, intervalMs: number = 10000) {
-  setInterval(() => {
+// Auto-save on interval. Returns the timer handle so the caller can
+// `clearInterval` it on shutdown. The timer is `unref`'d so it doesn't
+// pin the event loop on its own — Ctrl+C exits cleanly even if the
+// HTTP server has already stopped accepting connections.
+export function startAutoSave(stores: Record<string, () => any[]>, intervalMs: number = 10000): NodeJS.Timeout {
+  const handle = setInterval(() => {
     for (const [name, getData] of Object.entries(stores)) {
       saveStore(name, getData());
     }
   }, intervalMs);
+  if (typeof handle.unref === 'function') handle.unref();
   logger.info({ interval: intervalMs, stores: Object.keys(stores) }, 'Auto-save started');
+  return handle;
+}
+
+/**
+ * Run a final save pass — used at shutdown to flush any in-memory
+ * state to disk before exit. Skips the timer entirely.
+ */
+export function flushStores(stores: Record<string, () => any[]>): void {
+  for (const [name, getData] of Object.entries(stores)) {
+    try { saveStore(name, getData()); }
+    catch (err) { logger.error({ err, name }, 'Final save failed'); }
+  }
 }
