@@ -540,7 +540,7 @@ export default function DataAssetsPage() {
           <SkeletonRows rows={5} columns={4} />
         ) : assets.length === 0 && !showForm ? (
           <EmptyState
-            icon="\u26C1"
+            icon={'\u26C1'}
             title="No data assets yet"
             description="Data assets describe your information in business terms — customer accounts, billing records, inventory levels. Define them first, then link each one to where the data actually lives."
             action={{ label: '+ Add Data Asset', onClick: openAdd }}

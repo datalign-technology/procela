@@ -447,7 +447,7 @@ export default function DataDomainsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : domains.length === 0 && !showForm ? (
           <EmptyState
-            icon="\u2637"
+            icon={'\u2637'}
             title="No data domains defined yet"
             description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies. Start with the big buckets (Customer, Finance, Product) and refine later."
             action={{ label: '+ Add Domain', onClick: openAdd }}

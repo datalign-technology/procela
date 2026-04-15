@@ -165,7 +165,7 @@ export default function LinkConnectionModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>
-              {isChangeMode ? 'Change location' : 'Link connection'} \u2014 {asset.name}
+              {isChangeMode ? 'Change location' : 'Link connection'} {'\u2014'} {asset.name}
             </h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
               Pick a connection, then select the table/file and (optionally) the column this
@@ -203,7 +203,7 @@ export default function LinkConnectionModal({
             </label>
             {discovering && (
               <div style={{ padding: 12, border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                Discovering\u2026
+                {'Discovering\u2026'}
               </div>
             )}
             {discoverError && (
@@ -258,7 +258,7 @@ export default function LinkConnectionModal({
                               cursor: 'pointer',
                             }}
                           >
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>\u21B3</span>
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{'\u21B3'}</span>
                             <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{col}</span>
                             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>column</span>
                           </div>

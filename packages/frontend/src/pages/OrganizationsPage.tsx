@@ -567,7 +567,7 @@ export default function OrganizationsPage() {
         <div>
           {tree.length === 0 ? (
             <EmptyState
-              icon="\u2616"
+              icon={'\u2616'}
               title="No organizations yet"
               description="Define your company, its divisions, and sub-teams. Most of Procela is scoped to the org you select at the top of the page, so this is the first thing to set up."
               action={{ label: '+ Add Organization', onClick: () => openAddOrg(null) }}

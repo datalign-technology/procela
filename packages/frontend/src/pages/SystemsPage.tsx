@@ -397,7 +397,7 @@ export default function SystemsPage() {
           <SkeletonRows rows={5} columns={5} />
         ) : systems.length === 0 && !showForm ? (
           <EmptyState
-            icon="\u2699"
+            icon={'\u2699'}
             title="No systems defined yet"
             description="Systems are the applications and platforms where your data lives — ERP, CRM, GIS, and so on. Define them first so you can connect and map data assets to each one."
             action={{ label: '+ Add System', onClick: openAdd }}

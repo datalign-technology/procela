@@ -709,7 +709,7 @@ export default function DataQualityPage() {
       {filteredRules.length === 0 ? (
         rules.length === 0 ? (
           <EmptyState
-            icon="\u2713"
+            icon={'\u2713'}
             title="No quality rules yet"
             description="Quality rules validate your data — uniqueness, non-null, regex match, value ranges. Pick an asset, attach a rule, and Procela will run it and score the asset's health."
             action={{ label: '+ Add Rule', onClick: openAdd }}
@@ -880,9 +880,9 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
                     ) : (
                       <span>
                         {rs.length} total
-                        {passing > 0 && <span style={{ color: '#16a34a', marginLeft: 6 }}>\u2714 {passing}</span>}
-                        {warn > 0 && <span style={{ color: '#ca8a04', marginLeft: 6 }}>\u26A0 {warn}</span>}
-                        {failing > 0 && <span style={{ color: '#dc2626', marginLeft: 6 }}>\u2716 {failing}</span>}
+                        {passing > 0 && <span style={{ color: '#16a34a', marginLeft: 6 }}>{'\u2714'} {passing}</span>}
+                        {warn > 0 && <span style={{ color: '#ca8a04', marginLeft: 6 }}>{'\u26A0'} {warn}</span>}
+                        {failing > 0 && <span style={{ color: '#dc2626', marginLeft: 6 }}>{'\u2716'} {failing}</span>}
                       </span>
                     )}
                   </td>

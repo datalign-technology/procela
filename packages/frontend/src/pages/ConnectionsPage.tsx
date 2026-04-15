@@ -788,7 +788,7 @@ export default function ConnectionsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : visibleConnections.length === 0 && !showForm ? (
           <EmptyState
-            icon="\u26A1"
+            icon={'\u26A1'}
             title={filterSystem ? `No connections for ${filterSystem.name} yet` : 'No connections configured yet'}
             description="Connections are the bridge between a system and its actual data — a database, a file, a warehouse. Add one, test it, and then discover and link assets from it."
             action={{ label: '+ Add Connection', onClick: openAdd }}
@@ -904,7 +904,7 @@ export default function ConnectionsPage() {
             ) : (
               <>
                 <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
-                  Click an asset to drill into its columns. To link a column to a Data Asset, go to Data Assets \u2192 Link.
+                  {'Click an asset to drill into its columns. To link a column to a Data Asset, go to Data Assets \u2192 Link.'}
                 </p>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -950,7 +950,7 @@ export default function ConnectionsPage() {
                                 style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, paddingLeft: 24, color: 'var(--color-text)', border: 'none' }}
                                 colSpan={4}
                               >
-                                <span style={{ color: 'var(--color-text-muted)', marginRight: 6 }}>\u21B3</span>
+                                <span style={{ color: 'var(--color-text-muted)', marginRight: 6 }}>{'\u21B3'}</span>
                                 <strong>{col}</strong>
                                 <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>column</span>
                               </td>

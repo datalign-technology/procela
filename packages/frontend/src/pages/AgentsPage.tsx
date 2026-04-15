@@ -238,7 +238,7 @@ export default function AgentsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading\u2026</p>;
+  if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>{'Loading\u2026'}</p>;
 
   return (
     <div>
@@ -250,7 +250,7 @@ export default function AgentsPage() {
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none' }} title="Help">?</Link>
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-            Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.
+            {'Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -459,7 +459,7 @@ export default function AgentsPage() {
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {filtered.length === 0 ? (
           <EmptyState
-            icon="\u2734"
+            icon={'\u2734'}
             title={selectedOrgId ? 'No agents in this organization yet' : 'No agents defined yet'}
             description="Agents are non-human actors — AI models, service accounts, pipelines, bots — that participate in your org alongside people."
             action={{ label: '+ Add Agent', onClick: openAdd }}
@@ -504,17 +504,17 @@ export default function AgentsPage() {
                         {a.agentType.replace('_', ' ')}
                       </span>
                     </td>
-                    <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>\u2014</span>}</td>
+                    <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}</td>
                     <td style={tdStyle}>
                       <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
                         {a.status}
                       </span>
                     </td>
                     <td style={tdStyle}>
-                      {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>\u2014</span>}
+                      {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
                     </td>
                     <td style={tdStyle}>
-                      {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>\u2014</span>}
+                      {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>

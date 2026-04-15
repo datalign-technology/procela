@@ -99,7 +99,7 @@ export function DefinitionBlock({ def, label = 'Definition' }: { def: RuleDefini
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, fontFamily: 'inherit', fontSize: 10, color: '#9ca3af' }}>
         <span style={{ padding: '1px 5px', borderRadius: 3, background: tagColor, color: '#fff', fontWeight: 600, letterSpacing: '0.04em' }}>{tag}</span>
         <span>{label}</span>
-        {!def.executable && <span style={{ color: '#f59e0b' }}>\u2014 not executable here (display only)</span>}
+        {!def.executable && <span style={{ color: '#f59e0b' }}>{'\u2014 not executable here (display only)'}</span>}
       </div>
       <code style={{ color: '#e5e7eb' }}>{def.body}</code>
     </div>
@@ -410,7 +410,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
             )}
             {!columnName && (
               <p style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
-                This asset isn\u2019t bound to a specific column, so rules will run against the whole asset (simulated only).
+                {'This asset isn\u2019t bound to a specific column, so rules will run against the whole asset (simulated only).'}
               </p>
             )}
           </div>

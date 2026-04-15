@@ -546,7 +546,7 @@ export default function MappingsPage() {
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : mappings.length === 0 && !showForm ? (
           <EmptyState
-            icon="\u2194"
+            icon={'\u2194'}
             title="No mappings yet"
             description="Mappings link your data assets to the process steps they support. They're how Procela knows which processes a piece of data flows through (and where the gaps are)."
             action={{ label: '+ Add Mapping', onClick: openForm }}
