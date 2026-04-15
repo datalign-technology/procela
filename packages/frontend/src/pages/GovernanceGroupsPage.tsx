@@ -513,6 +513,7 @@ export default function GovernanceGroupsPage() {
         title="Delete All Governance Groups?"
         message={`This will permanently delete all ${flatGroups.length} governance groups. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/governance-groups/all');

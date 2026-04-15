@@ -8,6 +8,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
+import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import LinkConnectionModal from '../components/LinkConnectionModal';
 
@@ -234,12 +235,32 @@ export default function DataAssetsPage() {
     setShowForm(true);
   };
 
-  const handleSave = async () => {
+  // Duplicate — seed the create form from an existing asset's values.
+  const openDuplicate = (asset: DataAssetEntity) => {
+    setForm({
+      name: `${asset.name} (copy)`,
+      description: asset.description,
+      systemId: asset.systemId,
+    });
+    setEditingId(null);
+    setShowForm(true);
+  };
+
+  const handleSave = async (keepOpen: boolean = false) => {
     if (!form.name.trim()) return;
     if (editingId) {
       await apiClient.put(`/data-assets/${editingId}`, form);
     } else {
       await apiClient.post('/data-assets', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+    }
+    // "Save and add another": keep the form open with fresh inputs so
+    // the user can keep keying in new assets without clicking Add each
+    // time. The original form state isn't reset on edit (keepOpen only
+    // applies to create flow).
+    if (keepOpen && !editingId) {
+      setForm(emptyForm);
+      fetchData();
+      return;
     }
     setShowForm(false);
     setEditingId(null);
@@ -416,10 +437,20 @@ export default function DataAssetsPage() {
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
+            {!editingId && (
+              <button
+                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1 }}
+                disabled={!form.name.trim()}
+                onClick={() => handleSave(true)}
+                title="Save this asset and keep the form open to add another"
+              >
+                Save & Add Another
+              </button>
+            )}
             <button
               style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }}
               disabled={!form.name.trim()}
-              onClick={handleSave}
+              onClick={() => handleSave(false)}
             >
               {editingId ? 'Save Changes' : 'Add Data Asset'}
             </button>
@@ -468,6 +499,7 @@ export default function DataAssetsPage() {
         title="Delete All Data Assets?"
         message={`This will permanently delete all ${assets.length} data assets. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/data-assets/all');
@@ -505,7 +537,7 @@ export default function DataAssetsPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+          <SkeletonRows rows={5} columns={4} />
         ) : assets.length === 0 && !showForm ? (
           <EmptyState
             icon="\u26C1"
@@ -564,6 +596,7 @@ export default function DataAssetsPage() {
                           <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
                         )}
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(asset)} />
+                        <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(asset)} />
                         <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(asset.id)} />
                       </div>
                     </td>

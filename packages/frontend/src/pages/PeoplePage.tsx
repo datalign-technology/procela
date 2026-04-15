@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { errorToast } from '../lib/errorToast';
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
+import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
 
@@ -374,23 +375,37 @@ export default function PeoplePage() {
     } catch { /* */ }
   };
 
-  // ── Governance Group membership toggle ──
+  // ── Governance Group membership toggle (optimistic) ──
+  // Flip the UI state immediately so the checkbox feels instant, then
+  // call the API in the background. On failure, revert and toast — the
+  // previous state is captured in `snapshot` before mutation.
   const toggleGroupMembership = async (groupId: string, isMember: boolean, role: string = 'MEMBER') => {
     if (!viewing360) return;
-    setSaving360(true);
+    const snapshot = viewing360;
+    // Optimistically toggle the group in the currently-viewed 360.
+    const nextGroups = isMember
+      ? viewing360.governanceGroups.filter((g) => g.groupId !== groupId)
+      : [
+          ...viewing360.governanceGroups,
+          {
+            groupId,
+            groupName: viewing360.allGroups.find((g) => g.id === groupId)?.name || '',
+            groupType: viewing360.allGroups.find((g) => g.id === groupId)?.type || '',
+            groupRole: role,
+            since: new Date().toISOString(),
+          },
+        ];
+    setViewing360({ ...viewing360, governanceGroups: nextGroups });
     try {
-      if (isMember) {
-        // Remove membership
-        await apiClient.delete(`/governance-groups/${groupId}/members/${viewing360.person.id}`);
-      } else {
-        // Add membership
-        await apiClient.post(`/governance-groups/${groupId}/members`, {
-          personId: viewing360.person.id, groupRole: role,
-        });
-      }
+      if (isMember) await apiClient.delete(`/governance-groups/${groupId}/members/${viewing360.person.id}`);
+      else await apiClient.post(`/governance-groups/${groupId}/members`, { personId: viewing360.person.id, groupRole: role });
+      // Background reconcile with server truth — catches any server-side
+      // mutations our optimistic model didn't predict (timestamps, etc.).
       await refresh360();
-    } catch (err) { errorToast(err, 'Failed to update group membership'); }
-    finally { setSaving360(false); }
+    } catch (err) {
+      setViewing360(snapshot);  // revert
+      errorToast(err, 'Failed to update group membership');
+    }
   };
 
   // ── Governance Group role change ──
@@ -503,7 +518,11 @@ export default function PeoplePage() {
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>;
+  if (loading) return (
+    <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden', padding: 8 }}>
+      <SkeletonRows rows={6} columns={5} />
+    </div>
+  );
 
   return (
     <div>
@@ -594,6 +613,7 @@ export default function PeoplePage() {
                 title="Delete All People?"
                 message={`This will permanently delete all ${people.length} people across all organizations. This cannot be undone.`}
                 confirmLabel="Delete All"
+                requireTypedConfirmation="DELETE"
                 onConfirm={async () => {
                   setShowDeleteAllPeople(false);
                   await apiClient.delete('/people/all');

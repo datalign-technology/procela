@@ -433,6 +433,7 @@ export default function AgentsPage() {
         title="Delete All Agents?"
         message={`This will permanently delete all ${agents.length} agents. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/agents/all');

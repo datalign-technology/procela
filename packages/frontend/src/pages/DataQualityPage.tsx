@@ -8,6 +8,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
+import ActiveFiltersBar from '../components/ActiveFiltersBar';
 import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
 
 // Assets tab: we need more than just {id,name} to display source provenance
@@ -453,22 +454,31 @@ export default function DataQualityPage() {
 
       {/* Filters */}
       {rules.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Data Asset:</label>
-            <select style={{ ...selectStyle, width: 'auto', minWidth: 180 }} value={filterAssetId} onChange={(e) => setFilterAssetId(e.target.value)}>
-              <option value="">All</option>
-              {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+        <>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Data Asset:</label>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 180 }} value={filterAssetId} onChange={(e) => setFilterAssetId(e.target.value)}>
+                <option value="">All</option>
+                {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Dimension:</label>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 150 }} value={filterDimension} onChange={(e) => setFilterDimension(e.target.value)}>
+                <option value="">All</option>
+                {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Dimension:</label>
-            <select style={{ ...selectStyle, width: 'auto', minWidth: 150 }} value={filterDimension} onChange={(e) => setFilterDimension(e.target.value)}>
-              <option value="">All</option>
-              {QUALITY_DIMENSIONS.map((d) => <option key={d} value={d}>{d.replace(/_/g, ' ')}</option>)}
-            </select>
-          </div>
-        </div>
+          <ActiveFiltersBar
+            filters={[
+              filterAssetId && { label: 'Asset', value: assetsList.find((a) => a.id === filterAssetId)?.name || filterAssetId, onClear: () => setFilterAssetId('') },
+              filterDimension && { label: 'Dimension', value: filterDimension.replace(/_/g, ' '), onClear: () => setFilterDimension('') },
+            ].filter(Boolean) as any}
+            onClearAll={() => { setFilterAssetId(''); setFilterDimension(''); }}
+          />
+        </>
       )}
 
       {/* Compute Health Buttons */}
@@ -647,6 +657,7 @@ export default function DataQualityPage() {
         title="Delete All Quality Rules?"
         message={`This will permanently delete all ${rules.length} quality rules. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/data-quality/all');

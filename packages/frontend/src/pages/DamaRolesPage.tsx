@@ -336,6 +336,7 @@ export default function DamaRolesPage() {
         title="Delete All Governance Roles?"
         message={`This will permanently delete all ${roles.length} governance role assignments. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/dama-roles/all');

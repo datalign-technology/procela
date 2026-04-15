@@ -446,6 +446,7 @@ export default function DataLineagePage() {
         title="Delete All Lineage Flows?"
         message={`This will permanently delete all ${links.length} lineage flows. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/data-lineage/all');

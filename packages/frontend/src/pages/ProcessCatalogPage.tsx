@@ -755,6 +755,7 @@ export default function ProcessCatalogPage() {
         title="Delete All Processes?"
         message={`This will permanently delete all ${totalNodes} process nodes and their flow relationships. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/process-catalog/all');

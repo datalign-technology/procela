@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
+import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 
@@ -112,10 +113,15 @@ export default function SystemsPage() {
     setEditingId(sys.id); setShowForm(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (keepOpen: boolean = false) => {
     if (!form.name.trim()) return;
     if (editingId) { await apiClient.put(`/systems/${editingId}`, form); }
     else { await apiClient.post('/systems', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) }); }
+    if (keepOpen && !editingId) {
+      setForm(emptyForm);
+      fetchData();
+      return;
+    }
     setShowForm(false); setEditingId(null); setForm(emptyForm); fetchData();
   };
 
@@ -292,7 +298,17 @@ export default function SystemsPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={handleSave}>
+            {!editingId && (
+              <button
+                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1 }}
+                disabled={!form.name.trim()}
+                onClick={() => handleSave(true)}
+                title="Save this system and keep the form open to add another"
+              >
+                Save & Add Another
+              </button>
+            )}
+            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={() => handleSave(false)}>
               {editingId ? 'Save Changes' : 'Add System'}
             </button>
           </div>
@@ -340,6 +356,7 @@ export default function SystemsPage() {
         title="Delete All Systems?"
         message={`This will permanently delete all ${systems.length} systems. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/systems/all');
@@ -377,7 +394,7 @@ export default function SystemsPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+          <SkeletonRows rows={5} columns={5} />
         ) : systems.length === 0 && !showForm ? (
           <EmptyState
             icon="\u2699"

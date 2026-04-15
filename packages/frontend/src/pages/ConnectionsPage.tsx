@@ -289,6 +289,22 @@ export default function ConnectionsPage() {
     setShowForm(true);
   };
 
+  // Duplicate — pre-fills the create form with the source's values,
+  // nudges the name with a "(copy)" suffix so the user isn't forced
+  // to pick something unique immediately.
+  const openDuplicate = (conn: ConnectionProfile) => {
+    setForm({
+      name: `${conn.name} (copy)`,
+      systemId: conn.systemId,
+      connectionType: conn.connectionType,
+      config: { ...conn.config },
+      credentials: { ...conn.credentials },
+    });
+    setEditingId(null);
+    setPendingFile(null);
+    setShowForm(true);
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) return;
     try {
@@ -721,6 +737,7 @@ export default function ConnectionsPage() {
         title="Delete All Connections?"
         message={`This will permanently delete all ${connections.length} connection profiles. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => { setShowDeleteAll(false); await handleDeleteAll(); }}
         onCancel={() => setShowDeleteAll(false)}
       />
@@ -844,6 +861,7 @@ export default function ConnectionsPage() {
                           <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
                         )}
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(conn)} />
+                        <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(conn)} />
                         <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(conn.id)} />
                       </div>
                     </td>

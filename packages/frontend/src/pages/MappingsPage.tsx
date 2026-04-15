@@ -498,6 +498,7 @@ export default function MappingsPage() {
         title="Delete All Mappings?"
         message={`This will permanently delete all ${mappings.length} mappings. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/mappings/all');

@@ -275,6 +275,7 @@ export default function DataDomainsPage() {
         title="Delete All Data Domains?"
         message={`This will permanently delete all ${domains.length} data domains. This cannot be undone.`}
         confirmLabel="Delete All"
+        requireTypedConfirmation="DELETE"
         onConfirm={async () => {
           setShowDeleteAll(false);
           await apiClient.delete('/data-domains/all');
