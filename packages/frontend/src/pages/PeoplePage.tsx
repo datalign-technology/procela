@@ -9,6 +9,8 @@ import IconButton from '../components/IconButton';
 import { errorToast } from '../lib/errorToast';
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 import { SkeletonRows } from '../components/Skeleton';
+import OrgChipInput from '../components/OrgChipInput';
+import { OrgPickerModal } from '../components/OrgPicker';
 
 // ── Types ──
 
@@ -207,6 +209,8 @@ export default function PeoplePage() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
 
   // Governance data for summary column and 360 editing
@@ -273,6 +277,39 @@ export default function PeoplePage() {
     if (urlOrgId !== selectedOrgId) setSelectedOrgId(urlOrgId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlOrgId]);
+
+  // `?addToOrg=<id>` comes from the "+ Person" button on the Organizations
+  // tree: it's a shortcut to "drop a new person into this org". If the
+  // user has bulk-selected people already, we bulk-assign instead —
+  // matches the UX recommendation of "if selection exists, offer Assign
+  // these N here; otherwise open the Add form pre-scoped".
+  const addToOrgParam = searchParams.get('addToOrg') || '';
+  useEffect(() => {
+    if (!addToOrgParam || !flatOrgs.length) return;
+    // Don't re-trigger while the form is already open.
+    if (showPersonForm || bulkAssignOpen) return;
+
+    const targetOrg = flatOrgs.find((o) => o.id === addToOrgParam);
+    // Strip the param once handled so refresh / back doesn't re-open.
+    const clearParam = () => {
+      const next = new URLSearchParams(searchParams);
+      next.delete('addToOrg');
+      setSearchParams(next, { replace: true });
+    };
+
+    if (!targetOrg) { clearParam(); return; }
+
+    if (selectedPersonIds.size > 0) {
+      // Bulk-assign existing selection to that org instead of creating a new person.
+      setBulkAssignOrgIds(new Set([targetOrg.id]));
+      setBulkAssignOpen(true);
+    } else {
+      openAddPerson();
+      setPersonForm((f) => ({ ...f, orgIds: [targetOrg.id] }));
+    }
+    clearParam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addToOrgParam, flatOrgs]);
 
   const applyOrgFilter = (id: string) => {
     setSelectedOrgId(id);
@@ -347,6 +384,39 @@ export default function PeoplePage() {
     await Promise.all(Array.from(selectedPersonIds).map((id) => apiClient.delete(`/people/${id}`)));
     setSelectedPersonIds(new Set());
     fetchData();
+  };
+
+  // Bulk assign N selected people to one or more orgs. We merge (not replace)
+  // so existing assignments aren't clobbered — the flow is "add these orgs
+  // to everyone selected", which matches the affordance's label.
+  const openBulkAssign = () => {
+    setBulkAssignOrgIds(new Set());
+    setBulkAssignOpen(true);
+  };
+  const toggleBulkAssignOrg = (orgId: string) => {
+    setBulkAssignOrgIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orgId)) next.delete(orgId); else next.add(orgId);
+      return next;
+    });
+  };
+  const handleBulkAssign = async () => {
+    if (selectedPersonIds.size === 0 || bulkAssignOrgIds.size === 0) return;
+    const targetIds = Array.from(selectedPersonIds);
+    const addIds = Array.from(bulkAssignOrgIds);
+    try {
+      await Promise.all(targetIds.map(async (pid) => {
+        const p = people.find((x) => x.id === pid);
+        if (!p) return;
+        const merged = Array.from(new Set([...(p.orgIds || []), ...addIds]));
+        await apiClient.put(`/people/${pid}`, { orgIds: merged });
+      }));
+      setBulkAssignOpen(false);
+      setBulkAssignOrgIds(new Set());
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Bulk assignment failed');
+    }
   };
   // NOTE: The Person 360 modal used to be the entry point here.
   // It's now the dedicated /people/:id page; the Manage button
@@ -656,6 +726,12 @@ export default function PeoplePage() {
                 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedPersonIds.size} selected</span>
                   <button
+                    onClick={openBulkAssign}
+                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+                  >
+                    Assign to org\u2026
+                  </button>
+                  <button
                     onClick={() => setConfirmBulkDeletePeople(true)}
                     style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                   >
@@ -669,6 +745,20 @@ export default function PeoplePage() {
                   </button>
                 </div>
               )}
+
+              {/* Bulk assign picker modal — shared OrgPicker in a dialog. */}
+              <OrgPickerModal
+                open={bulkAssignOpen}
+                title={`Assign ${selectedPersonIds.size} ${selectedPersonIds.size === 1 ? 'person' : 'people'} to organizations`}
+                description="Selected orgs are added to every selected person. Existing assignments are preserved."
+                confirmLabel={`Assign to ${bulkAssignOrgIds.size} org${bulkAssignOrgIds.size === 1 ? '' : 's'}`}
+                orgs={flatOrgs}
+                selectedIds={bulkAssignOrgIds}
+                onToggle={toggleBulkAssignOrg}
+                scopeOrgId={activeOrgId || null}
+                onConfirm={handleBulkAssign}
+                onCancel={() => setBulkAssignOpen(false)}
+              />
 
               {/* Add/Edit Person Form */}
               {showPersonForm && (
@@ -701,26 +791,15 @@ export default function PeoplePage() {
                         <div style={{ gridColumn: '1 / -1' }}>
                           <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assign to Organizations *</label>
                           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                            Select all org levels this person belongs to. You can refine these later via Manage.
+                            Type to search \u2014 matches show their breadcrumb so same-named orgs are distinguishable.
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0', maxHeight: 240, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4 }}>
-                            {orgOptions.map((opt) => {
-                              const checked = personForm.orgIds.includes(opt.id);
-                              return (
-                                <label key={opt.id} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', paddingLeft: 8 + opt.depth * 20, paddingTop: 2, paddingBottom: 2 }}>
-                                  <input type="checkbox" checked={checked}
-                                    onChange={() => setPersonForm({
-                                      ...personForm,
-                                      orgIds: checked ? personForm.orgIds.filter((id) => id !== opt.id) : [...personForm.orgIds, opt.id],
-                                    })}
-                                    style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
-                                  />
-                                  <span style={{ whiteSpace: 'nowrap' }}>{opt.name}</span>
-                                  <span style={{ fontSize: 9, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>({opt.type.charAt(0).toUpperCase() + opt.type.slice(1)})</span>
-                                </label>
-                              );
-                            })}
-                          </div>
+                          <OrgChipInput
+                            orgs={flatOrgs}
+                            selectedIds={personForm.orgIds}
+                            onChange={(next) => setPersonForm({ ...personForm, orgIds: next })}
+                            scopeOrgId={activeOrgId || null}
+                            autoFocus
+                          />
                         </div>
                         <div>
                           <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Application Role</label>

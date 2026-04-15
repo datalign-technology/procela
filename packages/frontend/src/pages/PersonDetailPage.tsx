@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
 import { errorToast, successToast } from '../lib/errorToast';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
+import OrgPicker from '../components/OrgPicker';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -58,10 +60,14 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: 10,
 };
 
+interface FlatOrg { id: string; parentId: string | null; name: string; type: string; }
+
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { activeOrgId } = useOrgContext();
   const [data, setData] = useState<Person360Data | null>(null);
+  const [allOrgs, setAllOrgs] = useState<FlatOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -71,8 +77,12 @@ export default function PersonDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${id}/360`);
-      setData(res.data);
+      const [personRes, orgsRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${id}/360`),
+        apiClient.get<{ success: boolean; data: FlatOrg[] }>('/organizations'),
+      ]);
+      setData(personRes.data);
+      setAllOrgs(orgsRes.data || []);
     } catch (err: any) {
       setError(err?.message || 'Could not load person');
     } finally {
@@ -81,6 +91,32 @@ export default function PersonDetailPage() {
   }, [id]);
 
   useEffect(() => { fetch360(); }, [fetch360]);
+
+  // Toggle an org in the person's assignment list, persisting immediately.
+  // Backend requires at least one assignment, so we block the last unassign.
+  const toggleOrgAssignment = async (orgId: string) => {
+    if (!data) return;
+    const current = data.person.orgIds || [];
+    const isAssigned = current.includes(orgId);
+    const next = isAssigned ? current.filter((x) => x !== orgId) : [...current, orgId];
+    if (next.length === 0) {
+      errorToast(null, 'A person must belong to at least one organization.');
+      return;
+    }
+    // Optimistic update.
+    const snapshot = data;
+    setData({ ...data, person: { ...data.person, orgIds: next } });
+    setBusy(true);
+    try {
+      await apiClient.put(`/people/${data.person.id}`, { orgIds: next });
+      await fetch360();
+    } catch (err) {
+      setData(snapshot);
+      errorToast(err, 'Failed to update org assignment');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // ── Mutations ──
   const toggleGroup = async (groupId: string, isMember: boolean, role = 'MEMBER') => {
@@ -222,30 +258,67 @@ export default function PersonDetailPage() {
         </div>
       </div>
 
-      {/* Org Assignments */}
+      {/* Org Assignments — editable via shared picker. Uses the Working-In
+          context as the default scope so a Tidewater Electric admin sees
+          that subtree first, with a one-click expand to all orgs. */}
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Assigned organizations ({data.orgAssignments.length})</div>
-        {data.orgAssignments.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No organizations assigned.</div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {data.orgAssignments.map((o) => (
-              <span key={o.id}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '4px 10px', borderRadius: 999,
-                  background: '#eff6ff', color: '#1e40af', fontSize: 12,
-                }}
-              >
-                <strong>{o.name}</strong>
-                <span style={{ fontSize: 10, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{o.type}</span>
-              </span>
-            ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={sectionTitleStyle}>Assigned organizations ({(data.person.orgIds || []).length})</div>
+          {busy && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Saving\u2026</span>}
+        </div>
+        {/* Selected chips — compact summary above the picker. */}
+        {(data.person.orgIds || []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {(data.person.orgIds || []).map((oid) => {
+              const o = allOrgs.find((x) => x.id === oid);
+              if (!o) return null;
+              const isLast = (data.person.orgIds || []).length === 1;
+              return (
+                <span key={oid}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 4px 4px 10px',
+                    borderRadius: 999,
+                    background: 'var(--color-primary-light)',
+                    color: 'var(--color-primary)',
+                    fontSize: 12,
+                  }}
+                >
+                  <strong>{o.name}</strong>
+                  <span style={{ fontSize: 10, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{o.type}</span>
+                  <button
+                    onClick={() => toggleOrgAssignment(oid)}
+                    disabled={isLast || busy}
+                    aria-label={`Unassign from ${o.name}`}
+                    title={isLast ? 'Cannot unassign the last org' : `Unassign from ${o.name}`}
+                    style={{
+                      background: 'transparent', border: 'none',
+                      cursor: isLast || busy ? 'not-allowed' : 'pointer',
+                      color: 'var(--color-primary)', fontSize: 14, lineHeight: 1,
+                      padding: '0 8px', borderRadius: 999,
+                      opacity: isLast ? 0.4 : 1,
+                    }}
+                  >&times;</button>
+                </span>
+              );
+            })}
           </div>
         )}
-        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8 }}>
-          Edit org assignments in the Manage modal on the People page.
-        </p>
+        <OrgPicker
+          orgs={allOrgs}
+          selectedIds={new Set(data.person.orgIds || [])}
+          onToggle={toggleOrgAssignment}
+          scopeOrgId={activeOrgId || null}
+          initialScope="subtree"
+          isDisabled={(orgId) => {
+            // Block unchecking the one-and-only assignment. Matches the
+            // backend's non-empty-orgIds guard and avoids the toast.
+            const current = data.person.orgIds || [];
+            return current.length === 1 && current[0] === orgId;
+          }}
+          maxHeight={260}
+          placeholder="Search organizations (press / to focus)"
+        />
       </div>
 
       {/* Governance roles */}
