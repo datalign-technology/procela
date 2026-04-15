@@ -1,0 +1,22 @@
+Name,Type,Provider,Description
+Outage Prediction Model,AI,Internal ML Platform,Predicts distribution outage probability from weather and asset health signals
+Load Forecaster,AI,Internal ML Platform,Day-ahead and hour-ahead electric load forecasting by substation
+Vegetation Growth Forecaster,AI,Databricks,Satellite imagery analysis for vegetation encroachment on transmission corridors
+Non-Revenue Water Anomaly Detector,AI,Azure ML,Detects main breaks and unauthorized consumption from DMA flow patterns
+Leak Acoustic Classifier,AI,Google Cloud AI,Classifies acoustic sensor signals to localize water main leaks
+Treatment Chemical Optimizer,AI,Internal ML Platform,Suggests coagulant dosing based on raw water turbidity and temperature
+Customer Churn Predictor,AI,Anthropic Claude,Identifies customers likely to switch to community solar programs
+AMI Meter Ingestion Pipeline,PIPELINE,Apache Airflow,Hourly ETL for electric and water meter interval data into data lake
+Outage Event Stream,PIPELINE,Apache Kafka,Streaming ingest of DMS outage events to analytics and notification systems
+SCADA Historian Replication,PIPELINE,Informatica,Replicates OSIsoft PI tags to Snowflake for analytics workloads
+Weather Data Integration,PIPELINE,MuleSoft,Pulls NOAA and third-party forecast feeds into operational systems
+Asset Health Refresh,PIPELINE,dbt Cloud,Nightly refresh of asset health indices from maintenance and sensor data
+Water Quality Reporting Pipeline,PIPELINE,Azure Data Factory,Consolidates lab results from LIMS for monthly SDWA reporting
+NERC CIP Evidence Pipeline,PIPELINE,Splunk,Automated evidence collection for CIP-007 and CIP-010 audit requirements
+Customer Notification Bot,BOT,Twilio,Automated SMS and voice outage notifications and restoration updates
+Meter Exception Triage Bot,BOT,UiPath,RPA bot resolving meter read exceptions in the CIS queue
+Permit Application Assistant,BOT,ServiceNow,Conversational agent guiding customers through new service applications
+PI Historian Service Account,SERVICE_ACCOUNT,OSIsoft,Read-only account used by analytics jobs to extract historian tags
+GIS Feature Service Account,SERVICE_ACCOUNT,Esri,Read-write account for automated GIS feature updates from field work orders
+Billing Integration Service Account,SERVICE_ACCOUNT,Oracle,CIS to general ledger posting automation
+Compliance Report Generator,OTHER,Internal,Scheduled generator producing NPDES DMR and DWR monthly submissions

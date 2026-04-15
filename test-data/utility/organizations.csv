@@ -1,0 +1,20 @@
+Name,Parent,Type,Industry,Description
+Tidewater Utilities,,company,Utilities,Investor-owned utility holding company serving 1.8M electric and water customers
+Tidewater Electric,Tidewater Utilities,division,,Electric generation transmission and distribution serving 1.4M customers
+Power Generation,Tidewater Electric,department,,Fleet of natural gas solar and hydro generation assets totalling 4.2 GW
+Transmission & Distribution,Tidewater Electric,department,,6400 miles of transmission 18000 miles of distribution and 240 substations
+Electric Customer Service,Tidewater Electric,department,,Billing call center new service connections and account management for electric customers
+Electric Engineering,Tidewater Electric,department,,Planning protection-and-control and capital project engineering
+Electric Asset Management,Tidewater Electric,department,,Reliability vegetation management and asset lifecycle programs
+Tidewater Water,Tidewater Utilities,division,,Drinking water production distribution and wastewater treatment for 400K customers
+Water Production,Tidewater Water,department,,Surface water treatment plants and groundwater wellfields
+Water Distribution,Tidewater Water,department,,4800 miles of distribution main plus pump stations storage tanks and hydrants
+Wastewater Operations,Tidewater Water,department,,Wastewater collection system and treatment plants meeting EPA NPDES requirements
+Water Customer Service,Tidewater Water,department,,Billing customer call center and service connections for water and wastewater customers
+Water Engineering,Tidewater Water,department,,Hydraulic modeling capital planning and water quality engineering
+Shared Services,Tidewater Utilities,division,,Corporate functions supporting both utilities
+Information Technology,Shared Services,department,,Enterprise IT OT convergence cybersecurity and application delivery
+Finance & Accounting,Shared Services,department,,Financial planning rate case support and regulatory accounting
+Human Resources,Shared Services,department,,Workforce planning labor relations and learning & development
+Regulatory Affairs,Shared Services,department,,Rate filings NERC CIP compliance EPA SDWA and state PUC coordination
+Safety & Environmental,Shared Services,department,,Occupational safety environmental compliance and emergency preparedness

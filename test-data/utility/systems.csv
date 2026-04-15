@@ -1,0 +1,34 @@
+Name,Description,Type
+GE PowerOn Advantage,Distribution management and outage management system for electric grid,Other
+Siemens Spectrum Power,Energy management system and SCADA master station for transmission,SCADA
+OSIsoft PI,Real-time data historian for generation and transmission operations,SCADA
+ArcGIS Utility Network - Electric,Geographic information system for electric network modeling,GIS
+ArcGIS Utility Network - Water,Geographic information system for water and wastewater assets,GIS
+Oracle Utilities Customer Cloud Service,Customer information system for billing and account management,Other
+Itron OpenWay,Advanced metering infrastructure and electric meter data management,Other
+Sensus FlexNet,AMI network and water meter data management,Other
+Bentley Synergi Electric,Distribution planning and load flow modeling,Other
+Siemens PSS/E,Transmission planning and power flow analysis,Other
+IBM Maximo,Enterprise asset management for substations pumps and treatment equipment,Asset Management
+ClickSoftware ServiceEdge,Mobile workforce management and crew dispatching,Other
+Schneider ClearSCADA,SCADA system for water distribution and wastewater collection,SCADA
+Innovyze InfoWater,Hydraulic modeling for water distribution networks,Other
+Bentley WaterGEMS,Water distribution system design and master planning,Other
+Innovyze InfoWorks ICM,Integrated catchment modeling for wastewater and stormwater,Other
+Hach WIMS,Water information management system for plant process data,Other
+Cityworks,Work order and asset management for water utilities,Asset Management
+SAP S/4HANA,Enterprise resource planning for finance procurement and materials,ERP
+Workday HCM,Human capital management payroll and benefits,HRIS
+Oracle Primavera P6,Capital project portfolio and schedule management,Other
+ServiceNow,IT service management workflow and CMDB,Other
+Splunk,Security information and event management plus OT log analytics,Other
+Snowflake,Cloud data warehouse for analytics across electric and water,Data Warehouse
+Power BI,Executive dashboards and operational reporting,Business Intelligence
+Tableau,Self-service analytics for engineering and operations,Business Intelligence
+SharePoint Online,Document management and intranet collaboration,Document Management
+DocuSign,Electronic signatures for contracts and regulatory filings,Other
+NERC CIP Compliance Manager,Evidence collection and audit support for bulk electric system assets,Other
+LIMS StarLIMS,Laboratory information management for water quality testing,Other
+Weather Services International,Severe weather forecasting and storm restoration support,Other
+CyberArk,Privileged access management for OT and IT systems,Other
+Milsoft DisSPatch,Distribution operations and switching management,Other
