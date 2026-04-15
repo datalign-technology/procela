@@ -12,6 +12,7 @@ import ValueStreamWizard from '@/pages/ValueStreamWizard';
 import OrganizationsPage from '@/pages/OrganizationsPage';
 import OrgVisualizationPage from '@/pages/OrgVisualizationPage';
 import PeoplePage from '@/pages/PeoplePage';
+import PersonDetailPage from '@/pages/PersonDetailPage';
 import AgentsPage from '@/pages/AgentsPage';
 import GapDetectionPage from '@/pages/GapDetectionPage';
 import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
@@ -29,6 +30,7 @@ import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
 import GovernancePage from '@/pages/GovernancePage';
 import AnalyzePage from '@/pages/AnalyzePage';
 import ConnectionsPage from '@/pages/ConnectionsPage';
+import ReportsPage from '@/pages/ReportsPage';
 
 export default function App() {
   return (
@@ -52,6 +54,7 @@ export default function App() {
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/organizations/visualization" element={<OrgVisualizationPage />} />
         <Route path="/people" element={<PeoplePage />} />
+        <Route path="/people/:id" element={<PersonDetailPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
         <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
@@ -63,6 +66,7 @@ export default function App() {
         <Route path="/data-lineage" element={<DataLineagePage />} />
         <Route path="/data-quality" element={<DataQualityPage />} />
         <Route path="/connections" element={<ConnectionsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>

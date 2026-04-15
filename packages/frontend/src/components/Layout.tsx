@@ -54,7 +54,7 @@ const navSections: NavSection[] = [
   {
     label: 'Analyze',
     items: [
-      { to: '/analyze', label: 'Analyze', icon: '\u26A0' },
+      { to: '/reports', label: 'Reports', icon: '\u26A0' },
     ],
   },
 ];

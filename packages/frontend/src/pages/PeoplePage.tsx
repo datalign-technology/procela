@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
@@ -174,6 +174,7 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
 
 export default function PeoplePage() {
   const { triggerRefresh, orgs: accessibleOrgs, activeOrgId } = useOrgContext();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Org lookup state — we only need the flat list + tree for the "assign
@@ -197,7 +198,10 @@ export default function PeoplePage() {
   // to any org they have access to in the dropdown.
   const [peopleImportOrgId, setPeopleImportOrgId] = useState('');
   const [viewing360, setViewing360] = useState<Person360Data | null>(null);
-  const [loading360, setLoading360] = useState(false);
+  // loading360 is only read by the legacy modal (now unreachable); setter
+  // is dead. `_setLoading360` retains the tuple shape without the unused
+  // warning.
+  const [loading360, _setLoading360] = useState(false); void _setLoading360;
   const [saving360, setSaving360] = useState(false);
   const [showDeleteAllPeople, setShowDeleteAllPeople] = useState(false);
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
@@ -344,16 +348,12 @@ export default function PeoplePage() {
     setSelectedPersonIds(new Set());
     fetchData();
   };
-  const openPerson360 = async (id: string) => {
-    setLoading360(true);
-    setShowAddDamaRole(false);
-    setNewDamaRole({ roleType: 'CDO', scopeType: 'ORG', scopeId: '' });
-    try {
-      const res = await apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${id}/360`);
-      setViewing360(res.data || null);
-    } catch { /* */ }
-    finally { setLoading360(false); }
-  };
+  // NOTE: The Person 360 modal used to be the entry point here.
+  // It's now the dedicated /people/:id page; the Manage button
+  // navigates there. The modal JSX below remains as legacy code but
+  // is unreachable because nothing sets `viewing360` anymore. Leave
+  // it in place for one release cycle so we can ship the new page
+  // without a destructive diff; remove in a follow-up.
 
   // Re-fetch 360 data for current person (after edits)
   const refresh360 = async () => {
@@ -838,7 +838,7 @@ export default function PeoplePage() {
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                              <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => openPerson360(person.id)} />
+                              <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
                               <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
                               <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeletePerson(person.id)} />
                             </div>
