@@ -42,6 +42,7 @@ import backupRouter from './routes/backup';
 import dataLineageRouter from './routes/data-lineage';
 import dataQualityRouter from './routes/data-quality';
 import connectionsRouter from './routes/connections';
+import brandingRouter from './routes/branding';
 
 const app = express();
 
@@ -52,7 +53,9 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use(compression());
-app.use(express.json());
+// Default JSON body limit is 100kb — too small for branding logos uploaded
+// as data: URLs. Raise to 2MB so customers can inline a reasonable PNG.
+app.use(express.json({ limit: '2mb' }));
 
 // ---------------------------------------------------------------------------
 // Routes — Public (no auth required)
@@ -60,6 +63,10 @@ app.use(express.json());
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/docs', docsRouter);
+// Branding is partially public: the GET is reachable without auth so the
+// login screen can apply the customer's theme. The PUT/POST handlers
+// inside the router enforce `authenticateToken` themselves.
+app.use('/api/v1/branding', brandingRouter);
 
 // ---------------------------------------------------------------------------
 // Routes — Protected (require valid access token)
@@ -115,6 +122,7 @@ import { maturitySnapshots } from './routes/maturity-trends';
 import { dataLineageLinks } from './routes/data-lineage';
 import { dataQualityRules } from './routes/data-quality';
 import { connections } from './routes/connections';
+import { brandingStoreArray } from './routes/branding';
 
 const stores = {
   processNodes: () => processNodes,
@@ -138,6 +146,7 @@ const stores = {
   dataLineageLinks: () => dataLineageLinks,
   dataQualityRules: () => dataQualityRules,
   connections: () => connections,
+  branding: () => brandingStoreArray,
 };
 const autoSaveHandle = startAutoSave(stores);
 

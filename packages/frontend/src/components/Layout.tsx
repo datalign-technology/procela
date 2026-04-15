@@ -12,6 +12,7 @@ import ScopeBanner from './ScopeBanner';
 import DensityToggle from './DensityToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
+import { useBrandingStore } from '@/stores/brandingStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 
@@ -126,6 +127,13 @@ export default function Layout() {
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
+  const { branding, fetch: fetchBranding } = useBrandingStore();
+
+  // Apply the customer's theme (company name, logo, colors) as early as
+  // possible. The store also fetches from /login via brandingStore bootstrap;
+  // re-fetching on mount here keeps the shell in sync when an admin updates
+  // branding without requiring a full reload.
+  useEffect(() => { fetchBranding(); }, [fetchBranding]);
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; label: string }>>([]);
 
   // Sidebar collapse state
@@ -371,8 +379,13 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className={clsx(styles.sidebar, sidebarCollapsed && styles.sidebarCollapsed)}>
         <div className={styles.sidebarBrand}>
-          <img src="/procela-icon.png" alt="Procela" className={styles.brandIcon} />
-          {!sidebarCollapsed && <span>Procela</span>}
+          <img
+            src={branding.logoUrl || '/procela-icon.png'}
+            alt={branding.companyName || 'Procela'}
+            className={styles.brandIcon}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/procela-icon.png'; }}
+          />
+          {!sidebarCollapsed && <span>{branding.companyName || 'Procela'}</span>}
         </div>
         <nav className={styles.sidebarNav}>
           {navSections.map((section, sIdx) => (

@@ -333,6 +333,24 @@ export default function SettingsPage() {
         <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
       </div>
 
+      {/* Branding — quick link to the dedicated theming page */}
+      <div style={sectionStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={sectionTitleStyle}>Branding</h2>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+              Company name, logo, and color palette.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/settings/branding')}
+            style={{ padding: '8px 14px', fontSize: 13, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
+          >
+            Customize branding
+          </button>
+        </div>
+      </div>
+
       {/* Authentication Section */}
       <div style={sectionStyle}>
         <h2 style={sectionTitleStyle}>Authentication</h2>

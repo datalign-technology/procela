@@ -5,6 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from '@/App';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import '@/styles/global.css';
+import { useBrandingStore } from '@/stores/brandingStore';
+
+// Fetch branding before any React rendering happens so the login screen
+// and shell paint with the customer's colors on first draw. This is
+// fire-and-forget — the store also falls back to defaults on failure.
+useBrandingStore.getState().fetch();
 
 const queryClient = new QueryClient({
   defaultOptions: {

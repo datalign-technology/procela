@@ -31,6 +31,7 @@ import GovernancePage from '@/pages/GovernancePage';
 import AnalyzePage from '@/pages/AnalyzePage';
 import ConnectionsPage from '@/pages/ConnectionsPage';
 import ReportsPage from '@/pages/ReportsPage';
+import BrandingPage from '@/pages/BrandingPage';
 
 export default function App() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/branding" element={<BrandingPage />} />
         <Route path="/help" element={<HelpPage />} />
       </Route>
     </Routes>
