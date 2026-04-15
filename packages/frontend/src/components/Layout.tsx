@@ -7,6 +7,9 @@ import ChatPanel from './ChatPanel';
 import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
 import ShortcutsModal from './ShortcutsModal';
+import ShortcutsHint from './ShortcutsHint';
+import ScopeBanner from './ScopeBanner';
+import DensityToggle from './DensityToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { apiClient } from '@/api/client';
@@ -646,6 +649,7 @@ export default function Layout() {
                 </div>
               )}
             </div>
+            <DensityToggle />
             <div className={styles.userMenu}>
               <div className={styles.userAvatar}>{userInitial}</div>
               <span>{user?.name || 'User'}</span>
@@ -679,6 +683,7 @@ export default function Layout() {
         >
           Skip to main content
         </a>
+        <ScopeBanner />
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
           <Outlet />
@@ -687,6 +692,7 @@ export default function Layout() {
         <SessionTimeout />
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
       </div>
     </div>
   );
