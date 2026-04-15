@@ -215,6 +215,11 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           borderBottom: '1px solid var(--color-border)',
           background: isSelected ? 'var(--color-primary-light, #f0f7ff)' : undefined,
           cursor: 'pointer', transition: 'background 0.1s',
+          // Shrink with the parent so a long group name + action
+          // icons can't push this row wider than the card, which
+          // was causing an unwanted horizontal scrollbar.
+          minWidth: 0,
+          overflow: 'hidden',
         }}
         onClick={() => onSelect(node.id)}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -621,8 +626,12 @@ export default function GovernanceGroupsPage() {
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
         </div>
 
-        {/* Tree body */}
-        <div style={{ maxHeight: 'calc(100vh - 420px)', overflowY: 'auto' }}>
+        {/* Tree body — no inner scroll container. The page itself
+            scrolls when needed; `overflowY: auto` on the wrapper
+            implicitly coerces overflow-x to auto too, which was
+            adding a spurious horizontal scrollbar on any pixel
+            overshoot. */}
+        <div>
           {tree.length === 0 && !showForm ? (
             <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
               <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>No governance groups defined yet. Use the + Add Group button above to get started.</p>
