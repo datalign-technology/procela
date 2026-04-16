@@ -5,6 +5,7 @@ import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import DataQualityRulesModal, { type RulesModalAsset } from '../components/DataQualityRulesModal';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
@@ -132,6 +133,12 @@ interface DataAssetColumn {
   sourceConnectionId?: string;
   sourceAsset?: string;
   sourceColumn?: string;
+  // Enriched by the columns endpoint with per-column DQ summary.
+  rulesCount?: number;
+  rulesPassing?: number;
+  rulesFailing?: number;
+  rulesWarning?: number;
+  healthScore?: number | null;
 }
 
 export default function DataAssetsPage() {
@@ -282,6 +289,47 @@ export default function DataAssetsPage() {
     } catch (err) {
       errorToast(err, 'Failed to delete column');
     }
+  };
+
+  // Quick-add a DQ rule for a column — one-click creation with sensible
+  // defaults. After creation, refresh the column list so the health badge
+  // updates immediately.
+  const quickAddRule = async (assetId: string, col: DataAssetColumn, ruleType: string) => {
+    const namePrefix = col.columnName;
+    const ruleNames: Record<string, string> = {
+      NOT_NULL: `${namePrefix}: Not Null`,
+      UNIQUE: `${namePrefix}: Unique`,
+      REGEX_MATCH: `${namePrefix}: Regex`,
+    };
+    const dimensions: Record<string, string> = {
+      NOT_NULL: 'COMPLETENESS',
+      UNIQUE: 'UNIQUENESS',
+      REGEX_MATCH: 'VALIDITY',
+    };
+    try {
+      await apiClient.post('/data-quality', {
+        dataAssetId: assetId,
+        columnId: col.id,
+        name: ruleNames[ruleType] || `${namePrefix}: ${ruleType}`,
+        dimension: dimensions[ruleType] || 'VALIDITY',
+        ruleType,
+        parameters: ruleType === 'REGEX_MATCH' ? { pattern: '.*' } : {},
+        threshold: 95,
+        orgId: activeOrgId || undefined,
+      });
+      addToast('success', `Added ${ruleType.replace('_', ' ')} rule for ${namePrefix}`);
+      // Refresh columns to pick up the new rule in the health summary.
+      const res = await apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${assetId}/columns`);
+      setColumnsMap((prev) => ({ ...prev, [assetId]: res.data || [] }));
+    } catch (err) {
+      errorToast(err, 'Failed to add rule');
+    }
+  };
+
+  // Open the full DQ rules modal pre-scoped to a specific column.
+  const [rulesModalAsset, setRulesModalAsset] = useState<RulesModalAsset | null>(null);
+  const openColumnRulesModal = (asset: DataAssetEntity, col: DataAssetColumn) => {
+    setRulesModalAsset({ id: asset.id, name: asset.name, sourceAsset: asset.sourceAsset, sourceColumn: col.columnName });
   };
 
   const openAdd = () => {
@@ -740,25 +788,57 @@ export default function DataAssetsPage() {
                                 <tr style={{ background: 'var(--color-bg)' }}>
                                   <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Column</th>
                                   <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Data Type</th>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Description</th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Health</th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Rules</th>
                                   <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Source</th>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px', width: 50, textAlign: 'center' }}></th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {cols.map((col) => (
+                                {cols.map((col) => {
+                                  const h = col.healthScore;
+                                  const hColor = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+                                  return (
                                   <tr key={col.id}>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{col.columnName}</td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{col.dataType || '\u2014'}</td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{col.description || '\u2014'}</td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
+                                      {col.columnName}
+                                      {col.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400, fontFamily: 'inherit' }}>{col.description}</div>}
+                                    </td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: 12 }}>{col.dataType || '\u2014'}</td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)' }}>
+                                      {h != null ? (
+                                        <span style={{ fontWeight: 600, fontSize: 12, color: hColor }}>{h}%</span>
+                                      ) : (
+                                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{(col.rulesCount || 0) > 0 ? 'Not run' : '\u2014'}</span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
+                                      {(col.rulesCount || 0) > 0 ? (
+                                        <span>
+                                          {col.rulesCount} rule{col.rulesCount === 1 ? '' : 's'}
+                                          {(col.rulesPassing || 0) > 0 && <span style={{ color: '#16a34a', marginLeft: 4 }}>{'\u2714'}{col.rulesPassing}</span>}
+                                          {(col.rulesFailing || 0) > 0 && <span style={{ color: '#dc2626', marginLeft: 4 }}>{'\u2716'}{col.rulesFailing}</span>}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: 'var(--color-text-muted)' }}>None</span>
+                                      )}
+                                    </td>
                                     <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                                       {col.sourceAsset ? `${col.sourceAsset}.${col.sourceColumn || col.columnName}` : '\u2014'}
                                     </td>
                                     <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-                                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
+                                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                        {/* Quick-add rule buttons */}
+                                        <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddRule(asset.id, col, 'NOT_NULL')} />
+                                        <IconButton size="sm" icon="search" label="Add UNIQUE rule" onClick={() => quickAddRule(asset.id, col, 'UNIQUE')} />
+                                        {/* Manage Rules — opens the full modal pre-scoped */}
+                                        <IconButton size="sm" icon="settings" label="Manage rules" onClick={() => openColumnRulesModal(asset, col)} />
+                                        <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
+                                      </div>
                                     </td>
                                   </tr>
-                                ))}
+                                  );
+                                })}
                               </tbody>
                             </table>
                           )}
@@ -773,6 +853,30 @@ export default function DataAssetsPage() {
           </table>
         )}
       </div>
+
+      {/* DQ Rules Modal — opened from column rows */}
+      {rulesModalAsset && (
+        <DataQualityRulesModal
+          asset={rulesModalAsset}
+          onClose={() => {
+            setRulesModalAsset(null);
+            // Refresh columns so health badges update after rule changes.
+            if (expandedAssetId) {
+              apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${expandedAssetId}/columns`)
+                .then((res) => setColumnsMap((prev) => ({ ...prev, [expandedAssetId!]: res.data || [] })))
+                .catch(() => {});
+            }
+          }}
+          onAfterChange={() => {
+            // Also refresh columns inline (the modal calls this after run/add/delete).
+            if (expandedAssetId) {
+              apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${expandedAssetId}/columns`)
+                .then((res) => setColumnsMap((prev) => ({ ...prev, [expandedAssetId!]: res.data || [] })))
+                .catch(() => {});
+            }
+          }}
+        />
+      )}
 
       {/* Data Asset 360 View Modal */}
       {(viewing360 || loading360) && (

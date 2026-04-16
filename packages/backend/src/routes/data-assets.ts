@@ -463,12 +463,36 @@ router.delete('/:id', (req: Request, res: Response) => {
 // Column CRUD — nested under /data-assets/:id/columns
 // ──────────────────────────────────────────────────────────────────────────
 
-/** GET /data-assets/:id/columns — list columns for an asset */
+/** GET /data-assets/:id/columns — list columns for an asset, enriched with
+ *  per-column DQ rule summary (count, passing, failing, health score). */
 router.get('/:id/columns', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const cols = dataAssetColumns.filter((c) => c.dataAssetId === asset.id);
-  res.json({ success: true, data: cols });
+
+  // Lazy-import DQ rules to avoid circular dep at module level.
+  let dqRules: any[] = [];
+  try { dqRules = require('./data-quality').dataQualityRules || []; } catch { /* */ }
+
+  const enriched = cols.map((col) => {
+    const rules = dqRules.filter((r: any) => r.dataAssetId === asset.id && r.columnId === col.id);
+    const passing = rules.filter((r: any) => r.status === 'PASSING').length;
+    const failing = rules.filter((r: any) => r.status === 'FAILING').length;
+    const warning = rules.filter((r: any) => r.status === 'WARNING').length;
+    const totalWeight = rules.reduce((s: number, r: any) => s + (r.weight || 5), 0);
+    const weightedSum = rules.reduce((s: number, r: any) => s + (r.currentScore || 0) * (r.weight || 5), 0);
+    const health = rules.length > 0 && totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null;
+    return {
+      ...col,
+      rulesCount: rules.length,
+      rulesPassing: passing,
+      rulesFailing: failing,
+      rulesWarning: warning,
+      healthScore: health,
+    };
+  });
+
+  res.json({ success: true, data: enriched });
 });
 
 /** POST /data-assets/:id/columns — create a column */
