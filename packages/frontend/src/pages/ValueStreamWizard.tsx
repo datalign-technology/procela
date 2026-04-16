@@ -178,8 +178,12 @@ export default function ValueStreamWizard() {
           {error && <p style={{ color: 'var(--color-error)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
           {!orgIndustry && (
-            <button style={{ ...btnPrimary, opacity: !industry ? 0.6 : 1 }} disabled={!industry} onClick={() => handleGenerate(industry)}>
-              Generate Processes
+            <button
+              style={{ ...btnPrimary, opacity: !industry || loading ? 0.6 : 1 }}
+              disabled={!industry || loading}
+              onClick={() => handleGenerate(industry)}
+            >
+              {loading ? 'Generating\u2026' : 'Generate Processes'}
             </button>
           )}
         </div>
@@ -187,12 +191,13 @@ export default function ValueStreamWizard() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ ...card, textAlign: 'center', padding: '3rem' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>{'\u2699'}</div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Generating process hierarchy...</h2>
+        <div style={{ ...card, textAlign: 'center', padding: '3rem', border: '1px solid var(--color-primary)' }}>
+          <div style={{ fontSize: 32, marginBottom: 12, animation: 'procelaGenSpin 2s linear infinite' }}>{'\u2699'}</div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>Generating process hierarchy...</h2>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-            AI is creating value streams, processes, and activities for {industry}. This takes 10-30 seconds.
+            AI is creating value streams, processes, and activities for {industry || orgIndustry}. This usually takes 10{'\u2013'}30 seconds.
           </p>
+          <style>{`@keyframes procelaGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 

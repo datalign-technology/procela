@@ -321,6 +321,28 @@ export default function DataDomainsPage() {
         </div>
       </div>
 
+      {/* AI generation loading indicator */}
+      {generating && (
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: 'var(--radius-md)',
+          padding: '2.5rem',
+          textAlign: 'center',
+          marginBottom: 20,
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12, animation: 'procelaGenSpin 2s linear infinite' }}>{'\u2699'}</div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>
+            Generating data domains...
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+            AI is suggesting data domains based on your organization's industry. This usually takes 10{'\u2013'}20 seconds.
+          </p>
+          <style>{`@keyframes procelaGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
       {/* Stats */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
         <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
