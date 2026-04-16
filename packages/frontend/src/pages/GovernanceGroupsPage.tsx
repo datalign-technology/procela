@@ -304,10 +304,6 @@ export default function GovernanceGroupsPage() {
       setGroupTypeLabels(res.groupTypeLabels || {});
       setValidChildren(res.validChildren || {});
       setGroupRoles(res.groupRoles || []);
-      // Auto-expand root nodes on first load
-      if (expanded.size === 0 && res.tree && res.tree.length > 0) {
-        setExpanded(new Set(res.tree.map((n) => n.id)));
-      }
     } catch { /* */ }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
