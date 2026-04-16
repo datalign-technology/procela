@@ -88,7 +88,18 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
       // attribute the tooltip element listens to.
       onMouseEnter={(e) => {
         const tip = e.currentTarget.querySelector<HTMLElement>('[data-tooltip]');
-        if (tip) { tip.style.opacity = '1'; tip.style.visibility = 'visible'; }
+        if (!tip) return;
+        // Position the tooltip using `fixed` coordinates derived from the
+        // button's viewport rect. This escapes any parent `overflow: hidden`
+        // (table wrapper cards, tree containers) so the tooltip is never
+        // clipped.
+        const rect = e.currentTarget.getBoundingClientRect();
+        tip.style.position = 'fixed';
+        tip.style.top = `${rect.bottom + 6}px`;
+        tip.style.left = `${rect.left + rect.width / 2}px`;
+        tip.style.transform = 'translateX(-50%)';
+        tip.style.opacity = '1';
+        tip.style.visibility = 'visible';
       }}
       onPointerLeave={(e) => {
         const tip = e.currentTarget.querySelector<HTMLElement>('[data-tooltip]');
@@ -99,15 +110,14 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
       <span
         data-tooltip
         style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: '50%',
-          transform: 'translateX(-50%)',
+          position: 'fixed', top: 0, left: 0,
           background: '#1e293b', color: '#fff',
           padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500,
           whiteSpace: 'nowrap', pointerEvents: 'none',
           opacity: 0, visibility: 'hidden',
           transition: 'opacity 0.12s, visibility 0.12s',
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          zIndex: 900,
+          zIndex: 9999,
         }}
       >
         {label}
