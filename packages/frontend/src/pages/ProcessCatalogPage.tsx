@@ -536,14 +536,6 @@ export default function ProcessCatalogPage() {
       setValidChildrenMap(catalogRes.validChildren || {});
       setFlows(flowsRes.data || []);
       setAllTags(tagsRes.data || []);
-      // Auto-expand value streams
-      if (catalogRes.tree) {
-        setExpanded((prev) => {
-          const next = new Set(prev);
-          for (const vs of catalogRes.tree) next.add(vs.id);
-          return next;
-        });
-      }
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
