@@ -98,6 +98,24 @@ router.put('/read-all', (_req: Request, res: Response) => {
   res.json({ success: true, data: { updated: notifications.length } });
 });
 
+/** DELETE /all — clear every notification. */
+router.delete('/all', (_req: Request, res: Response) => {
+  const count = notifications.length;
+  notifications.splice(0, notifications.length);
+  saveStore('notifications', notifications);
+  logger.info({ count }, 'Cleared all notifications');
+  res.json({ success: true, deleted: count });
+});
+
+/** DELETE /:id — remove a single notification. */
+router.delete('/:id', (req: Request, res: Response) => {
+  const idx = notifications.findIndex((n) => n.id === req.params.id);
+  if (idx === -1) { res.status(404).json({ success: false, error: 'Notification not found' }); return; }
+  notifications.splice(idx, 1);
+  saveStore('notifications', notifications);
+  res.status(204).send();
+});
+
 /** POST / — create a notification (can also be used via API) */
 router.post('/', (req: Request, res: Response) => {
   const { orgId, userId, type, title, message, link } = req.body;

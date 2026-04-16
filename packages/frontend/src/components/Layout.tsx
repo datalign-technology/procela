@@ -284,6 +284,19 @@ export default function Layout() {
     setNotifList((list) => list.map((n) => ({ ...n, read: true })));
   };
 
+  const handleClearAllNotifications = async () => {
+    await apiClient.delete('/notifications/all');
+    setNotifCount(0);
+    setNotifList([]);
+  };
+
+  const handleDismissNotification = async (id: string) => {
+    setNotifList((list) => list.filter((n) => n.id !== id));
+    setNotifCount((c) => Math.max(0, c - 1));
+    try { await apiClient.delete(`/notifications/${id}`); }
+    catch { /* optimistic — already removed from UI */ }
+  };
+
   // Close notification dropdown on click outside or Escape
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -597,14 +610,24 @@ export default function Layout() {
                     padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
                   }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Notifications</span>
-                    {notifList.some((n) => !n.read) && (
-                      <button onClick={handleMarkAllRead} style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 11, color: 'var(--color-primary)', fontWeight: 500,
-                      }}>
-                        Mark all as read
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {notifList.some((n) => !n.read) && (
+                        <button onClick={handleMarkAllRead} style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          fontSize: 11, color: 'var(--color-primary)', fontWeight: 500,
+                        }}>
+                          Mark all read
+                        </button>
+                      )}
+                      {notifList.length > 0 && (
+                        <button onClick={handleClearAllNotifications} style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          fontSize: 11, color: 'var(--color-error, #dc2626)', fontWeight: 500,
+                        }}>
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {notifLoading && (
                     <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>Loading...</div>
@@ -650,12 +673,25 @@ export default function Layout() {
                           <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{n.message}</div>
                           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>{ago}</div>
                         </div>
-                        {!n.read && (
-                          <span style={{
-                            width: 8, height: 8, borderRadius: '50%', background: '#2563eb',
-                            flexShrink: 0, marginTop: 6,
-                          }} />
-                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          {!n.read && (
+                            <span style={{
+                              width: 8, height: 8, borderRadius: '50%', background: '#2563eb',
+                            }} />
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDismissNotification(n.id); }}
+                            aria-label="Dismiss notification"
+                            title="Dismiss"
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'var(--color-text-muted)', fontSize: 14, lineHeight: 1,
+                              padding: '2px 4px', borderRadius: 4,
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-error, #dc2626)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+                          >&times;</button>
+                        </div>
                       </div>
                     );
                   })}
