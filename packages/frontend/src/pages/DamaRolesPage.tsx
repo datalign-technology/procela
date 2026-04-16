@@ -11,7 +11,7 @@ interface DamaRoleAssignment {
   personId: string;
   personName: string;
   roleType: string;
-  scopeType: 'ORG' | 'DOMAIN';
+  scopeType: 'ORG';
   scopeId: string;
   since: string;
   createdAt: string;
@@ -100,7 +100,7 @@ const tdStyle: React.CSSProperties = {
 interface FormData {
   personId: string;
   roleType: string;
-  scopeType: 'ORG' | 'DOMAIN';
+  scopeType: 'ORG';
   scopeId: string;
 }
 
@@ -197,13 +197,8 @@ export default function DamaRolesPage() {
   // Apply the card-click filter to the table.
   const filteredRoles = filterRoleType ? roles.filter((r) => r.roleType === filterRoleType) : roles;
 
-  const scopeOptions = form.scopeType === 'ORG' ? orgs : domains;
-
-  const scopeName = (scopeType: string, scopeId: string) => {
-    if (scopeType === 'ORG') {
-      return orgs.find((o) => o.id === scopeId)?.name || scopeId;
-    }
-    return domains.find((d) => d.id === scopeId)?.name || scopeId;
+  const scopeName = (scopeId: string) => {
+    return orgs.find((o) => o.id === scopeId)?.name || scopeId;
   };
 
   const roleBadge = (roleType: string): React.CSSProperties => {
@@ -234,11 +229,10 @@ export default function DamaRolesPage() {
           )}
           {roles.length > 0 && (
             <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('governance-roles.csv', ['Person', 'Governance Role', 'Scope Type', 'Scope', 'Since'], roles.map((r) => [
+              onClick={() => exportCsv('governance-roles.csv', ['Person', 'Governance Role', 'Organization', 'Since'], roles.map((r) => [
                 r.personName,
                 ROLE_TYPE_LABELS[r.roleType] || r.roleType,
-                r.scopeType,
-                scopeName(r.scopeType, r.scopeId),
+                scopeName(r.scopeId),
                 new Date(r.since).toLocaleDateString(),
               ]))} />
           )}
@@ -331,18 +325,14 @@ export default function DamaRolesPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Scope Type *</label>
-              <select style={selectStyle} value={form.scopeType} onChange={(e) => setForm({ ...form, scopeType: e.target.value as 'ORG' | 'DOMAIN', scopeId: '' })}>
-                <option value="ORG">Organization</option>
-                <option value="DOMAIN">Data Domain</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Scope *</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
               <select style={selectStyle} value={form.scopeId} onChange={(e) => setForm({ ...form, scopeId: e.target.value })}>
-                <option value="">-- Select {form.scopeType === 'ORG' ? 'organization' : 'data domain'} --</option>
-                {scopeOptions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                <option value="">-- Select organization --</option>
+                {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
+              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                Domain ownership (owner/steward) is managed directly on the Data Domain.
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
@@ -442,8 +432,7 @@ export default function DamaRolesPage() {
                 </th>
                 <th style={thStyle}>Person</th>
                 <th style={thStyle}>Governance Role</th>
-                <th style={thStyle}>Scope Type</th>
-                <th style={thStyle}>Scope</th>
+                <th style={thStyle}>Organization</th>
                 <th style={thStyle}>Since</th>
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
@@ -464,8 +453,7 @@ export default function DamaRolesPage() {
                       {ROLE_TYPE_LABELS[role.roleType] || role.roleType}
                     </span>
                   </td>
-                  <td style={tdStyle}>{role.scopeType}</td>
-                  <td style={tdStyle}>{scopeName(role.scopeType, role.scopeId)}</td>
+                  <td style={tdStyle}>{scopeName(role.scopeId)}</td>
                   <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
                     {new Date(role.since).toLocaleDateString()}
                   </td>

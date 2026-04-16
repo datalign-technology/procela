@@ -256,7 +256,7 @@ function MyItems() {
                 {data.myRoles.map((r) => (
                   <Link key={r.id} to="/governance?tab=roles" style={{ ...chipStyle, textDecoration: 'none' }}>
                     <strong>{DAMA_SHORT[r.roleType] || r.roleType}</strong>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{r.scopeType}: {r.scopeName}</span>
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{r.scopeName}</span>
                   </Link>
                 ))}
               </div>

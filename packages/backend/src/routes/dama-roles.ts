@@ -25,13 +25,24 @@ export interface StoredDamaRole {
   id: string;
   personId: string;
   roleType: string;    // one of DAMA_ROLE_TYPES
-  scopeType: 'ORG' | 'DOMAIN';  // scoped to an org or a data domain
-  scopeId: string;     // orgId or domainId
+  scopeType: 'ORG';    // always org-scoped; domain ownership lives on the domain itself
+  scopeId: string;     // orgId
   since: string;
   createdAt: string;
 }
 
 export const damaRoles: StoredDamaRole[] = loadStore<StoredDamaRole>('damaRoles');
+
+// Migration: any existing DOMAIN-scoped role is removed. Domain ownership
+// is now managed exclusively via DataDomain.ownerId / stewardIds.
+const preMigrationCount = damaRoles.length;
+for (let i = damaRoles.length - 1; i >= 0; i--) {
+  if ((damaRoles[i].scopeType as string) === 'DOMAIN') damaRoles.splice(i, 1);
+}
+if (damaRoles.length < preMigrationCount) {
+  saveStore('damaRoles', damaRoles);
+  logger.info({ removed: preMigrationCount - damaRoles.length }, 'Removed DOMAIN-scoped DAMA roles (ownership lives on the domain now)');
+}
 
 const router = Router();
 
@@ -74,8 +85,8 @@ router.post('/', (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: `Invalid roleType. Must be one of: ${DAMA_ROLE_TYPES.join(', ')}` });
     return;
   }
-  if (!scopeType || !['ORG', 'DOMAIN'].includes(scopeType)) {
-    res.status(400).json({ success: false, error: 'scopeType must be ORG or DOMAIN' });
+  if (!scopeType || scopeType !== 'ORG') {
+    res.status(400).json({ success: false, error: 'scopeType must be ORG. Domain ownership is managed on the Data Domain itself.' });
     return;
   }
   if (!scopeId) { res.status(400).json({ success: false, error: 'scopeId is required' }); return; }

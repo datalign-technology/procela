@@ -337,7 +337,7 @@ export default function PersonDetailPage() {
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType}</div>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    {r.scopeType === 'ORG' ? 'Organization' : 'Domain'}: {r.scopeName}
+                    Organization: {r.scopeName}
                   </div>
                 </div>
                 <button

@@ -217,7 +217,7 @@ export default function PeoplePage() {
 
   // DAMA role add form state inside 360 modal
   const [showAddDamaRole, setShowAddDamaRole] = useState(false);
-  const [newDamaRole, setNewDamaRole] = useState({ roleType: 'CDO', scopeType: 'ORG' as 'ORG' | 'DOMAIN', scopeId: '' });
+  const [newDamaRole, setNewDamaRole] = useState({ roleType: 'CDO', scopeType: 'ORG' as const, scopeId: '' });
 
   const fetchData = useCallback(async () => {
     try {
@@ -1095,31 +1095,15 @@ export default function PeoplePage() {
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Scope Type</label>
-                        <select
-                          style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', appearance: 'auto' as any }}
-                          value={newDamaRole.scopeType}
-                          onChange={(e) => setNewDamaRole({ ...newDamaRole, scopeType: e.target.value as 'ORG' | 'DOMAIN', scopeId: '' })}
-                        >
-                          <option value="ORG">Organization</option>
-                          <option value="DOMAIN">Data Domain</option>
-                        </select>
-                      </div>
                       <div style={{ flex: 1, minWidth: 120 }}>
-                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>
-                          {newDamaRole.scopeType === 'ORG' ? 'Organization' : 'Data Domain'}
-                        </label>
+                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Organization</label>
                         <select
                           style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', width: '100%', appearance: 'auto' as any }}
                           value={newDamaRole.scopeId}
                           onChange={(e) => setNewDamaRole({ ...newDamaRole, scopeId: e.target.value })}
                         >
-                          <option value="">-- Select --</option>
-                          {newDamaRole.scopeType === 'ORG'
-                            ? flatOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)
-                            : (viewing360.allDomains || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)
-                          }
+                          <option value="">-- Select organization --</option>
+                          {flatOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                         </select>
                       </div>
                       <button
