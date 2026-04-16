@@ -123,6 +123,18 @@ const emptyForm: FormData = {
   systemId: '',
 };
 
+interface ColumnRule {
+  id: string;
+  name: string;
+  ruleType: string | null;
+  dimension: string;
+  threshold: number;
+  currentScore: number;
+  status: string;
+  lastMeasured: string | null;
+  weight: number;
+}
+
 interface DataAssetColumn {
   id: string;
   dataAssetId: string;
@@ -132,12 +144,12 @@ interface DataAssetColumn {
   sourceConnectionId?: string;
   sourceAsset?: string;
   sourceColumn?: string;
-  // Enriched by the columns endpoint with per-column DQ summary.
   rulesCount?: number;
   rulesPassing?: number;
   rulesFailing?: number;
   rulesWarning?: number;
   healthScore?: number | null;
+  rules?: ColumnRule[];
 }
 
 export default function DataAssetsPage() {
@@ -161,6 +173,12 @@ export default function DataAssetsPage() {
   const [columnsMap, setColumnsMap] = useState<Record<string, DataAssetColumn[]>>({});
   const [columnsLoading, setColumnsLoading] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState<string | null>(null);
+  const [expandedColumnIds, setExpandedColumnIds] = useState<Set<string>>(new Set());
+  const toggleColumnExpand = (colId: string) => setExpandedColumnIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(colId)) next.delete(colId); else next.add(colId);
+    return next;
+  });
   const [assetComments, setAssetComments] = useState<CommentEntry[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentUserName, setCommentUserName] = useState('');
@@ -741,34 +759,87 @@ export default function DataAssetsPage() {
                                 : 'No columns yet. Link this asset to a connection first, then discover its columns.'}
                             </div>
                           ) : (
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                              <thead>
-                                <tr style={{ background: 'var(--color-bg)' }}>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Column</th>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Data Type</th>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Description</th>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Source</th>
-                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px', width: 50, textAlign: 'center' }}></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {cols.map((col) => (
-                                  <tr key={col.id}>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
-                                      {col.columnName}
-                                    </td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: 12 }}>{col.dataType || '\u2014'}</td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', fontSize: 12 }}>{col.description || '\u2014'}</td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                                      {col.sourceAsset ? `${col.sourceAsset}.${col.sourceColumn || col.columnName}` : '\u2014'}
-                                    </td>
-                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-                                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                              {cols.map((col) => {
+                                const colRules = col.rules || [];
+                                const isColExpanded = expandedColumnIds.has(col.id);
+                                const h = col.healthScore;
+                                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+                                return (
+                                  <div key={col.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                    {/* Column row */}
+                                    <div
+                                      onClick={() => toggleColumnExpand(col.id)}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: 10,
+                                        padding: '8px 12px',
+                                        cursor: 'pointer',
+                                        background: isColExpanded ? '#f0f9ff' : undefined,
+                                      }}
+                                      onMouseEnter={(e) => { if (!isColExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                                      onMouseLeave={(e) => { if (!isColExpanded) e.currentTarget.style.background = ''; }}
+                                    >
+                                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 12, flexShrink: 0 }}>
+                                        {colRules.length > 0 ? (isColExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
+                                      </span>
+                                      <span style={{ fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 13, minWidth: 120 }}>
+                                        {col.columnName}
+                                      </span>
+                                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', minWidth: 70 }}>{col.dataType || ''}</span>
+                                      <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {col.description || ''}
+                                      </span>
+                                      {h != null && (
+                                        <span style={{ fontSize: 11, fontWeight: 600, color: hc, minWidth: 40, textAlign: 'right' }}>{h}%</span>
+                                      )}
+                                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', minWidth: 60, textAlign: 'right' }}>
+                                        {colRules.length > 0 ? `${colRules.length} rule${colRules.length === 1 ? '' : 's'}` : ''}
+                                      </span>
+                                      <div onClick={(e) => e.stopPropagation()}>
+                                        <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
+                                      </div>
+                                    </div>
+                                    {/* Expanded rules under this column */}
+                                    {isColExpanded && colRules.length > 0 && (
+                                      <div style={{ paddingLeft: 46, paddingBottom: 8 }}>
+                                        {colRules.map((rule) => {
+                                          const rc = rule.status === 'PASSING' ? '#16a34a' : rule.status === 'FAILING' ? '#dc2626' : rule.status === 'WARNING' ? '#ca8a04' : '#64748b';
+                                          return (
+                                            <div key={rule.id} style={{
+                                              display: 'flex', alignItems: 'center', gap: 10,
+                                              padding: '4px 10px', fontSize: 12,
+                                              borderLeft: `3px solid ${rc}`,
+                                              marginBottom: 2, borderRadius: '0 4px 4px 0',
+                                              background: 'var(--color-bg)',
+                                            }}>
+                                              <span style={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {rule.name}
+                                              </span>
+                                              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{rule.dimension}</span>
+                                              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{rule.ruleType || 'manual'}</span>
+                                              <span style={{ fontSize: 11, fontWeight: 600, color: rc, minWidth: 35, textAlign: 'right' }}>
+                                                {rule.currentScore}%
+                                              </span>
+                                              <span style={{
+                                                fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                                                background: rc + '18', color: rc,
+                                              }}>
+                                                {rule.status}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    {isColExpanded && colRules.length === 0 && (
+                                      <div style={{ paddingLeft: 46, paddingBottom: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                                        No rules defined for this column. Add rules on the Data Quality page.
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           )}
                         </div>
                       </td>

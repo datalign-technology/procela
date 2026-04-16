@@ -482,6 +482,12 @@ router.get('/:id/columns', (req: Request, res: Response) => {
     const totalWeight = rules.reduce((s: number, r: any) => s + (r.weight || 5), 0);
     const weightedSum = rules.reduce((s: number, r: any) => s + (r.currentScore || 0) * (r.weight || 5), 0);
     const health = rules.length > 0 && totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null;
+    const enrichedRules = rules.map((r: any) => ({
+      id: r.id, name: r.name, ruleType: r.ruleType || null,
+      dimension: r.dimension, threshold: r.threshold,
+      currentScore: r.currentScore, status: r.status,
+      lastMeasured: r.lastMeasured, weight: r.weight,
+    }));
     return {
       ...col,
       rulesCount: rules.length,
@@ -489,6 +495,7 @@ router.get('/:id/columns', (req: Request, res: Response) => {
       rulesFailing: failing,
       rulesWarning: warning,
       healthScore: health,
+      rules: enrichedRules,
     };
   });
 

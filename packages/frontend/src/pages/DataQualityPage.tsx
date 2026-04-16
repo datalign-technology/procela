@@ -905,7 +905,6 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
               <th style={thLocal}>Owner</th>
               <th style={thLocal}>Health</th>
               <th style={thLocal}>Rules</th>
-              <th style={{ ...thLocal, width: 140, textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -956,14 +955,11 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
                       </span>
                     )}
                   </td>
-                  <td style={{ ...tdLocal, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                    <IconButton size="sm" icon="settings" label="Manage all rules" onClick={() => onManageRules(a)} />
-                  </td>
                 </tr>
                 {/* Expanded columns */}
                 {isExpanded && (
                   <tr>
-                    <td colSpan={7} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                    <td colSpan={6} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
                       <div style={{ padding: '12px 20px 12px 50px' }}>
                         {loadingCols === a.id ? (
                           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading columns\u2026'}</div>
