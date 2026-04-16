@@ -140,7 +140,8 @@ export default function LinkConnectionModal({
       await apiClient.post(`/data-assets/${asset.id}/bindings`, {
         connectionId: selectedConnId,
         sourceAsset: pickedAsset,
-        sourceColumn: pickedColumn || undefined,
+        // Bindings are table/file level. Columns are managed as child
+        // entities via auto-discover on the Data Assets page.
         isPrimary: true,
       });
       onLinked();
@@ -165,7 +166,7 @@ export default function LinkConnectionModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>
-              {isChangeMode ? 'Change location' : 'Link connection'} {'\u2014'} {asset.name}
+              {isChangeMode ? 'Change connection' : 'Link to connection'} {'\u2014'} {asset.name}
             </h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
               Pick a connection, then select the table/file and (optionally) the column this
@@ -235,7 +236,7 @@ export default function LinkConnectionModal({
                           display: 'flex', alignItems: 'center', gap: 8,
                           padding: '8px 12px', borderBottom: '1px solid var(--color-border)',
                           cursor: 'pointer',
-                          background: isThisAssetPicked && !pickedColumn ? '#eff6ff' : 'transparent',
+                          background: isThisAssetPicked ? '#eff6ff' : 'transparent',
                         }}
                       >
                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)', width: 10 }}>
@@ -245,25 +246,20 @@ export default function LinkConnectionModal({
                         <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '1px 6px', borderRadius: 3 }}>{a.type}</span>
                         {a.rowCount != null && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{a.rowCount.toLocaleString()} rows</span>}
                       </div>
-                      {isOpen && hasCols && (a.columns || []).map((col) => {
-                        const selected = pickedAsset === a.name && pickedColumn === col;
-                        return (
+                      {isOpen && hasCols && (a.columns || []).map((col) => (
                           <div
                             key={`${a.name}.${col}`}
-                            onClick={() => { setPickedAsset(a.name); setPickedColumn(col); }}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8,
                               padding: '6px 12px 6px 34px', borderBottom: '1px solid var(--color-border)',
-                              background: selected ? '#eff6ff' : '#fafafa',
-                              cursor: 'pointer',
+                              background: '#fafafa',
                             }}
                           >
                             <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{'\u21B3'}</span>
-                            <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{col}</span>
+                            <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{col}</span>
                             <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>column</span>
                           </div>
-                        );
-                      })}
+                      ))}
                     </div>
                   );
                 })}
@@ -275,10 +271,15 @@ export default function LinkConnectionModal({
         {/* Preview of what will be linked */}
         {pickedAsset && (
           <div style={{ marginBottom: 12, padding: 10, background: 'var(--color-bg)', borderRadius: 4, fontSize: 12 }}>
-            <span style={{ color: 'var(--color-text-muted)' }}>Will link to:</span>{' '}
-            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-              {pickedConn?.name} / {pickedAsset}{pickedColumn ? `.${pickedColumn}` : ''}
-            </code>
+            <div>
+              <span style={{ color: 'var(--color-text-muted)' }}>Will link to:</span>{' '}
+              <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                {pickedConn?.name} / {pickedAsset}
+              </code>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+              After linking, use "Auto-discover columns" on the Data Assets page to populate the individual columns for this table/file.
+            </div>
           </div>
         )}
 

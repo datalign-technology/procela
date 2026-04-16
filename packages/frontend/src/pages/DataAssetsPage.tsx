@@ -688,8 +688,8 @@ export default function DataAssetsPage() {
                         <IconButton size="sm" icon="eye" label="View 360" onClick={() => open360(asset.id)} />
                         {binding ? (
                           <>
-                            <IconButton size="sm" icon="refresh" label="Change connection or column" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }} />
-                            <IconButton size="sm" icon="unlink" label="Unlink from location" onClick={() => unlinkPrimary(asset)} />
+                            <IconButton size="sm" icon="refresh" label="Change connection" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }} />
+                            <IconButton size="sm" icon="unlink" label="Unlink" onClick={() => unlinkPrimary(asset)} />
                           </>
                         ) : (
                           <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
