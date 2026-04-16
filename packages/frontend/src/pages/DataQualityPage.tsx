@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -380,7 +380,7 @@ export default function DataQualityPage() {
           assets={fullAssets}
           rulesByAsset={rulesByAsset}
           systemNameById={systemNameById}
-          onManageRules={(a) => setRulesModalAsset({ id: a.id, name: a.name, sourceAsset: a.sourceAsset, sourceColumn: a.sourceColumn })}
+          onManageRules={(a, colName) => setRulesModalAsset({ id: a.id, name: a.name, sourceAsset: a.sourceAsset, sourceColumn: colName || a.sourceColumn })}
         />
       )}
 
@@ -808,15 +808,37 @@ export default function DataQualityPage() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Assets tab — per-asset view with Manage Rules entry point.
+// Assets tab — per-asset expandable view. Each asset row expands to show
+// its columns with per-column health, rule counts, quick-add rule buttons,
+// and a Manage Rules entry point that opens the DQ modal pre-scoped.
 // ──────────────────────────────────────────────────────────────────────────
+
+interface ColumnWithHealth {
+  id: string;
+  dataAssetId: string;
+  columnName: string;
+  dataType?: string;
+  description?: string;
+  sourceAsset?: string;
+  sourceColumn?: string;
+  rulesCount?: number;
+  rulesPassing?: number;
+  rulesFailing?: number;
+  rulesWarning?: number;
+  healthScore?: number | null;
+}
 
 function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
   assets: DataAssetFull[];
   rulesByAsset: Map<string, QualityRule[]>;
   systemNameById: Record<string, string>;
-  onManageRules: (asset: DataAssetFull) => void;
+  onManageRules: (asset: DataAssetFull, columnName?: string) => void;
 }) {
+  const { addToast } = useToastStore();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [columnsMap, setColumnsMap] = useState<Record<string, ColumnWithHealth[]>>({});
+  const [loadingCols, setLoadingCols] = useState<string | null>(null);
+
   const tdLocal: React.CSSProperties = {
     padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
   };
@@ -825,10 +847,45 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
     color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
   };
 
+  const toggleExpand = async (assetId: string) => {
+    if (expandedId === assetId) { setExpandedId(null); return; }
+    setExpandedId(assetId);
+    setLoadingCols(assetId);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: ColumnWithHealth[] }>(`/data-assets/${assetId}/columns`);
+      setColumnsMap((prev) => ({ ...prev, [assetId]: res.data || [] }));
+    } catch { /* */ }
+    finally { setLoadingCols(null); }
+  };
+
+  const refreshColumns = async (assetId: string) => {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: ColumnWithHealth[] }>(`/data-assets/${assetId}/columns`);
+      setColumnsMap((prev) => ({ ...prev, [assetId]: res.data || [] }));
+    } catch { /* */ }
+  };
+
+  const quickAddRule = async (assetId: string, col: ColumnWithHealth, ruleType: string) => {
+    const dimensions: Record<string, string> = { NOT_NULL: 'COMPLETENESS', UNIQUE: 'UNIQUENESS' };
+    try {
+      await apiClient.post('/data-quality', {
+        dataAssetId: assetId,
+        columnId: col.id,
+        name: `${col.columnName}: ${ruleType.replace('_', ' ')}`,
+        dimension: dimensions[ruleType] || 'VALIDITY',
+        ruleType,
+        parameters: {},
+        threshold: 95,
+      });
+      addToast('success', `Added ${ruleType.replace('_', ' ')} rule for ${col.columnName}`);
+      await refreshColumns(assetId);
+    } catch { addToast('error', 'Failed to add rule'); }
+  };
+
   if (assets.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-        <p style={{ color: 'var(--color-text-muted)' }}>No data assets yet. Import a column from Connections to get started.</p>
+        <p style={{ color: 'var(--color-text-muted)' }}>No data assets yet. Create data assets on the Data Assets page first.</p>
       </div>
     );
   }
@@ -836,22 +893,19 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
   return (
     <div>
       <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-        Each data asset with its current health (derived from rule pass rates), ownership,
-        and rule count. Click <strong>Manage Rules</strong> to add typed DQ rules from the
-        catalog (with OOTB suggestions by column name) or write a custom expression.
+        Expand an asset to see its columns. Add rules per column, or click <strong>Manage Rules</strong> for the full rule editor with templates and scheduling.
       </p>
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
+              <th style={{ ...thLocal, width: 32 }}></th>
               <th style={thLocal}>Asset</th>
               <th style={thLocal}>System</th>
-              <th style={thLocal}>Source</th>
               <th style={thLocal}>Owner</th>
-              <th style={thLocal}>Steward</th>
               <th style={thLocal}>Health</th>
               <th style={thLocal}>Rules</th>
-              <th style={{ ...thLocal, width: 150, textAlign: 'center' }}>Actions</th>
+              <th style={{ ...thLocal, width: 140, textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -862,19 +916,26 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
               const warn = rs.filter((r) => r.status === 'WARNING').length;
               const score = a.healthScore ?? 0;
               const healthColor = score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
+              const isExpanded = expandedId === a.id;
+              const cols = columnsMap[a.id] || [];
               return (
-                <tr key={a.id}>
-                  <td style={{ ...tdLocal, fontWeight: 500 }}>{a.name}</td>
+                <React.Fragment key={a.id}>
+                <tr style={{ cursor: 'pointer' }}
+                  onClick={() => toggleExpand(a.id)}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+                >
+                  <td style={{ ...tdLocal, textAlign: 'center', width: 32, fontSize: 10, color: 'var(--color-text-muted)' }}>
+                    {isExpanded ? '\u25BC' : '\u25B6'}
+                  </td>
+                  <td style={{ ...tdLocal, fontWeight: 500 }}>
+                    {a.name}
+                    {a.description && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 1 }}>{a.description}</div>}
+                  </td>
                   <td style={tdLocal}>
                     {systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                   </td>
-                  <td style={{ ...tdLocal, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-secondary)' }}>
-                    {a.sourceAsset ? (
-                      <>{a.sourceAsset}{a.sourceColumn && <><span style={{ color: 'var(--color-text-muted)' }}>.</span>{a.sourceColumn}</>}</>
-                    ) : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                  </td>
                   <td style={tdLocal}>{a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
-                  <td style={tdLocal}>{a.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                   <td style={tdLocal}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
@@ -895,19 +956,78 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
                       </span>
                     )}
                   </td>
-                  <td style={{ ...tdLocal, textAlign: 'center' }}>
-                    <button
-                      onClick={() => onManageRules(a)}
-                      style={{
-                        padding: '4px 10px', fontSize: 11, fontWeight: 500,
-                        background: 'var(--color-primary)', color: '#fff',
-                        border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                      }}
-                    >
-                      Manage Rules
-                    </button>
+                  <td style={{ ...tdLocal, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <IconButton size="sm" icon="settings" label="Manage all rules" onClick={() => onManageRules(a)} />
                   </td>
                 </tr>
+                {/* Expanded columns */}
+                {isExpanded && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                      <div style={{ padding: '12px 20px 12px 50px' }}>
+                        {loadingCols === a.id ? (
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading columns\u2026'}</div>
+                        ) : cols.length === 0 ? (
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
+                            No columns defined. Auto-discover them from the Data Assets page.
+                          </div>
+                        ) : (
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ background: 'var(--color-bg)' }}>
+                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Column</th>
+                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Type</th>
+                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Health</th>
+                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Rules</th>
+                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cols.map((col) => {
+                                const h = col.healthScore;
+                                const hc = h == null ? 'var(--color-text-muted)' : h >= 80 ? '#16a34a' : h >= 50 ? '#ca8a04' : '#dc2626';
+                                return (
+                                  <tr key={col.id}>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>
+                                      {col.columnName}
+                                    </td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{col.dataType || '\u2014'}</td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)' }}>
+                                      {h != null ? (
+                                        <span style={{ fontWeight: 600, fontSize: 12, color: hc }}>{h}%</span>
+                                      ) : (
+                                        <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{(col.rulesCount || 0) > 0 ? 'Not run' : '\u2014'}</span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
+                                      {(col.rulesCount || 0) > 0 ? (
+                                        <span>
+                                          {col.rulesCount}
+                                          {(col.rulesPassing || 0) > 0 && <span style={{ color: '#16a34a', marginLeft: 4 }}>{'\u2714'}{col.rulesPassing}</span>}
+                                          {(col.rulesFailing || 0) > 0 && <span style={{ color: '#dc2626', marginLeft: 4 }}>{'\u2716'}{col.rulesFailing}</span>}
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: 'var(--color-text-muted)' }}>None</span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
+                                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                        <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddRule(a.id, col, 'NOT_NULL')} />
+                                        <IconButton size="sm" icon="search" label="Add UNIQUE rule" onClick={() => quickAddRule(a.id, col, 'UNIQUE')} />
+                                        <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => onManageRules(a, col.columnName)} />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
