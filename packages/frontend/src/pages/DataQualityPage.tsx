@@ -411,8 +411,9 @@ export default function DataQualityPage() {
           )}
           {rules.length > 0 && (
             <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('data-quality-rules.csv', ['Data Asset', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'], rules.map((r) => [
+              onClick={() => exportCsv('data-quality-rules.csv', ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'], rules.map((r) => [
                 r.dataAssetName,
+                (r as any).columnName || '',
                 r.name,
                 r.dimension,
                 String(r.threshold),
@@ -746,6 +747,7 @@ export default function DataQualityPage() {
                     }} />
                 </th>
                 <th style={thStyle}>Data Asset</th>
+                <th style={thStyle}>Column</th>
                 <th style={thStyle}>Rule Name</th>
                 <th style={thStyle}>Dimension</th>
                 <th style={thStyle}>Threshold</th>
@@ -765,6 +767,9 @@ export default function DataQualityPage() {
                     <input type="checkbox" checked={isSelected} onChange={() => toggleRuleSelect(rule.id)} />
                   </td>
                   <td style={tdStyle}>{rule.dataAssetName || rule.dataAssetId}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {(rule as any).columnName || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
+                  </td>
                   <td style={tdStyle}>{rule.name}</td>
                   <td style={tdStyle}>
                     <Badge label={rule.dimension} colors={DIMENSION_BADGES[rule.dimension] || DIMENSION_BADGES.VALIDITY} />

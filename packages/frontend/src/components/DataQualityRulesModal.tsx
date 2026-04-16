@@ -63,6 +63,12 @@ export interface RulesModalAsset {
   sourceColumn?: string;
 }
 
+interface AssetColumn {
+  id: string;
+  columnName: string;
+  dataType?: string;
+}
+
 // ── Inline styles (kept local so the modal is self-contained) ──
 
 const inputStyle: React.CSSProperties = {
@@ -118,6 +124,12 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
   const [runningId, setRunningId] = useState<string | null>(null);
   const [configuringTemplateId, setConfiguringTemplateId] = useState<string | null>(null);
   const [configParams, setConfigParams] = useState<Record<string, any>>({});
+
+  // Column picker — lets the user target rules at a specific column rather
+  // than the whole asset. Fetched from /data-assets/:id/columns on mount.
+  const [columns, setColumns] = useState<AssetColumn[]>([]);
+  const [selectedColumnId, setSelectedColumnId] = useState<string>('');   // '' = all / whole-asset
+
   // Per-rule expand state for the "View" toggle. Engine command, message,
   // and failure samples live here so the table itself stays clean.
   const [expandedRuleIds, setExpandedRuleIds] = useState<Set<string>>(new Set());
@@ -136,12 +148,25 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
     return next;
   });
 
-  const columnName = asset.sourceColumn;
+  // Resolve the active column name — from the picker if columns exist, or
+  // fall back to the legacy asset.sourceColumn for backward compat.
+  const selectedColumn = columns.find((c) => c.id === selectedColumnId);
+  const columnName = selectedColumn?.columnName || asset.sourceColumn;
 
   const load = async () => {
     try {
+      // Fetch columns for this asset so the column picker populates.
+      const colRes = await apiClient.get<{ success: boolean; data: AssetColumn[] }>(`/data-assets/${asset.id}/columns`);
+      const cols = colRes.data || [];
+      setColumns(cols);
+      // Auto-select the first column if any exist and nothing is selected.
+      if (cols.length > 0 && !selectedColumnId) {
+        setSelectedColumnId(cols[0].id);
+      }
+
+      const activeColName = cols.find((c) => c.id === (selectedColumnId || cols[0]?.id))?.columnName || asset.sourceColumn;
       const tmplQuery = [
-        columnName ? `column=${encodeURIComponent(columnName)}` : '',
+        activeColName ? `column=${encodeURIComponent(activeColName)}` : '',
         `assetId=${encodeURIComponent(asset.id)}`,
       ].filter(Boolean).join('&');
       const [rulesRes, tmplRes] = await Promise.all([
@@ -156,7 +181,31 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
     } catch { /* */ }
   };
 
+  // Reload templates when the selected column changes so suggestions
+  // match the targeted column.
+  const loadTemplates = async (colName: string | undefined) => {
+    try {
+      const tmplQuery = [
+        colName ? `column=${encodeURIComponent(colName)}` : '',
+        `assetId=${encodeURIComponent(asset.id)}`,
+      ].filter(Boolean).join('&');
+      const tmplRes = await apiClient.get<{ success: boolean; data: { suggested: RuleTemplate[]; generic: RuleTemplate[] } }>(
+        `/data-quality/templates?${tmplQuery}`,
+      );
+      setSuggested(tmplRes.data?.suggested || []);
+      setGeneric(tmplRes.data?.generic || []);
+    } catch { /* */ }
+  };
+
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [asset.id]);
+
+  // When the user switches columns, refresh templates so the suggestions
+  // are relevant to the new column.
+  const handleColumnChange = (colId: string) => {
+    setSelectedColumnId(colId);
+    const col = columns.find((c) => c.id === colId);
+    loadTemplates(col?.columnName || asset.sourceColumn);
+  };
 
   const needsConfig = (t: RuleTemplate): boolean => {
     if (t.ruleType === 'IN_SET') return !t.parameters.allowedValues || t.parameters.allowedValues.length === 0;
@@ -171,14 +220,14 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
       const parameters = overrideParams ?? t.parameters;
       await apiClient.post('/data-quality', {
         dataAssetId: asset.id,
+        // Attach the selected column so the rule targets it specifically.
+        ...(selectedColumnId ? { columnId: selectedColumnId } : {}),
         name: columnName ? `${columnName}: ${t.name}` : t.name,
         description: t.description,
         dimension: t.dimension,
         ruleType: t.ruleType,
         parameters,
         threshold: 95,
-        // Stamp the template id so the templates list can hide ones
-        // that are already in use for this asset.
         templateId: t.id,
       });
       addToast('success', `Added rule "${t.name}"`);
@@ -402,27 +451,58 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Data Quality Rules — {asset.name}</h3>
-            {(asset.sourceAsset || columnName) && (
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                {asset.sourceAsset || ''}{columnName ? `.${columnName}` : ''}
-              </p>
-            )}
-            {!columnName && (
-              <p style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
-                {'This asset isn\u2019t bound to a specific column, so rules will run against the whole asset (simulated only).'}
-              </p>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Data Quality Rules {'\u2014'} {asset.name}</h3>
+            {/* Column picker — shown when the asset has columns defined */}
+            {columns.length > 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Column:</label>
+                <select
+                  value={selectedColumnId}
+                  onChange={(e) => handleColumnChange(e.target.value)}
+                  style={{ ...inputStyle, width: 'auto', minWidth: 180, fontSize: 12, padding: '4px 8px' }}
+                >
+                  <option value="">{'All columns / whole asset'}</option>
+                  {columns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.columnName}{c.dataType ? ` (${c.dataType})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {selectedColumn && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    {asset.sourceAsset ? `${asset.sourceAsset}.${selectedColumn.columnName}` : selectedColumn.columnName}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <>
+                {(asset.sourceAsset || columnName) && (
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+                    {asset.sourceAsset || ''}{columnName ? `.${columnName}` : ''}
+                  </p>
+                )}
+                {!columnName && (
+                  <p style={{ fontSize: 11, color: '#92400e', marginTop: 4 }}>
+                    {'This asset doesn\u2019t have columns defined yet. Auto-discover them from the Data Assets page, or rules will target the whole asset.'}
+                  </p>
+                )}
+              </>
             )}
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}>&times;</button>
         </div>
 
-        {/* Active rules */}
+        {/* Active rules — filtered by selected column when one is picked */}
+        {(() => {
+          const displayRules = selectedColumnId
+            ? rules.filter((r) => (r as any).columnId === selectedColumnId)
+            : rules;
+          return (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-            Active rules ({rules.length})
+            Active rules ({displayRules.length}{selectedColumnId ? ` for ${selectedColumn?.columnName || 'column'}` : ''})
           </div>
-          {rules.length === 0 ? (
+          {displayRules.length === 0 ? (
             <div style={{ padding: '12px 14px', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 12, color: 'var(--color-text-muted)' }}>
               No rules yet. Pick a template below to add one.
             </div>
@@ -438,7 +518,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                 </tr>
               </thead>
               <tbody>
-                {rules.map((r) => {
+                {displayRules.map((r) => {
                   const pr = r.lastRun?.passRate;
                   const prColor = pr === undefined ? '#64748b' : pr >= 95 ? '#16a34a' : pr >= 80 ? '#ca8a04' : '#dc2626';
                   const isExpanded = expandedRuleIds.has(r.id);
@@ -534,6 +614,8 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
             </table>
           )}
         </div>
+          );
+        })()}
 
         {/* Templates — hide ones already in use for this asset.
             CUSTOM is exempt because users typically write multiple
