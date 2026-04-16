@@ -20,6 +20,11 @@ interface DataQualityRule {
   id: string;
   orgId: string;
   dataAssetId: string;
+  // Optional: when set, the rule targets a specific column within the
+  // asset. When null/undefined, it targets the asset as a whole (legacy
+  // behaviour). New rules should always target a column.
+  columnId?: string;
+  columnName?: string; // denormalised for display; set from the column record at creation time
   dimension: 'COMPLETENESS' | 'ACCURACY' | 'TIMELINESS' | 'CONSISTENCY' | 'UNIQUENESS' | 'VALIDITY';
   name: string;
   description: string;
@@ -293,7 +298,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-quality — create rule */
 router.post('/', (req: Request, res: Response) => {
-  const { dataAssetId, dimension, name, description, threshold, currentScore, weight, orgId,
+  const { dataAssetId, columnId, dimension, name, description, threshold, currentScore, weight, orgId,
     ruleType, parameters, templateId, scheduleFrequency } = req.body;
 
   if (!dataAssetId || !name) {
@@ -315,6 +320,13 @@ router.post('/', (req: Request, res: Response) => {
     id: uuid(),
     orgId: orgId || DEV_ORG_ID,
     dataAssetId,
+    ...(columnId ? { columnId } : {}),
+    ...(columnId ? (() => {
+      // Resolve column name for display convenience.
+      const { dataAssetColumns } = require('./data-assets');
+      const col = dataAssetColumns.find((c: any) => c.id === columnId);
+      return col ? { columnName: col.columnName } : {};
+    })() : {}),
     dimension: validDimension,
     name,
     description: description || '',

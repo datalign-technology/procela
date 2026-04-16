@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -10,6 +10,8 @@ import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
+import { useToastStore } from '../stores/toastStore';
+import { errorToast } from '../lib/errorToast';
 import LinkConnectionModal from '../components/LinkConnectionModal';
 
 interface DataAssetEntity {
@@ -121,8 +123,20 @@ const emptyForm: FormData = {
   systemId: '',
 };
 
+interface DataAssetColumn {
+  id: string;
+  dataAssetId: string;
+  columnName: string;
+  dataType?: string;
+  description?: string;
+  sourceConnectionId?: string;
+  sourceAsset?: string;
+  sourceColumn?: string;
+}
+
 export default function DataAssetsPage() {
   const { activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +149,12 @@ export default function DataAssetsPage() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  // Column state — expandable per-asset
+  const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
+  const [columnsMap, setColumnsMap] = useState<Record<string, DataAssetColumn[]>>({});
+  const [columnsLoading, setColumnsLoading] = useState<string | null>(null);
+  const [discovering, setDiscovering] = useState<string | null>(null);
   const [assetComments, setAssetComments] = useState<CommentEntry[]>([]);
   const [newComment, setNewComment] = useState('');
   const [commentUserName, setCommentUserName] = useState('');
@@ -219,6 +239,50 @@ export default function DataAssetsPage() {
     },
     'name',
   );
+
+  // Column management
+  const toggleExpandColumns = async (assetId: string) => {
+    if (expandedAssetId === assetId) { setExpandedAssetId(null); return; }
+    setExpandedAssetId(assetId);
+    // Fetch columns if we haven't already (or refresh)
+    setColumnsLoading(assetId);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${assetId}/columns`);
+      setColumnsMap((prev) => ({ ...prev, [assetId]: res.data || [] }));
+    } catch { /* */ }
+    finally { setColumnsLoading(null); }
+  };
+
+  const autoDiscoverColumns = async (assetId: string) => {
+    setDiscovering(assetId);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: DataAssetColumn[]; message: string }>(`/data-assets/${assetId}/columns/auto-discover`, {});
+      if (res.data?.length > 0) {
+        addToast('success', res.message || `Discovered ${res.data.length} columns`);
+      } else {
+        addToast('info', res.message || 'No new columns found.');
+      }
+      // Refresh column list
+      const listRes = await apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${assetId}/columns`);
+      setColumnsMap((prev) => ({ ...prev, [assetId]: listRes.data || [] }));
+    } catch (err) {
+      errorToast(err, 'Column discovery failed');
+    } finally {
+      setDiscovering(null);
+    }
+  };
+
+  const deleteColumn = async (assetId: string, colId: string) => {
+    try {
+      await apiClient.delete(`/data-assets/${assetId}/columns/${colId}`);
+      setColumnsMap((prev) => ({
+        ...prev,
+        [assetId]: (prev[assetId] || []).filter((c) => c.id !== colId),
+      }));
+    } catch (err) {
+      errorToast(err, 'Failed to delete column');
+    }
+  };
 
   const openAdd = () => {
     setForm(emptyForm);
@@ -569,18 +633,32 @@ export default function DataAssetsPage() {
               {sorted.map((asset) => {
                 const binding = primaryBindingOf(asset.id);
                 const connName = binding ? connectionNameById[binding.connectionId] : undefined;
+                const isExpanded = expandedAssetId === asset.id;
+                const cols = columnsMap[asset.id] || [];
                 return (
-                  <tr key={asset.id} style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
+                  <React.Fragment key={asset.id}>
+                  <tr style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
                       <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelect(asset.id)} />
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      {asset.name}
-                      {asset.description && (
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
-                          {asset.description}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={() => toggleExpandColumns(asset.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 10, padding: 0, width: 14, flexShrink: 0 }}
+                          title={isExpanded ? 'Collapse columns' : 'Expand columns'}
+                        >
+                          {isExpanded ? '\u25BC' : '\u25B6'}
+                        </button>
+                        <div style={{ minWidth: 0 }}>
+                          {asset.name}
+                          {asset.description && (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                              {asset.description}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
                     <td style={tdStyle}>
                       {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
@@ -622,6 +700,73 @@ export default function DataAssetsPage() {
                       </div>
                     </td>
                   </tr>
+                  {/* Expanded columns section */}
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                        <div style={{ padding: '12px 20px 12px 60px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              Columns ({cols.length})
+                            </span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              {binding && (
+                                <button
+                                  onClick={() => autoDiscoverColumns(asset.id)}
+                                  disabled={discovering === asset.id}
+                                  style={{
+                                    padding: '4px 10px', fontSize: 11, fontWeight: 500,
+                                    background: 'var(--color-primary)', color: '#fff',
+                                    border: 'none', borderRadius: 4, cursor: discovering === asset.id ? 'default' : 'pointer',
+                                    opacity: discovering === asset.id ? 0.6 : 1,
+                                  }}
+                                >
+                                  {discovering === asset.id ? 'Discovering\u2026' : 'Auto-discover columns'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {columnsLoading === asset.id ? (
+                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading\u2026'}</div>
+                          ) : cols.length === 0 ? (
+                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>
+                              {binding
+                                ? 'No columns yet. Click "Auto-discover columns" to populate from the linked connection.'
+                                : 'No columns yet. Link this asset to a connection first, then discover its columns.'}
+                            </div>
+                          ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                              <thead>
+                                <tr style={{ background: 'var(--color-bg)' }}>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Column</th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Data Type</th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Description</th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px' }}>Source</th>
+                                  <th style={{ ...thStyle, fontSize: 10, padding: '6px 10px', width: 50, textAlign: 'center' }}></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {cols.map((col) => (
+                                  <tr key={col.id}>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', fontWeight: 500, fontFamily: 'var(--font-mono)' }}>{col.columnName}</td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>{col.dataType || '\u2014'}</td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>{col.description || '\u2014'}</td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                                      {col.sourceAsset ? `${col.sourceAsset}.${col.sourceColumn || col.columnName}` : '\u2014'}
+                                    </td>
+                                    <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
+                                      <IconButton size="sm" icon="trash" label="Remove column" variant="danger" onClick={() => deleteColumn(asset.id, col.id)} />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

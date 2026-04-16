@@ -106,7 +106,7 @@ app.use(errorHandler);
 // ---------------------------------------------------------------------------
 import { processNodes, flowRelationships, processVersions } from './routes/process-catalog';
 import { systems } from './routes/systems';
-import { dataAssets, dataAssetBindings } from './routes/data-assets';
+import { dataAssets, dataAssetBindings, dataAssetColumns } from './routes/data-assets';
 import { organizations } from './routes/organizations';
 import { people } from './routes/people';
 import { agents } from './routes/agents';
@@ -131,6 +131,7 @@ const stores = {
   systems: () => systems,
   dataAssets: () => dataAssets,
   dataAssetBindings: () => dataAssetBindings,
+  dataAssetColumns: () => dataAssetColumns,
   organizations: () => organizations,
   people: () => people,
   agents: () => agents,

@@ -97,6 +97,32 @@ function migrateLegacySourceFieldsToBindings(): void {
 }
 migrateLegacySourceFieldsToBindings();
 
+// ── Data Asset Columns ──────────────────────────────────────────────────
+//
+// Columns are the measurable data points within a Data Asset. A Data Asset
+// represents the business concept ("Customer Accounts"); columns represent
+// the individual fields ("email", "phone", "created_at"). DQ rules target
+// columns specifically, and asset health rolls up from column-level scores.
+//
+// Columns can be auto-populated from a connection's discovery output (the
+// Link flow offers this), or manually added.
+
+export interface StoredDataAssetColumn {
+  id: string;
+  dataAssetId: string;
+  columnName: string;         // e.g. "email", "customer_id"
+  dataType?: string;          // e.g. "VARCHAR", "INTEGER", "DATE" — discovered or user-set
+  description?: string;       // business description
+  sourceConnectionId?: string;
+  sourceAsset?: string;       // physical table/file this column came from
+  sourceColumn?: string;      // physical column name if different from columnName
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const dataAssetColumns: StoredDataAssetColumn[] =
+  loadStore<StoredDataAssetColumn>('dataAssetColumns');
+
 /**
  * Resolve the primary binding for an asset, or undefined if it isn't linked
  * to a physical location yet. Exported so other modules (DQ engine,
@@ -431,6 +457,125 @@ router.delete('/:id', (req: Request, res: Response) => {
   }
   if (ownBindings.length > 0) saveStore('dataAssetBindings', dataAssetBindings);
   res.status(204).send();
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Column CRUD — nested under /data-assets/:id/columns
+// ──────────────────────────────────────────────────────────────────────────
+
+/** GET /data-assets/:id/columns — list columns for an asset */
+router.get('/:id/columns', (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  const cols = dataAssetColumns.filter((c) => c.dataAssetId === asset.id);
+  res.json({ success: true, data: cols });
+});
+
+/** POST /data-assets/:id/columns — create a column */
+router.post('/:id/columns', (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  const { columnName, dataType, description, sourceConnectionId, sourceAsset, sourceColumn } = req.body;
+  if (!columnName) { res.status(400).json({ success: false, error: 'columnName is required' }); return; }
+  const now = new Date().toISOString();
+  const col: StoredDataAssetColumn = {
+    id: uuid(), dataAssetId: asset.id, columnName,
+    dataType: dataType || '', description: description || '',
+    sourceConnectionId: sourceConnectionId || undefined,
+    sourceAsset: sourceAsset || undefined,
+    sourceColumn: sourceColumn || columnName,
+    createdAt: now, updatedAt: now,
+  };
+  dataAssetColumns.push(col);
+  saveStore('dataAssetColumns', dataAssetColumns);
+  res.status(201).json({ success: true, data: col });
+});
+
+/** PUT /data-assets/:id/columns/:colId — update a column */
+router.put('/:id/columns/:colId', (req: Request, res: Response) => {
+  const col = dataAssetColumns.find((c) => c.id === req.params.colId && c.dataAssetId === req.params.id);
+  if (!col) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
+  const { columnName, dataType, description } = req.body;
+  if (columnName !== undefined) col.columnName = columnName;
+  if (dataType !== undefined) col.dataType = dataType;
+  if (description !== undefined) col.description = description;
+  col.updatedAt = new Date().toISOString();
+  saveStore('dataAssetColumns', dataAssetColumns);
+  res.json({ success: true, data: col });
+});
+
+/** DELETE /data-assets/:id/columns/:colId — delete a column */
+router.delete('/:id/columns/:colId', (req: Request, res: Response) => {
+  const idx = dataAssetColumns.findIndex((c) => c.id === req.params.colId && c.dataAssetId === req.params.id);
+  if (idx === -1) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
+  dataAssetColumns.splice(idx, 1);
+  saveStore('dataAssetColumns', dataAssetColumns);
+  res.status(204).send();
+});
+
+/**
+ * POST /data-assets/:id/columns/auto-discover
+ *
+ * Reads the asset's primary binding, calls the connection's discover
+ * endpoint to enumerate columns, and creates DataAssetColumn records for
+ * any columns that don't already exist. Idempotent — re-running it picks
+ * up new columns without duplicating existing ones.
+ */
+router.post('/:id/columns/auto-discover', async (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  const binding = getPrimaryBinding(asset.id);
+  if (!binding) {
+    res.status(400).json({ success: false, error: 'Asset has no connection binding. Link it to a connection first.' });
+    return;
+  }
+  // Import the connector dynamically to avoid circular deps at module level.
+  const { connections } = require('./connections');
+  const conn = connections.find((c: any) => c.id === binding.connectionId);
+  if (!conn) {
+    res.status(400).json({ success: false, error: 'The linked connection no longer exists.' });
+    return;
+  }
+  try {
+    // Re-use the discovery infrastructure to get columns.
+    const { discoverAssets } = require('../lib/local-file-connector');
+    // For local files, discoverAssets returns columns on each asset.
+    // For other types, we simulate with column list from config.
+    let discoveredColumns: string[] = [];
+    if (conn.connectionType === 'FILE_STORAGE' && conn.config?.localFilePath) {
+      const result = await discoverAssets(conn);
+      const matchingAsset = result.find((a: any) => a.name === binding.sourceAsset);
+      if (matchingAsset?.columns) discoveredColumns = matchingAsset.columns;
+    } else if (conn.config?.columns && Array.isArray(conn.config.columns)) {
+      discoveredColumns = conn.config.columns;
+    }
+    if (discoveredColumns.length === 0) {
+      res.json({ success: true, data: [], message: 'No columns discovered from this connection.' });
+      return;
+    }
+    const existing = dataAssetColumns.filter((c) => c.dataAssetId === asset.id);
+    const existingNames = new Set(existing.map((c) => c.columnName.toLowerCase()));
+    const now = new Date().toISOString();
+    const created: StoredDataAssetColumn[] = [];
+    for (const colName of discoveredColumns) {
+      if (existingNames.has(colName.toLowerCase())) continue;
+      const col: StoredDataAssetColumn = {
+        id: uuid(), dataAssetId: asset.id, columnName: colName,
+        dataType: '', description: '',
+        sourceConnectionId: binding.connectionId,
+        sourceAsset: binding.sourceAsset,
+        sourceColumn: colName,
+        createdAt: now, updatedAt: now,
+      };
+      dataAssetColumns.push(col);
+      created.push(col);
+    }
+    if (created.length > 0) saveStore('dataAssetColumns', dataAssetColumns);
+    res.json({ success: true, data: created, message: `Discovered ${created.length} new column(s).`, total: existing.length + created.length });
+  } catch (err: any) {
+    logger.error({ err, assetId: asset.id }, 'Column auto-discover failed');
+    res.status(500).json({ success: false, error: err?.message || 'Discovery failed' });
+  }
 });
 
 export default router;
