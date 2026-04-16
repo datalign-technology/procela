@@ -129,13 +129,20 @@ router.get('/by-person/:personId', (req: Request, res: Response) => {
   res.json({ success: true, data: roles });
 });
 
-/** GET /api/v1/dama-roles/summary — counts by role type */
-router.get('/summary', (_req: Request, res: Response) => {
+/** GET /api/v1/dama-roles/summary — counts by role type. Accepts
+ *  ?orgId= to match the same filter the list endpoint uses so the
+ *  summary cards and the table below them show consistent numbers. */
+router.get('/summary', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  let filtered = [...damaRoles];
+  if (orgId) {
+    filtered = filtered.filter((r) => r.scopeType === 'ORG' && r.scopeId === orgId);
+  }
   const counts: Record<string, number> = {};
   for (const rt of DAMA_ROLE_TYPES) {
-    counts[rt] = damaRoles.filter((r) => r.roleType === rt).length;
+    counts[rt] = filtered.filter((r) => r.roleType === rt).length;
   }
-  res.json({ success: true, data: counts, total: damaRoles.length });
+  res.json({ success: true, data: counts, total: filtered.length });
 });
 
 export default router;
