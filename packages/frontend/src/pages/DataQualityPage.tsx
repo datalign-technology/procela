@@ -25,6 +25,10 @@ interface DataAssetFull {
   sourceConnectionId?: string;
   sourceAsset?: string;
   sourceColumn?: string;
+  // Enriched by the list endpoint from domain cross-reference.
+  domainName?: string | null;
+  ownerName?: string | null;
+  stewardName?: string | null;
 }
 
 interface SystemRef {
@@ -869,8 +873,8 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
                       <>{a.sourceAsset}{a.sourceColumn && <><span style={{ color: 'var(--color-text-muted)' }}>.</span>{a.sourceColumn}</>}</>
                     ) : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                   </td>
-                  <td style={tdLocal}>{a.owner || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
-                  <td style={tdLocal}>{a.steward || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                  <td style={tdLocal}>{a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                  <td style={tdLocal}>{a.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                   <td style={tdLocal}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
