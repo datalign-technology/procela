@@ -17,20 +17,19 @@ interface DataAssetEntity {
   name: string;
   description: string;
   systemId: string;
-  /** @deprecated kept for backward-compat with existing stored data; owners/stewards live in Governance now. */
   owner?: string;
-  /** @deprecated kept for backward-compat; see Governance. */
   steward?: string;
-  /** @deprecated no longer shown here; tiers were removed in favour of DQ-derived health. */
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
-  /** @deprecated kept for backward-compat; health is shown and computed on the Data Quality page. */
   healthScore?: number;
-  // Populated when the asset was imported from a connection column.
   sourceConnectionId?: string;
   sourceAsset?: string;
   sourceColumn?: string;
   createdAt: string;
   updatedAt: string;
+  // Enriched by the list endpoint so the table can render inline.
+  domainName?: string | null;
+  ownerName?: string | null;
+  stewardName?: string | null;
 }
 
 interface SystemRef {
@@ -214,6 +213,8 @@ export default function DataAssetsPage() {
     {
       name: (a, b) => a.name.localeCompare(b.name),
       system: (a, b) => systemName(a.systemId).localeCompare(systemName(b.systemId)),
+      domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
+      owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'name',
@@ -380,11 +381,14 @@ export default function DataAssetsPage() {
           )}
           {assets.length > 0 && (
             <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('data-assets.csv', ['Name', 'Description', 'System', 'Source'], assets.map((a) => [
+              onClick={() => exportCsv('data-assets.csv', ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'], assets.map((a) => [
                 a.name,
                 a.description,
                 systemName(a.systemId),
                 a.sourceAsset ? `${a.sourceAsset}${a.sourceColumn ? '.' + a.sourceColumn : ''}` : '',
+                a.domainName || '',
+                a.ownerName || '',
+                a.stewardName || '',
               ]))} />
           )}
           <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
@@ -554,8 +558,11 @@ export default function DataAssetsPage() {
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
-                <th style={thStyle}>Binding</th>
-                <th style={{ ...thStyle, width: 220, textAlign: 'center' }}>Actions</th>
+                <th style={thStyle}>Source</th>
+                <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
+                <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
+                <th style={thStyle}>Steward</th>
+                <th style={{ ...thStyle, width: 180, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -567,22 +574,36 @@ export default function DataAssetsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
                       <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelect(asset.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>{asset.name}</td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }}>
+                      {asset.name}
+                      {asset.description && (
+                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                          {asset.description}
+                        </div>
+                      )}
+                    </td>
                     <td style={tdStyle}>
-                      {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                      {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
                     </td>
                     <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                       {binding ? (
                         <span title={`Linked to connection ${connName || binding.connectionId}`}>
-                          <strong style={{ color: 'var(--color-text)' }}>{connName || '(unknown connection)'}</strong>
-                          {' \u2192 '}
                           <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                             {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
                           </code>
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--color-text-muted)' }}>Not linked</span>
+                        <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
                       )}
+                    </td>
+                    <td style={tdStyle}>
+                      {asset.domainName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
+                    </td>
+                    <td style={tdStyle}>
+                      {asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
+                    </td>
+                    <td style={tdStyle}>
+                      {asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>

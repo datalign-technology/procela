@@ -143,7 +143,28 @@ router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId ? dataAssets.filter((a) => a.orgId === orgId) : dataAssets;
   const filteredSystems = orgId ? systems.filter((s) => s.orgId === orgId) : systems;
-  res.json({ success: true, data: filtered, systems: filteredSystems });
+
+  // Enrich each asset with domain, owner, steward and health info so the
+  // table can display them without a per-row 360 fetch.
+  const enriched = filtered.map((asset) => {
+    const domain = dataDomains.find((d) => d.dataAssetIds?.includes(asset.id));
+    let domainName: string | null = null;
+    let ownerName: string | null = null;
+    let stewardName: string | null = null;
+    if (domain) {
+      domainName = domain.name;
+      if (domain.ownerId) ownerName = people.find((p) => p.id === domain.ownerId)?.name || null;
+      if (domain.stewardIds?.length > 0) {
+        stewardName = domain.stewardIds
+          .map((sid: string) => people.find((p) => p.id === sid)?.name)
+          .filter(Boolean)
+          .join(', ') || null;
+      }
+    }
+    return { ...asset, domainName, ownerName, stewardName };
+  });
+
+  res.json({ success: true, data: enriched, systems: filteredSystems });
 });
 
 /** GET /api/v1/data-assets/:id/360 — full 360 view of a data asset */
