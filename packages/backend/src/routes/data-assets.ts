@@ -537,16 +537,28 @@ router.post('/:id/columns/auto-discover', async (req: Request, res: Response) =>
     return;
   }
   try {
-    // Re-use the discovery infrastructure to get columns.
-    const { discoverAssets } = require('../lib/local-file-connector');
-    // For local files, discoverAssets returns columns on each asset.
-    // For other types, we simulate with column list from config.
+    // Use the shared connector service — it handles LOCAL files with real
+    // parsing and simulates discovery for DATABASE, API, WAREHOUSE, etc.
+    const { discoverAssets } = require('../services/connector.service');
+    const result = await discoverAssets(conn);
+
     let discoveredColumns: string[] = [];
-    if (conn.connectionType === 'FILE_STORAGE' && conn.config?.localFilePath) {
-      const result = await discoverAssets(conn);
-      const matchingAsset = result.find((a: any) => a.name === binding.sourceAsset);
-      if (matchingAsset?.columns) discoveredColumns = matchingAsset.columns;
-    } else if (conn.config?.columns && Array.isArray(conn.config.columns)) {
+    if (result.success && result.details?.assets) {
+      // Find the asset whose name matches the binding's sourceAsset.
+      const matchingAsset = result.details.assets.find(
+        (a: any) => a.name === binding.sourceAsset,
+      );
+      if (matchingAsset?.columns) {
+        discoveredColumns = matchingAsset.columns;
+      } else if (result.details.assets.length > 0 && !binding.sourceAsset) {
+        // No sourceAsset on the binding (rare) — take columns from the
+        // first discovered asset as a best-effort fallback.
+        discoveredColumns = result.details.assets[0].columns || [];
+      }
+    }
+    // Fallback: if the connection config itself has a columns array
+    // (populated during the original test/upload for LOCAL files).
+    if (discoveredColumns.length === 0 && conn.config?.columns && Array.isArray(conn.config.columns)) {
       discoveredColumns = conn.config.columns;
     }
     if (discoveredColumns.length === 0) {
