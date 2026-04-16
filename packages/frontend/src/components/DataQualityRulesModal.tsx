@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useToastStore } from '../stores/toastStore';
+import IconButton from './IconButton';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Data Quality Rules modal — shared between DataAssetsPage (legacy entry)
@@ -545,44 +546,32 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                           )}
                         </td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          {/* Schedule selector — kept compact so it doesn't
-                              dominate the row. NEVER means manual-only. */}
-                          <select
-                            value={r.scheduleFrequency || 'NEVER'}
-                            disabled={!r.ruleType}
-                            onChange={(e) => updateSchedule(r, e.target.value as ScheduleFrequency)}
-                            title={r.nextRunAt ? `Next auto-run: ${new Date(r.nextRunAt).toLocaleString()}` : 'Manual only'}
-                            style={{
-                              fontSize: 10, padding: '2px 4px', marginRight: 6,
-                              border: '1px solid var(--color-border)', borderRadius: 4,
-                              background: 'var(--color-surface)', color: 'var(--color-text)',
-                              appearance: 'auto' as any,
-                            }}
-                          >
-                            <option value="NEVER">Manual</option>
-                            <option value="HOURLY">Hourly</option>
-                            <option value="DAILY">Daily</option>
-                            <option value="WEEKLY">Weekly</option>
-                          </select>
-                          <button
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: 11, marginRight: 4 }}
-                            onClick={() => toggleExpanded(r.id)}
-                            title="Show the engine command, message, and any failure samples"
-                          >
-                            {isExpanded ? 'Hide' : 'View'}
-                          </button>
-                          <button
-                            style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, marginRight: 4, opacity: !r.ruleType || runningId === r.id ? 0.6 : 1 }}
-                            disabled={!r.ruleType || runningId === r.id}
-                            onClick={() => runRule(r)}
-                            title={r.ruleType ? 'Run rule against the data' : 'Legacy rule \u2014 no typed execution'}
-                          >
-                            {runningId === r.id ? 'Running\u2026' : 'Run'}
-                          </button>
-                          <button
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11 }}
-                            onClick={() => deleteRule(r)}
-                          >Delete</button>
+                          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                            {/* Schedule selector */}
+                            <select
+                              value={r.scheduleFrequency || 'NEVER'}
+                              disabled={!r.ruleType}
+                              onChange={(e) => updateSchedule(r, e.target.value as ScheduleFrequency)}
+                              title={r.nextRunAt ? `Next auto-run: ${new Date(r.nextRunAt).toLocaleString()}` : 'Manual only'}
+                              style={{
+                                fontSize: 11, padding: '4px 6px',
+                                border: '1px solid var(--color-border)', borderRadius: 4,
+                                background: 'var(--color-surface)', color: 'var(--color-text)',
+                                appearance: 'auto' as any, height: 24,
+                              }}
+                            >
+                              <option value="NEVER">Manual</option>
+                              <option value="HOURLY">Hourly</option>
+                              <option value="DAILY">Daily</option>
+                              <option value="WEEKLY">Weekly</option>
+                            </select>
+                            <IconButton size="sm" icon="eye" label={isExpanded ? 'Hide details' : 'View details'} onClick={() => toggleExpanded(r.id)} />
+                            <IconButton size="sm" icon="play" label={r.ruleType ? (runningId === r.id ? 'Running\u2026' : 'Run rule') : 'Legacy rule \u2014 no typed execution'}
+                              variant="primary"
+                              disabled={!r.ruleType || runningId === r.id}
+                              onClick={() => runRule(r)} />
+                            <IconButton size="sm" icon="trash" label="Delete rule" variant="danger" onClick={() => deleteRule(r)} />
+                          </div>
                         </td>
                       </tr>
                       {isExpanded && (
