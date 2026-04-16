@@ -8,6 +8,7 @@ import { people } from './people';
 import { dataDomains } from './data-domains';
 import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -342,6 +343,117 @@ router.get('/raci', (req: Request, res: Response) => {
       rows: rows.map(({ ownerId, ...rest }) => rest),
       columns,
       matrix,
+    },
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// GET /api/v1/dashboard/my-items
+//
+// Returns ownership-based data for the person whose email matches the
+// logged-in JWT. Feeds the "My Items" widget on the Dashboard so a user
+// instantly sees what they own, steward, belong to, and need to act on.
+// ──────────────────────────────────────────────────────────────────────────
+
+function flattenNodes(nodes: typeof processNodes): typeof processNodes {
+  const out: typeof processNodes = [];
+  function walk(n: any) {
+    out.push(n);
+    if (n.children) n.children.forEach(walk);
+  }
+  nodes.forEach(walk);
+  return out;
+}
+
+router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
+  const email = (req.user?.email || '').toLowerCase();
+  if (!email) {
+    res.json({ success: true, data: { person: null } });
+    return;
+  }
+
+  const person = people.find((p) => p.email?.toLowerCase() === email);
+  if (!person) {
+    res.json({ success: true, data: { person: null } });
+    return;
+  }
+
+  // Flatten nested process tree to a flat list for ownership lookups.
+  const allNodes = flattenNodes(processNodes);
+
+  // Owned process nodes.
+  const ownedProcesses = allNodes
+    .filter((n) => n.ownerId === person.id)
+    .map((n) => ({ id: n.id, name: n.name, level: n.level, status: n.status }));
+
+  // Owned / stewarded data assets.
+  const myAssets = dataAssets
+    .filter((a) => (a as any).ownerId === person.id || (a as any).stewardId === person.id)
+    .map((a) => ({ id: a.id, name: a.name, relation: (a as any).ownerId === person.id ? 'owner' : 'steward' }));
+
+  // DAMA governance roles.
+  const myRoles = damaRoles
+    .filter((r) => r.personId === person.id)
+    .map((r) => {
+      let scopeName = r.scopeId;
+      if (r.scopeType === 'ORG') {
+        scopeName = organizations.find((o) => o.id === r.scopeId)?.name || r.scopeId;
+      } else {
+        scopeName = dataDomains.find((d) => d.id === r.scopeId)?.name || r.scopeId;
+      }
+      return { id: r.id, roleType: r.roleType, scopeType: r.scopeType, scopeName };
+    });
+
+  // Governance group memberships.
+  const myGroups = governanceGroups
+    .filter((g) => g.members?.some((m: any) => m.personId === person.id))
+    .map((g) => {
+      const membership = g.members?.find((m: any) => m.personId === person.id);
+      return { id: g.id, name: g.name, type: g.type, groupRole: membership?.groupRole || 'MEMBER' };
+    });
+
+  // Domain owner / steward.
+  const myDomains = dataDomains
+    .filter((d) => d.ownerId === person.id || (d.stewardIds || []).includes(person.id))
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      relation: d.ownerId === person.id ? 'owner' : 'steward',
+    }));
+
+  // Action items — things that may need attention.
+  const actionItems: Array<{ type: string; message: string; link: string }> = [];
+  // Owned processes in DRAFT status.
+  for (const p of ownedProcesses) {
+    if (p.status === 'DRAFT') {
+      actionItems.push({
+        type: 'review',
+        message: `"${p.name}" is still in DRAFT.`,
+        link: '/processes',
+      });
+    }
+  }
+  // Governance groups where person is CHAIR with no meetings or pending items (simplified: just flag it).
+  for (const g of myGroups) {
+    if (g.groupRole === 'CHAIR') {
+      actionItems.push({
+        type: 'governance',
+        message: `You chair "${g.name}".`,
+        link: '/governance?tab=groups',
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      person: { id: person.id, name: person.name, email: person.email, role: person.role, title: (person as any).title || '' },
+      ownedProcesses,
+      myAssets,
+      myRoles,
+      myGroups,
+      myDomains,
+      actionItems,
     },
   });
 });

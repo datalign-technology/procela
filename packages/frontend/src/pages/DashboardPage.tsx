@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useAuthStore } from '../stores/authStore';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
@@ -104,6 +105,202 @@ interface ChecklistStep {
   description: string;
   link: string;
   complete: boolean;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// My Items — personalized dashboard section showing what the logged-in
+// user owns, stewards, and may need to act on.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface MyItemsData {
+  person: { id: string; name: string; email: string; role: string; title: string } | null;
+  ownedProcesses: Array<{ id: string; name: string; level: string; status: string }>;
+  myAssets: Array<{ id: string; name: string; relation: string }>;
+  myRoles: Array<{ id: string; roleType: string; scopeType: string; scopeName: string }>;
+  myGroups: Array<{ id: string; name: string; type: string; groupRole: string }>;
+  myDomains: Array<{ id: string; name: string; relation: string }>;
+  actionItems: Array<{ type: string; message: string; link: string }>;
+}
+
+const DAMA_SHORT: Record<string, string> = {
+  CDO: 'CDO', DATA_GOVERNANCE_LEAD: 'Gov Lead', DATA_OWNER: 'Owner',
+  BUSINESS_DATA_STEWARD: 'Biz Steward', DATA_QUALITY_ANALYST: 'DQ Analyst',
+  TECHNICAL_DATA_STEWARD: 'Tech Steward', DATA_CUSTODIAN: 'Custodian',
+  DATA_ARCHITECT: 'Architect', DATA_ENGINEER: 'Engineer', DATABASE_ADMINISTRATOR: 'DBA',
+  DATA_STEWARD: 'Steward',
+};
+
+const chipStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '3px 10px', borderRadius: 4,
+  fontSize: 12, fontWeight: 500,
+  background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+  color: 'var(--color-text)',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280,
+};
+
+function MyItems() {
+  const { user } = useAuthStore();
+  const [data, setData] = useState<MyItemsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.email) { setLoading(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: MyItemsData }>('/dashboard/my-items');
+        setData(res.data);
+      } catch { /* */ }
+      finally { setLoading(false); }
+    })();
+  }, [user?.email]);
+
+  if (loading) return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{'My Items'}</h2>
+      <div style={{ ...cardStyle, color: 'var(--color-text-muted)', fontSize: 13 }}>{'Loading\u2026'}</div>
+    </div>
+  );
+
+  if (!data?.person) return null;  // user has no people record — skip silently
+
+  const hasAnything = (data.ownedProcesses.length + data.myAssets.length + data.myRoles.length + data.myGroups.length + data.myDomains.length) > 0;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+        {'My Items'}
+      </h2>
+      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+        {'What you own, steward, and belong to \u2014 based on your login '}({data.person.email}).
+      </p>
+
+      {/* Action items */}
+      {data.actionItems.length > 0 && (
+        <div style={{ ...cardStyle, marginBottom: 12, borderLeft: '4px solid #f59e0b', padding: '14px 16px' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {'Needs attention'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {data.actionItems.map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--color-text)' }}>{a.message}</span>
+                <Link to={a.link} style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 500, flexShrink: 0, textDecoration: 'none' }}>
+                  View
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!hasAnything && (
+        <div style={{ ...cardStyle, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13, padding: 24 }}>
+          {'No processes, assets, roles, or groups are assigned to you yet.'}
+        </div>
+      )}
+
+      {hasAnything && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+          {/* Owned processes */}
+          {data.ownedProcesses.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                {'My Processes'} ({data.ownedProcesses.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.ownedProcesses.slice(0, 6).map((p) => (
+                  <Link key={p.id} to="/processes" style={{ ...chipStyle, textDecoration: 'none' }}>
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{p.level}</span>
+                    {p.name}
+                    <span style={{ fontSize: 10, color: p.status === 'ACTIVE' ? '#0f4f46' : '#64748b', marginLeft: 'auto' }}>{p.status}</span>
+                  </Link>
+                ))}
+                {data.ownedProcesses.length > 6 && (
+                  <Link to="/processes" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>
+                    {`+${data.ownedProcesses.length - 6} more`}
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Data assets */}
+          {data.myAssets.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                {'My Data Assets'} ({data.myAssets.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.myAssets.slice(0, 6).map((a) => (
+                  <Link key={a.id} to="/data-assets" style={{ ...chipStyle, textDecoration: 'none' }}>
+                    {a.name}
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto', textTransform: 'uppercase' }}>{a.relation}</span>
+                  </Link>
+                ))}
+                {data.myAssets.length > 6 && (
+                  <Link to="/data-assets" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>
+                    {`+${data.myAssets.length - 6} more`}
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Governance roles */}
+          {data.myRoles.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                {'My Governance Roles'} ({data.myRoles.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.myRoles.map((r) => (
+                  <Link key={r.id} to="/governance?tab=roles" style={{ ...chipStyle, textDecoration: 'none' }}>
+                    <strong>{DAMA_SHORT[r.roleType] || r.roleType}</strong>
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{r.scopeType}: {r.scopeName}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Governance groups */}
+          {data.myGroups.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                {'My Groups'} ({data.myGroups.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.myGroups.map((g) => (
+                  <Link key={g.id} to="/governance?tab=groups" style={{ ...chipStyle, textDecoration: 'none' }}>
+                    {g.name}
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>{g.groupRole}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Domain responsibilities */}
+          {data.myDomains.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                {'My Domains'} ({data.myDomains.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {data.myDomains.map((d) => (
+                  <Link key={d.id} to="/governance?tab=domains" style={{ ...chipStyle, textDecoration: 'none' }}>
+                    {d.name}
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto', textTransform: 'uppercase' }}>{d.relation}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function GettingStartedChecklist({ stats }: { stats: DashboardStats }) {
@@ -858,7 +1055,12 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Personalized section — shows what the logged-in user owns. */}
       <div style={{ marginTop: 24 }}>
+        <MyItems />
+      </div>
+
+      <div style={{ marginTop: 0 }}>
         <DashboardAlerts stats={stats} />
       </div>
 
