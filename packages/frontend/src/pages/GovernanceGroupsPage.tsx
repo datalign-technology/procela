@@ -215,11 +215,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           borderBottom: '1px solid var(--color-border)',
           background: isSelected ? 'var(--color-primary-light, #f0f7ff)' : undefined,
           cursor: 'pointer', transition: 'background 0.1s',
-          // Shrink with the parent so a long group name + action
-          // icons can't push this row wider than the card, which
-          // was causing an unwanted horizontal scrollbar.
           minWidth: 0,
-          overflow: 'hidden',
         }}
         onClick={() => onSelect(node.id)}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -619,7 +615,7 @@ export default function GovernanceGroupsPage() {
       )}
 
       {/* Tree View */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar */}
         <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>

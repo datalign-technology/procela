@@ -141,11 +141,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
           borderBottom: '1px solid var(--color-border)',
           background: isSelected ? '#f0f9ff' : undefined,
           transition: 'background 0.1s',
-          // Allow the row to shrink with its container so a long
-          // description or industry chip can't push the row wider
-          // than the card and trigger a horizontal scrollbar.
           minWidth: 0,
-          overflow: 'hidden',
         }}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
@@ -545,7 +541,7 @@ export default function OrganizationsPage() {
       />
 
       {/* ══ MAIN BODY — full-width tree ══ */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar — select-all, expand/collapse */}
         <div style={{ display: 'flex', gap: 12, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
