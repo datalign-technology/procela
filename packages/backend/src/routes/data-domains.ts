@@ -5,6 +5,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataAssets } from './data-assets';
+import { aiService } from '../services/ai.service';
 
 export interface StoredDataDomain {
   id: string;
@@ -45,6 +46,30 @@ function enrichDomain(domain: StoredDataDomain) {
 const router = Router();
 
 /** DELETE /api/v1/data-domains/all — delete all data domains */
+/**
+ * POST /api/v1/data-domains/generate
+ *
+ * Uses the AI service to suggest data domains for a given industry.
+ * Returns the suggestions without committing them — the frontend shows
+ * a preview and the user picks which to keep.
+ */
+router.post('/generate', async (req: Request, res: Response) => {
+  const { industry } = req.body;
+  if (!industry || typeof industry !== 'string') {
+    res.status(400).json({ success: false, error: 'industry is required' });
+    return;
+  }
+  try {
+    const suggestions = await aiService.generateDataDomains(industry);
+    // The AI returns either a JSON array or an object with a `raw` key.
+    const domains = Array.isArray(suggestions) ? suggestions : [];
+    res.json({ success: true, data: domains });
+  } catch (err: any) {
+    logger.error({ err, industry }, 'Data domain generation failed');
+    res.status(500).json({ success: false, error: err?.message || 'AI generation failed' });
+  }
+});
+
 router.delete('/all', (_req: Request, res: Response) => {
   const count = dataDomains.length;
   dataDomains.splice(0, dataDomains.length);

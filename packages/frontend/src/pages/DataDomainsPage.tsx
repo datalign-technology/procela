@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
+import { errorToast } from '../lib/errorToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -91,6 +92,11 @@ export default function DataDomainsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  // AI generate state
+  const [generating, setGenerating] = useState(false);
+  const [generatedDomains, setGeneratedDomains] = useState<Array<{ name: string; description: string; selected: boolean }>>([]);
+  const [showGeneratePreview, setShowGeneratePreview] = useState(false);
 
   // Detail editing state
   const [detailOwnerId, setDetailOwnerId] = useState<string>('');
@@ -207,6 +213,70 @@ export default function DataDomainsPage() {
     );
   };
 
+  // ── AI-generate handler ──
+  const handleGenerate = async () => {
+    if (!activeOrgId) {
+      errorToast(null, 'Select an organization from the "Working In" dropdown first.');
+      return;
+    }
+    setGenerating(true);
+    try {
+      // Look up the active org's industry.
+      const orgRes = await apiClient.get<{ success: boolean; data: Array<{ id: string; industry: string }> }>('/organizations');
+      const activeOrg = (orgRes.data || []).find((o) => o.id === activeOrgId);
+      // Walk up the parent chain to find an org with an industry set.
+      let industry = activeOrg?.industry || '';
+      if (!industry) {
+        const allOrgs = orgRes.data || [];
+        let current = activeOrg;
+        while (current && !industry) {
+          const parent = allOrgs.find((o: any) => o.id === (current as any).parentId);
+          if (parent) industry = (parent as any).industry || '';
+          current = parent;
+        }
+      }
+      if (!industry) {
+        errorToast(null, 'The active organization (and its ancestors) has no industry set. Set it on the Organizations page first.');
+        setGenerating(false);
+        return;
+      }
+      const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>('/data-domains/generate', { industry });
+      const suggestions = (res.data || []).map((d) => ({ ...d, selected: true }));
+      if (suggestions.length === 0) {
+        errorToast(null, 'AI returned no suggestions. Try a different industry.');
+        setGenerating(false);
+        return;
+      }
+      setGeneratedDomains(suggestions);
+      setShowGeneratePreview(true);
+    } catch (err) {
+      errorToast(err, 'AI generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleApplyGenerated = async () => {
+    const toCreate = generatedDomains.filter((d) => d.selected);
+    if (toCreate.length === 0) { setShowGeneratePreview(false); return; }
+    try {
+      await Promise.all(toCreate.map((d) =>
+        apiClient.post('/data-domains', {
+          name: d.name,
+          description: d.description,
+          status: 'DRAFT',
+          ...(activeOrgId ? { orgId: activeOrgId } : {}),
+        }),
+      ));
+      addToast('success', `Created ${toCreate.length} data domain${toCreate.length === 1 ? '' : 's'}`);
+      setShowGeneratePreview(false);
+      setGeneratedDomains([]);
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to create domains');
+    }
+  };
+
   const statusBadge = (status: string): React.CSSProperties => {
     const c = status === 'ACTIVE'
       ? { bg: '#d1f0eb', color: '#0f4f46' }
@@ -246,6 +316,7 @@ export default function DataDomainsPage() {
                 d.status,
               ]))} />
           )}
+          <IconButton icon="settings" label={generating ? 'Generating\u2026' : 'Generate from industry'} disabled={generating} onClick={handleGenerate} />
           <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -516,6 +587,97 @@ export default function DataDomainsPage() {
           </table>
         )}
       </div>
+
+      {/* AI Generate Preview Modal */}
+      {showGeneratePreview && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1050,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setShowGeneratePreview(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--color-surface)',
+              borderRadius: 10,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+              padding: 24,
+              maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto',
+            }}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Suggested Data Domains</h3>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+              AI-generated based on your organization's industry. Uncheck any you don't need; the rest will be created as DRAFT domains.
+            </p>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <button
+                onClick={() => setGeneratedDomains((prev) => prev.map((d) => ({ ...d, selected: true })))}
+                style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 500, padding: 0 }}
+              >
+                Select all
+              </button>
+              <span style={{ color: 'var(--color-text-muted)' }}>{'|'}</span>
+              <button
+                onClick={() => setGeneratedDomains((prev) => prev.map((d) => ({ ...d, selected: false })))}
+                style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontWeight: 500, padding: 0 }}
+              >
+                Deselect all
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {generatedDomains.map((d, i) => (
+                <label
+                  key={i}
+                  style={{
+                    display: 'flex', gap: 10, alignItems: 'flex-start',
+                    padding: '10px 12px', borderRadius: 6,
+                    border: '1px solid var(--color-border)',
+                    background: d.selected ? 'var(--color-primary-light)' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={d.selected}
+                    onChange={() => setGeneratedDomains((prev) =>
+                      prev.map((x, j) => (j === i ? { ...x, selected: !x.selected } : x)),
+                    )}
+                    style={{ marginTop: 3, flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{d.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>{d.description}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setShowGeneratePreview(false)}
+                style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyGenerated}
+                disabled={generatedDomains.filter((d) => d.selected).length === 0}
+                style={{
+                  padding: '8px 18px', fontSize: 13, fontWeight: 500,
+                  background: generatedDomains.some((d) => d.selected) ? 'var(--color-primary)' : '#e5e7eb',
+                  color: generatedDomains.some((d) => d.selected) ? '#fff' : '#9ca3af',
+                  border: 'none', borderRadius: 6,
+                  cursor: generatedDomains.some((d) => d.selected) ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Create {generatedDomains.filter((d) => d.selected).length} domain{generatedDomains.filter((d) => d.selected).length === 1 ? '' : 's'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

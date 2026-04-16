@@ -19,6 +19,7 @@ function getClient(): Anthropic {
 
 export interface AiService {
   generateIndustryTemplate(industry: string): Promise<object>;
+  generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   chat(messages: ChatMessage[], orgContext: OrgContext): Promise<string>;
 }
@@ -85,6 +86,51 @@ Guidelines:
       response.content[0].type === 'text' ? response.content[0].text : '';
     try {
       // Handle potential markdown code fences in response
+      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch {
+      return { raw: text };
+    }
+  }
+
+  /**
+   * Generate data-domain suggestions for a given industry. Returns an
+   * array of { name, description } objects that the frontend previews
+   * before committing.
+   */
+  async generateDataDomains(industry: string): Promise<object> {
+    const response = await getClient().messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: `You are a data governance expert for the Procela platform. Given an industry, suggest the standard data domains that a company in that industry should define to organize their enterprise data assets.
+
+A data domain is a top-level grouping of related data assets under a single governance umbrella — for example "Customer Data", "Financial Data", "Product Data", "Operational Data".
+
+Return ONLY a valid JSON array — no markdown, no code fences, no explanation:
+[
+  {
+    "name": "Domain Name",
+    "description": "1-2 sentence description of what data this domain governs and why it matters"
+  }
+]
+
+Guidelines:
+- Suggest 6-12 domains that are standard for the industry
+- Include both operational and analytical domains
+- Include regulatory/compliance domains where relevant (e.g. NERC CIP for utilities, HIPAA for healthcare)
+- Use clear business language accessible to non-technical users
+- Order from most foundational to most specialized
+- Descriptions should explain scope and governance rationale`,
+      messages: [
+        {
+          role: 'user',
+          content: `Generate standard data domains for the "${industry}" industry.`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    try {
       const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       return JSON.parse(cleaned);
     } catch {
