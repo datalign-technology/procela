@@ -393,39 +393,17 @@ export default function PersonDetailPage() {
         </div>
       </div>
 
-      {/* Data domain ownership / stewardship */}
-      <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Data domain responsibilities</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {data.allDomains.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data domains defined.</div>
-          )}
-          {data.allDomains.map((d) => {
-            const isOwner = d.ownerId === p.id;
-            const isSteward = d.stewardIds.includes(p.id);
-            return (
-              <div
-                key={d.id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '6px 10px', borderRadius: 6,
-                  background: (isOwner || isSteward) ? 'var(--color-bg)' : 'transparent',
-                }}
-              >
-                <span style={{ flex: 1, fontSize: 13 }}>{d.name}</span>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: busy ? 'default' : 'pointer' }}>
-                  <input type="checkbox" checked={isOwner} disabled={busy} onChange={() => toggleDomainOwner(d.id, isOwner)} />
-                  Owner
-                </label>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: busy ? 'default' : 'pointer' }}>
-                  <input type="checkbox" checked={isSteward} disabled={busy} onChange={() => toggleDomainSteward(d.id, isSteward, d.stewardIds)} />
-                  Steward
-                </label>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Data domain ownership / stewardship — only shows domains
+          where the person IS owner or steward by default; an "Assign
+          to domain" toggle reveals the rest so the page isn't cluttered
+          with every domain in the system. */}
+      <DomainResponsibilities
+        allDomains={data.allDomains}
+        personId={p.id}
+        busy={busy}
+        onToggleOwner={toggleDomainOwner}
+        onToggleSteward={toggleDomainSteward}
+      />
 
       {/* Related processes */}
       {data.ownedProcessNodes.length > 0 && (
@@ -441,6 +419,91 @@ export default function PersonDetailPage() {
             ))}
           </ul>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Domain responsibilities sub-component ──
+// Split out so the expand/collapse state is local to this card and doesn't
+// re-render the entire page on every toggle.
+
+function DomainResponsibilities({ allDomains, personId, busy, onToggleOwner, onToggleSteward }: {
+  allDomains: Array<{ id: string; name: string; ownerId: string | null; stewardIds: string[] }>;
+  personId: string;
+  busy: boolean;
+  onToggleOwner: (domainId: string, isCurrentOwner: boolean) => void;
+  onToggleSteward: (domainId: string, isSteward: boolean, currentStewardIds: string[]) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const assigned = allDomains.filter((d) => d.ownerId === personId || d.stewardIds.includes(personId));
+  const unassigned = allDomains.filter((d) => d.ownerId !== personId && !d.stewardIds.includes(personId));
+
+  const renderRow = (d: typeof allDomains[0]) => {
+    const isOwner = d.ownerId === personId;
+    const isSteward = d.stewardIds.includes(personId);
+    return (
+      <div
+        key={d.id}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '6px 10px', borderRadius: 6,
+          background: (isOwner || isSteward) ? 'var(--color-bg)' : 'transparent',
+        }}
+      >
+        <span style={{ flex: 1, fontSize: 13 }}>{d.name}</span>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: busy ? 'default' : 'pointer' }}>
+          <input type="checkbox" checked={isOwner} disabled={busy} onChange={() => onToggleOwner(d.id, isOwner)} />
+          Owner
+        </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: busy ? 'default' : 'pointer' }}>
+          <input type="checkbox" checked={isSteward} disabled={busy} onChange={() => onToggleSteward(d.id, isSteward, d.stewardIds)} />
+          Steward
+        </label>
+      </div>
+    );
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={sectionTitleStyle}>
+        Data domain responsibilities{assigned.length > 0 ? ` (${assigned.length})` : ''}
+      </div>
+
+      {allDomains.length === 0 && (
+        <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data domains defined in the system.</div>
+      )}
+
+      {/* Show only assigned domains by default — clean for the common case. */}
+      {assigned.length === 0 && allDomains.length > 0 && !showAll && (
+        <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+          Not assigned to any data domains.
+        </div>
+      )}
+
+      {assigned.map(renderRow)}
+
+      {/* Expand to show unassigned domains so the admin can add new ones. */}
+      {unassigned.length > 0 && (
+        <>
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            style={{
+              marginTop: 8, background: 'transparent', border: 'none',
+              cursor: 'pointer', fontSize: 12, color: 'var(--color-primary)',
+              padding: 0, fontWeight: 500,
+            }}
+          >
+            {showAll
+              ? `Hide ${unassigned.length} unassigned domain${unassigned.length === 1 ? '' : 's'}`
+              : `Assign to domain\u2026 (${unassigned.length} available)`}
+          </button>
+          {showAll && (
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {unassigned.map(renderRow)}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
