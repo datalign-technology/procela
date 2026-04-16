@@ -18,8 +18,7 @@ export type Industry = (typeof INDUSTRIES)[number];
 export type UserRole =
   | 'SUPER_ADMIN'
   | 'ORG_ADMIN'
-  | 'PROCESS_OWNER'
-  | 'DATA_STEWARD'
+  | 'EDITOR'
   | 'CONTRIBUTOR'
   | 'VIEWER';
 

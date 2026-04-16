@@ -40,7 +40,6 @@ const DAMA_ROLE_LABELS: Record<string, string> = {
   DATA_ARCHITECT: 'Data Architect',
   DATA_ENGINEER: 'Data Engineer',
   DATABASE_ADMINISTRATOR: 'Database Administrator',
-  DATA_STEWARD: 'Data Steward (Legacy)',
 };
 
 const cardStyle: React.CSSProperties = {

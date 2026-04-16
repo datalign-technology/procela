@@ -156,6 +156,23 @@ export function canAccessOrg(
 
 export const people: StoredPerson[] = loadStore<StoredPerson>('people');
 
+// Migration: PROCESS_OWNER and DATA_STEWARD were legacy app-roles that
+// conflated platform permissions with governance accountability. They've
+// been replaced by the DAMA role model. Migrate anyone still carrying
+// the old values to EDITOR (closest equivalent permission set).
+const LEGACY_ROLES = new Set(['PROCESS_OWNER', 'DATA_STEWARD']);
+let migrated = 0;
+for (const p of people) {
+  if (LEGACY_ROLES.has(p.role)) {
+    p.role = 'EDITOR';
+    migrated++;
+  }
+}
+if (migrated > 0) {
+  saveStore('people', people);
+  logger.info({ migrated }, 'Migrated legacy PROCESS_OWNER/DATA_STEWARD roles to EDITOR');
+}
+
 const router = Router();
 
 /** DELETE /api/v1/people/all — delete all people */

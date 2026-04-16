@@ -46,8 +46,6 @@ const ROLE_TYPE_LABELS: Record<string, string> = {
   DATA_ARCHITECT: 'Data Architect',
   DATA_ENGINEER: 'Data Engineer',
   DATABASE_ADMINISTRATOR: 'Database Administrator',
-  // Legacy
-  DATA_STEWARD: 'Data Steward (Legacy)',
 };
 
 const ROLE_CATEGORIES: Record<string, string> = {
@@ -55,7 +53,6 @@ const ROLE_CATEGORIES: Record<string, string> = {
   DATA_OWNER: 'Business', BUSINESS_DATA_STEWARD: 'Business', DATA_QUALITY_ANALYST: 'Business',
   TECHNICAL_DATA_STEWARD: 'Technical', DATA_CUSTODIAN: 'Technical', DATA_ARCHITECT: 'Technical',
   DATA_ENGINEER: 'Technical', DATABASE_ADMINISTRATOR: 'Technical',
-  DATA_STEWARD: 'Business',
 };
 
 const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -72,8 +69,6 @@ const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   DATA_ARCHITECT: { bg: '#e0e7ff', color: '#3730a3' },
   DATA_ENGINEER: { bg: '#fef9c3', color: '#854d0e' },
   DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#64748b' },
-  // Legacy
-  DATA_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
 };
 
 const inputStyle: React.CSSProperties = {

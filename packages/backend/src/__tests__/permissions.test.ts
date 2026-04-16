@@ -25,20 +25,12 @@ describe('hasPermission', () => {
     assert.strictEqual(hasPermission('ORG_ADMIN', 'process:write'), true);
   });
 
-  it('PROCESS_OWNER can read/write processes and mappings', () => {
-    assert.strictEqual(hasPermission('PROCESS_OWNER', 'process:read'), true);
-    assert.strictEqual(hasPermission('PROCESS_OWNER', 'process:write'), true);
-    assert.strictEqual(hasPermission('PROCESS_OWNER', 'mapping:read'), true);
-    assert.strictEqual(hasPermission('PROCESS_OWNER', 'mapping:write'), true);
-    assert.strictEqual(hasPermission('PROCESS_OWNER', 'data-asset:write'), false);
-  });
-
-  it('DATA_STEWARD can read/write data assets and mappings', () => {
-    assert.strictEqual(hasPermission('DATA_STEWARD', 'data-asset:read'), true);
-    assert.strictEqual(hasPermission('DATA_STEWARD', 'data-asset:write'), true);
-    assert.strictEqual(hasPermission('DATA_STEWARD', 'mapping:read'), true);
-    assert.strictEqual(hasPermission('DATA_STEWARD', 'mapping:write'), true);
-    assert.strictEqual(hasPermission('DATA_STEWARD', 'process:write'), false);
+  it('legacy PROCESS_OWNER / DATA_STEWARD are no longer valid roles', () => {
+    // These were removed — existing records are migrated to EDITOR on
+    // startup. If anyone still has them, hasPermission should return
+    // false (unknown role) rather than granting stale permissions.
+    assert.strictEqual(hasPermission('PROCESS_OWNER', 'process:read'), false);
+    assert.strictEqual(hasPermission('DATA_STEWARD', 'data-asset:read'), false);
   });
 
   it('CONTRIBUTOR can read and write processes but not data assets', () => {
@@ -79,6 +71,6 @@ describe('ROLES', () => {
     assert.ok(Array.isArray(ROLES));
     assert.ok(ROLES.includes('SUPER_ADMIN'));
     assert.ok(ROLES.includes('VIEWER'));
-    assert.ok(ROLES.length >= 6);
+    assert.ok(ROLES.length >= 5);
   });
 });

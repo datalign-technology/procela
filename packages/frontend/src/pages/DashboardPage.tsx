@@ -127,7 +127,6 @@ const DAMA_SHORT: Record<string, string> = {
   BUSINESS_DATA_STEWARD: 'Biz Steward', DATA_QUALITY_ANALYST: 'DQ Analyst',
   TECHNICAL_DATA_STEWARD: 'Tech Steward', DATA_CUSTODIAN: 'Custodian',
   DATA_ARCHITECT: 'Architect', DATA_ENGINEER: 'Engineer', DATABASE_ADMINISTRATOR: 'DBA',
-  DATA_STEWARD: 'Steward',
 };
 
 const chipStyle: React.CSSProperties = {
