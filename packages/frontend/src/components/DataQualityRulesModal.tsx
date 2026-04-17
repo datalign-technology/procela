@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useToastStore } from '../stores/toastStore';
+import { useOrgContext } from '../stores/orgContext';
 import IconButton from './IconButton';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -119,6 +120,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
   onAfterChange: () => void;
 }) {
   const addToast = useToastStore((s) => s.addToast);
+  const activeOrgId = useOrgContext((s) => s.activeOrgId);
   const [rules, setRules] = useState<DQRule[]>([]);
   const [suggested, setSuggested] = useState<RuleTemplate[]>([]);
   const [generic, setGeneric] = useState<RuleTemplate[]>([]);
@@ -230,7 +232,11 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
         parameters,
         threshold: 95,
         templateId: t.id,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
       });
+      // Recompute the asset's aggregate health so the caller's asset list
+      // reflects the new rule without a manual refresh.
+      try { await apiClient.post(`/data-quality/compute-health/${asset.id}`); } catch { /* */ }
       addToast('success', `Added rule "${t.name}"`);
       setConfiguringTemplateId(null);
       setConfigParams({});
@@ -295,6 +301,9 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
   const deleteRule = async (rule: DQRule) => {
     try {
       await apiClient.delete(`/data-quality/${rule.id}`);
+      // Recompute asset health so removing a rule updates the parent
+      // asset's health and rule count immediately.
+      try { await apiClient.post(`/data-quality/compute-health/${asset.id}`); } catch { /* */ }
       await load();
       onAfterChange();
     } catch { /* */ }

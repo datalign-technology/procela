@@ -315,10 +315,15 @@ router.post('/', (req: Request, res: Response) => {
 
   const status = validScore > 0 ? computeStatus(validScore, validThreshold) : 'NOT_MEASURED';
 
+  // If no explicit orgId, inherit from the owning asset so rules always
+  // live in the same tenant as the asset they measure.
+  const ownerAsset = dataAssets.find((a) => a.id === dataAssetId);
+  const resolvedOrgId = orgId || ownerAsset?.orgId || DEV_ORG_ID;
+
   const now = new Date().toISOString();
   const rule: DataQualityRule = {
     id: uuid(),
-    orgId: orgId || DEV_ORG_ID,
+    orgId: resolvedOrgId,
     dataAssetId,
     ...(columnId ? { columnId } : {}),
     ...(columnId ? (() => {

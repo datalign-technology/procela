@@ -285,7 +285,13 @@ export default function DataQualityPage() {
 
   const handleDelete = async (id: string) => {
     try {
+      // Capture the asset id before deletion so we can recompute health
+      // for the right asset after the row disappears.
+      const assetId = rules.find((r) => r.id === id)?.dataAssetId;
       await apiClient.delete(`/data-quality/${id}`);
+      if (assetId) {
+        try { await apiClient.post(`/data-quality/compute-health/${assetId}`); } catch { /* */ }
+      }
       addToast('success', 'Quality rule deleted');
       fetchData();
     } catch {
@@ -380,6 +386,8 @@ export default function DataQualityPage() {
           assets={fullAssets}
           rulesByAsset={rulesByAsset}
           systemNameById={systemNameById}
+          activeOrgId={activeOrgId}
+          onRefreshAll={fetchData}
           onManageRules={(a, colName) => setRulesModalAsset({ id: a.id, name: a.name, sourceAsset: a.sourceAsset, sourceColumn: colName || a.sourceColumn })}
         />
       )}
@@ -828,10 +836,12 @@ interface ColumnWithHealth {
   healthScore?: number | null;
 }
 
-function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
+function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefreshAll, onManageRules }: {
   assets: DataAssetFull[];
   rulesByAsset: Map<string, QualityRule[]>;
   systemNameById: Record<string, string>;
+  activeOrgId: string;
+  onRefreshAll: () => void | Promise<void>;
   onManageRules: (asset: DataAssetFull, columnName?: string) => void;
 }) {
   const { addToast } = useToastStore();
@@ -876,9 +886,14 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, onManageRules }: {
         ruleType,
         parameters: {},
         threshold: 95,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
       });
+      // Recompute the asset's health so the Rules column / health bar
+      // reflect the new rule immediately.
+      try { await apiClient.post(`/data-quality/compute-health/${assetId}`); } catch { /* */ }
       addToast('success', `Added ${ruleType.replace('_', ' ')} rule for ${col.columnName}`);
       await refreshColumns(assetId);
+      await onRefreshAll();
     } catch { addToast('error', 'Failed to add rule'); }
   };
 
