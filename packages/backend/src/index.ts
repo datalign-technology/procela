@@ -43,6 +43,7 @@ import dataLineageRouter from './routes/data-lineage';
 import dataQualityRouter from './routes/data-quality';
 import connectionsRouter from './routes/connections';
 import enterpriseViewRouter from './routes/enterprise-view';
+import gapDetectionRouter from './routes/gap-detection';
 import brandingRouter from './routes/branding';
 
 const app = express();
@@ -97,6 +98,7 @@ app.use('/api/v1/data-lineage', authenticateToken, dataLineageRouter);
 app.use('/api/v1/data-quality', authenticateToken, dataQualityRouter);
 app.use('/api/v1/connections', authenticateToken, connectionsRouter);
 app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
+app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
