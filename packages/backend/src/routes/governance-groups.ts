@@ -59,6 +59,24 @@ interface StoredGovernanceGroup {
 export const governanceGroups: StoredGovernanceGroup[] = loadStore<StoredGovernanceGroup>('governanceGroups');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
+// Deduplicate on startup: keep the first occurrence of each name+orgId+type combo
+{
+  const seen = new Set<string>();
+  const dupeIds: string[] = [];
+  for (const g of governanceGroups) {
+    const key = `${g.orgId}|${g.name.toLowerCase()}|${g.type}`;
+    if (seen.has(key)) { dupeIds.push(g.id); } else { seen.add(key); }
+  }
+  if (dupeIds.length > 0) {
+    const dupeSet = new Set(dupeIds);
+    for (let i = governanceGroups.length - 1; i >= 0; i--) {
+      if (dupeSet.has(governanceGroups[i].id)) governanceGroups.splice(i, 1);
+    }
+    saveStore('governanceGroups', governanceGroups);
+    logger.info({ removed: dupeIds.length }, 'Removed duplicate governance groups');
+  }
+}
+
 // ── Tree builder ──
 
 function buildTree(groups: StoredGovernanceGroup[]): any[] {
@@ -127,9 +145,19 @@ router.post('/generate-template', (req: Request, res: Response) => {
     { type: 'WORKING_GROUP', name: 'Data Quality Improvement', description: 'Initiative-focused group driving data quality improvements.', charter: 'Identify data quality issues, implement fixes, measure improvement, report progress.', parentType: 'COMMITTEE' },
   ];
 
+  // Skip items that already exist in this org (prevents duplicates on re-run)
+  const existingNames = new Set(
+    governanceGroups.filter((g) => g.orgId === targetOrgId).map((g) => g.name.toLowerCase()),
+  );
+
   const typeToId: Record<string, string> = {};
+  // Seed typeToId from existing groups so parent lookups work even when skipping
+  for (const g of governanceGroups.filter((g) => g.orgId === targetOrgId)) {
+    if (!typeToId[g.type]) typeToId[g.type] = g.id;
+  }
 
   for (const t of template) {
+    if (existingNames.has(t.name.toLowerCase())) continue;
     const parentId = t.parentType ? typeToId[t.parentType] || null : null;
     const group: StoredGovernanceGroup = {
       id: uuid(), orgId: targetOrgId, parentId,
