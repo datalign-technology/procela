@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
+import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -154,6 +155,7 @@ interface DataAssetColumn {
 
 export default function DataAssetsPage() {
   const { activeOrgId } = useOrgContext();
+  const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
@@ -463,7 +465,7 @@ export default function DataAssetsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {assets.length > 0 && (
+          {assets.length > 0 && canWrite && (
             <IconButton icon="trash" label="Delete all data assets" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
           )}
@@ -479,7 +481,9 @@ export default function DataAssetsPage() {
                 a.stewardName || '',
               ]))} />
           )}
-          <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
+          {canWrite && (
+            <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
+          )}
         </div>
       </div>
 
@@ -718,9 +722,9 @@ export default function DataAssetsPage() {
                         ) : (
                           <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
                         )}
-                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(asset)} />
-                        <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(asset)} />
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(asset.id)} />
+                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(asset)} />}
+                        {canWrite && <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(asset)} />}
+                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(asset.id)} />}
                       </div>
                     </td>
                   </tr>

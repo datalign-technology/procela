@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
+import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
@@ -189,6 +190,7 @@ function ScoreBar({ score, threshold }: { score: number; threshold: number }) {
 
 export default function DataQualityPage() {
   const { activeOrgId } = useOrgContext();
+  const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const [rules, setRules] = useState<QualityRule[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
@@ -417,7 +419,7 @@ export default function DataQualityPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {rules.length > 0 && (
+          {rules.length > 0 && canWrite && (
             <IconButton icon="trash" label="Delete all rules" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
           )}
@@ -435,7 +437,9 @@ export default function DataQualityPage() {
                 r.lastMeasured || '',
               ]))} />
           )}
-          <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
+          {canWrite && (
+            <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
+          )}
         </div>
       </div>
 

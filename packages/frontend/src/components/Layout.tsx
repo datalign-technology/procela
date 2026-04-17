@@ -15,9 +15,10 @@ import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type NavItem = { to: string; label: string; icon: string };
-type NavSection = { label: string | null; items: NavItem[] };
+type NavSection = { label: string | null; items: NavItem[]; adminOnly?: boolean };
 
 const navSections: NavSection[] = [
   {
@@ -39,6 +40,7 @@ const navSections: NavSection[] = [
   },
   {
     label: 'Administration',
+    adminOnly: true,
     items: [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/people', label: 'People', icon: '\u263B' },
@@ -118,6 +120,9 @@ export default function Layout() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
+  const { isAdmin, role } = usePermissions();
+
+  const visibleSections = navSections.filter((s) => !s.adminOnly || isAdmin);
 
   // Apply the customer's theme (company name, logo, colors) as early as
   // possible. The store also fetches from /login via brandingStore bootstrap;
@@ -391,7 +396,7 @@ export default function Layout() {
           {!sidebarCollapsed && <span>{branding.companyName || 'Procela'}</span>}
         </div>
         <nav className={styles.sidebarNav}>
-          {navSections.map((section, sIdx) => (
+          {visibleSections.map((section, sIdx) => (
             <div key={sIdx} className={styles.navGroup}>
               {section.label && !sidebarCollapsed && (
                 <div className={styles.navGroupLabel}>{section.label}</div>
@@ -691,7 +696,12 @@ export default function Layout() {
             <DensityToggle />
             <div className={styles.userMenu}>
               <div className={styles.userAvatar}>{userInitial}</div>
-              <span>{user?.name || 'User'}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+                <span>{user?.name || 'User'}</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {role.replace('_', ' ')}
+                </span>
+              </div>
             </div>
             <button
               onClick={handleSignOut}

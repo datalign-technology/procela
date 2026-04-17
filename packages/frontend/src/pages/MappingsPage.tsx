@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -138,6 +139,7 @@ function formatStepPath(info: StepInfo): string {
 
 export default function MappingsPage() {
   const { activeOrgId } = useOrgContext();
+  const { canWrite } = usePermissions();
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [valueStreams, setValueStreams] = useState<StoredValueStream[]>([]);
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
@@ -271,7 +273,7 @@ export default function MappingsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {mappings.length > 0 && (
+          {mappings.length > 0 && canWrite && (
             <IconButton icon="trash" label="Delete all mappings" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
           )}
@@ -285,7 +287,9 @@ export default function MappingsPage() {
                 m.notes,
               ]))} />
           )}
-          <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
+          {canWrite && (
+            <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
+          )}
         </div>
       </div>
 
@@ -627,7 +631,7 @@ export default function MappingsPage() {
                     {m.notes || '--'}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} />
+                    {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(m.id)} />}
                   </td>
                 </tr>
               ))}

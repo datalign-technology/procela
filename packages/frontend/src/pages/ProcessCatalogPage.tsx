@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePolling } from '../hooks/usePolling';
+import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
@@ -507,6 +508,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
+  const { canWrite, canContribute } = usePermissions();
   const [tree, setTree] = useState<ProcessNode[]>([]);
   const [stats, setStats] = useState<Record<string, any>>({});
   const [validChildrenMap, setValidChildrenMap] = useState<Record<string, string[]>>({});
@@ -716,18 +718,24 @@ export default function ProcessCatalogPage() {
         </div>
         {totalNodes > 0 && canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 6 }}>
-            <IconButton icon="trash" label="Delete all processes" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
+            {canWrite && (
+              <IconButton icon="trash" label="Delete all processes" variant="danger"
+                onClick={() => setShowDeleteAll(true)} />
+            )}
             <IconButton icon="eye" label="Visualize"
               onClick={() => navigate('/processes/visualization')} />
             {(byLevel.VALUE_STREAM || 0) >= 2 && (
               <IconButton icon="refresh" label="Compare value streams"
                 onClick={() => navigate('/processes/compare')} />
             )}
-            <IconButton icon="settings" label="Generate from template"
-              onClick={() => navigate('/processes/wizard')} />
-            <IconButton icon="plus" label="Add value stream" variant="primary"
-              onClick={() => setAddingTo('__root__')} />
+            {canWrite && (
+              <IconButton icon="settings" label="Generate from template"
+                onClick={() => navigate('/processes/wizard')} />
+            )}
+            {canContribute && (
+              <IconButton icon="plus" label="Add value stream" variant="primary"
+                onClick={() => setAddingTo('__root__')} />
+            )}
           </div>
         )}
         {totalNodes > 0 && !canCreateValueStreams && (
