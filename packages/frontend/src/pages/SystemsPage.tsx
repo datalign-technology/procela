@@ -17,6 +17,9 @@ interface SystemEntity {
   name: string;
   description: string;
   systemType: string;
+  businessCriticality?: string;
+  vendor?: string;
+  integrationPoints?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,9 +65,12 @@ interface FormData {
   name: string;
   description: string;
   systemType: string;
+  businessCriticality: string;
+  vendor: string;
+  integrationPoints: string;
 }
 
-const emptyForm: FormData = { name: '', description: '', systemType: '' };
+const emptyForm: FormData = { name: '', description: '', systemType: '', businessCriticality: '', vendor: '', integrationPoints: '' };
 
 export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
@@ -109,7 +115,12 @@ export default function SystemsPage() {
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
   const openEdit = (sys: SystemEntity) => {
-    setForm({ name: sys.name, description: sys.description, systemType: sys.systemType });
+    setForm({
+      name: sys.name, description: sys.description, systemType: sys.systemType,
+      businessCriticality: sys.businessCriticality || '',
+      vendor: sys.vendor || '',
+      integrationPoints: sys.integrationPoints || '',
+    });
     setEditingId(sys.id); setShowForm(true);
   };
 
@@ -294,6 +305,23 @@ export default function SystemsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Business Criticality</label>
+              <select style={selectStyle} value={form.businessCriticality} onChange={(e) => setForm({ ...form, businessCriticality: e.target.value })}>
+                <option value="">-- Select --</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vendor / Platform</label>
+              <input style={inputStyle} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Points</label>
+              <input style={inputStyle} value={form.integrationPoints} onChange={(e) => setForm({ ...form, integrationPoints: e.target.value })} placeholder="e.g. Connects to SAP via API, feeds Data Warehouse nightly" />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>

@@ -14,7 +14,8 @@ export interface StoredDataDomain {
   description: string;
   ownerId: string | null;       // personId of the Data Owner
   stewardIds: string[];          // personIds of Data Stewards
-  dataAssetIds: string[];        // linked data asset IDs
+  dataAssetIds: string[];
+  scopeDefinition?: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -121,7 +122,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-domains — create */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, orgId, status } = req.body;
+  const { name, description, orgId, status, scopeDefinition } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
@@ -134,6 +135,7 @@ router.post('/', (req: Request, res: Response) => {
     ownerId: null,
     stewardIds: [],
     dataAssetIds: [],
+    ...(scopeDefinition ? { scopeDefinition } : {}),
     status: status && VALID_STATUSES.includes(status) ? status : 'DRAFT',
     createdAt: now,
     updatedAt: now,
@@ -148,11 +150,10 @@ router.put('/:id', (req: Request, res: Response) => {
   const domain = dataDomains.find((d) => d.id === req.params.id);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
-  const { name, description, ownerId, stewardIds, dataAssetIds, status } = req.body;
+  const { name, description, ownerId, stewardIds, dataAssetIds, status, scopeDefinition } = req.body;
 
-  // Block field edits on locked statuses (status-only and dataAssetIds changes still allowed)
   const hasFieldEdits = name !== undefined || description !== undefined
-    || ownerId !== undefined || stewardIds !== undefined;
+    || ownerId !== undefined || stewardIds !== undefined || scopeDefinition !== undefined;
   if (hasFieldEdits && DOMAIN_LOCKED.has(domain.status)) {
     res.status(403).json({
       success: false,
@@ -166,6 +167,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (ownerId !== undefined) domain.ownerId = ownerId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) domain.stewardIds = stewardIds;
   if (dataAssetIds !== undefined && Array.isArray(dataAssetIds)) domain.dataAssetIds = dataAssetIds;
+  if (scopeDefinition !== undefined) domain.scopeDefinition = scopeDefinition || undefined;
 
   // Validate status transition
   if (status !== undefined && status !== domain.status) {

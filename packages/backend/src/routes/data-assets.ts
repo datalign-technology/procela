@@ -23,8 +23,11 @@ interface StoredDataAsset {
   // connection column. Enables "where did this come from?" and later
   // re-sync against the source.
   sourceConnectionId?: string;
-  sourceAsset?: string;   // table / file / endpoint / sheet name in the source
-  sourceColumn?: string;  // the specific column, null if the whole asset was imported
+  sourceAsset?: string;
+  sourceColumn?: string;
+  dataClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
+  retentionPolicy?: string;
+  refreshFrequency?: 'REAL_TIME' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MANUAL';
   createdAt: string;
   updatedAt: string;
 }
@@ -395,7 +398,8 @@ router.get('/:id', (req: Request, res: Response) => {
 /** POST /api/v1/data-assets */
 router.post('/', (req: Request, res: Response) => {
   const { name, description, systemId, owner, steward, governanceTier, healthScore, orgId,
-    sourceConnectionId, sourceAsset, sourceColumn } = req.body;
+    sourceConnectionId, sourceAsset, sourceColumn,
+    dataClassification, retentionPolicy, refreshFrequency } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
 
   const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
@@ -413,6 +417,9 @@ router.post('/', (req: Request, res: Response) => {
     ...(sourceConnectionId ? { sourceConnectionId } : {}),
     ...(sourceAsset ? { sourceAsset } : {}),
     ...(sourceColumn ? { sourceColumn } : {}),
+    ...(dataClassification ? { dataClassification } : {}),
+    ...(retentionPolicy ? { retentionPolicy } : {}),
+    ...(refreshFrequency ? { refreshFrequency } : {}),
     createdAt: now, updatedAt: now,
   };
   dataAssets.push(asset);
@@ -426,7 +433,8 @@ router.put('/:id', (req: Request, res: Response) => {
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
   const { name, description, systemId, owner, steward, governanceTier, healthScore,
-    sourceConnectionId, sourceAsset, sourceColumn } = req.body;
+    sourceConnectionId, sourceAsset, sourceColumn,
+    dataClassification, retentionPolicy, refreshFrequency } = req.body;
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
   if (systemId !== undefined) asset.systemId = systemId;
@@ -437,6 +445,9 @@ router.put('/:id', (req: Request, res: Response) => {
   if (sourceConnectionId !== undefined) asset.sourceConnectionId = sourceConnectionId || undefined;
   if (sourceAsset !== undefined) asset.sourceAsset = sourceAsset || undefined;
   if (sourceColumn !== undefined) asset.sourceColumn = sourceColumn || undefined;
+  if (dataClassification !== undefined) asset.dataClassification = dataClassification || undefined;
+  if (retentionPolicy !== undefined) asset.retentionPolicy = retentionPolicy || undefined;
+  if (refreshFrequency !== undefined) asset.refreshFrequency = refreshFrequency || undefined;
   asset.updatedAt = new Date().toISOString();
   saveStore('dataAssets', dataAssets);
   res.json({ success: true, data: asset });

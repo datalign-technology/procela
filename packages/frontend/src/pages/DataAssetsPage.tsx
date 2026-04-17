@@ -24,6 +24,9 @@ interface DataAssetEntity {
   steward?: string;
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
+  dataClassification?: string;
+  retentionPolicy?: string;
+  refreshFrequency?: string;
   sourceConnectionId?: string;
   sourceAsset?: string;
   sourceColumn?: string;
@@ -120,6 +123,9 @@ interface FormData {
   steward: string;
   governanceTier: string;
   domainId: string;
+  dataClassification: string;
+  retentionPolicy: string;
+  refreshFrequency: string;
 }
 
 const emptyForm: FormData = {
@@ -130,6 +136,9 @@ const emptyForm: FormData = {
   steward: '',
   governanceTier: 'BRONZE',
   domainId: '',
+  dataClassification: '',
+  retentionPolicy: '',
+  refreshFrequency: '',
 };
 
 interface ColumnRule {
@@ -342,6 +351,9 @@ export default function DataAssetsPage() {
       steward: asset.steward || '',
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: dom?.id || '',
+      dataClassification: asset.dataClassification || '',
+      retentionPolicy: asset.retentionPolicy || '',
+      refreshFrequency: asset.refreshFrequency || '',
     });
     setEditingId(asset.id);
     setShowForm(true);
@@ -356,6 +368,9 @@ export default function DataAssetsPage() {
       steward: asset.steward || '',
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: '',
+      dataClassification: asset.dataClassification || '',
+      retentionPolicy: asset.retentionPolicy || '',
+      refreshFrequency: asset.refreshFrequency || '',
     });
     setEditingId(null);
     setShowForm(true);
@@ -606,6 +621,32 @@ export default function DataAssetsPage() {
                 <option value="">-- No steward --</option>
                 {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Classification</label>
+              <select style={selectStyle} value={form.dataClassification} onChange={(e) => updateField('dataClassification', e.target.value)}>
+                <option value="">-- Select --</option>
+                <option value="PUBLIC">Public</option>
+                <option value="INTERNAL">Internal</option>
+                <option value="CONFIDENTIAL">Confidential</option>
+                <option value="RESTRICTED">Restricted</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Refresh Frequency</label>
+              <select style={selectStyle} value={form.refreshFrequency} onChange={(e) => updateField('refreshFrequency', e.target.value)}>
+                <option value="">-- Select --</option>
+                <option value="REAL_TIME">Real-time</option>
+                <option value="HOURLY">Hourly</option>
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+                <option value="MANUAL">Manual</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Retention Policy</label>
+              <input style={inputStyle} value={form.retentionPolicy} onChange={(e) => updateField('retentionPolicy', e.target.value)} placeholder="e.g. 7 years per regulatory requirement, 90 days rolling" />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>

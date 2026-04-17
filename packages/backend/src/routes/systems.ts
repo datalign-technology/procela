@@ -10,6 +10,9 @@ interface StoredSystem {
   name: string;
   description: string;
   systemType: string;
+  businessCriticality?: 'HIGH' | 'MEDIUM' | 'LOW';
+  vendor?: string;
+  integrationPoints?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,12 +54,15 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType, orgId } = req.body;
+  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const now = new Date().toISOString();
   const sys: StoredSystem = {
     id: uuid(), orgId: orgId || DEV_ORG_ID, name,
     description: description || '', systemType: systemType || '',
+    ...(businessCriticality ? { businessCriticality } : {}),
+    ...(vendor ? { vendor } : {}),
+    ...(integrationPoints ? { integrationPoints } : {}),
     createdAt: now, updatedAt: now,
   };
   systems.push(sys);
@@ -69,10 +75,13 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const { name, description, systemType } = req.body;
+  const { name, description, systemType, businessCriticality, vendor, integrationPoints } = req.body;
   if (name !== undefined) sys.name = name;
   if (description !== undefined) sys.description = description;
   if (systemType !== undefined) sys.systemType = systemType;
+  if (businessCriticality !== undefined) sys.businessCriticality = businessCriticality || undefined;
+  if (vendor !== undefined) sys.vendor = vendor || undefined;
+  if (integrationPoints !== undefined) sys.integrationPoints = integrationPoints || undefined;
   sys.updatedAt = new Date().toISOString();
   saveStore('systems', systems);
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);

@@ -73,13 +73,21 @@ export interface ProcessNode {
   level: NodeLevel;
   name: string;
   description: string;
-  activityId: string | null;  // human-readable ID for activities (e.g. "ACT-001")
+  activityId: string | null;
   status: string;
   orderIndex: number;
   orgId: string;
   orgIds: string[];
   ownerId: string | null;
   version: number;
+  // Documentation fields
+  purpose?: string;
+  businessOutcome?: string;
+  stakeholders?: string;
+  complianceTags?: string[];
+  inputsOutputs?: string;
+  responsibleRole?: string;
+  statusJustification?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -289,7 +297,9 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 
 /** POST /nodes — create a node */
 router.post('/nodes', (req: Request, res: Response) => {
-  const { parentId, level, name, description, status, orgIds, ownerId } = req.body;
+  const { parentId, level, name, description, status, orgIds, ownerId,
+    purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
+    responsibleRole, statusJustification } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -355,6 +365,13 @@ router.post('/nodes', (req: Request, res: Response) => {
     orgIds: orgIds || [DEV_ORG_ID],
     ownerId: ownerId || null,
     version: 1,
+    ...(purpose ? { purpose } : {}),
+    ...(businessOutcome ? { businessOutcome } : {}),
+    ...(stakeholders ? { stakeholders } : {}),
+    ...(complianceTags?.length ? { complianceTags } : {}),
+    ...(inputsOutputs ? { inputsOutputs } : {}),
+    ...(responsibleRole ? { responsibleRole } : {}),
+    ...(statusJustification ? { statusJustification } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -376,7 +393,9 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   const node = findNode(param(req.params.id));
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
-  const { name, description, status, orderIndex, orgIds, ownerId, parentId, version } = req.body;
+  const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
+    purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
+    responsibleRole, statusJustification } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
   if (version !== undefined && version !== (node.version ?? 1)) {
@@ -419,7 +438,9 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   // Block field edits when the node is in a locked status.
   // Status-only updates are still allowed (handled below).
   const hasFieldEdits = name !== undefined || description !== undefined
-    || orderIndex !== undefined || orgIds !== undefined || ownerId !== undefined;
+    || orderIndex !== undefined || orgIds !== undefined || ownerId !== undefined
+    || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
+    || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined;
   if (hasFieldEdits && LOCKED_STATUSES.has(node.status)) {
     res.status(403).json({
       success: false,
@@ -433,6 +454,13 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   if (orderIndex !== undefined) node.orderIndex = orderIndex;
   if (orgIds !== undefined) node.orgIds = orgIds;
   if (ownerId !== undefined) node.ownerId = ownerId;
+  if (purpose !== undefined) node.purpose = purpose;
+  if (businessOutcome !== undefined) node.businessOutcome = businessOutcome;
+  if (stakeholders !== undefined) node.stakeholders = stakeholders;
+  if (complianceTags !== undefined) node.complianceTags = complianceTags;
+  if (inputsOutputs !== undefined) node.inputsOutputs = inputsOutputs;
+  if (responsibleRole !== undefined) node.responsibleRole = responsibleRole;
+  if (statusJustification !== undefined) node.statusJustification = statusJustification;
 
   // Validate status transition against the state machine
   if (status !== undefined && status !== node.status) {

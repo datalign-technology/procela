@@ -24,6 +24,13 @@ interface ProcessNode {
   orgIds: string[];
   ownerId: string | null;
   version?: number;
+  purpose?: string;
+  businessOutcome?: string;
+  stakeholders?: string;
+  complianceTags?: string[];
+  inputsOutputs?: string;
+  responsibleRole?: string;
+  statusJustification?: string;
   children?: ProcessNode[];
 }
 
@@ -178,6 +185,39 @@ function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, placeholde
         if (e.key === 'Escape') setEditing(false);
       }}
     />
+  );
+}
+
+// ── Documentation Field (label + inline edit in a compact row) ──
+
+function DocField({ label, value, onSave, disabled, placeholder }: {
+  label: string; value: string; onSave: (v: string) => void; disabled: boolean; placeholder: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
+      {editing && !disabled ? (
+        <input autoFocus style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', flex: 1 }}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
+            if (e.key === 'Escape') setEditing(false);
+          }}
+        />
+      ) : (
+        <span
+          onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}
+          style={{ cursor: disabled ? 'default' : 'pointer', color: value ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: value ? 'normal' : 'italic', opacity: disabled ? 0.6 : 1 }}
+          title={disabled ? 'Locked' : 'Click to edit'}
+        >
+          {value || placeholder}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -352,6 +392,28 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           <div style={{ marginTop: 1 }}>
             <InlineEdit value={node.description} onSave={(description) => onUpdate(node.id, { description })} fontSize={11} placeholder="Add description..." disabled={isLocked} />
           </div>
+          {/* Documentation fields — visible when expanded */}
+          {isExpanded && (
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 2 }}>
+              {(node.level === 'VALUE_STREAM' || node.level === 'PROCESS') && (
+                <>
+                  <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
+                  {node.level === 'VALUE_STREAM' && (
+                    <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
+                  )}
+                  <DocField label="Stakeholders" value={node.stakeholders || ''} onSave={(v) => onUpdate(node.id, { stakeholders: v })} disabled={isLocked} placeholder="Who cares about this?" />
+                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
+                  <DocField label="Compliance Tags" value={(node.complianceTags || []).join(', ')} onSave={(v) => onUpdate(node.id, { complianceTags: v.split(',').map((s: string) => s.trim()).filter(Boolean) })} disabled={isLocked} placeholder="e.g. SOX, HIPAA, GDPR" />
+                </>
+              )}
+              {node.level === 'ACTIVITY' && (
+                <>
+                  <DocField label="Responsible Role" value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} placeholder="Who performs this activity?" />
+                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="Data consumed / produced" />
+                </>
+              )}
+            </div>
+          )}
           {/* Guided prompt for missing required children */}
           {warning && (
             <div style={{ fontSize: 10, color: '#d97706', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, background: '#fef3c7', padding: '2px 8px', borderRadius: 4, width: 'fit-content' }}>

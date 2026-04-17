@@ -73,9 +73,10 @@ interface FormData {
   name: string;
   description: string;
   status: string;
+  scopeDefinition: string;
 }
 
-const emptyForm: FormData = { name: '', description: '', status: 'DRAFT' };
+const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', scopeDefinition: '' };
 
 const DOMAIN_TRANSITIONS: Record<string, string[]> = {
   DRAFT:        ['PROPOSED'],
@@ -141,7 +142,7 @@ export default function DataDomainsPage() {
   };
 
   const openEdit = (domain: DataDomain) => {
-    setForm({ name: domain.name, description: domain.description, status: domain.status });
+    setForm({ name: domain.name, description: domain.description, status: domain.status, scopeDefinition: (domain as any).scopeDefinition || '' });
     setEditingId(domain.id);
     setSelectedDomain(null);
     setShowForm(true);
@@ -476,6 +477,15 @@ export default function DataDomainsPage() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Describe the purpose and scope of this data domain"
+              />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Scope Definition</label>
+              <input
+                style={inputStyle}
+                value={form.scopeDefinition}
+                onChange={(e) => setForm({ ...form, scopeDefinition: e.target.value })}
+                placeholder="What data falls in/out of this domain? e.g. All customer-facing data excluding internal analytics"
               />
             </div>
           </div>
