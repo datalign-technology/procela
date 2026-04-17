@@ -32,6 +32,7 @@ import AnalyzePage from '@/pages/AnalyzePage';
 import ConnectionsPage from '@/pages/ConnectionsPage';
 import ReportsPage from '@/pages/ReportsPage';
 import BrandingPage from '@/pages/BrandingPage';
+import EnterpriseViewPage from '@/pages/EnterpriseViewPage';
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="/data-lineage" element={<DataLineagePage />} />
         <Route path="/data-quality" element={<DataQualityPage />} />
         <Route path="/connections" element={<ConnectionsPage />} />
+        <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/branding" element={<BrandingPage />} />

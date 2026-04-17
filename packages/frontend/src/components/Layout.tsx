@@ -30,6 +30,7 @@ const navSections: NavSection[] = [
   {
     label: 'Workspace',
     items: [
+      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u25A8' },
       { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
       { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
