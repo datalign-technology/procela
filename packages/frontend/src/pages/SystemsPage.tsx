@@ -11,6 +11,7 @@ import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
+import HelpPopover from '../components/HelpPopover';
 
 interface SystemEntity {
   id: string;
@@ -229,7 +230,10 @@ export default function SystemsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Systems</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <HelpPopover id="systems-intro" title="Systems">
+              Register the applications and platforms your organization uses. Include business
+              criticality, vendor, and integration points so you can assess the impact of changes.
+            </HelpPopover>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Applications and platforms where your organization's data lives.
@@ -307,7 +311,7 @@ export default function SystemsPage() {
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Business Criticality</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Business Criticality <HelpPopover id="sys-criticality" title="Business Criticality">How critical is this system to daily operations? High = outage stops the business. Medium = workarounds exist. Low = minimal operational impact.</HelpPopover></label>
               <select style={selectStyle} value={form.businessCriticality} onChange={(e) => setForm({ ...form, businessCriticality: e.target.value })}>
                 <option value="">-- Select --</option>
                 <option value="HIGH">High</option>

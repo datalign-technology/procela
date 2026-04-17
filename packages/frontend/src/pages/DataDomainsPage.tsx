@@ -9,6 +9,7 @@ import { getStatusColor } from '../lib/statusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import HelpPopover from '../components/HelpPopover';
 
 interface DataDomain {
   id: string;
@@ -315,7 +316,11 @@ export default function DataDomainsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Domains</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <HelpPopover id="domains-intro" title="Data Domains">
+              Domains group related data assets into governed categories (e.g. Customer Data, Financial Data).
+              Each domain has an owner, stewards, and a scope definition. Status lifecycle applies —
+              locked domains cannot be edited until moved back to Draft.
+            </HelpPopover>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Organize data assets into governed domains with assigned owners and stewards.
@@ -480,7 +485,7 @@ export default function DataDomainsPage() {
               />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Scope Definition</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Scope Definition <HelpPopover id="domain-scope" title="Scope Definition">Define what data falls inside and outside this domain. Clear boundaries prevent overlap and ensure every asset has a governance home.</HelpPopover></label>
               <input
                 style={inputStyle}
                 value={form.scopeDefinition}

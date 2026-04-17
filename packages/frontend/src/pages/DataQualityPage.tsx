@@ -819,7 +819,7 @@ export default function DataQualityPage() {
                 <th style={thStyle}>Current Score</th>
                 <th style={thStyle}>Weight</th>
                 <th style={thStyle}>Status</th>
-                <th style={thStyle}>Schedule</th>
+                <th style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>
                 <th style={thStyle}>Last Measured</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
               </tr>

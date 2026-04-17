@@ -154,9 +154,24 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Inline editing — click any item to rename or update its description</li>
           <li>Status lifecycle: <span style={badgeStyle('#6b7280')}>Draft</span> <span style={badgeStyle('#1e40af')}>Proposed</span> <span style={badgeStyle('#d97706')}>Under Review</span> <span style={badgeStyle('#5b21b6')}>Approved</span> <span style={badgeStyle('#0f4f46')}>Active</span> <span style={badgeStyle('#9d174d')}>Deprecated</span></li>
+          <li>Status transitions are enforced: Draft → Proposed → Under Review → Approved → Active → Deprecated. Each state can return to Draft to restart the cycle.</li>
+          <li>Items in Under Review, Approved, Active, or Deprecated status are <strong>locked for editing</strong>. Change the status back to Draft to make edits.</li>
           <li>ACTIVE status is blocked until the required path (Value Stream, Process, Activity) is complete</li>
           <li>Guided prompts and a completeness checklist help you fill in all required information</li>
-          <li>A validation summary bar shows the overall health of your process catalog</li>
+        </ul>
+
+        <h3 style={h3Style}>Documentation Fields</h3>
+        <p style={pStyle}>
+          Expand a process node to see and edit documentation fields. These appear as inline-editable
+          label/value rows below the description:
+        </p>
+        <ul style={listStyle}>
+          <li><strong>Purpose</strong> — what does this process accomplish? (Value Streams, Processes)</li>
+          <li><strong>Business Outcome</strong> — what value does this deliver? (Value Streams)</li>
+          <li><strong>Stakeholders</strong> — who cares about this? (Value Streams, Processes)</li>
+          <li><strong>Inputs / Outputs</strong> — what goes in, what comes out? (Processes, Activities)</li>
+          <li><strong>Compliance Tags</strong> — SOX, HIPAA, GDPR, etc. Comma-separated. (Value Streams, Processes)</li>
+          <li><strong>Responsible Role</strong> — who performs this activity? (Activities)</li>
         </ul>
 
         <h3 style={h3Style}>Activities</h3>
@@ -182,7 +197,9 @@ export default function HelpPage() {
         </p>
         <ul style={listStyle}>
           <li>Each system has a name, description, and type (ERP, CRM, GIS, SCADA, Data Warehouse, etc.)</li>
-          <li>Assign a business owner and data steward to each system</li>
+          <li><strong>Business Criticality</strong> — High, Medium, or Low. Indicates how critical the system is to operations.</li>
+          <li><strong>Vendor / Platform</strong> — the vendor or technology (e.g. SAP, Salesforce, Custom)</li>
+          <li><strong>Integration Points</strong> — which other systems this connects to and how</li>
           <li>Systems can be imported in bulk via CSV or JSON</li>
           <li>All systems are scoped to the active organization selected in the header</li>
         </ul>
@@ -201,9 +218,21 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Name and business description</li>
           <li>Linked system (where the data lives)</li>
+          <li>Domain assignment — which data domain governs this asset</li>
           <li>Business owner and data steward</li>
           <li>Governance tier and health score</li>
+          <li><strong>Data Classification</strong> — Public, Internal, Confidential, or Restricted. Controls how sensitive the data is.</li>
+          <li><strong>Retention Policy</strong> — how long the data is kept (e.g. "7 years per SOX requirement")</li>
+          <li><strong>Refresh Frequency</strong> — how often the data is updated: Real-time, Hourly, Daily, Weekly, Monthly, or Manual</li>
         </ul>
+
+        <h3 style={h3Style}>Columns / Fields</h3>
+        <p style={pStyle}>
+          Each data asset can have columns or fields discovered from a linked connection.
+          Expand an asset to see its columns, their data types, and any data quality rules
+          attached to each column. Columns are auto-discovered when you link a connection,
+          or can be added manually.
+        </p>
 
         <h3 style={h3Style}>Governance Tiers</h3>
         <div style={{ marginBottom: 12 }}>
@@ -220,9 +249,10 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>Health Scores</h3>
         <p style={pStyle}>
-          Each data asset has a health score from 0 to 100, representing overall data quality
-          and reliability. In the prototype, health scores are manually set. In production, they
-          will be pulled from source systems automatically.
+          Each data asset has a health score from 0 to 100, computed as the weighted average of
+          all quality rule scores: <em>Health = &Sigma;(score &times; weight) / &Sigma;(weight)</em>.
+          Health updates automatically when rules are run. Hover over the health bar on the
+          Data Quality page to see the full breakdown.
         </p>
 
         <h3 style={h3Style}>360 View</h3>
@@ -267,6 +297,9 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Assign a Data Owner and one or more Data Stewards to each domain</li>
           <li>Link data assets to domains to establish governance coverage</li>
+          <li><strong>Scope Definition</strong> — define what data falls in or out of this domain</li>
+          <li>Status lifecycle: Draft → Proposed → Under Review → Approved → Active → Deprecated (same as processes)</li>
+          <li>Editing is locked when status is Under Review, Approved, Active, or Deprecated</li>
           <li>Track which domains are fully governed and which have gaps</li>
         </ul>
 
@@ -285,8 +318,8 @@ export default function HelpPage() {
           <li><strong>Data Quality Analyst</strong> — monitors and improves data quality</li>
         </ul>
         <p style={pStyle}>
-          Each governance role is scoped to either an Organization or a specific Data Domain. A person can
-          hold multiple governance roles across different scopes.
+          Governance roles are scoped to an Organization. Domain ownership is managed directly on
+          the Data Domain (owner and steward fields). A person can hold multiple governance roles.
         </p>
       </div>
 
@@ -320,26 +353,103 @@ export default function HelpPage() {
       </div>
 
       {/* Gap Detection */}
-      <div id="gap-detection" style={sectionStyle}>
-        <h2 style={h2Style}>8. Gap Detection</h2>
+      {/* Data Quality */}
+      <div id="data-quality" style={sectionStyle}>
+        <h2 style={h2Style}>8. Data Quality</h2>
         <p style={pStyle}>
-          Procela automatically identifies weaknesses in your process-data landscape:
+          Define quality rules for your data assets and compute health scores automatically.
+          Rules are attached to specific columns/fields within an asset.
         </p>
+
+        <h3 style={h3Style}>Rule Types</h3>
         <ul style={listStyle}>
-          <li><strong>Unmapped process activities</strong> — activities with no linked data assets</li>
-          <li><strong>Ungoverned assets</strong> — data assets at Bronze tier that are linked to processes</li>
-          <li><strong>Ownership gaps</strong> — processes or data assets with no assigned owner</li>
-          <li><strong>Ungoverned data domains</strong> — domains without assigned owners or stewards</li>
+          <li><strong>NOT_NULL</strong> — checks that a column has no null values</li>
+          <li><strong>UNIQUE</strong> — checks that all values are unique</li>
+          <li><strong>REGEX_MATCH</strong> — validates values against a regular expression pattern</li>
+          <li><strong>IN_SET</strong> — checks that values are in an allowed set</li>
+          <li><strong>NUMERIC_RANGE</strong> — validates values fall within a min/max range</li>
+          <li><strong>LENGTH_RANGE</strong> — validates string length within bounds</li>
+          <li><strong>CUSTOM</strong> — user-defined validation logic</li>
+        </ul>
+
+        <h3 style={h3Style}>Running Rules</h3>
+        <ul style={listStyle}>
+          <li>Click the <strong>play button</strong> on any rule to run it immediately</li>
+          <li>Use <strong>Run All Rules</strong> on an asset row to execute every rule at once</li>
+          <li>Results update the rule's score, status, and the asset's overall health</li>
+        </ul>
+
+        <h3 style={h3Style}>Scheduling</h3>
+        <ul style={listStyle}>
+          <li>Click the <strong>clock icon</strong> on any rule to set a schedule</li>
+          <li>Options: Manual only, Hourly, Daily, or Weekly</li>
+          <li>Scheduled rules run automatically; the next run time is shown in the schedule dropdown</li>
+        </ul>
+
+        <h3 style={h3Style}>Health Score Calculation</h3>
+        <p style={pStyle}>
+          Asset health = weighted average of all rule scores. Each rule has a weight (1–10, default 5).
+          Formula: <em>&Sigma;(currentScore &times; weight) / &Sigma;(weight)</em>.
+          New rules start at 0% until run. Hover over the health bar for a full breakdown.
+        </p>
+      </div>
+
+      {/* Gap Detection */}
+      <div id="gap-detection" style={sectionStyle}>
+        <h2 style={h2Style}>9. Gap Detection</h2>
+        <p style={pStyle}>
+          Procela identifies 8 categories of gaps across your organization, grouped by severity:
+        </p>
+        <h3 style={h3Style}>Critical</h3>
+        <ul style={listStyle}>
+          <li><strong>Unmapped Activities</strong> — process activities with no linked data assets</li>
+          <li><strong>Ownership Gaps</strong> — value streams and processes with no assigned owner</li>
+        </ul>
+        <h3 style={h3Style}>Warning</h3>
+        <ul style={listStyle}>
+          <li><strong>Ungoverned Assets</strong> — Bronze-tier assets linked to processes</li>
+          <li><strong>Low-Health Assets</strong> — assets with health below 50% linked to processes</li>
+          <li><strong>Unowned Domains</strong> — data domains without an owner</li>
+        </ul>
+        <h3 style={h3Style}>Informational</h3>
+        <ul style={listStyle}>
+          <li><strong>Orphaned Assets</strong> — assets not assigned to any data domain</li>
+          <li><strong>Unlinked Assets</strong> — assets with no process mapping</li>
+          <li><strong>Unassigned People</strong> — people with no ownership or stewardship anywhere</li>
         </ul>
         <p style={pStyle}>
-          Use gap detection to prioritize governance efforts and ensure complete coverage across
-          your process catalog.
+          Each gap category shows a count badge and can be expanded to see the specific items.
+          A green "Clear" badge indicates no gaps in that category.
         </p>
+      </div>
+
+      {/* Enterprise View */}
+      <div id="enterprise-view" style={sectionStyle}>
+        <h2 style={h2Style}>10. Enterprise View</h2>
+        <p style={pStyle}>
+          A single-page overview showing all processes, systems, data assets, domains, and people
+          across the organization with their relationships.
+        </p>
+
+        <h3 style={h3Style}>Summary Cards</h3>
+        <p style={pStyle}>
+          The top row shows count cards for each entity type. Click any card to expand and see
+          the items in that category. A Relationships card shows the total number of connections.
+        </p>
+
+        <h3 style={h3Style}>Impact Analysis</h3>
+        <ul style={listStyle}>
+          <li>Click any item to select it — the sidebar shows its full dependency chain</li>
+          <li>Unrelated items dim; connected items stay visible</li>
+          <li><strong>Direct Connections</strong> shows immediate neighbors with relationship type</li>
+          <li><strong>Full Impact</strong> shows all transitively connected entities, grouped by type</li>
+          <li>Use this to answer: "If this system goes down, what processes are affected?"</li>
+        </ul>
       </div>
 
       {/* Dashboards */}
       <div id="dashboards" style={sectionStyle}>
-        <h2 style={h2Style}>9. Dashboard</h2>
+        <h2 style={h2Style}>11. Dashboard</h2>
         <p style={pStyle}>
           The dashboard provides an at-a-glance view of your organization's process and data landscape.
         </p>
@@ -367,7 +477,7 @@ export default function HelpPage() {
 
       {/* AI Features */}
       <div id="ai-assistant" style={sectionStyle}>
-        <h2 style={h2Style}>10. AI Features</h2>
+        <h2 style={h2Style}>12. AI Features</h2>
         <p style={pStyle}>
           Procela uses Anthropic's Claude API to provide AI capabilities throughout the platform.
         </p>
@@ -400,9 +510,9 @@ export default function HelpPage() {
 
       {/* Roles & Permissions */}
       <div id="roles" style={sectionStyle}>
-        <h2 style={h2Style}>11. Roles & Permissions</h2>
+        <h2 style={h2Style}>13. Roles & Permissions</h2>
         <p style={pStyle}>
-          Procela uses role-based access control tied to your enterprise identity provider:
+          Procela uses role-based access control. Your role is shown under your name in the header.
         </p>
         <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse', marginTop: 8, marginBottom: 16 }}>
           <thead>
@@ -413,12 +523,11 @@ export default function HelpPage() {
           </thead>
           <tbody>
             {[
-              ['Super Admin', 'Full platform access, manages org settings and integrations'],
-              ['Org Admin', 'Manages their organization and all descendant orgs'],
-              ['Process Owner', 'Create/edit/delete processes in their assigned domain'],
-              ['Data Steward', 'Manage data assets and system connections'],
-              ['Contributor', 'Edit items they are assigned to'],
-              ['Viewer', 'Read-only access to the full catalog'],
+              ['Super Admin', 'Full access to all features and all organizations. Sees Administration section.'],
+              ['Org Admin', 'Manages their assigned organization(s). Sees Administration section.'],
+              ['Editor', 'Full read/write on processes, systems, data assets, and mappings. No admin access.'],
+              ['Contributor', 'Limited write access to processes and data assets. Read-only for systems.'],
+              ['Viewer', 'Read-only access across the catalog. Can export data but cannot create or edit.'],
             ].map(([role, access]) => (
               <tr key={role} style={{ borderBottom: '1px solid var(--color-border)' }}>
                 <td style={{ padding: '8px 12px', fontWeight: 500, whiteSpace: 'nowrap' }}>{role}</td>
@@ -428,17 +537,24 @@ export default function HelpPage() {
           </tbody>
         </table>
 
-        <h3 style={h3Style}>Organization Access Control</h3>
+        <h3 style={h3Style}>What Each Role Sees</h3>
         <ul style={listStyle}>
-          <li>Access is computed from a combination of your role and your org assignment</li>
-          <li>Additional org access can be granted via explicit access grants</li>
-          <li>The "Working in" dropdown in the header shows only the organizations you have access to</li>
+          <li><strong>Sidebar</strong> — the Administration section (Organizations, People, Agents, Systems, Connections, Governance) is only visible to Super Admin and Org Admin</li>
+          <li><strong>Action buttons</strong> — Add, Edit, Delete, and Generate buttons are hidden for Viewers and limited for Contributors</li>
+          <li><strong>Export</strong> — CSV export is available to all roles</li>
+        </ul>
+
+        <h3 style={h3Style}>Organization Access</h3>
+        <ul style={listStyle}>
+          <li>Each user is assigned to one or more organizations</li>
+          <li>Your role applies within your assigned org(s)</li>
+          <li>The "Working in" dropdown shows only organizations you have access to</li>
         </ul>
       </div>
 
       {/* Settings & Security */}
       <div id="settings" style={sectionStyle}>
-        <h2 style={h2Style}>12. Settings & Security</h2>
+        <h2 style={h2Style}>14. Settings & Security</h2>
 
         <h3 style={h3Style}>Authentication</h3>
         <p style={pStyle}>
@@ -466,7 +582,7 @@ export default function HelpPage() {
 
       {/* Import & Export */}
       <div id="import-export" style={sectionStyle}>
-        <h2 style={h2Style}>13. Import & Export</h2>
+        <h2 style={h2Style}>15. Import & Export</h2>
 
         <h3 style={h3Style}>Importing Data</h3>
         <p style={pStyle}>
@@ -488,6 +604,7 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Systems</li>
           <li>Data Assets</li>
+          <li>Data Quality Rules</li>
           <li>Mappings</li>
           <li>Governance Groups</li>
           <li>Governance Roles</li>
@@ -509,7 +626,7 @@ export default function HelpPage() {
 
       {/* FAQ */}
       <div id="faq" style={sectionStyle}>
-        <h2 style={h2Style}>14. Frequently Asked Questions</h2>
+        <h2 style={h2Style}>16. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>Do I need technical knowledge to use Procela?</h3>
         <p style={pStyle}>

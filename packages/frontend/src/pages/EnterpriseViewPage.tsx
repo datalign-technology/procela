@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
+import HelpPopover from '../components/HelpPopover';
 
 // ── Types ──
 
@@ -144,7 +145,14 @@ export default function EnterpriseViewPage() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 20px 0' }}>
         {/* Header */}
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Enterprise View</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Enterprise View</h1>
+            <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
+              See all processes, systems, assets, domains, and people in one place.
+              Click any card to expand, then click an item to run impact analysis — the sidebar
+              shows every entity connected to your selection.
+            </HelpPopover>
+          </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
             Full visibility across processes, systems, data assets, domains, and people.
             Click any item to see its dependencies and impact.
