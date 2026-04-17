@@ -249,8 +249,9 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
         onChange={(e) => onSave(e.target.value)}
         disabled={disabled}
         style={{
-          fontSize: 11, border: 'none', background: 'transparent', cursor: disabled ? 'default' : 'pointer',
-          color: value ? 'var(--color-text)' : 'var(--color-text-muted)', padding: '1px 2px',
+          fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4,
+          background: 'var(--color-surface)', cursor: disabled ? 'default' : 'pointer',
+          color: value ? 'var(--color-text)' : 'var(--color-text-muted)', padding: '2px 6px',
           opacity: disabled ? 0.6 : 1,
         }}
       >
@@ -288,11 +289,18 @@ function DocMultiSelect({ label, selected, options, onSave, disabled, placeholde
           <select
             value=""
             onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
-            style={{ fontSize: 10, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '1px 2px' }}
+            style={{
+              fontSize: 10, border: '1px solid var(--color-border)', borderRadius: 4,
+              background: 'var(--color-surface)', cursor: 'pointer',
+              color: 'var(--color-text-muted)', padding: '2px 6px',
+            }}
           >
             <option value="">{selected.length === 0 ? placeholder : '+ Add...'}</option>
             {available.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
+        )}
+        {!disabled && available.length === 0 && selected.length === 0 && (
+          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 10 }}>No options available</span>
         )}
         {selected.length === 0 && disabled && (
           <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', opacity: 0.6 }}>{placeholder}</span>
@@ -716,7 +724,7 @@ export default function ProcessCatalogPage() {
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
-        apiClient.get<{ success: boolean; data: PersonRef[] }>(`/people${qp}`),
+        apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${qp}`),
       ]);
       setTree(catalogRes.tree || []);
