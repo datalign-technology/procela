@@ -487,6 +487,8 @@ router.get('/:id/columns', (req: Request, res: Response) => {
       dimension: r.dimension, threshold: r.threshold,
       currentScore: r.currentScore, status: r.status,
       lastMeasured: r.lastMeasured, weight: r.weight,
+      scheduleFrequency: r.scheduleFrequency || 'NEVER',
+      nextRunAt: r.nextRunAt || null,
     }));
     return {
       ...col,

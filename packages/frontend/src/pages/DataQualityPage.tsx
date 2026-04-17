@@ -37,6 +37,8 @@ interface SystemRef {
   name: string;
 }
 
+type ScheduleFrequency = 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
+
 interface QualityRule {
   id: string;
   orgId: string;
@@ -50,6 +52,10 @@ interface QualityRule {
   status: string;
   lastMeasured: string | null;
   dataAssetName: string;
+  ruleType?: string;
+  columnName?: string;
+  scheduleFrequency?: ScheduleFrequency;
+  nextRunAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -301,6 +307,41 @@ export default function DataQualityPage() {
     }
   };
 
+  const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState<string | null>(null);
+
+  const handleRunRule = async (rule: QualityRule) => {
+    if (!rule.ruleType) {
+      addToast('error', 'This rule has no ruleType and cannot be executed');
+      return;
+    }
+    setRunningRuleId(rule.id);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: { passRate: number; simulated: boolean } }>(`/data-quality/${rule.id}/run`);
+      const r = res.data;
+      const verdict = r.passRate >= 95 ? 'success' : r.passRate >= 80 ? 'info' : 'error';
+      const sim = r.simulated ? ' (simulated)' : '';
+      addToast(verdict as 'success' | 'info' | 'error', `${rule.name}: ${r.passRate}% pass${sim}`);
+      fetchData();
+    } catch (e) {
+      addToast('error', `${rule.name}: ${e instanceof Error ? e.message : 'run failed'}`);
+    } finally {
+      setRunningRuleId(null);
+    }
+  };
+
+  const handleScheduleChange = async (ruleId: string, freq: ScheduleFrequency) => {
+    try {
+      await apiClient.put(`/data-quality/${ruleId}`, { scheduleFrequency: freq });
+      const label = freq === 'NEVER' ? 'Schedule cleared' : `Scheduled ${freq.toLowerCase()}`;
+      addToast('success', label);
+      setScheduleOpen(null);
+      fetchData();
+    } catch {
+      addToast('error', 'Failed to update schedule');
+    }
+  };
+
   // ── Bulk select handlers ──
   const toggleRuleSelect = (id: string) => {
     setSelectedRuleIds((prev) => {
@@ -352,6 +393,14 @@ export default function DataQualityPage() {
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading...</div>;
   }
+
+  const scheduleLabel = (rule: QualityRule): string => {
+    const freq = rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER'
+      ? `Scheduled ${rule.scheduleFrequency.toLowerCase()}`
+      : 'Manual only';
+    const next = rule.nextRunAt ? `\nNext run: ${new Date(rule.nextRunAt).toLocaleString()}` : '';
+    return `${freq}${next}\nClick to change`;
+  };
 
   // Per-asset aggregate view (used by the Assets tab). Groups rules by
   // dataAssetId and pulls latest run info so the user sees per-asset health
@@ -770,6 +819,7 @@ export default function DataQualityPage() {
                 <th style={thStyle}>Current Score</th>
                 <th style={thStyle}>Weight</th>
                 <th style={thStyle}>Status</th>
+                <th style={thStyle}>Schedule</th>
                 <th style={thStyle}>Last Measured</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
               </tr>
@@ -798,13 +848,64 @@ export default function DataQualityPage() {
                   <td style={tdStyle}>
                     <Badge label={rule.status} colors={STATUS_BADGES[rule.status] || STATUS_BADGES.NOT_MEASURED} />
                   </td>
+                  <td style={{ ...tdStyle, fontSize: 12, position: 'relative' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <IconButton
+                        size="sm"
+                        icon="clock"
+                        label={scheduleLabel(rule)}
+                        onClick={() => setScheduleOpen(scheduleOpen === rule.id ? null : rule.id)}
+                      />
+                      <span style={{ color: rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER' ? 'var(--color-text)' : 'var(--color-text-muted)', fontSize: 11 }}>
+                        {rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER' ? rule.scheduleFrequency.charAt(0) + rule.scheduleFrequency.slice(1).toLowerCase() : 'Manual'}
+                      </span>
+                    </div>
+                    {scheduleOpen === rule.id && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, zIndex: 20,
+                        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
+                        padding: 8, minWidth: 150, fontSize: 12,
+                      }}>
+                        {(['NEVER', 'HOURLY', 'DAILY', 'WEEKLY'] as ScheduleFrequency[]).map((f) => (
+                          <div
+                            key={f}
+                            onClick={() => handleScheduleChange(rule.id, f)}
+                            style={{
+                              padding: '6px 10px', cursor: 'pointer', borderRadius: 4,
+                              fontWeight: rule.scheduleFrequency === f ? 600 : 400,
+                              background: rule.scheduleFrequency === f ? 'var(--color-bg)' : 'transparent',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = rule.scheduleFrequency === f ? 'var(--color-bg)' : 'transparent'; }}
+                          >
+                            {f === 'NEVER' ? 'Manual only' : f.charAt(0) + f.slice(1).toLowerCase()}
+                          </div>
+                        ))}
+                        {rule.nextRunAt && (
+                          <div style={{ padding: '6px 10px', fontSize: 10, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', marginTop: 4 }}>
+                            Next run: {new Date(rule.nextRunAt).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
                     {rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--'}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                      <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(rule)} />
-                      <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(rule.id)} />
+                      {rule.ruleType && (
+                        <IconButton
+                          size="sm"
+                          icon="play"
+                          label={runningRuleId === rule.id ? 'Running\u2026' : 'Run now'}
+                          onClick={() => handleRunRule(rule)}
+                          disabled={runningRuleId !== null}
+                        />
+                      )}
+                      {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(rule)} />}
+                      {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(rule.id)} />}
                     </div>
                   </td>
                 </tr>
