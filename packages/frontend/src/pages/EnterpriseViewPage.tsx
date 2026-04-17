@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
@@ -11,11 +11,6 @@ interface GraphNode {
   label: string;
   status?: string;
   meta: Record<string, any>;
-  // Layout
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
 }
 
 interface GraphEdge {
@@ -37,83 +32,15 @@ interface Summary {
 
 // ── Constants ──
 
-const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: string; label: string }> = {
-  process:      { color: '#2563eb', bg: '#dbeafe', icon: '\u2630', label: 'Process' },
-  system:       { color: '#7c3aed', bg: '#ede9fe', icon: '\u2699', label: 'System' },
-  'data-asset': { color: '#059669', bg: '#d1fae5', icon: '\u26C1', label: 'Data Asset' },
-  person:       { color: '#d97706', bg: '#fef3c7', icon: '\u263B', label: 'Person' },
-  domain:       { color: '#dc2626', bg: '#fee2e2', icon: '\u2637', label: 'Domain' },
+const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: string; label: string; plural: string }> = {
+  process:      { color: '#2563eb', bg: '#dbeafe', icon: '\u2630', label: 'Process', plural: 'Processes' },
+  system:       { color: '#7c3aed', bg: '#ede9fe', icon: '\u2699', label: 'System', plural: 'Systems' },
+  'data-asset': { color: '#059669', bg: '#d1fae5', icon: '\u26C1', label: 'Data Asset', plural: 'Data Assets' },
+  domain:       { color: '#dc2626', bg: '#fee2e2', icon: '\u2637', label: 'Domain', plural: 'Domains' },
+  person:       { color: '#d97706', bg: '#fef3c7', icon: '\u263B', label: 'Person', plural: 'People' },
 };
 
-const EDGE_COLORS: Record<string, string> = {
-  hierarchy: '#94a3b8',
-  'hosted-by': '#7c3aed',
-  'owned-by': '#d97706',
-  mapping: '#2563eb',
-  governs: '#dc2626',
-  lineage: '#059669',
-};
-
-const NODE_RADIUS = 28;
-
-// ── Force layout helpers ──
-
-function initLayout(nodes: GraphNode[], width: number, height: number) {
-  const cx = width / 2;
-  const cy = height / 2;
-  for (const n of nodes) {
-    n.x = cx + (Math.random() - 0.5) * width * 0.6;
-    n.y = cy + (Math.random() - 0.5) * height * 0.6;
-    n.vx = 0;
-    n.vy = 0;
-  }
-}
-
-function runForceIteration(nodes: GraphNode[], edges: GraphEdge[], width: number, height: number) {
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const k = Math.sqrt((width * height) / Math.max(nodes.length, 1));
-  const repulsion = k * 50;
-  const attraction = 0.005;
-  const damping = 0.85;
-
-  // Repulsion
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i], b = nodes[j];
-      let dx = b.x - a.x, dy = b.y - a.y;
-      const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-      const force = repulsion / (dist * dist);
-      const fx = (dx / dist) * force, fy = (dy / dist) * force;
-      a.vx -= fx; a.vy -= fy;
-      b.vx += fx; b.vy += fy;
-    }
-  }
-
-  // Attraction (edges)
-  for (const e of edges) {
-    const a = nodeMap.get(e.source), b = nodeMap.get(e.target);
-    if (!a || !b) continue;
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const force = dist * attraction;
-    const fx = dx * force, fy = dy * force;
-    a.vx += fx; a.vy += fy;
-    b.vx -= fx; b.vy -= fy;
-  }
-
-  // Center gravity
-  const cx = width / 2, cy = height / 2;
-  for (const n of nodes) {
-    n.vx += (cx - n.x) * 0.001;
-    n.vy += (cy - n.y) * 0.001;
-    n.vx *= damping;
-    n.vy *= damping;
-    n.x += n.vx;
-    n.y += n.vy;
-    n.x = Math.max(NODE_RADIUS, Math.min(width - NODE_RADIUS, n.x));
-    n.y = Math.max(NODE_RADIUS, Math.min(height - NODE_RADIUS, n.y));
-  }
-}
+const COLUMN_ORDER: string[] = ['process', 'system', 'data-asset', 'domain', 'person'];
 
 // ── Component ──
 
@@ -124,27 +51,15 @@ export default function EnterpriseViewPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GraphNode | null>(null);
-  const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set(['process', 'system', 'data-asset', 'person', 'domain']));
-  const [filterEdgeTypes, setFilterEdgeTypes] = useState<Set<string>>(new Set(Object.keys(EDGE_COLORS)));
-  const svgRef = useRef<SVGSVGElement>(null);
-  const animRef = useRef<number>(0);
-  const nodesRef = useRef<GraphNode[]>([]);
-  const dragging = useRef<{ nodeId: string; offsetX: number; offsetY: number } | null>(null);
-
-  const WIDTH = 1200;
-  const HEIGHT = 700;
+  const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const res = await apiClient.get<{ success: boolean; data: { nodes: GraphNode[]; edges: GraphEdge[] }; summary: Summary }>(`/enterprise-view${query}`);
-      const data = res.data;
-      if (data) {
-        const gNodes = data.nodes.map((n) => ({ ...n, x: 0, y: 0, vx: 0, vy: 0 }));
-        initLayout(gNodes, WIDTH, HEIGHT);
-        nodesRef.current = gNodes;
-        setNodes(gNodes);
-        setEdges(data.edges || []);
+      if (res.data) {
+        setNodes(res.data.nodes || []);
+        setEdges(res.data.edges || []);
       }
       setSummary(res.summary || null);
     } catch { /* */ }
@@ -153,61 +68,17 @@ export default function EnterpriseViewPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Force simulation
-  useEffect(() => {
-    if (nodes.length === 0) return;
-    let iterations = 0;
-    const maxIterations = 300;
-    function tick() {
-      if (iterations >= maxIterations) return;
-      runForceIteration(nodesRef.current, edges, WIDTH, HEIGHT);
-      setNodes([...nodesRef.current]);
-      iterations++;
-      animRef.current = requestAnimationFrame(tick);
-    }
-    animRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animRef.current);
-  }, [edges, nodes.length]);
+  // Group nodes by type
+  const byType: Record<string, GraphNode[]> = {};
+  for (const col of COLUMN_ORDER) byType[col] = [];
+  for (const n of nodes) {
+    if (byType[n.type]) byType[n.type].push(n);
+  }
 
-  // Drag handlers
-  const handleMouseDown = (e: React.MouseEvent, node: GraphNode) => {
-    e.preventDefault();
-    const svg = svgRef.current;
-    if (!svg) return;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const svgP = pt.matrixTransform(svg.getScreenCTM()?.inverse());
-    dragging.current = { nodeId: node.id, offsetX: svgP.x - node.x, offsetY: svgP.y - node.y };
-  };
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging.current) return;
-    const svg = svgRef.current;
-    if (!svg) return;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const svgP = pt.matrixTransform(svg.getScreenCTM()?.inverse());
-    const n = nodesRef.current.find((n) => n.id === dragging.current!.nodeId);
-    if (n) {
-      n.x = svgP.x - dragging.current.offsetX;
-      n.y = svgP.y - dragging.current.offsetY;
-      n.vx = 0; n.vy = 0;
-      setNodes([...nodesRef.current]);
-    }
-  };
-
-  const handleMouseUp = () => { dragging.current = null; };
-
-  // Filter
-  const visibleNodes = nodes.filter((n) => filterTypes.has(n.type));
-  const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
-  const visibleEdges = edges.filter((e) =>
-    visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target) && filterEdgeTypes.has(e.type)
-  );
-
-  // Impact analysis: find all connected nodes from selected
+  // Impact analysis BFS
   const impactSet = new Set<string>();
-  const impactEdges = new Set<string>();
   if (selected) {
     const queue = [selected.id];
     impactSet.add(selected.id);
@@ -215,160 +86,226 @@ export default function EnterpriseViewPage() {
       const current = queue.shift()!;
       for (const e of edges) {
         if (e.source === current && !impactSet.has(e.target)) {
-          impactSet.add(e.target); impactEdges.add(e.id); queue.push(e.target);
+          impactSet.add(e.target); queue.push(e.target);
         }
         if (e.target === current && !impactSet.has(e.source)) {
-          impactSet.add(e.source); impactEdges.add(e.id); queue.push(e.source);
+          impactSet.add(e.source); queue.push(e.source);
         }
       }
     }
   }
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  const toggleFilter = (type: string) => {
-    setFilterTypes((prev) => {
+  // Group impacted nodes by type for the sidebar
+  const impactByType: Record<string, GraphNode[]> = {};
+  if (selected) {
+    for (const id of impactSet) {
+      if (id === selected.id) continue;
+      const n = nodeMap.get(id);
+      if (!n) continue;
+      if (!impactByType[n.type]) impactByType[n.type] = [];
+      impactByType[n.type].push(n);
+    }
+  }
+
+  // Direct connections for the selected node
+  const directEdges = selected
+    ? edges.filter((e) => e.source === selected.id || e.target === selected.id)
+    : [];
+
+  const toggleCol = (type: string) => {
+    setExpandedCols((prev) => {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type); else next.add(type);
       return next;
     });
   };
 
-  const toggleEdgeFilter = (type: string) => {
-    setFilterEdgeTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type); else next.add(type);
-      return next;
-    });
+  const selectNode = (n: GraphNode) => {
+    setSelected((prev) => prev?.id === n.id ? null : n);
   };
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading enterprise view...</div>;
   }
 
+  const cardStyle = (type: string, count: number): React.CSSProperties => {
+    const cfg = TYPE_CONFIG[type];
+    return {
+      flex: 1, minWidth: 140, padding: '14px 16px', borderRadius: 'var(--radius-md)',
+      background: 'var(--color-surface)', border: `1px solid var(--color-border)`,
+      borderLeft: `4px solid ${cfg.color}`,
+      cursor: count > 0 ? 'pointer' : 'default',
+    };
+  };
+
   return (
     <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 140px)' }}>
-      {/* Main graph area */}
-      <div style={{ flex: 1, position: 'relative', background: '#fafbfc', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-        {/* Legend / Filters */}
-        <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {Object.entries(TYPE_CONFIG).map(([type, cfg]) => (
-            <button key={type}
-              onClick={() => toggleFilter(type)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px',
-                borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                background: filterTypes.has(type) ? cfg.bg : '#f1f5f9',
-                color: filterTypes.has(type) ? cfg.color : '#94a3b8',
-                border: `1px solid ${filterTypes.has(type) ? cfg.color + '44' : '#e2e8f0'}`,
-                opacity: filterTypes.has(type) ? 1 : 0.5,
-              }}
-            >
-              <span>{cfg.icon}</span> {cfg.label}
-            </button>
-          ))}
+      {/* Main content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 20px 0' }}>
+        {/* Header */}
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>Enterprise View</h1>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            Full visibility across processes, systems, data assets, domains, and people.
+            Click any item to see its dependencies and impact.
+          </p>
         </div>
 
-        {/* Edge type filters */}
-        <div style={{ position: 'absolute', top: 48, left: 12, zIndex: 10, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {Object.entries(EDGE_COLORS).map(([type, color]) => (
-            <button key={type}
-              onClick={() => toggleEdgeFilter(type)}
-              style={{
-                padding: '2px 8px', borderRadius: 10, fontSize: 9, fontWeight: 500,
-                cursor: 'pointer', border: '1px solid #e2e8f0',
-                background: filterEdgeTypes.has(type) ? color + '18' : '#f8fafc',
-                color: filterEdgeTypes.has(type) ? color : '#94a3b8',
-                opacity: filterEdgeTypes.has(type) ? 1 : 0.4,
-              }}
-            >
-              {type.replace('-', ' ')}
-            </button>
-          ))}
-        </div>
-
-        {/* Summary stats */}
+        {/* Summary cards */}
         {summary && (
-          <div style={{ position: 'absolute', bottom: 12, left: 12, zIndex: 10, display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-muted)' }}>
-            <span>{summary.processes} processes</span>
-            <span>{summary.systems} systems</span>
-            <span>{summary.dataAssets} assets</span>
-            <span>{summary.domains} domains</span>
-            <span>{summary.people} people</span>
-            <span>{summary.edges} relationships</span>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+            {COLUMN_ORDER.map((type) => {
+              const cfg = TYPE_CONFIG[type];
+              const count = byType[type]?.length || 0;
+              const isOpen = expandedCols.has(type);
+              return (
+                <div key={type} style={cardStyle(type, count)}
+                  onClick={() => count > 0 && toggleCol(type)}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 24, fontWeight: 700, color: cfg.color }}>{count}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>{cfg.plural}</div>
+                    </div>
+                    <span style={{ fontSize: 20, opacity: 0.4 }}>{cfg.icon}</span>
+                  </div>
+                  {count > 0 && (
+                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                      {isOpen ? '\u25BC Collapse' : '\u25B6 Expand to view'}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {/* Relationships card */}
+            <div style={{ flex: 1, minWidth: 140, padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderLeft: '4px solid #64748b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#64748b' }}>{summary.edges}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>Relationships</div>
+                </div>
+                <span style={{ fontSize: 20, opacity: 0.4 }}>{'\u2194'}</span>
+              </div>
+            </div>
           </div>
         )}
 
-        <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
-          style={{ cursor: dragging.current ? 'grabbing' : 'default' }}>
-          <defs>
-            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-              <polygon points="0 0, 8 3, 0 6" fill="#94a3b8" />
-            </marker>
-          </defs>
-
-          {/* Edges */}
-          {visibleEdges.map((e) => {
-            const s = nodeMap.get(e.source);
-            const t = nodeMap.get(e.target);
-            if (!s || !t) return null;
-            const isHighlighted = selected && impactEdges.has(e.id);
-            const isDimmed = selected && !impactEdges.has(e.id);
-            return (
-              <line key={e.id}
-                x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                stroke={EDGE_COLORS[e.type] || '#cbd5e1'}
-                strokeWidth={isHighlighted ? 2.5 : 1}
-                strokeOpacity={isDimmed ? 0.1 : isHighlighted ? 1 : 0.35}
-                markerEnd={e.type === 'lineage' ? 'url(#arrowhead)' : undefined}
-              />
-            );
-          })}
-
-          {/* Nodes */}
-          {visibleNodes.map((n) => {
-            const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.process;
-            const isSelected = selected?.id === n.id;
-            const isImpacted = selected && impactSet.has(n.id);
-            const isDimmed = selected && !impactSet.has(n.id);
-            const statusColor = n.status ? getStatusColor(n.status) : null;
-            return (
-              <g key={n.id}
-                style={{ cursor: 'grab' }}
-                onMouseDown={(e) => handleMouseDown(e as any, n)}
-                onClick={() => setSelected(isSelected ? null : n)}
+        {/* Grouped columns — each entity type as an expandable section */}
+        {COLUMN_ORDER.map((type) => {
+          const cfg = TYPE_CONFIG[type];
+          const items = byType[type] || [];
+          const isOpen = expandedCols.has(type);
+          if (items.length === 0) return null;
+          return (
+            <div key={type} style={{ marginBottom: 16 }}>
+              {/* Section header */}
+              <div
+                onClick={() => toggleCol(type)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+                  background: cfg.bg, borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', userSelect: 'none',
+                  border: `1px solid ${cfg.color}22`,
+                }}
               >
-                {/* Glow for selected */}
-                {isSelected && (
-                  <circle cx={n.x} cy={n.y} r={NODE_RADIUS + 6} fill="none" stroke={cfg.color} strokeWidth={2} strokeOpacity={0.4} />
-                )}
-                {/* Node circle */}
-                <circle cx={n.x} cy={n.y} r={NODE_RADIUS}
-                  fill={cfg.bg} stroke={cfg.color}
-                  strokeWidth={isImpacted ? 2.5 : 1.5}
-                  opacity={isDimmed ? 0.2 : 1}
-                />
-                {/* Status dot */}
-                {statusColor && (
-                  <circle cx={n.x + NODE_RADIUS * 0.65} cy={n.y - NODE_RADIUS * 0.65} r={5}
-                    fill={statusColor.bg} stroke={statusColor.color} strokeWidth={1.5}
-                    opacity={isDimmed ? 0.2 : 1}
-                  />
-                )}
-                {/* Icon */}
-                <text x={n.x} y={n.y - 4} textAnchor="middle" fontSize={14}
-                  opacity={isDimmed ? 0.2 : 1}>
-                  {cfg.icon}
-                </text>
-                {/* Label */}
-                <text x={n.x} y={n.y + 12} textAnchor="middle" fontSize={8} fontWeight={500}
-                  fill={cfg.color} opacity={isDimmed ? 0.2 : 1}>
-                  {n.label.length > 14 ? n.label.substring(0, 13) + '\u2026' : n.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+                <span style={{ fontSize: 10, color: cfg.color }}>{isOpen ? '\u25BC' : '\u25B6'}</span>
+                <span style={{ fontSize: 16 }}>{cfg.icon}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: cfg.color }}>{cfg.plural}</span>
+                <span style={{ fontSize: 12, color: cfg.color, opacity: 0.6, marginLeft: 4 }}>({items.length})</span>
+              </div>
+
+              {/* Items */}
+              {isOpen && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8, padding: '10px 0 0 0' }}>
+                  {items.map((n) => {
+                    const isSelected = selected?.id === n.id;
+                    const isImpacted = selected && impactSet.has(n.id) && !isSelected;
+                    const isDimmed = selected && !impactSet.has(n.id);
+                    const statusColor = n.status ? getStatusColor(n.status) : null;
+                    return (
+                      <div key={n.id}
+                        onClick={() => selectNode(n)}
+                        style={{
+                          display: 'flex', alignItems: 'flex-start', gap: 10,
+                          padding: '10px 12px', borderRadius: 'var(--radius-md)',
+                          background: isSelected ? cfg.bg : 'var(--color-surface)',
+                          border: `1px solid ${isSelected ? cfg.color : isImpacted ? cfg.color + '66' : 'var(--color-border)'}`,
+                          cursor: 'pointer', opacity: isDimmed ? 0.35 : 1,
+                          boxShadow: isSelected ? `0 0 0 2px ${cfg.color}33` : 'none',
+                          transition: 'opacity 0.15s, border-color 0.15s',
+                        }}
+                        onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = cfg.color + '88'; }}
+                        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = isImpacted ? cfg.color + '66' : 'var(--color-border)'; }}
+                      >
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                          background: cfg.bg, color: cfg.color, fontSize: 14,
+                          border: `1.5px solid ${cfg.color}44`,
+                        }}>
+                          {cfg.icon}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {n.label}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+                            {n.meta.description || n.meta.level || n.meta.systemType || n.meta.email || '\u2014'}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                            {statusColor && (
+                              <span style={{
+                                fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                                background: statusColor.bg, color: statusColor.color,
+                              }}>
+                                {(n.status || '').replace('_', ' ')}
+                              </span>
+                            )}
+                            {n.meta.governanceTier && (
+                              <span style={{
+                                fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                                background: n.meta.governanceTier === 'GOLD' ? '#fef3c7' : n.meta.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa',
+                                color: n.meta.governanceTier === 'GOLD' ? '#92400e' : n.meta.governanceTier === 'SILVER' ? '#475569' : '#9a3412',
+                              }}>
+                                {n.meta.governanceTier}
+                              </span>
+                            )}
+                            {n.meta.healthScore != null && (
+                              <span style={{
+                                fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                                background: n.meta.healthScore >= 80 ? '#d1fae5' : n.meta.healthScore >= 50 ? '#fef3c7' : '#fee2e2',
+                                color: n.meta.healthScore >= 80 ? '#065f46' : n.meta.healthScore >= 50 ? '#92400e' : '#991b1b',
+                              }}>
+                                {n.meta.healthScore}% health
+                              </span>
+                            )}
+                            {n.meta.rulesCount > 0 && (
+                              <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+                                {n.meta.rulesCount} rules
+                              </span>
+                            )}
+                            {n.meta.role && (
+                              <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+                                {n.meta.role.replace('_', ' ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {nodes.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 14 }}>
+              No entities found. Create processes, systems, and data assets to see the enterprise view.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Sidebar — impact analysis panel */}
@@ -378,46 +315,46 @@ export default function EnterpriseViewPage() {
       }}>
         {!selected ? (
           <div>
-            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Enterprise View</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Impact Analysis</h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-              Click any node in the graph to see its dependencies, impact, and details.
-              Drag nodes to rearrange. Use the legend to filter entity types.
+              Select any item to see its full dependency chain across the organization.
             </p>
-            <div style={{ marginTop: 20 }}>
-              <h4 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Relationship Types</h4>
-              {Object.entries(EDGE_COLORS).map(([type, color]) => (
-                <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12 }}>
-                  <div style={{ width: 20, height: 2, background: color, borderRadius: 1 }} />
-                  <span style={{ color: 'var(--color-text-secondary)' }}>{type.replace('-', ' ')}</span>
-                </div>
-              ))}
+            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginTop: 8 }}>
+              Use this to understand the impact of changes — for example, if a system is being
+              deprecated, you can see which processes, assets, and people are affected.
+            </p>
+            <div style={{ marginTop: 20, padding: 12, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', fontSize: 11, color: 'var(--color-text-muted)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 12 }}>How to use</div>
+              <div style={{ marginBottom: 4 }}>1. Expand a category by clicking a summary card</div>
+              <div style={{ marginBottom: 4 }}>2. Click any item to select it</div>
+              <div style={{ marginBottom: 4 }}>3. Connected items stay visible; unrelated items dim</div>
+              <div>4. Browse the impact list here to see all dependencies</div>
             </div>
           </div>
         ) : (
           <div>
+            {/* Selected node header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 28, height: 28, borderRadius: '50%',
-                    background: TYPE_CONFIG[selected.type]?.bg,
-                    color: TYPE_CONFIG[selected.type]?.color,
-                    fontSize: 14,
-                  }}>
-                    {TYPE_CONFIG[selected.type]?.icon}
-                  </span>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{selected.label}</div>
-                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-                      {TYPE_CONFIG[selected.type]?.label}
-                    </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: TYPE_CONFIG[selected.type]?.bg,
+                  color: TYPE_CONFIG[selected.type]?.color,
+                  fontSize: 14,
+                }}>
+                  {TYPE_CONFIG[selected.type]?.icon}
+                </span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{selected.label}</div>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                    {TYPE_CONFIG[selected.type]?.label}
                   </div>
                 </div>
               </div>
               <button onClick={() => setSelected(null)}
                 style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
-                Close
+                {'\u2715'}
               </button>
             </div>
 
@@ -435,16 +372,18 @@ export default function EnterpriseViewPage() {
               </div>
             )}
 
-            {/* Meta details */}
+            {/* Description */}
             {selected.meta.description && (
               <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
                 {selected.meta.description}
               </p>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+
+            {/* Meta details */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
               {Object.entries(selected.meta).filter(([k]) => k !== 'description').map(([k, v]) => (
                 v != null && v !== '' ? (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderBottom: '1px solid var(--color-border)' }}>
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '4px 0', borderBottom: '1px solid var(--color-border)' }}>
                     <span style={{ color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>{k.replace(/([A-Z])/g, ' $1')}</span>
                     <span style={{ fontWeight: 500, maxWidth: 160, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(v)}</span>
                   </div>
@@ -452,52 +391,86 @@ export default function EnterpriseViewPage() {
               ))}
             </div>
 
-            {/* Impact analysis */}
-            <h4 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-              Impact Analysis ({impactSet.size - 1} connected)
+            {/* Direct connections */}
+            {directEdges.length > 0 && (
+              <>
+                <h4 style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                  Direct Connections ({directEdges.length})
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
+                  {directEdges.map((e) => {
+                    const otherId = e.source === selected.id ? e.target : e.source;
+                    const other = nodeMap.get(otherId);
+                    if (!other) return null;
+                    const cfg = TYPE_CONFIG[other.type] || TYPE_CONFIG.process;
+                    const direction = e.source === selected.id ? '\u2192' : '\u2190';
+                    return (
+                      <div key={e.id}
+                        onClick={() => setSelected(other)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px',
+                          borderRadius: 4, cursor: 'pointer', fontSize: 12,
+                          background: 'var(--color-bg)',
+                        }}
+                        onMouseEnter={(ev) => { ev.currentTarget.style.background = cfg.bg; }}
+                        onMouseLeave={(ev) => { ev.currentTarget.style.background = 'var(--color-bg)'; }}
+                      >
+                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{direction}</span>
+                        <span style={{ fontSize: 11 }}>{cfg.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{other.label}</div>
+                          <div style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{e.label}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Full impact by type */}
+            <h4 style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Full Impact ({impactSet.size - 1} entities)
             </h4>
             {impactSet.size <= 1 ? (
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No dependencies found.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {[...impactSet].filter((id) => id !== selected.id).map((id) => {
-                  const n = nodeMap.get(id);
-                  if (!n) return null;
-                  const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.process;
-                  // Find the edge connecting to this node
-                  const connectingEdge = edges.find((e) =>
-                    (e.source === selected.id && e.target === id) ||
-                    (e.target === selected.id && e.source === id) ||
-                    impactEdges.has(e.id) && (e.source === id || e.target === id)
-                  );
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {COLUMN_ORDER.map((type) => {
+                  const items = impactByType[type];
+                  if (!items || items.length === 0) return null;
+                  const cfg = TYPE_CONFIG[type];
                   return (
-                    <div key={id}
-                      onClick={() => setSelected(n)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
-                        borderRadius: 4, cursor: 'pointer', fontSize: 12,
-                        background: 'var(--color-bg)',
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = cfg.bg; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    >
-                      <span style={{ fontSize: 12 }}>{cfg.icon}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
-                        <div style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-                          {cfg.label}
-                          {connectingEdge && <span> &middot; {connectingEdge.label}</span>}
-                        </div>
+                    <div key={type}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: cfg.color, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span>{cfg.icon}</span> {cfg.plural} ({items.length})
                       </div>
-                      {n.status && (
-                        <span style={{
-                          fontSize: 8, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                          background: getStatusColor(n.status).bg,
-                          color: getStatusColor(n.status).color,
-                        }}>
-                          {n.status.replace('_', ' ')}
-                        </span>
-                      )}
+                      {items.map((n) => (
+                        <div key={n.id}
+                          onClick={() => setSelected(n)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
+                            borderRadius: 4, cursor: 'pointer', fontSize: 12,
+                            borderLeft: `3px solid ${cfg.color}44`,
+                            marginBottom: 2,
+                          }}
+                          onMouseEnter={(ev) => { ev.currentTarget.style.background = 'var(--color-bg)'; }}
+                          onMouseLeave={(ev) => { ev.currentTarget.style.background = ''; }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
+                          </div>
+                          {n.status && (
+                            <span style={{
+                              fontSize: 8, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+                              background: getStatusColor(n.status).bg,
+                              color: getStatusColor(n.status).color,
+                            }}>
+                              {n.status.replace('_', ' ')}
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   );
                 })}
