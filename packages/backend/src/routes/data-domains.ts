@@ -15,14 +15,23 @@ export interface StoredDataDomain {
   ownerId: string | null;       // personId of the Data Owner
   stewardIds: string[];          // personIds of Data Stewards
   dataAssetIds: string[];        // linked data asset IDs
-  status: 'ACTIVE' | 'DRAFT';
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export const dataDomains: StoredDataDomain[] = loadStore<StoredDataDomain>('dataDomains');
 
-const VALID_STATUSES = ['ACTIVE', 'DRAFT'];
+const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+const DOMAIN_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const DOMAIN_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 function enrichDomain(domain: StoredDataDomain) {
   const owner = domain.ownerId ? people.find((p) => p.id === domain.ownerId) : null;
@@ -140,12 +149,37 @@ router.put('/:id', (req: Request, res: Response) => {
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
   const { name, description, ownerId, stewardIds, dataAssetIds, status } = req.body;
+
+  // Block field edits on locked statuses (status-only and dataAssetIds changes still allowed)
+  const hasFieldEdits = name !== undefined || description !== undefined
+    || ownerId !== undefined || stewardIds !== undefined;
+  if (hasFieldEdits && DOMAIN_LOCKED.has(domain.status)) {
+    res.status(403).json({
+      success: false,
+      error: `Cannot edit "${domain.name}" — it is currently ${domain.status.replace('_', ' ')}. Change its status to Draft first.`,
+    });
+    return;
+  }
+
   if (name !== undefined) domain.name = name;
   if (description !== undefined) domain.description = description;
   if (ownerId !== undefined) domain.ownerId = ownerId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) domain.stewardIds = stewardIds;
   if (dataAssetIds !== undefined && Array.isArray(dataAssetIds)) domain.dataAssetIds = dataAssetIds;
-  if (status !== undefined && VALID_STATUSES.includes(status)) domain.status = status;
+
+  // Validate status transition
+  if (status !== undefined && status !== domain.status) {
+    const allowed = DOMAIN_TRANSITIONS[domain.status] || [];
+    if (!allowed.includes(status)) {
+      res.status(400).json({
+        success: false,
+        error: `Cannot transition from ${domain.status.replace('_', ' ')} to ${status.replace('_', ' ')}. Valid transitions: ${allowed.map((s: string) => s.replace('_', ' ')).join(', ') || 'none'}.`,
+      });
+      return;
+    }
+    domain.status = status;
+  }
+
   domain.updatedAt = new Date().toISOString();
   saveStore('dataDomains', dataDomains);
 

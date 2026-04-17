@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import { errorToast } from '../lib/errorToast';
+import { getStatusColor } from '../lib/statusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -20,7 +21,7 @@ interface DataDomain {
   stewards: { id: string; name: string }[];
   dataAssetIds: string[];
   assets: { id: string; name: string }[];
-  status: 'ACTIVE' | 'DRAFT';
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -71,10 +72,20 @@ const tdStyle: React.CSSProperties = {
 interface FormData {
   name: string;
   description: string;
-  status: 'ACTIVE' | 'DRAFT';
+  status: string;
 }
 
 const emptyForm: FormData = { name: '', description: '', status: 'DRAFT' };
+
+const DOMAIN_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const DOMAIN_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
@@ -277,14 +288,23 @@ export default function DataDomainsPage() {
     }
   };
 
-  const statusBadge = (status: string): React.CSSProperties => {
-    const c = status === 'ACTIVE'
-      ? { bg: '#d1f0eb', color: '#0f4f46' }
-      : { bg: '#f1f5f9', color: '#64748b' };
+  const statusBadgeStyle = (status: string): React.CSSProperties => {
+    const c = getStatusColor(status);
     return {
       display: 'inline-block', padding: '2px 8px', borderRadius: 4,
       fontSize: 11, fontWeight: 600, background: c.bg, color: c.color,
     };
+  };
+
+  const handleStatusChange = async (domainId: string, newStatus: string) => {
+    try {
+      await apiClient.put(`/data-domains/${domainId}`, { status: newStatus });
+      addToast('success', `Status changed to ${newStatus.replace('_', ' ')}`);
+      fetchData();
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Failed to update status';
+      addToast('error', msg);
+    }
   };
 
   return (
@@ -440,13 +460,15 @@ export default function DataDomainsPage() {
                 placeholder="e.g. Customer Data, Financial Data"
               />
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
-              <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'ACTIVE' | 'DRAFT' })}>
-                <option value="DRAFT">Draft</option>
-                <option value="ACTIVE">Active</option>
-              </select>
-            </div>
+            {!editingId && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
+                <select style={selectStyle} value="DRAFT" disabled>
+                  <option value="DRAFT">Draft</option>
+                </select>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2, display: 'block' }}>New domains start as Draft</span>
+              </div>
+            )}
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input
@@ -592,14 +614,27 @@ export default function DataDomainsPage() {
                       : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
                     }
                   </td>
-                  <td style={tdStyle} onClick={() => openDetail(domain)}>
-                    <span style={statusBadge(domain.status)}>{domain.status}</span>
+                  <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={domain.status}
+                      onChange={(e) => { if (e.target.value !== domain.status) handleStatusChange(domain.id, e.target.value); }}
+                      style={{ ...statusBadgeStyle(domain.status), border: 'none', cursor: 'pointer', appearance: 'auto' as any, paddingRight: 16 }}
+                    >
+                      <option value={domain.status}>{domain.status.replace('_', ' ')}</option>
+                      {(DOMAIN_TRANSITIONS[domain.status] || []).map((s) => (
+                        <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                      ))}
+                    </select>
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                       <IconButton size="sm" icon="eye" label="Details" onClick={() => openDetail(domain)} />
-                      <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
-                      <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(domain.id)} />
+                      {!DOMAIN_LOCKED.has(domain.status) && (
+                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
+                      )}
+                      {!DOMAIN_LOCKED.has(domain.status) && (
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(domain.id)} />
+                      )}
                     </div>
                   </td>
                 </tr>

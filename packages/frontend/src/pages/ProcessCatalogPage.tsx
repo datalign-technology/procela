@@ -70,8 +70,17 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
 import { getStatusColor } from '@/lib/statusBadge';
 
 const STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
-// Use the shared status palette so DRAFT/ACTIVE/etc. match the rest of the app.
 const statusColors = Object.fromEntries(STATUSES.map((s) => [s, getStatusColor(s)]));
+
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const LOCKED_STATUSES = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
@@ -146,14 +155,16 @@ function findNodeInTree(nodes: ProcessNode[], id: string): ProcessNode | null {
 
 // ── Inline Edit ──
 
-function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, placeholder = 'Click to edit...' }: {
-  value: string; onSave: (v: string) => void; fontSize?: number; fontWeight?: number; placeholder?: string;
+function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, placeholder = 'Click to edit...', disabled = false }: {
+  value: string; onSave: (v: string) => void; fontSize?: number; fontWeight?: number; placeholder?: string; disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  if (!editing) {
+  if (!editing || disabled) {
     return (
-      <span onClick={() => { setDraft(value); setEditing(true); }} style={{ cursor: 'pointer', fontSize, fontWeight }} title="Click to edit">
+      <span onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}
+        style={{ cursor: disabled ? 'default' : 'pointer', fontSize, fontWeight, opacity: disabled ? 0.7 : 1 }}
+        title={disabled ? 'Locked — change status to Draft to edit' : 'Click to edit'}>
         {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{placeholder}</span>}
       </span>
     );
@@ -250,6 +261,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   const config = LEVEL_CONFIG[node.level];
   const validChildren = (validChildrenMap[node.level] || []) as NodeLevel[];
   const canAddChildren = validChildren.length > 0;
+  const isLocked = LOCKED_STATUSES.has(node.status);
 
   // Completeness check for value streams
   const completeness = node.level === 'VALUE_STREAM' ? hasRequiredPath(node) : null;
@@ -336,9 +348,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
 
         {/* Name + Description */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <InlineEdit value={node.name} onSave={(name) => onUpdate(node.id, { name })} fontSize={node.level === 'VALUE_STREAM' ? 15 : 13} fontWeight={node.level === 'VALUE_STREAM' || node.level === 'PROCESS' ? 600 : 500} />
+          <InlineEdit value={node.name} onSave={(name) => onUpdate(node.id, { name })} fontSize={node.level === 'VALUE_STREAM' ? 15 : 13} fontWeight={node.level === 'VALUE_STREAM' || node.level === 'PROCESS' ? 600 : 500} disabled={isLocked} />
           <div style={{ marginTop: 1 }}>
-            <InlineEdit value={node.description} onSave={(description) => onUpdate(node.id, { description })} fontSize={11} placeholder="Add description..." />
+            <InlineEdit value={node.description} onSave={(description) => onUpdate(node.id, { description })} fontSize={11} placeholder="Add description..." disabled={isLocked} />
           </div>
           {/* Guided prompt for missing required children */}
           {warning && (
@@ -398,21 +410,18 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
         ) : (
           <select value={node.status} onChange={(e) => {
               if (e.target.value === node.status) return;
-              if ((e.target.value === 'ACTIVE' || e.target.value === 'APPROVED') && !canBeActive) {
-                alert(`Cannot set to ${e.target.value}. ${node.level === 'VALUE_STREAM' ? 'Value stream needs Process + Activity.' : 'Process needs at least one Activity.'}`);
-                return;
-              }
               setPendingStatus(e.target.value);
             }}
             style={{ ...inputStyle, width: 'auto', fontSize: 10, padding: '1px 4px',
               background: statusColors[node.status]?.bg || '#f1f5f9',
               color: statusColors[node.status]?.color || '#64748b', fontWeight: 600, border: 'none',
             }}>
-            {STATUSES.map((s) => {
+            <option value={node.status}>{node.status.replace('_', ' ')}</option>
+            {(STATUS_TRANSITIONS[node.status] || []).map((s) => {
               const blocked = (s === 'ACTIVE' || s === 'APPROVED') && !canBeActive;
               return (
                 <option key={s} value={s} disabled={blocked}>
-                  {s}{blocked ? ' (incomplete)' : ''}
+                  {s.replace('_', ' ')}{blocked ? ' (incomplete)' : ''}
                 </option>
               );
             })}
@@ -466,7 +475,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           <button style={{ ...btnIcon, fontSize: 9, color: '#6366f1' }} onClick={() => setShowTagInput(true)} title="Add tag">tag+</button>
         )}
 
-        {canAddChildren && (
+        {canAddChildren && !isLocked && (
           guidedLevel ? (
             <button style={{
               background: LEVEL_CONFIG[guidedLevel].bg, color: LEVEL_CONFIG[guidedLevel].color,
@@ -483,7 +492,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           )
         )}
         <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onShowHistory(node.id)} title="Version History">Hist</button>
-        <button style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete">&times;</button>
+        {!isLocked && (
+          <button style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete">&times;</button>
+        )}
       </div>
 
       {/* Children */}

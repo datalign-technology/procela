@@ -8,6 +8,21 @@ import { createNotification } from './notifications';
 
 const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
 
+// ── Status state machine ────────────────────────────────────────────────
+// Maps each status to the set of statuses it can transition to.
+const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'] as const;
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+// Statuses where field edits (name, description, owner, etc.) are locked.
+// Status-only changes are still allowed.
+const LOCKED_STATUSES = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // UNIVERSAL PROCESS HIERARCHY
 //
@@ -92,6 +107,7 @@ export interface ProcessVersion {
 
 // ── Persistent stores ──
 
+export { VALID_TRANSITIONS, LOCKED_STATUSES };
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
@@ -400,14 +416,34 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     node.parentId = parentId;
   }
 
+  // Block field edits when the node is in a locked status.
+  // Status-only updates are still allowed (handled below).
+  const hasFieldEdits = name !== undefined || description !== undefined
+    || orderIndex !== undefined || orgIds !== undefined || ownerId !== undefined;
+  if (hasFieldEdits && LOCKED_STATUSES.has(node.status)) {
+    res.status(403).json({
+      success: false,
+      error: `Cannot edit "${node.name}" — it is currently ${node.status.replace('_', ' ')}. Change its status to Draft first.`,
+    });
+    return;
+  }
+
   if (name !== undefined) node.name = name;
   if (description !== undefined) node.description = description;
   if (orderIndex !== undefined) node.orderIndex = orderIndex;
   if (orgIds !== undefined) node.orgIds = orgIds;
   if (ownerId !== undefined) node.ownerId = ownerId;
 
-  // Enforce ACTIVE/APPROVED status only on complete paths
+  // Validate status transition against the state machine
   if (status !== undefined && status !== node.status) {
+    const allowed = VALID_TRANSITIONS[node.status] || [];
+    if (!allowed.includes(status)) {
+      res.status(400).json({
+        success: false,
+        error: `Cannot transition from ${node.status.replace('_', ' ')} to ${status.replace('_', ' ')}. Valid transitions: ${allowed.map((s: string) => s.replace('_', ' ')).join(', ') || 'none'}.`,
+      });
+      return;
+    }
     // Status is changing — create a version snapshot before applying the change
     const existingVersions = processVersions.filter((v) => v.nodeId === node.id);
     const nextVersion = existingVersions.length > 0
