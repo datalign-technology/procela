@@ -243,8 +243,26 @@ export default function PersonDetailPage() {
         <div style={sectionTitleStyle}>Identity</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Application role</div>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>{p.role}</div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 }}>Application role</div>
+            <select
+              value={p.role}
+              onChange={async (e) => {
+                try {
+                  await apiClient.put(`/people/${p.id}`, { role: e.target.value });
+                  successToast(`Role changed to ${e.target.value.replace('_', ' ')}`);
+                  fetch360();
+                } catch (err) { errorToast(err, 'Failed to change role'); }
+              }}
+              style={{
+                fontSize: 13, fontWeight: 500, border: '1px solid var(--color-border)',
+                borderRadius: 4, padding: '3px 8px', background: 'var(--color-surface)',
+                cursor: 'pointer',
+              }}
+            >
+              {['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'].map((r) => (
+                <option key={r} value={r}>{r.replace('_', ' ')}</option>
+              ))}
+            </select>
           </div>
           <div>
             <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Email</div>
