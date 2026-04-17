@@ -21,41 +21,31 @@ type NavSection = { label: string | null; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
-    label: null, // standalone top item
+    label: null,
     items: [
       { to: '/', label: 'Dashboard', icon: '\u25A3' },
     ],
   },
   {
-    label: 'Define',
+    label: 'Workspace',
+    items: [
+      { to: '/processes', label: 'Processes', icon: '\u2630' },
+      { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
+      { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
+      { to: '/mappings', label: 'Mappings', icon: '\u2194' },
+      { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
+      { to: '/reports', label: 'Reports', icon: '\u26A0' },
+    ],
+  },
+  {
+    label: 'Administration',
     items: [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/people', label: 'People', icon: '\u263B' },
       { to: '/agents', label: 'Agents', icon: '\u2734' },
-      { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/systems', label: 'Systems', icon: '\u2699' },
-      { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
       { to: '/connections', label: 'Connections', icon: '\u26A1' },
-    ],
-  },
-  {
-    label: 'Govern',
-    items: [
       { to: '/governance', label: 'Governance', icon: '\u2637' },
-      { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
-    ],
-  },
-  {
-    label: 'Connect',
-    items: [
-      { to: '/mappings', label: 'Mappings', icon: '\u2194' },
-      { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
-    ],
-  },
-  {
-    label: 'Analyze',
-    items: [
-      { to: '/reports', label: 'Reports', icon: '\u26A0' },
     ],
   },
 ];
