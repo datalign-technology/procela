@@ -89,6 +89,21 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 };
 const LOCKED_STATUSES = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
+const COMPLIANCE_OPTIONS = [
+  'SOX', 'HIPAA', 'GDPR', 'PCI-DSS', 'CCPA', 'FERPA', 'FISMA', 'NERC CIP',
+  'ISO 27001', 'SOC 2', 'NIST', 'GLBA', 'FERC', 'EPA', 'OSHA', 'ADA', 'Other',
+];
+
+const ROLE_OPTIONS = [
+  'Process Owner', 'Process Manager', 'Business Analyst', 'Data Analyst',
+  'System Administrator', 'End User', 'Supervisor', 'Technician',
+  'Customer Service Rep', 'Finance Analyst', 'Compliance Officer',
+  'Operations Manager', 'IT Support', 'Quality Analyst', 'Other',
+];
+
+interface PersonRef { id: string; name: string; }
+interface DataAssetRef { id: string; name: string; }
+
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '4px 8px', fontSize: 13, background: 'var(--color-surface)',
@@ -221,6 +236,72 @@ function DocField({ label, value, onSave, disabled, placeholder }: {
   );
 }
 
+// ── Documentation Dropdown (single select from predefined list) ──
+
+function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
+  label: string; value: string; options: string[]; onSave: (v: string) => void; disabled: boolean; placeholder: string;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
+      <select
+        value={value}
+        onChange={(e) => onSave(e.target.value)}
+        disabled={disabled}
+        style={{
+          fontSize: 11, border: 'none', background: 'transparent', cursor: disabled ? 'default' : 'pointer',
+          color: value ? 'var(--color-text)' : 'var(--color-text-muted)', padding: '1px 2px',
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ── Documentation Multi-Select (chips with add dropdown) ──
+
+function DocMultiSelect({ label, selected, options, onSave, disabled, placeholder }: {
+  label: string; selected: string[]; options: string[]; onSave: (vals: string[]) => void; disabled: boolean; placeholder: string;
+}) {
+  const available = options.filter((o) => !selected.includes(o));
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>{label}:</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', flex: 1 }}>
+        {selected.map((v) => (
+          <span key={v} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 500,
+            background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd',
+          }}>
+            {v}
+            {!disabled && (
+              <button onClick={() => onSave(selected.filter((s) => s !== v))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#1e40af', padding: 0, lineHeight: 1 }}>&times;</button>
+            )}
+          </span>
+        ))}
+        {!disabled && available.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
+            style={{ fontSize: 10, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '1px 2px' }}
+          >
+            <option value="">{selected.length === 0 ? placeholder : '+ Add...'}</option>
+            {available.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        )}
+        {selected.length === 0 && disabled && (
+          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', opacity: 0.6 }}>{placeholder}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Add Node Form ──
 
 function AddNodeForm({ validChildren, onAdd, onCancel }: {
@@ -274,7 +355,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -282,6 +363,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   expanded: Set<string>; toggleExpand: (id: string) => void;
   validChildrenMap: Record<string, string[]>;
   flows: FlowRelationship[];
+  peopleList: PersonRef[];
+  assetsList: DataAssetRef[];
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
@@ -394,21 +477,45 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           </div>
           {/* Documentation fields — visible when expanded */}
           {isExpanded && (
-            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 2 }}>
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 2 }}>
               {(node.level === 'VALUE_STREAM' || node.level === 'PROCESS') && (
                 <>
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                   {node.level === 'VALUE_STREAM' && (
                     <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
                   )}
-                  <DocField label="Stakeholders" value={node.stakeholders || ''} onSave={(v) => onUpdate(node.id, { stakeholders: v })} disabled={isLocked} placeholder="Who cares about this?" />
+                  {/* Stakeholders — multi-select from people */}
+                  <DocMultiSelect
+                    label="Stakeholders"
+                    selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)}
+                    options={peopleList.map((p) => p.name)}
+                    onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })}
+                    disabled={isLocked}
+                    placeholder="Select stakeholders..."
+                  />
                   <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
-                  <DocField label="Compliance Tags" value={(node.complianceTags || []).join(', ')} onSave={(v) => onUpdate(node.id, { complianceTags: v.split(',').map((s: string) => s.trim()).filter(Boolean) })} disabled={isLocked} placeholder="e.g. SOX, HIPAA, GDPR" />
+                  {/* Compliance Tags — multi-select from predefined list */}
+                  <DocMultiSelect
+                    label="Compliance"
+                    selected={node.complianceTags || []}
+                    options={COMPLIANCE_OPTIONS}
+                    onSave={(vals) => onUpdate(node.id, { complianceTags: vals })}
+                    disabled={isLocked}
+                    placeholder="Select compliance tags..."
+                  />
                 </>
               )}
               {node.level === 'ACTIVITY' && (
                 <>
-                  <DocField label="Responsible Role" value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} placeholder="Who performs this activity?" />
+                  {/* Responsible Role — dropdown from predefined list */}
+                  <DocDropdown
+                    label="Responsible Role"
+                    value={node.responsibleRole || ''}
+                    options={ROLE_OPTIONS}
+                    onSave={(v) => onUpdate(node.id, { responsibleRole: v })}
+                    disabled={isLocked}
+                    placeholder="Select role..."
+                  />
                   <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="Data consumed / produced" />
                 </>
               )}
@@ -570,7 +677,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           onShowHistory={onShowHistory}
           allTags={allTags}
           onAddTag={onAddTag}
-          onRemoveTag={onRemoveTag} />
+          onRemoveTag={onRemoveTag}
+          peopleList={peopleList}
+          assetsList={assetsList} />
       ))}
     </div>
   );
@@ -593,6 +702,8 @@ export default function ProcessCatalogPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
+  const [peopleList, setPeopleList] = useState<PersonRef[]>([]);
+  const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyVersions, setHistoryVersions] = useState<ProcessVersion[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -601,16 +712,20 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
+        apiClient.get<{ success: boolean; data: PersonRef[] }>(`/people${qp}`),
+        apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${qp}`),
       ]);
       setTree(catalogRes.tree || []);
       setStats(catalogRes.stats || {});
       setValidChildrenMap(catalogRes.validChildren || {});
       setFlows(flowsRes.data || []);
       setAllTags(tagsRes.data || []);
+      setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
+      setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name })));
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -1022,7 +1137,9 @@ export default function ProcessCatalogPage() {
               onShowHistory={showHistory}
               allTags={allTags}
               onAddTag={addTag}
-              onRemoveTag={removeTag} />
+              onRemoveTag={removeTag}
+              peopleList={peopleList}
+              assetsList={assetsList} />
           ))
         )}
       </div>
