@@ -848,6 +848,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [columnsMap, setColumnsMap] = useState<Record<string, ColumnWithHealth[]>>({});
   const [loadingCols, setLoadingCols] = useState<string | null>(null);
+  const [runningAll, setRunningAll] = useState<string | null>(null);
 
   const tdLocal: React.CSSProperties = {
     padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
@@ -897,6 +898,30 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
     } catch { addToast('error', 'Failed to add rule'); }
   };
 
+  const runAllRules = async (e: React.MouseEvent, assetId: string, assetName: string) => {
+    e.stopPropagation();
+    setRunningAll(assetId);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: { ran: number; assetHealth: number; results: { name: string; passRate: number; status: string }[] } }>(`/data-quality/run-all/${assetId}`);
+      const d = res.data;
+      if (d.ran === 0) {
+        addToast('info', `${assetName}: no typed rules to run`);
+      } else {
+        const passing = d.results.filter((r) => r.status === 'PASSING').length;
+        addToast(
+          passing === d.ran ? 'success' : 'info',
+          `${assetName}: ran ${d.ran} rules \u2014 health ${d.assetHealth}%`,
+        );
+      }
+      if (expandedId === assetId) await refreshColumns(assetId);
+      await onRefreshAll();
+    } catch {
+      addToast('error', `Failed to run rules for ${assetName}`);
+    } finally {
+      setRunningAll(null);
+    }
+  };
+
   if (assets.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
@@ -920,18 +945,24 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
               <th style={thLocal}>Owner</th>
               <th style={thLocal}>Health</th>
               <th style={thLocal}>Rules</th>
+              <th style={{ ...thLocal, textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {assets.map((a) => {
               const rs = rulesByAsset.get(a.id) || [];
+              const measured = rs.filter((r) => r.currentScore > 0);
               const passing = rs.filter((r) => r.status === 'PASSING').length;
               const failing = rs.filter((r) => r.status === 'FAILING').length;
               const warn = rs.filter((r) => r.status === 'WARNING').length;
               const score = a.healthScore ?? 0;
-              const healthColor = score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
+              const healthColor = rs.length === 0 ? 'var(--color-text-muted)' : score >= 80 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
               const isExpanded = expandedId === a.id;
               const cols = columnsMap[a.id] || [];
+              const totalWeight = rs.reduce((s, r) => s + r.weight, 0);
+              const healthTooltip = rs.length === 0
+                ? 'No rules defined. Add rules to calculate health.'
+                : `Health: ${score}%\nWeighted average of ${rs.length} rule${rs.length > 1 ? 's' : ''} (${measured.length} measured)\nFormula: \u03A3(score \u00D7 weight) / \u03A3(weight)\nTotal weight: ${totalWeight}\nPassing: ${passing} | Warning: ${warn} | Failing: ${failing}`;
               return (
                 <React.Fragment key={a.id}>
                 <tr style={{ cursor: 'pointer' }}
@@ -950,8 +981,8 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                     {systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                   </td>
                   <td style={tdLocal}>{a.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
-                  <td style={tdLocal}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <td style={tdLocal} title={healthTooltip}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'help' }}>
                       <div style={{ flex: 1, maxWidth: 80, height: 6, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
                         <div style={{ width: `${score}%`, height: '100%', borderRadius: 3, background: healthColor }} />
                       </div>
@@ -970,11 +1001,22 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                       </span>
                     )}
                   </td>
+                  <td style={{ ...tdLocal, textAlign: 'center' }}>
+                    {rs.length > 0 && (
+                      <IconButton
+                        size="sm"
+                        icon="play"
+                        label={runningAll === a.id ? 'Running\u2026' : 'Run all rules'}
+                        onClick={(e) => runAllRules(e, a.id, a.name)}
+                        disabled={runningAll !== null}
+                      />
+                    )}
+                  </td>
                 </tr>
                 {/* Expanded columns */}
                 {isExpanded && (
                   <tr>
-                    <td colSpan={6} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                    <td colSpan={7} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
                       <div style={{ padding: '12px 20px 12px 50px' }}>
                         {loadingCols === a.id ? (
                           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 8 }}>{'Loading columns\u2026'}</div>

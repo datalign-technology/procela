@@ -289,6 +289,42 @@ router.get('/templates', (req: Request, res: Response) => {
   });
 });
 
+/** POST /api/v1/data-quality/run-all/:assetId — run every typed rule for an asset */
+router.post('/run-all/:assetId', (req: Request, res: Response) => {
+  const { assetId } = req.params;
+  const asset = dataAssets.find((a) => a.id === assetId);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+
+  const assetRules = dataQualityRules.filter((r) => r.dataAssetId === assetId && r.ruleType);
+  if (assetRules.length === 0) {
+    res.json({ success: true, data: { ran: 0, results: [], assetHealth: asset.healthScore ?? 0 } });
+    return;
+  }
+
+  const results: { ruleId: string; name: string; passRate: number; simulated: boolean; status: string }[] = [];
+  for (const rule of assetRules) {
+    const out = runRuleNow(rule);
+    if (out) {
+      results.push({
+        ruleId: rule.id,
+        name: rule.name,
+        passRate: out.engineResult.passRate,
+        simulated: out.engineResult.simulated,
+        status: rule.status,
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      ran: results.length,
+      results,
+      assetHealth: asset.healthScore ?? 0,
+    },
+  });
+});
+
 /** GET /api/v1/data-quality/:id */
 router.get('/:id', (req: Request, res: Response) => {
   const rule = dataQualityRules.find((r) => r.id === req.params.id);
