@@ -61,6 +61,48 @@ const sectionTitleStyle: React.CSSProperties = {
 
 interface FlatOrg { id: string; parentId: string | null; name: string; type: string; }
 
+function InlineField({ label, value, field, personId, onSaved }: {
+  label: string; value: string; field: string; personId: string; onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const save = async () => {
+    if (draft !== value) {
+      try {
+        await apiClient.put(`/people/${personId}`, { [field]: draft });
+        successToast(`${label} updated`);
+        onSaved();
+      } catch (err) { errorToast(err, `Failed to update ${label.toLowerCase()}`); }
+    }
+    setEditing(false);
+  };
+  if (editing) {
+    return (
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 2 }}>{label}</div>
+        <input autoFocus value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+          style={{ fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 8px', width: '100%', background: 'var(--color-surface)' }}
+        />
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{label}</div>
+      <div
+        onClick={() => { setDraft(value); setEditing(true); }}
+        style={{ fontSize: 13, cursor: 'pointer' }}
+        title="Click to edit"
+      >
+        {value || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Click to set...</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -264,14 +306,8 @@ export default function PersonDetailPage() {
               ))}
             </select>
           </div>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Email</div>
-            <div style={{ fontSize: 13 }}>{p.email || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Title</div>
-            <div style={{ fontSize: 13 }}>{p.title || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</div>
-          </div>
+          <InlineField label="Email" value={p.email} field="email" personId={p.id} onSaved={fetch360} />
+          <InlineField label="Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} />
         </div>
       </div>
 
