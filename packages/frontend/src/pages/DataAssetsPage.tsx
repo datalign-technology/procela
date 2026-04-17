@@ -116,12 +116,20 @@ interface FormData {
   name: string;
   description: string;
   systemId: string;
+  owner: string;
+  steward: string;
+  governanceTier: string;
+  domainId: string;
 }
 
 const emptyForm: FormData = {
   name: '',
   description: '',
   systemId: '',
+  owner: '',
+  steward: '',
+  governanceTier: 'BRONZE',
+  domainId: '',
 };
 
 interface ColumnRule {
@@ -159,6 +167,8 @@ export default function DataAssetsPage() {
   const { addToast } = useToastStore();
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
+  const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
+  const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[] }[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -203,10 +213,14 @@ export default function DataAssetsPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [assetRes, connRes] = await Promise.all([
+      const [assetRes, connRes, peopleRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/connections${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/people${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; dataAssetIds: string[] }> }>(`/data-domains${query}`),
       ]);
+      setPeopleList(peopleRes.data || []);
+      setDomainsList(domainsRes.data || []);
       const nextAssets = assetRes.data || [];
       setAssets(nextAssets);
       setSystems(assetRes.systems || []);
@@ -316,22 +330,32 @@ export default function DataAssetsPage() {
     setShowForm(true);
   };
 
+  const domainForAsset = (assetId: string) => domainsList.find((d) => d.dataAssetIds?.includes(assetId));
+
   const openEdit = (asset: DataAssetEntity) => {
+    const dom = domainForAsset(asset.id);
     setForm({
       name: asset.name,
       description: asset.description,
       systemId: asset.systemId,
+      owner: asset.owner || '',
+      steward: asset.steward || '',
+      governanceTier: asset.governanceTier || 'BRONZE',
+      domainId: dom?.id || '',
     });
     setEditingId(asset.id);
     setShowForm(true);
   };
 
-  // Duplicate — seed the create form from an existing asset's values.
   const openDuplicate = (asset: DataAssetEntity) => {
     setForm({
       name: `${asset.name} (copy)`,
       description: asset.description,
       systemId: asset.systemId,
+      owner: asset.owner || '',
+      steward: asset.steward || '',
+      governanceTier: asset.governanceTier || 'BRONZE',
+      domainId: '',
     });
     setEditingId(null);
     setShowForm(true);
@@ -339,10 +363,37 @@ export default function DataAssetsPage() {
 
   const handleSave = async (keepOpen: boolean = false) => {
     if (!form.name.trim()) return;
+    const { domainId, ...assetFields } = form;
+    let savedId = editingId;
     if (editingId) {
-      await apiClient.put(`/data-assets/${editingId}`, form);
+      await apiClient.put(`/data-assets/${editingId}`, assetFields);
     } else {
-      await apiClient.post('/data-assets', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/data-assets', { ...assetFields, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+      savedId = res.data?.id || null;
+    }
+    // Update domain assignment if changed
+    if (savedId && domainId) {
+      const prevDomain = domainForAsset(savedId);
+      if (prevDomain?.id !== domainId) {
+        // Remove from old domain
+        if (prevDomain) {
+          const newIds = prevDomain.dataAssetIds.filter((id) => id !== savedId);
+          try { await apiClient.put(`/data-domains/${prevDomain.id}`, { dataAssetIds: newIds }); } catch { /* */ }
+        }
+        // Add to new domain
+        const targetDomain = domainsList.find((d) => d.id === domainId);
+        if (targetDomain) {
+          const newIds = [...new Set([...targetDomain.dataAssetIds, savedId])];
+          try { await apiClient.put(`/data-domains/${domainId}`, { dataAssetIds: newIds }); } catch { /* */ }
+        }
+      }
+    } else if (savedId && !domainId) {
+      // Unassign from current domain if cleared
+      const prevDomain = domainForAsset(savedId);
+      if (prevDomain) {
+        const newIds = prevDomain.dataAssetIds.filter((id) => id !== savedId);
+        try { await apiClient.put(`/data-domains/${prevDomain.id}`, { dataAssetIds: newIds }); } catch { /* */ }
+      }
     }
     // "Save and add another": keep the form open with fresh inputs so
     // the user can keep keying in new assets without clicking Add each
@@ -527,10 +578,36 @@ export default function DataAssetsPage() {
                 placeholder="Describe this data asset in business terms"
               />
             </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
+              <select style={selectStyle} value={form.domainId} onChange={(e) => updateField('domainId', e.target.value)}>
+                <option value="">-- No domain --</option>
+                {domainsList.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Governance Tier</label>
+              <select style={selectStyle} value={form.governanceTier} onChange={(e) => updateField('governanceTier', e.target.value)}>
+                <option value="BRONZE">Bronze</option>
+                <option value="SILVER">Silver</option>
+                <option value="GOLD">Gold</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
+              <select style={selectStyle} value={form.owner} onChange={(e) => updateField('owner', e.target.value)}>
+                <option value="">-- No owner --</option>
+                {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Steward</label>
+              <select style={selectStyle} value={form.steward} onChange={(e) => updateField('steward', e.target.value)}>
+                <option value="">-- No steward --</option>
+                {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
           </div>
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 12 }}>
-            Ownership &amp; stewardship are managed on the Governance page. Data quality and health live on the Data Quality page.
-          </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             {!editingId && (
