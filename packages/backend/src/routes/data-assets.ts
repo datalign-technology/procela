@@ -113,14 +113,38 @@ migrateLegacySourceFieldsToBindings();
 export interface StoredDataAssetColumn {
   id: string;
   dataAssetId: string;
-  columnName: string;         // e.g. "email", "customer_id"
-  dataType?: string;          // e.g. "VARCHAR", "INTEGER", "DATE" — discovered or user-set
-  description?: string;       // business description
+  columnName: string;
+  dataType?: string;
+  description?: string;
   sourceConnectionId?: string;
-  sourceAsset?: string;       // physical table/file this column came from
-  sourceColumn?: string;      // physical column name if different from columnName
+  sourceAsset?: string;
+  sourceColumn?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+const STANDARD_DATA_TYPES = [
+  'String', 'Integer', 'Decimal', 'Boolean', 'Date', 'DateTime',
+  'Timestamp', 'Binary', 'JSON', 'Array', 'UUID', 'Email', 'Phone',
+  'URL', 'Currency', 'Percentage', 'Text', 'Other',
+];
+
+const DATA_TYPE_ALIASES: Record<string, string> = {
+  varchar: 'String', char: 'String', text: 'Text', string: 'String', nvarchar: 'String',
+  int: 'Integer', integer: 'Integer', bigint: 'Integer', smallint: 'Integer', tinyint: 'Integer', number: 'Integer',
+  float: 'Decimal', double: 'Decimal', decimal: 'Decimal', numeric: 'Decimal', real: 'Decimal',
+  bool: 'Boolean', boolean: 'Boolean', bit: 'Boolean',
+  date: 'Date', datetime: 'DateTime', timestamp: 'Timestamp', datetime2: 'DateTime',
+  blob: 'Binary', binary: 'Binary', varbinary: 'Binary', bytea: 'Binary',
+  json: 'JSON', jsonb: 'JSON',
+  uuid: 'UUID', uniqueidentifier: 'UUID',
+  array: 'Array',
+};
+
+function normalizeDataType(raw: string): string {
+  if (!raw) return '';
+  const lower = raw.toLowerCase().replace(/\(.*\)/, '').trim();
+  return DATA_TYPE_ALIASES[lower] || raw;
 }
 
 export const dataAssetColumns: StoredDataAssetColumn[] =
@@ -193,7 +217,7 @@ router.get('/', (req: Request, res: Response) => {
     return { ...asset, domainName, ownerName, stewardName };
   });
 
-  res.json({ success: true, data: enriched, systems: filteredSystems });
+  res.json({ success: true, data: enriched, systems: filteredSystems, dataTypes: STANDARD_DATA_TYPES });
 });
 
 /** GET /api/v1/data-assets/:id/360 — full 360 view of a data asset */
@@ -524,7 +548,7 @@ router.post('/:id/columns', (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const col: StoredDataAssetColumn = {
     id: uuid(), dataAssetId: asset.id, columnName,
-    dataType: dataType || '', description: description || '',
+    dataType: normalizeDataType(dataType || ''), description: description || '',
     sourceConnectionId: sourceConnectionId || undefined,
     sourceAsset: sourceAsset || undefined,
     sourceColumn: sourceColumn || columnName,
@@ -541,7 +565,7 @@ router.put('/:id/columns/:colId', (req: Request, res: Response) => {
   if (!col) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
   const { columnName, dataType, description } = req.body;
   if (columnName !== undefined) col.columnName = columnName;
-  if (dataType !== undefined) col.dataType = dataType;
+  if (dataType !== undefined) col.dataType = normalizeDataType(dataType);
   if (description !== undefined) col.description = description;
   col.updatedAt = new Date().toISOString();
   saveStore('dataAssetColumns', dataAssetColumns);

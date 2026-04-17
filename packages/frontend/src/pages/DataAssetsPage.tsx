@@ -178,6 +178,7 @@ export default function DataAssetsPage() {
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
   const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[] }[]>([]);
+  const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -233,6 +234,7 @@ export default function DataAssetsPage() {
       const nextAssets = assetRes.data || [];
       setAssets(nextAssets);
       setSystems(assetRes.systems || []);
+      setStandardDataTypes((assetRes as any).dataTypes || []);
       // Build a lookup of connection names so the binding column can show
       // "<conn-name> / <asset>.<col>" without a second trip per row.
       const cmap: Record<string, string> = {};
@@ -330,6 +332,18 @@ export default function DataAssetsPage() {
       }));
     } catch (err) {
       errorToast(err, 'Failed to delete column');
+    }
+  };
+
+  const updateColumnType = async (assetId: string, colId: string, dataType: string) => {
+    try {
+      await apiClient.put(`/data-assets/${assetId}/columns/${colId}`, { dataType });
+      setColumnsMap((prev) => ({
+        ...prev,
+        [assetId]: (prev[assetId] || []).map((c) => c.id === colId ? { ...c, dataType } : c),
+      }));
+    } catch (err) {
+      errorToast(err, 'Failed to update column type');
     }
   };
 
@@ -907,7 +921,21 @@ export default function DataAssetsPage() {
                                       <span style={{ fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 13, minWidth: 120 }}>
                                         {col.columnName}
                                       </span>
-                                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', minWidth: 70 }}>{col.dataType || ''}</span>
+                                      <span style={{ minWidth: 90 }} onClick={(e) => e.stopPropagation()}>
+                                        <select
+                                          value={col.dataType || ''}
+                                          onChange={(e) => updateColumnType(asset.id, col.id, e.target.value)}
+                                          style={{
+                                            fontSize: 11, color: col.dataType ? 'var(--color-text-secondary)' : 'var(--color-text-muted)',
+                                            border: 'none', background: 'transparent', cursor: 'pointer',
+                                            padding: '1px 2px', fontFamily: 'inherit',
+                                          }}
+                                          title="Click to set data type"
+                                        >
+                                          <option value="">{col.dataType || 'Set type...'}</option>
+                                          {standardDataTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                      </span>
                                       <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {col.description || ''}
                                       </span>
