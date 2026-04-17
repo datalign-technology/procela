@@ -12,6 +12,8 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
+import UnsavedBanner from '../components/UnsavedBanner';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 
 interface SystemEntity {
   id: string;
@@ -125,10 +127,16 @@ export default function SystemsPage() {
     setEditingId(sys.id); setShowForm(true);
   };
 
+  const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
+
+  const closeForm = () => { markClean(); setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const setFormDirty = (update: FormData | ((prev: FormData) => FormData)) => { markDirty(); setForm(update); };
+
   const handleSave = async (keepOpen: boolean = false) => {
     if (!form.name.trim()) return;
     if (editingId) { await apiClient.put(`/systems/${editingId}`, form); }
     else { await apiClient.post('/systems', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) }); }
+    markClean();
     if (keepOpen && !editingId) {
       setForm(emptyForm);
       fetchData();
@@ -141,7 +149,7 @@ export default function SystemsPage() {
     await apiClient.delete(`/systems/${id}`); fetchData();
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const handleCancel = () => { confirmIfDirty(closeForm); };
 
   const handleImport = async () => {
     if (!importText.trim()) return;
@@ -294,25 +302,26 @@ export default function SystemsPage() {
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit System' : 'Add New System'}
           </h3>
+          <UnsavedBanner visible={isDirty()} onSave={() => handleSave(false)} onDiscard={closeForm} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. SAP ERP, Salesforce CRM" />
+              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setFormDirty({ ...form, name: e.target.value })} placeholder="e.g. SAP ERP, Salesforce CRM" />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System Type</label>
-              <select style={selectStyle} value={form.systemType} onChange={(e) => setForm({ ...form, systemType: e.target.value })}>
+              <select style={selectStyle} value={form.systemType} onChange={(e) => setFormDirty({ ...form, systemType: e.target.value })}>
                 <option value="">-- Select type --</option>
                 {systemTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
-              <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
+              <input style={inputStyle} value={form.description} onChange={(e) => setFormDirty({ ...form, description: e.target.value })} placeholder="Brief description of what this system does" />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Business Criticality <HelpPopover id="sys-criticality" title="Business Criticality">How critical is this system to daily operations? High = outage stops the business. Medium = workarounds exist. Low = minimal operational impact.</HelpPopover></label>
-              <select style={selectStyle} value={form.businessCriticality} onChange={(e) => setForm({ ...form, businessCriticality: e.target.value })}>
+              <select style={selectStyle} value={form.businessCriticality} onChange={(e) => setFormDirty({ ...form, businessCriticality: e.target.value })}>
                 <option value="">-- Select --</option>
                 <option value="HIGH">High</option>
                 <option value="MEDIUM">Medium</option>
@@ -321,11 +330,11 @@ export default function SystemsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vendor / Platform</label>
-              <input style={inputStyle} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
+              <input style={inputStyle} value={form.vendor} onChange={(e) => setFormDirty({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Points</label>
-              <input style={inputStyle} value={form.integrationPoints} onChange={(e) => setForm({ ...form, integrationPoints: e.target.value })} placeholder="e.g. Connects to SAP via API, feeds Data Warehouse nightly" />
+              <input style={inputStyle} value={form.integrationPoints} onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })} placeholder="e.g. Connects to SAP via API, feeds Data Warehouse nightly" />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>

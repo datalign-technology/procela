@@ -192,14 +192,17 @@ function InlineEdit({ value, onSave, fontSize = 13, fontWeight = 400, placeholde
     );
   }
   return (
-    <input autoFocus style={{ ...inputStyle, fontSize, fontWeight, width: '100%' }} value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => { if (draft.trim() && draft !== value) onSave(draft.trim()); setEditing(false); }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') { if (draft.trim() && draft !== value) onSave(draft.trim()); setEditing(false); }
-        if (e.key === 'Escape') setEditing(false);
-      }}
-    />
+    <div>
+      <input autoFocus style={{ ...inputStyle, fontSize, fontWeight, width: '100%' }} value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => { if (draft.trim() && draft !== value) onSave(draft.trim()); setEditing(false); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { if (draft.trim() && draft !== value) onSave(draft.trim()); setEditing(false); }
+          if (e.key === 'Escape') setEditing(false);
+        }}
+      />
+      <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>
+    </div>
   );
 }
 
@@ -214,15 +217,18 @@ function DocField({ label, value, onSave, disabled, placeholder }: {
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
       {editing && !disabled ? (
-        <input autoFocus style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', flex: 1 }}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
+        <div style={{ flex: 1 }}>
+          <input autoFocus style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%' }}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
             if (e.key === 'Escape') setEditing(false);
           }}
-        />
+          />
+          <div style={{ fontSize: 8, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>
+        </div>
       ) : (
         <span
           onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}

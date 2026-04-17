@@ -14,6 +14,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import { errorToast } from '../lib/errorToast';
 import LinkConnectionModal from '../components/LinkConnectionModal';
+import UnsavedBanner from '../components/UnsavedBanner';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 
 interface DataAssetEntity {
   id: string;
@@ -428,6 +430,7 @@ export default function DataAssetsPage() {
     // the user can keep keying in new assets without clicking Add each
     // time. The original form state isn't reset on edit (keepOpen only
     // applies to create flow).
+    markClean();
     if (keepOpen && !editingId) {
       setForm(emptyForm);
       fetchData();
@@ -444,13 +447,21 @@ export default function DataAssetsPage() {
     fetchData();
   };
 
-  const handleCancel = () => {
+  const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
+
+  const closeForm = () => {
+    markClean();
     setShowForm(false);
     setEditingId(null);
     setForm(emptyForm);
   };
 
+  const handleCancel = () => {
+    confirmIfDirty(closeForm);
+  };
+
   const updateField = (field: keyof FormData, value: string | number) => {
+    markDirty();
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -580,6 +591,7 @@ export default function DataAssetsPage() {
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit Data Asset' : 'Add New Data Asset'}
           </h3>
+          <UnsavedBanner visible={isDirty()} onSave={() => handleSave(false)} onDiscard={closeForm} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>

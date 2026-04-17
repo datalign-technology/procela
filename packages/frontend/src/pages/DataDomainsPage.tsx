@@ -10,6 +10,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
+import UnsavedBanner from '../components/UnsavedBanner';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 
 interface DataDomain {
   id: string;
@@ -158,6 +160,9 @@ export default function DataDomainsPage() {
     setEditingId(null);
   };
 
+  const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
+  const closeForm = () => { markClean(); setShowForm(false); setEditingId(null); setForm(emptyForm); };
+
   const handleSave = async () => {
     if (!form.name.trim()) return;
     if (editingId) {
@@ -167,6 +172,7 @@ export default function DataDomainsPage() {
       await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
       addToast('success', 'Data domain created');
     }
+    markClean();
     setShowForm(false);
     setEditingId(null);
     setForm(emptyForm);
@@ -201,7 +207,7 @@ export default function DataDomainsPage() {
     fetchData();
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const handleCancel = () => { confirmIfDirty(closeForm); };
 
   const handleDetailSave = async () => {
     if (!selectedDomain) return;
@@ -455,6 +461,7 @@ export default function DataDomainsPage() {
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit Data Domain' : 'Add New Data Domain'}
           </h3>
+          <UnsavedBanner visible={isDirty()} onSave={handleSave} onDiscard={closeForm} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -462,7 +469,7 @@ export default function DataDomainsPage() {
                 autoFocus
                 style={inputStyle}
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => { markDirty(); setForm({ ...form, name: e.target.value }); }}
                 placeholder="e.g. Customer Data, Financial Data"
               />
             </div>
@@ -480,7 +487,7 @@ export default function DataDomainsPage() {
               <input
                 style={inputStyle}
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) => { markDirty(); setForm({ ...form, description: e.target.value }); }}
                 placeholder="Describe the purpose and scope of this data domain"
               />
             </div>
@@ -489,7 +496,7 @@ export default function DataDomainsPage() {
               <input
                 style={inputStyle}
                 value={form.scopeDefinition}
-                onChange={(e) => setForm({ ...form, scopeDefinition: e.target.value })}
+                onChange={(e) => { markDirty(); setForm({ ...form, scopeDefinition: e.target.value }); }}
                 placeholder="What data falls in/out of this domain? e.g. All customer-facing data excluding internal analytics"
               />
             </div>
