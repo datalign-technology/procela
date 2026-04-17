@@ -125,7 +125,7 @@ router.get('/', (req: Request, res: Response) => {
   for (const n of nodes) { if (n.ownerId) ownerIds.add(n.ownerId); }
   for (const a of assets) {
     if (a.owner) ownerIds.add(a.owner);
-    if (a.steward) ownerIds.add(a.steward);
+    for (const sid of a.stewardIds || []) ownerIds.add(sid);
   }
   for (const d of domains) {
     if (d.ownerId) ownerIds.add(d.ownerId);

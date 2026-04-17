@@ -115,7 +115,7 @@ router.get('/', (req: Request, res: Response) => {
   for (const p of filteredProcesses) { if (p.ownerId) relevantPeopleIds.add(p.ownerId); }
   for (const a of filteredAssets) {
     if (a.owner) relevantPeopleIds.add(a.owner);
-    if (a.steward) relevantPeopleIds.add(a.steward);
+    for (const sid of a.stewardIds || []) relevantPeopleIds.add(sid);
   }
   for (const d of filteredDomains) {
     if (d.ownerId) relevantPeopleIds.add(d.ownerId);

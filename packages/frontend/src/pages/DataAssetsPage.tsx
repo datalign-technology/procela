@@ -21,7 +21,7 @@ interface DataAssetEntity {
   description: string;
   systemId: string;
   owner?: string;
-  steward?: string;
+  stewardIds?: string[];
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
   dataClassification?: string;
@@ -101,7 +101,7 @@ interface Asset360Data {
   domain: { id: string; name: string; ownerName: string | null; stewards: { id: string; name: string }[] } | null;
   mappings: { id: string; processStepId: string; linkType: string; notes: string; processPath: string }[];
   ownerInfo: { id: string | null; name: string } | null;
-  stewardInfo: { id: string | null; name: string } | null;
+  stewardInfos: { id: string; name: string }[];
 }
 
 interface CommentEntry {
@@ -120,7 +120,7 @@ interface FormData {
   description: string;
   systemId: string;
   owner: string;
-  steward: string;
+  stewardIds: string[];
   governanceTier: string;
   domainId: string;
   dataClassification: string;
@@ -133,7 +133,7 @@ const emptyForm: FormData = {
   description: '',
   systemId: '',
   owner: '',
-  steward: '',
+  stewardIds: [],
   governanceTier: 'BRONZE',
   domainId: '',
   dataClassification: '',
@@ -362,7 +362,7 @@ export default function DataAssetsPage() {
       description: asset.description,
       systemId: asset.systemId,
       owner: asset.owner || '',
-      steward: asset.steward || '',
+      stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: dom?.id || '',
       dataClassification: asset.dataClassification || '',
@@ -379,7 +379,7 @@ export default function DataAssetsPage() {
       description: asset.description,
       systemId: asset.systemId,
       owner: asset.owner || '',
-      steward: asset.steward || '',
+      stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: '',
       dataClassification: asset.dataClassification || '',
@@ -630,11 +630,49 @@ export default function DataAssetsPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Steward</label>
-              <select style={selectStyle} value={form.steward} onChange={(e) => updateField('steward', e.target.value)}>
-                <option value="">-- No steward --</option>
-                {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                Data Steward(s)
+                <HelpPopover id="asset-stewards" title="Data Stewards">
+                  The first steward listed is the primary contact. Add additional stewards for backup coverage.
+                </HelpPopover>
+              </label>
+              <select
+                style={selectStyle}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value && !form.stewardIds.includes(e.target.value)) {
+                    setForm((prev) => ({ ...prev, stewardIds: [...prev.stewardIds, e.target.value] }));
+                  }
+                }}
+              >
+                <option value="">+ Add steward...</option>
+                {peopleList.filter((p) => !form.stewardIds.includes(p.id)).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
               </select>
+              {form.stewardIds.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                  {form.stewardIds.map((sid, idx) => {
+                    const person = peopleList.find((p) => p.id === sid);
+                    return (
+                      <span key={sid} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 500,
+                        background: idx === 0 ? '#dbeafe' : '#f1f5f9',
+                        color: idx === 0 ? '#1e40af' : '#475569',
+                        border: `1px solid ${idx === 0 ? '#93c5fd' : '#e2e8f0'}`,
+                      }}>
+                        {idx === 0 && <span style={{ fontSize: 9, fontWeight: 700 }}>PRIMARY</span>}
+                        {person?.name || sid}
+                        <button
+                          onClick={() => setForm((prev) => ({ ...prev, stewardIds: prev.stewardIds.filter((id) => id !== sid) }))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'inherit', padding: 0, lineHeight: 1 }}
+                        >&times;</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Data Classification <HelpPopover id="asset-classification" title="Data Classification">Public = open data. Internal = employee-only. Confidential = limited access, business-sensitive. Restricted = regulated (PII, PHI, financial).</HelpPopover></label>

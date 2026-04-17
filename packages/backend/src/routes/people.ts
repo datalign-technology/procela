@@ -232,7 +232,7 @@ router.get('/:id/360', (req: Request, res: Response) => {
     .filter((a) => a.owner === person.id || a.owner === person.name)
     .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'owner' as const }));
   const stewardedDataAssets = dataAssets
-    .filter((a) => (a.steward === person.id || a.steward === person.name) && a.owner !== person.id && a.owner !== person.name)
+    .filter((a) => (a.stewardIds || []).includes(person.id) && a.owner !== person.id)
     .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'steward' as const }));
 
   // All governance groups (for checkbox UI)

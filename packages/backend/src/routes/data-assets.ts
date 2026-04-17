@@ -16,7 +16,7 @@ interface StoredDataAsset {
   description: string;
   systemId: string;
   owner: string;
-  steward: string;
+  stewardIds: string[];
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore: number;
   // Optional provenance: set when the asset was imported from a discovered
@@ -34,6 +34,18 @@ interface StoredDataAsset {
 
 export const dataAssets: StoredDataAsset[] = loadStore<StoredDataAsset>('dataAssets');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
+// Migrate legacy `steward` string → `stewardIds[]`
+let migrated = false;
+for (const a of dataAssets) {
+  if (!a.stewardIds) {
+    const legacy = (a as any).steward;
+    a.stewardIds = legacy ? [legacy] : [];
+    delete (a as any).steward;
+    migrated = true;
+  }
+}
+if (migrated) saveStore('dataAssets', dataAssets);
 
 const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'];
 
@@ -207,12 +219,15 @@ router.get('/', (req: Request, res: Response) => {
     if (domain) {
       domainName = domain.name;
       if (domain.ownerId) ownerName = people.find((p) => p.id === domain.ownerId)?.name || null;
-      if (domain.stewardIds?.length > 0) {
-        stewardName = domain.stewardIds
-          .map((sid: string) => people.find((p) => p.id === sid)?.name)
-          .filter(Boolean)
-          .join(', ') || null;
-      }
+    }
+    // Resolve steward names from asset-level stewardIds (preferred),
+    // falling back to domain stewards if asset has none.
+    const stewardSrc = asset.stewardIds?.length > 0 ? asset.stewardIds : (domain?.stewardIds || []);
+    if (stewardSrc.length > 0) {
+      stewardName = stewardSrc
+        .map((sid: string) => people.find((p) => p.id === sid)?.name)
+        .filter(Boolean)
+        .join(', ') || null;
     }
     return { ...asset, domainName, ownerName, stewardName };
   });
@@ -260,9 +275,12 @@ router.get('/:id/360', (req: Request, res: Response) => {
       return { id: m.id, processStepId: m.processStepId, linkType: m.linkType, notes: m.notes, processPath: path };
     });
 
-  // Resolve owner and steward from people
+  // Resolve owner and stewards from people
   const ownerPerson = asset.owner ? people.find((p) => p.id === asset.owner || p.name === asset.owner) : null;
-  const stewardPerson = asset.steward ? people.find((p) => p.id === asset.steward || p.name === asset.steward) : null;
+  const stewardInfos = (asset.stewardIds || [])
+    .map((sid: string) => people.find((p) => p.id === sid))
+    .filter(Boolean)
+    .map((p) => ({ id: p!.id, name: p!.name }));
 
   res.json({
     success: true,
@@ -272,7 +290,7 @@ router.get('/:id/360', (req: Request, res: Response) => {
       domain: domainInfo,
       mappings: assetMappings,
       ownerInfo: ownerPerson ? { id: ownerPerson.id, name: ownerPerson.name } : (asset.owner ? { id: null, name: asset.owner } : null),
-      stewardInfo: stewardPerson ? { id: stewardPerson.id, name: stewardPerson.name } : (asset.steward ? { id: null, name: asset.steward } : null),
+      stewardInfos,
     },
   });
 });
@@ -421,7 +439,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-assets */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemId, owner, steward, governanceTier, healthScore, orgId,
+  const { name, description, systemId, owner, stewardIds, governanceTier, healthScore, orgId,
     sourceConnectionId, sourceAsset, sourceColumn,
     dataClassification, retentionPolicy, refreshFrequency } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
@@ -435,7 +453,7 @@ router.post('/', (req: Request, res: Response) => {
     description: description || '',
     systemId: systemId || '',
     owner: owner || '',
-    steward: steward || '',
+    stewardIds: Array.isArray(stewardIds) ? stewardIds : [],
     governanceTier: tier,
     healthScore: score,
     ...(sourceConnectionId ? { sourceConnectionId } : {}),
@@ -456,14 +474,14 @@ router.put('/:id', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
-  const { name, description, systemId, owner, steward, governanceTier, healthScore,
+  const { name, description, systemId, owner, stewardIds, governanceTier, healthScore,
     sourceConnectionId, sourceAsset, sourceColumn,
     dataClassification, retentionPolicy, refreshFrequency } = req.body;
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
   if (systemId !== undefined) asset.systemId = systemId;
   if (owner !== undefined) asset.owner = owner;
-  if (steward !== undefined) asset.steward = steward;
+  if (stewardIds !== undefined && Array.isArray(stewardIds)) asset.stewardIds = stewardIds;
   if (governanceTier !== undefined && VALID_TIERS.includes(governanceTier)) asset.governanceTier = governanceTier;
   if (healthScore !== undefined && typeof healthScore === 'number') asset.healthScore = Math.max(0, Math.min(100, healthScore));
   if (sourceConnectionId !== undefined) asset.sourceConnectionId = sourceConnectionId || undefined;
