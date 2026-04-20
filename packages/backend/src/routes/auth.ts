@@ -29,8 +29,9 @@ const validRefreshTokens = new Set<string>();
 // Token helpers
 // ---------------------------------------------------------------------------
 
-const ACCESS_TOKEN_EXPIRY = '15m';
-const ACCESS_TOKEN_EXPIRY_SECONDS = 15 * 60; // 900 seconds
+const IS_DEV = (process.env.NODE_ENV || 'development') !== 'production';
+const ACCESS_TOKEN_EXPIRY = IS_DEV ? '8h' : '15m';
+const ACCESS_TOKEN_EXPIRY_SECONDS = IS_DEV ? 8 * 60 * 60 : 15 * 60;
 const REFRESH_TOKEN_EXPIRY = '8h';
 
 interface AccessTokenPayload {
