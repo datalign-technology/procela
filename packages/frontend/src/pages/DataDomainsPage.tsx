@@ -347,7 +347,16 @@ export default function DataDomainsPage() {
                 d.status,
               ]))} />
           )}
-          <IconButton icon="settings" label={generating ? 'Generating\u2026' : 'Generate from industry'} disabled={generating} onClick={handleGenerate} />
+          <IconButton
+            icon="settings"
+            label={
+              generating ? 'Generating\u2026'
+              : domains.length > 0 ? `Generate disabled — ${domains.length} domain${domains.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+              : 'Generate from industry'
+            }
+            disabled={generating || domains.length > 0}
+            onClick={handleGenerate}
+          />
           <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />
         </div>
       </div>

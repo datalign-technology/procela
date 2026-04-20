@@ -494,7 +494,13 @@ export default function GovernanceGroupsPage() {
                 g.status,
               ]))} />
           )}
-          <IconButton icon="settings" label="Generate governance template"
+          <IconButton icon="settings"
+            label={
+              flatGroups.length > 0
+                ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+                : 'Generate governance template'
+            }
+            disabled={flatGroups.length > 0}
             onClick={async () => {
               try {
                 await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
