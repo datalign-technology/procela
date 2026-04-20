@@ -19,12 +19,13 @@ const ROLES = [
 
 export interface StoredPerson {
   id: string;
-  orgIds: string[];             // assigned org levels (multi-assignment)
-  accessibleOrgIds: string[];   // explicit additional org access grants
+  orgIds: string[];
+  accessibleOrgIds: string[];
   name: string;
   email: string;
   role: string;
   title: string;
+  jobRole?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -283,7 +284,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/people */
 router.post('/', (req: Request, res: Response) => {
-  const { orgIds, orgId, name, email, role, title, accessibleOrgIds } = req.body;
+  const { orgIds, orgId, name, email, role, title, jobRole, accessibleOrgIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   // Support both orgIds (array) and orgId (single, backward compat)
   const assignedOrgIds: string[] = orgIds || (orgId ? [orgId] : []);
@@ -302,6 +303,7 @@ router.post('/', (req: Request, res: Response) => {
     id: uuid(), orgIds: assignedOrgIds, name,
     email: email || '', role: role || 'VIEWER',
     title: title || '',
+    ...(jobRole ? { jobRole } : {}),
     accessibleOrgIds: accessibleOrgIds || [],
     createdAt: now, updatedAt: now,
   };
@@ -314,11 +316,12 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const { name, email, role, title, orgIds, orgId, accessibleOrgIds } = req.body;
+  const { name, email, role, title, jobRole, orgIds, orgId, accessibleOrgIds } = req.body;
   if (name !== undefined) person.name = name;
   if (email !== undefined) person.email = email;
   if (role !== undefined) person.role = role;
   if (title !== undefined) person.title = title;
+  if (jobRole !== undefined) person.jobRole = jobRole || undefined;
   if (accessibleOrgIds !== undefined) person.accessibleOrgIds = accessibleOrgIds;
   // Support both orgIds (array) and orgId (single, backward compat)
   const newOrgIds = orgIds || (orgId ? [orgId] : undefined);

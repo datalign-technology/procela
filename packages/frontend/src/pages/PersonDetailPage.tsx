@@ -307,7 +307,8 @@ export default function PersonDetailPage() {
             </select>
           </div>
           <InlineField label="Email" value={p.email} field="email" personId={p.id} onSaved={fetch360} />
-          <InlineField label="Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} />
+          <InlineField label="Job Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} />
+          <InlineField label="Job Role" value={(p as any).jobRole || ''} field="jobRole" personId={p.id} onSaved={fetch360} />
         </div>
       </div>
 

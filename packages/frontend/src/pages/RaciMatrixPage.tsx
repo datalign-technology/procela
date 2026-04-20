@@ -17,6 +17,7 @@ interface RaciColumn {
   name: string;
   role: string;
   title: string;
+  jobRole: string;
   orgUnit: string;
 }
 
@@ -47,7 +48,7 @@ const LEVEL_CONFIG: Record<string, { label: string; indent: number; weight: numb
   ACTIVITY:     { label: 'ACT', indent: 60, weight: 400, badge: 'ACT', badgeBg: '#fef3c7', badgeColor: '#92400e' },
 };
 
-type ColumnGroupBy = 'name' | 'title' | 'orgUnit' | 'role';
+type ColumnGroupBy = 'name' | 'title' | 'jobRole' | 'orgUnit';
 
 const thStyle: React.CSSProperties = {
   padding: '0.5rem 0.5rem',
@@ -127,19 +128,10 @@ export default function RaciMatrixPage() {
 
   const getColumnLabel = (col: RaciColumn): string => {
     switch (groupBy) {
-      case 'title': return col.title || col.name;
-      case 'orgUnit': return col.orgUnit || col.name;
-      case 'role': return col.role.replace(/_/g, ' ') || col.name;
+      case 'title': return col.title || '(no title)';
+      case 'jobRole': return col.jobRole || '(no job role)';
+      case 'orgUnit': return col.orgUnit || '(no org)';
       default: return col.name;
-    }
-  };
-
-  const getColumnSublabel = (col: RaciColumn): string => {
-    switch (groupBy) {
-      case 'title': return col.name;
-      case 'orgUnit': return col.name;
-      case 'role': return col.name;
-      default: return col.title || col.role.replace(/_/g, ' ');
     }
   };
 
@@ -215,8 +207,8 @@ export default function RaciMatrixPage() {
             >
               <option value="name">Person Name</option>
               <option value="title">Job Title</option>
+              <option value="jobRole">Job Role</option>
               <option value="orgUnit">Org Unit</option>
-              <option value="role">Governance Role</option>
             </select>
           </div>
 
@@ -305,7 +297,7 @@ export default function RaciMatrixPage() {
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
-            {visibleRows.length} of {data.rows.length} rows visible | {sortedColumns.length} people | Grouped by {groupBy === 'orgUnit' ? 'org unit' : groupBy === 'title' ? 'job title' : groupBy}
+            {visibleRows.length} of {data.rows.length} rows visible | {sortedColumns.length} people | Showing: {groupBy === 'orgUnit' ? 'org unit' : groupBy === 'title' ? 'job title' : groupBy === 'jobRole' ? 'job role' : 'person name'}
           </div>
         </>
       )}

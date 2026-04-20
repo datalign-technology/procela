@@ -309,6 +309,7 @@ router.get('/raci', (req: Request, res: Response) => {
         name: p.name,
         role: primaryRole,
         title: p.title || '',
+        jobRole: p.jobRole || '',
         orgUnit: orgNames[0] || '',
       };
     });
