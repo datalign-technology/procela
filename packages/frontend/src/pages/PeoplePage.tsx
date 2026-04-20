@@ -161,10 +161,86 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
   );
 }
 
+// ── Org Sidebar Tree ──
+
+const TYPE_ICONS: Record<string, string> = {
+  company: '\u{1F3E2}', division: '\u{1F3E4}', department: '\u{1F4C1}',
+  team: '\u{1F465}', unit: '\u{1F4CC}',
+};
+
+function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
+  nodes: OrgNode[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  peopleCounts: Record<string, number>;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    // Auto-expand root nodes on mount
+    return new Set(nodes.map((n) => n.id));
+  });
+
+  const toggle = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const renderNode = (node: OrgNode, depth: number) => {
+    const isSelected = selectedId === node.id;
+    const isExpanded = expanded.has(node.id);
+    const hasChildren = node.children && node.children.length > 0;
+    const count = peopleCounts[node.id] || 0;
+    return (
+      <div key={node.id}>
+        <div
+          onClick={() => onSelect(node.id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '4px 6px', paddingLeft: 6 + depth * 14,
+            fontSize: 12, borderRadius: 4, cursor: 'pointer',
+            fontWeight: isSelected ? 600 : 400,
+            background: isSelected ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+            color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+          }}
+          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+        >
+          {hasChildren ? (
+            <span
+              onClick={(e) => toggle(node.id, e)}
+              style={{ width: 14, textAlign: 'center', fontSize: 8, color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0 }}
+            >
+              {isExpanded ? '\u25BC' : '\u25B6'}
+            </span>
+          ) : (
+            <span style={{ width: 14, flexShrink: 0 }} />
+          )}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {node.name}
+          </span>
+          {count > 0 && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{count}</span>
+          )}
+        </div>
+        {hasChildren && isExpanded && (
+          <div>
+            {node.children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return <div>{nodes.map((n) => renderNode(n, 0))}</div>;
+}
+
 // ══════════════════════════════════════════════════════════════
-// MAIN COMPONENT — People list + 360 view. Filtered by org via a
-// dropdown; `?orgId=` query param preselects the filter so deep
-// links from the Organizations tree land on the right slice.
+// MAIN COMPONENT — People list + 360 view. Filtered by org via
+// the org tree sidebar; `?orgId=` query param preselects the filter
+// so deep links from the Organizations page land on the right slice.
 // ══════════════════════════════════════════════════════════════
 
 export default function PeoplePage() {
@@ -646,28 +722,14 @@ export default function PeoplePage() {
           >
             All ({people.length})
           </div>
-          {orgOptions.map((opt) => {
-            const isSelected = selectedOrgId === opt.id;
-            const count = people.filter((p) => p.orgIds.includes(opt.id)).length;
-            return (
-              <div key={opt.id}
-                onClick={() => applyOrgFilter(opt.id)}
-                style={{
-                  padding: '4px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
-                  paddingLeft: `${8 + (opt.label.match(/^\u00A0*/)?.[0]?.length || 0) * 3}px`,
-                  fontWeight: isSelected ? 600 : 400,
-                  background: isSelected ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
-                  color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.label.replace(/^\u00A0+/, '')}</span>
-                {count > 0 && <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{count}</span>}
-              </div>
-            );
-          })}
+          <OrgSidebarTree
+            nodes={tree}
+            selectedId={selectedOrgId}
+            onSelect={applyOrgFilter}
+            peopleCounts={Object.fromEntries(
+              flatOrgs.map((o) => [o.id, people.filter((p) => p.orgIds.includes(o.id)).length]),
+            )}
+          />
         </div>
 
         {/* People list */}
