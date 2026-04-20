@@ -260,17 +260,6 @@ const helpIconStyle: React.CSSProperties = {
   textDecoration: 'none', cursor: 'pointer', flexShrink: 0,
 };
 
-const exportBtnStyle: React.CSSProperties = {
-  padding: '0.375rem 1rem',
-  fontSize: '0.8125rem',
-  fontWeight: 500,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  color: 'var(--color-text-secondary)',
-  cursor: 'pointer',
-};
-
 const thStyle: React.CSSProperties = {
   padding: '0.5rem 0.5rem',
   textAlign: 'left',

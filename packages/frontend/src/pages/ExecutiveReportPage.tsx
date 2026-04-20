@@ -101,18 +101,11 @@ const metricBoxStyle: React.CSSProperties = {
   textAlign: 'center',
 };
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 export default function ExecutiveReportPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [scorecard, setScorecard] = useState<ScorecardData | null>(null);
-  const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
+  const [, setAuditEntries] = useState<AuditLogEntry[]>([]);
   const [govGroups, setGovGroups] = useState<GovernanceGroupSummary[]>([]);
   const [dataDomains, setDataDomains] = useState<DataDomainSummary[]>([]);
   const [loading, setLoading] = useState(true);

@@ -74,20 +74,6 @@ const typeRouteMap: Record<string, string> = {
   person: '/organizations',
 };
 
-interface OrgFlat {
-  id: string;
-  name: string;
-  type: string;
-  parentId: string | null;
-}
-
-interface OrgTreeNode {
-  id: string;
-  name: string;
-  type: string;
-  children: OrgTreeNode[];
-}
-
 interface Notification {
   id: string;
   orgId: string;
@@ -100,26 +86,11 @@ interface Notification {
   createdAt: string;
 }
 
-const WORKING_ORG_LEVELS = ['company', 'division'];
-
-function flattenOrgTree(nodes: OrgTreeNode[], depth: number = 0): Array<{ id: string; name: string; type: string; label: string }> {
-  const result: Array<{ id: string; name: string; type: string; label: string }> = [];
-  for (const node of nodes) {
-    if (WORKING_ORG_LEVELS.includes(node.type)) {
-      const indent = '\u00A0\u00A0'.repeat(depth);
-      const typeLabel = node.type.charAt(0).toUpperCase() + node.type.slice(1);
-      result.push({ id: node.id, name: node.name, type: node.type, label: `${indent}${node.name} (${typeLabel})` });
-    }
-    if (node.children.length > 0) result.push(...flattenOrgTree(node.children, depth + (WORKING_ORG_LEVELS.includes(node.type) ? 1 : 0)));
-  }
-  return result;
-}
-
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
-  const { activeOrgId, activeOrgName, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
+  const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
   const { isAdmin, role } = usePermissions();
 

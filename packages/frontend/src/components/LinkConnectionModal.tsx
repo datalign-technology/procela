@@ -75,7 +75,7 @@ export default function LinkConnectionModal({
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pickedAsset, setPickedAsset] = useState<string>(existingBinding?.sourceAsset || '');
-  const [pickedColumn, setPickedColumn] = useState<string>(existingBinding?.sourceColumn || '');
+  const [, setPickedColumn] = useState<string>(existingBinding?.sourceColumn || '');
   const [saving, setSaving] = useState(false);
 
   const isChangeMode = !!existingBinding;

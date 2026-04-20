@@ -38,14 +38,6 @@ const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
   padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
 };
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '8px 10px', fontSize: 10, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '8px 10px', fontSize: 12, borderTop: '1px solid var(--color-border)',
-};
-
 const typeBadge = (type: string): React.CSSProperties => {
   const colors: Record<string, { bg: string; color: string }> = {
     company: { bg: '#dbeafe', color: '#1e40af' }, division: { bg: '#ede9fe', color: '#5b21b6' },

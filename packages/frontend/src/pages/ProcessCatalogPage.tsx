@@ -531,7 +531,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   const completeness = node.level === 'VALUE_STREAM' ? hasRequiredPath(node) : null;
 
   // Missing required children — what's needed next
-  const requiredNext = getRequiredNextLevel(node);
+  void getRequiredNextLevel;
   let warning: string | null = null;
   let guidedLevel: NodeLevel | null = null;
   if (node.level === 'VALUE_STREAM' && countByLevel(node, 'PROCESS') === 0) {

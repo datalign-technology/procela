@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -139,9 +138,6 @@ function flattenTreeForSelect(nodes: OrgNode[], depth = 0): FlatOrgOption[] {
 
 // ── Forms ──
 
-interface OrgFormData { name: string; parentId: string | null; type: string; industry: string; description: string; }
-const emptyOrgForm: OrgFormData = { name: '', parentId: null, type: 'department', industry: '', description: '' };
-
 interface PersonFormData { orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[]; }
 const emptyPersonForm: PersonFormData = { orgIds: [], name: '', email: '', role: 'VIEWER', title: '', accessibleOrgIds: [] };
 
@@ -172,7 +168,7 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
 // ══════════════════════════════════════════════════════════════
 
 export default function PeoplePage() {
-  const { triggerRefresh, orgs: accessibleOrgs, activeOrgId } = useOrgContext();
+  const { orgs: accessibleOrgs, activeOrgId } = useOrgContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -265,7 +261,8 @@ export default function PeoplePage() {
   const selectedOrg = flatOrgs.find((o) => o.id === selectedOrgId);
   const filteredPeople = selectedOrgId ? people.filter((p) => p.orgIds.includes(selectedOrgId)) : people;
   const orgOptions = flattenTreeForSelect(tree);
-  const accessibleOrgIds = new Set(accessibleOrgs.map((o) => o.id));
+  // Reserved for future visibility filtering
+  void accessibleOrgs;
 
   // Keep the filter in sync with the URL so back/forward preserves it and
   // deep-links from the Organizations tree (?orgId=<id>) land pre-filtered.

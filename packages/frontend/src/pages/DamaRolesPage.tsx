@@ -112,7 +112,7 @@ export default function DamaRolesPage() {
   const [roleTypes, setRoleTypes] = useState<string[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
-  const [domains, setDomains] = useState<DomainOption[]>([]);
+  const [, setDomains] = useState<DomainOption[]>([]);
   const [summary, setSummary] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
