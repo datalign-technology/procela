@@ -231,22 +231,17 @@ router.get('/raci', (req: Request, res: Response) => {
     ? governanceGroups.filter((g) => g.orgId === oid)
     : governanceGroups;
 
-  // Rows: Value Streams and Processes
+  // Rows: all process hierarchy levels with parent info for tree building
   const rows = filteredNodes
-    .filter((n) => n.level === 'VALUE_STREAM' || n.level === 'PROCESS')
-    .map((n) => {
-      const parentNode =
-        n.level === 'PROCESS' && n.parentId
-          ? filteredNodes.find((p) => p.id === n.parentId)
-          : null;
-      return {
-        id: n.id,
-        name: n.name,
-        level: n.level,
-        parentName: parentNode?.name || null,
-        ownerId: (n as any).ownerId || null,
-      };
-    });
+    .filter((n) => ['VALUE_STREAM', 'PROCESS', 'SUBPROCESS', 'ACTIVITY'].includes(n.level))
+    .map((n) => ({
+      id: n.id,
+      name: n.name,
+      level: n.level,
+      parentId: n.parentId,
+      parentName: n.parentId ? filteredNodes.find((p) => p.id === n.parentId)?.name || null : null,
+      ownerId: (n as any).ownerId || null,
+    }));
 
   // Build lookup sets for DAMA role types -> person IDs
   const rolePersonMap: Record<string, Set<string>> = {};
@@ -304,13 +299,17 @@ router.get('/raci', (req: Request, res: Response) => {
   const columns = filteredPeople
     .filter((p) => allRelevantIds.has(p.id))
     .map((p) => {
-      // Determine primary DAMA role for display
       const personRoles = filteredRoles.filter((r) => r.personId === p.id);
       const primaryRole = personRoles.length > 0 ? personRoles[0].roleType : p.role || '';
+      const orgNames = (p.orgIds || [])
+        .map((oid) => organizations.find((o) => o.id === oid)?.name)
+        .filter(Boolean);
       return {
         personId: p.id,
         name: p.name,
         role: primaryRole,
+        title: p.title || '',
+        orgUnit: orgNames[0] || '',
       };
     });
 
