@@ -1111,14 +1111,16 @@ export default function ProcessCatalogPage() {
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
         </div>
-        {totalNodes > 0 && canCreateValueStreams && (
+        {canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 6 }}>
-            {canWrite && (
+            {totalNodes > 0 && canWrite && (
               <IconButton icon="trash" label="Delete all processes" variant="danger"
                 onClick={() => setShowDeleteAll(true)} />
             )}
-            <IconButton icon="eye" label="Visualize"
-              onClick={() => navigate('/processes/visualization')} />
+            {totalNodes > 0 && (
+              <IconButton icon="eye" label="Visualize"
+                onClick={() => navigate('/processes/visualization')} />
+            )}
             {(byLevel.VALUE_STREAM || 0) >= 2 && (
               <IconButton icon="refresh" label="Compare value streams"
                 onClick={() => navigate('/processes/compare')} />

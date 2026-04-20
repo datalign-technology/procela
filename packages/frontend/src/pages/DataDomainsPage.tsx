@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import { errorToast } from '../lib/errorToast';
@@ -98,6 +99,7 @@ const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECAT
 
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
+  const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [summary, setSummary] = useState<DomainSummary>({ total: 0, governed: 0, ungoverned: 0, totalAssetsInDomains: 0 });
@@ -360,17 +362,21 @@ export default function DataDomainsPage() {
                 d.status,
               ]))} />
           )}
-          <IconButton
-            icon="settings"
-            label={
-              generating ? 'Generating\u2026'
-              : domains.length > 0 ? `Generate disabled — ${domains.length} domain${domains.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
-              : 'Generate from industry'
-            }
-            disabled={generating || domains.length > 0}
-            onClick={handleGenerate}
-          />
-          <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />
+          {canWrite && (
+            <IconButton
+              icon="settings"
+              label={
+                generating ? 'Generating\u2026'
+                : domains.length > 0 ? `Generate disabled — ${domains.length} domain${domains.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+                : 'Generate from industry'
+              }
+              disabled={generating || domains.length > 0}
+              onClick={handleGenerate}
+            />
+          )}
+          {canWrite && (
+            <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />
+          )}
         </div>
       </div>
 

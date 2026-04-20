@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -254,6 +255,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
 export default function GovernanceGroupsPage() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
+  const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
   // Data state
@@ -494,20 +496,24 @@ export default function GovernanceGroupsPage() {
                 g.status,
               ]))} />
           )}
-          <IconButton icon="settings"
-            label={
-              flatGroups.length > 0
-                ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
-                : 'Generate governance template'
-            }
-            disabled={flatGroups.length > 0}
-            onClick={async () => {
-              try {
-                await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
-                fetchGroups();
-              } catch { /* */ }
-            }} />
-          <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
+          {canWrite && (
+            <IconButton icon="settings"
+              label={
+                flatGroups.length > 0
+                  ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+                  : 'Generate governance template'
+              }
+              disabled={flatGroups.length > 0}
+              onClick={async () => {
+                try {
+                  await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
+                  fetchGroups();
+                } catch { /* */ }
+              }} />
+          )}
+          {canWrite && (
+            <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
+          )}
         </div>
       </div>
 
