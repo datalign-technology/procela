@@ -625,20 +625,50 @@ export default function PeoplePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organization:</label>
-          <select
-            style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 13 }}
-            value={selectedOrgId}
-            onChange={(e) => applyOrgFilter(e.target.value)}
-          >
-            <option value="">All organizations</option>
-            {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-          </select>
         </div>
       </div>
 
-      {/* Full-width body (no tree any more) */}
-      <div>
+      {/* Side-by-side: Org tree (left) + People list (right) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
+        {/* Org tree sidebar */}
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 10, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Organizations</div>
+          <div
+            onClick={() => applyOrgFilter('')}
+            style={{
+              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+              fontWeight: !selectedOrgId ? 600 : 400,
+              background: !selectedOrgId ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              color: !selectedOrgId ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+            onMouseEnter={(e) => { if (selectedOrgId) e.currentTarget.style.background = 'var(--color-bg)'; }}
+            onMouseLeave={(e) => { if (selectedOrgId) e.currentTarget.style.background = 'transparent'; }}
+          >
+            All ({people.length})
+          </div>
+          {orgOptions.map((opt) => {
+            const isSelected = selectedOrgId === opt.id;
+            const count = people.filter((p) => p.orgIds.includes(opt.id)).length;
+            return (
+              <div key={opt.id}
+                onClick={() => applyOrgFilter(opt.id)}
+                style={{
+                  padding: '4px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+                  paddingLeft: `${8 + (opt.label.match(/^\u00A0*/)?.[0]?.length || 0) * 3}px`,
+                  fontWeight: isSelected ? 600 : 400,
+                  background: isSelected ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.label.replace(/^\u00A0+/, '')}</span>
+                {count > 0 && <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{count}</span>}
+              </div>
+            );
+          })}
+        </div>
 
         {/* People list */}
         <div>

@@ -106,11 +106,9 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
 // Root org is system-protected — never selectable for bulk delete.
 const ROOT_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, onAddPerson, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect }: {
+function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect }: {
   node: OrgNode; depth: number;
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
-  onViewPeople: (id: string) => void;
-  onAddPerson: (id: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
   accessibleOrgIds: Set<string>;
   allOrgs: OrgFlat[];
@@ -178,10 +176,8 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
           )}
         </div>
         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-          <IconButton size="sm" icon="users" label={count > 0 ? `View ${count} people` : 'View people'} onClick={() => onViewPeople(node.id)} />
           {canEdit && (
             <>
-              <IconButton size="sm" icon="plus" label={`Add person to ${node.name}`} onClick={() => onAddPerson(node.id)} />
               <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => onAddChild(node.id)} />
               <IconButton size="sm" icon="edit" label="Edit" onClick={() => onEdit(node)} />
               {!isRoot && (
@@ -196,7 +192,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, onViewPeople, 
       </div>
       {isExpanded && node.children.map((child) => (
         <OrgTreeNode key={child.id} node={child} depth={depth + 1}
-          onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} onViewPeople={onViewPeople} onAddPerson={onAddPerson}
+          onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
           accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs}
           selectedIds={selectedIds} toggleSelect={toggleSelect} />
@@ -366,7 +362,7 @@ export default function OrganizationsPage() {
             </HelpPopover>
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-            The organization hierarchy. Click <em>People</em> on a row to manage assignments for that org.
+            The organization hierarchy. Manage people on the <a href="/people" style={{ color: 'var(--color-primary)' }}>People</a> page.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -567,8 +563,6 @@ export default function OrganizationsPage() {
             tree.map((node) => (
               <OrgTreeNode key={node.id} node={node} depth={0}
                 onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
-                onViewPeople={(id) => navigate(`/people?orgId=${encodeURIComponent(id)}`)}
-                onAddPerson={(id) => navigate(`/people?addToOrg=${encodeURIComponent(id)}`)}
                 expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
                 selectedIds={selectedIds} toggleSelect={toggleOrgSelect} />
