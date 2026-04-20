@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { processNodes } from './process-catalog';
@@ -87,7 +88,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET /api/v1/mappings */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? mappings.filter((m) => m.orgId === orgId) : mappings;
+  const filtered = filterByOrgScope(mappings, orgId as string | undefined);
   const enriched = filtered.map(enrichMapping);
   res.json({ success: true, data: enriched });
 });

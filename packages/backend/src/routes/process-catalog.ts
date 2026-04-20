@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { loadStore, saveStore } from '../lib/persistence';
+import { getVisibleOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { organizations } from './organizations';
 import { createNotification } from './notifications';
@@ -241,7 +242,10 @@ router.delete('/all', (_req: Request, res: Response) => {
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId
-    ? processNodes.filter((n) => n.orgIds.includes(orgId as string) || n.orgId === orgId)
+    ? (() => {
+        const scope = getVisibleOrgScope(orgId as string)!;
+        return processNodes.filter((n) => scope.has(n.orgId) || n.orgIds.some((id) => scope.has(id)));
+      })()
     : processNodes;
   const valueStreams = filtered.filter((n) => n.level === 'VALUE_STREAM');
   res.json({

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
@@ -92,7 +93,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET /api/v1/data-domains — list all (support ?orgId= filter) */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? dataDomains.filter((d) => d.orgId === orgId) : dataDomains;
+  const filtered = filterByOrgScope(dataDomains, orgId as string | undefined);
   const enriched = filtered.map(enrichDomain);
   res.json({ success: true, data: enriched });
 });
@@ -100,7 +101,7 @@ router.get('/', (req: Request, res: Response) => {
 /** GET /api/v1/data-domains/summary — coverage stats */
 router.get('/summary', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? dataDomains.filter((d) => d.orgId === orgId) : dataDomains;
+  const filtered = filterByOrgScope(dataDomains, orgId as string | undefined);
 
   const total = filtered.length;
   const governed = filtered.filter((d) => d.ownerId).length;

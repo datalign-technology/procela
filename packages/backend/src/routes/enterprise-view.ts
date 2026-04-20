@@ -6,6 +6,7 @@ import { people } from './people';
 import { dataDomains } from './data-domains';
 import { dataLineageLinks } from './data-lineage';
 import { dataQualityRules } from './data-quality';
+import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
 
@@ -39,7 +40,10 @@ router.get('/', (req: Request, res: Response) => {
   // Process nodes (top 3 levels: VALUE_STREAM, PROCESS, ACTIVITY)
   const topLevels = new Set(['VALUE_STREAM', 'PROCESS', 'ACTIVITY']);
   const filteredProcesses = orgId
-    ? processNodes.filter((p) => p.orgId === orgId || p.orgIds?.includes(orgId as string))
+    ? (() => {
+        const scope = getVisibleOrgScope(orgId as string)!;
+        return processNodes.filter((p) => scope.has(p.orgId) || (p.orgIds || []).some((id) => scope.has(id)));
+      })()
     : processNodes;
   for (const p of filteredProcesses) {
     if (!topLevels.has(p.level)) continue;
@@ -62,7 +66,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Systems
   const filteredSystems = orgId
-    ? systems.filter((s: any) => s.orgId === orgId) : systems;
+    ? filterByOrgScope(systems, orgId as string) : systems;
   for (const s of filteredSystems as any[]) {
     addNode({
       id: s.id, type: 'system',
@@ -73,7 +77,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Data assets
   const filteredAssets = orgId
-    ? dataAssets.filter((a) => a.orgId === orgId) : dataAssets;
+    ? filterByOrgScope(dataAssets, orgId as string) : dataAssets;
   for (const a of filteredAssets) {
     const assetRules = dataQualityRules.filter((r) => r.dataAssetId === a.id);
     addNode({
@@ -95,7 +99,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Data domains
   const filteredDomains = orgId
-    ? dataDomains.filter((d) => d.orgId === orgId) : dataDomains;
+    ? filterByOrgScope(dataDomains, orgId as string) : dataDomains;
   for (const d of filteredDomains) {
     addNode({
       id: d.id, type: 'domain',
@@ -154,7 +158,7 @@ router.get('/', (req: Request, res: Response) => {
   let mappings: any[] = [];
   try { mappings = require('./mappings').mappings || []; } catch { /* */ }
   const filteredMappings = orgId
-    ? mappings.filter((m: any) => m.orgId === orgId) : mappings;
+    ? filterByOrgScope(mappings, orgId as string) : mappings;
   for (const m of filteredMappings) {
     // Map to the process node (step/activity) and data asset
     if (nodeIds.has(m.processStepId) && nodeIds.has(m.dataAssetId)) {
@@ -170,7 +174,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Lineage: System → System
   const filteredLineage = orgId
-    ? dataLineageLinks.filter((l: any) => l.orgId === orgId) : dataLineageLinks;
+    ? filterByOrgScope(dataLineageLinks, orgId as string) : dataLineageLinks;
   for (const l of filteredLineage as any[]) {
     if (nodeIds.has(l.sourceSystemId) && nodeIds.has(l.targetSystemId)) {
       edges.push({

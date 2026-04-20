@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import logger from '../lib/logger';
 
 interface StoredSystem {
@@ -41,7 +42,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET /api/v1/systems */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? systems.filter((s) => s.orgId === orgId) : systems;
+  const filtered = filterByOrgScope(systems, orgId as string | undefined);
   res.json({ success: true, data: filtered, systemTypes: SYSTEM_TYPES });
 });
 

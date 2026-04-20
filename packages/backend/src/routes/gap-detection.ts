@@ -3,6 +3,7 @@ import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { dataDomains } from './data-domains';
 import { people } from './people';
+import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
 
@@ -27,20 +28,23 @@ router.get('/', (req: Request, res: Response) => {
 
   // Scope by org
   const nodes = orgId
-    ? processNodes.filter((n) => n.orgId === orgId || n.orgIds?.includes(orgId as string))
+    ? (() => {
+        const scope = getVisibleOrgScope(orgId as string)!;
+        return processNodes.filter((n) => scope.has(n.orgId) || (n.orgIds || []).some((id) => scope.has(id)));
+      })()
     : processNodes;
   const assets = orgId
-    ? dataAssets.filter((a) => a.orgId === orgId)
+    ? filterByOrgScope(dataAssets, orgId as string)
     : dataAssets;
   const domains = orgId
-    ? dataDomains.filter((d) => d.orgId === orgId)
+    ? filterByOrgScope(dataDomains, orgId as string)
     : dataDomains;
 
   // Load mappings lazily to avoid circular deps
   let mappings: any[] = [];
   try { mappings = require('./mappings').mappings || []; } catch { /* */ }
   const filteredMappings = orgId
-    ? mappings.filter((m: any) => m.orgId === orgId)
+    ? filterByOrgScope(mappings, orgId as string)
     : mappings;
 
   const mappedStepIds = new Set(filteredMappings.map((m: any) => m.processStepId));
@@ -133,7 +137,10 @@ router.get('/', (req: Request, res: Response) => {
   }
 
   const allPeople = orgId
-    ? people.filter((p) => p.orgIds?.includes(orgId as string))
+    ? (() => {
+        const scope = getVisibleOrgScope(orgId as string)!;
+        return people.filter((p) => (p.orgIds || []).some((id) => scope.has(id)));
+      })()
     : people;
   const unassignedPeople = allPeople
     .filter((p) => !ownerIds.has(p.id))

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { systems } from './systems';
@@ -206,8 +207,8 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET /api/v1/data-assets */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? dataAssets.filter((a) => a.orgId === orgId) : dataAssets;
-  const filteredSystems = orgId ? systems.filter((s) => s.orgId === orgId) : systems;
+  const filtered = filterByOrgScope(dataAssets, orgId as string | undefined);
+  const filteredSystems = filterByOrgScope(systems, orgId as string | undefined);
 
   // Enrich each asset with domain, owner, steward and health info so the
   // table can display them without a per-row 360 fetch.

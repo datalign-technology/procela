@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { dataAssets, getPrimaryBinding } from './data-assets';
@@ -129,7 +130,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 router.get('/', (req: Request, res: Response) => {
   const { orgId, dataAssetId } = req.query;
   let filtered = dataQualityRules;
-  if (orgId) filtered = filtered.filter((r) => r.orgId === orgId);
+  if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
   if (dataAssetId) filtered = filtered.filter((r) => r.dataAssetId === dataAssetId);
 
   const enriched = filtered.map((rule) => {
@@ -150,7 +151,7 @@ router.get('/', (req: Request, res: Response) => {
 /** GET /api/v1/data-quality/summary — overall quality stats */
 router.get('/summary', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? dataQualityRules.filter((r) => r.orgId === orgId) : dataQualityRules;
+  const filtered = filterByOrgScope(dataQualityRules, orgId as string | undefined);
 
   const totalRules = filtered.length;
   const passingCount = filtered.filter((r) => r.status === 'PASSING').length;

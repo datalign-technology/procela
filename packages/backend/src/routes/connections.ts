@@ -4,6 +4,7 @@ import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import { testConnection, discoverAssets } from '../services/connector.service';
 import { analyzeLocalFile, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
 import logger from '../lib/logger';
@@ -139,7 +140,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 router.get('/', (req: Request, res: Response) => {
   const { orgId, systemId } = req.query;
   let filtered = connections;
-  if (orgId) filtered = filtered.filter((c) => c.orgId === orgId);
+  if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
   if (systemId) filtered = filtered.filter((c) => c.systemId === systemId);
   res.json({
     success: true,

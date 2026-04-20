@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import logger from '../lib/logger';
 
@@ -112,7 +113,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET /api/v1/governance-groups */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  let filtered = orgId ? governanceGroups.filter((g) => g.orgId === orgId) : governanceGroups;
+  let filtered = filterByOrgScope(governanceGroups, orgId as string | undefined);
   // Deduplicate by name+type within the result set
   const seen = new Set<string>();
   filtered = filtered.filter((g) => {
