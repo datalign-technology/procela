@@ -62,24 +62,15 @@ export default function LoginPage() {
   const microsoftProvider = providers.find((p) => p.type === 'oidc' && p.id === 'microsoft');
   const oktaProvider = providers.find((p) => p.type === 'oidc' && p.id === 'okta');
 
-  const handleDevLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const loginWithEmail = async (loginEmail: string, loginName?: string) => {
     setError('');
-
-    if (!email.trim()) {
-      setError('Email is required');
-      return;
-    }
-
     setLoading(true);
     try {
       const res = await apiClient.post<LoginResponse>('/auth/login', {
-        email: email.trim(),
-        name: name.trim() || undefined,
+        email: loginEmail,
+        name: loginName || undefined,
       });
-
       const { accessToken, refreshToken, expiresIn, user } = res.data;
-
       login(
         {
           id: user.sub,
@@ -94,13 +85,21 @@ export default function LoginPage() {
         refreshToken,
         expiresIn,
       );
-
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDevLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setError('Email is required');
+      return;
+    }
+    await loginWithEmail(email.trim(), name.trim());
   };
 
   const handleSsoClick = (provider: AuthProvider | undefined) => {
@@ -231,6 +230,32 @@ export default function LoginPage() {
                       {loading ? 'Signing in...' : 'Sign in'}
                     </button>
                   </form>
+
+                  {/* Quick test logins */}
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Test Accounts</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {[
+                        { email: 'eleanor.briggs@tidewater-utilities.com', name: 'Eleanor Briggs', role: 'Super Admin' },
+                        { email: 'susan.chen@tidewater-utilities.com', name: 'Susan Chen', role: 'Editor' },
+                      ].map((acct) => (
+                        <button
+                          key={acct.email}
+                          type="button"
+                          disabled={loading}
+                          onClick={() => loginWithEmail(acct.email, acct.name)}
+                          style={{
+                            flex: 1, minWidth: 140, padding: '8px 12px', borderRadius: 6,
+                            border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer',
+                            textAlign: 'left', fontSize: 12,
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{acct.name}</div>
+                          <div style={{ color: '#94a3b8', fontSize: 10 }}>{acct.role}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </>
             )}
