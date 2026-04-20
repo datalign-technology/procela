@@ -6,6 +6,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataAssets } from './data-assets';
+import { organizations } from './organizations';
 import { aiService } from '../services/ai.service';
 
 export interface StoredDataDomain {
@@ -34,13 +35,22 @@ export const dataDomains: StoredDataDomain[] = loadStore<StoredDataDomain>('data
   if (migrated > 0) saveStore('dataDomains', dataDomains);
 }
 
-const VALID_STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'];
-const DOMAIN_TRANSITIONS: Record<string, string[]> = {
+const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   DRAFT:      ['ACTIVE'],
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
   DEPRECATED: ['DRAFT'],
 };
-const DOMAIN_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['DRAFT', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 function enrichDomain(domain: StoredDataDomain) {
   const owner = domain.ownerId ? people.find((p) => p.id === domain.ownerId) : null;
@@ -162,7 +172,11 @@ router.put('/:id', (req: Request, res: Response) => {
 
   const hasFieldEdits = name !== undefined || description !== undefined
     || ownerId !== undefined || stewardIds !== undefined || scopeDefinition !== undefined;
-  if (hasFieldEdits && DOMAIN_LOCKED.has(domain.status)) {
+  const domainOrg = organizations.find((o: any) => o.id === domain.orgId);
+  const isAdvanced = domainOrg?.statusMode === 'advanced';
+  const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;
+  const transitionMap = isAdvanced ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
+  if (hasFieldEdits && lockedSet.has(domain.status)) {
     res.status(403).json({
       success: false,
       error: `Cannot edit "${domain.name}" — it is currently ${domain.status.replace('_', ' ')}. Change its status to Draft first.`,
@@ -179,7 +193,7 @@ router.put('/:id', (req: Request, res: Response) => {
 
   // Validate status transition
   if (status !== undefined && status !== domain.status) {
-    const allowed = DOMAIN_TRANSITIONS[domain.status] || [];
+    const allowed = transitionMap[domain.status] || [];
     if (!allowed.includes(status)) {
       res.status(400).json({
         success: false,

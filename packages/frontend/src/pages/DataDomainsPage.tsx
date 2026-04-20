@@ -80,12 +80,21 @@ interface FormData {
 
 const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', scopeDefinition: '' };
 
-const DOMAIN_TRANSITIONS: Record<string, string[]> = {
+const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   DRAFT:      ['ACTIVE'],
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
   DEPRECATED: ['DRAFT'],
 };
-const DOMAIN_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['DRAFT', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
@@ -99,6 +108,7 @@ export default function DataDomainsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedDomain, setSelectedDomain] = useState<DataDomain | null>(null);
+  const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -127,6 +137,12 @@ export default function DataDomainsPage() {
       setSummary(summaryRes.data || { total: 0, governed: 0, ungoverned: 0, totalAssetsInDomains: 0 });
       setPeople(peopleRes.data || []);
       setAllAssets(assetsRes.data || []);
+      if (activeOrgId) {
+        try {
+          const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
+          setStatusMode((orgRes.data?.statusMode as 'simple' | 'advanced') || 'simple');
+        } catch { /* */ }
+      }
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -650,17 +666,17 @@ export default function DataDomainsPage() {
                       style={{ ...statusBadgeStyle(domain.status), border: 'none', cursor: 'pointer', appearance: 'auto' as any, paddingRight: 16 }}
                     >
                       <option value={domain.status}>{domain.status.replace('_', ' ')}</option>
-                      {(DOMAIN_TRANSITIONS[domain.status] || []).map((s) => (
+                      {((statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS)[domain.status] || []).map((s) => (
                         <option key={s} value={s}>{s.replace('_', ' ')}</option>
                       ))}
                     </select>
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                      {!DOMAIN_LOCKED.has(domain.status) && (
+                      {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
                       )}
-                      {!DOMAIN_LOCKED.has(domain.status) && (
+                      {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
                         <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(domain.id)} />
                       )}
                     </div>

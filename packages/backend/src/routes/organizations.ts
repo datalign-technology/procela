@@ -16,10 +16,11 @@ export interface StoredOrg {
   id: string;
   parentId: string | null;
   name: string;
-  type: string; // 'company' | 'division' | 'department' | 'team' | 'unit'
+  type: string;
   industry: string;
   description: string;
   headCount: number;
+  statusMode?: 'simple' | 'advanced';
   createdAt: string;
   updatedAt: string;
 }
@@ -187,12 +188,14 @@ router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
       return;
     }
   }
+  const { statusMode } = req.body;
   if (name !== undefined) org.name = name;
   if (parentId !== undefined) org.parentId = parentId;
   if (type !== undefined) org.type = type;
   if (industry !== undefined) org.industry = industry;
   if (description !== undefined) org.description = description;
   if (headCount !== undefined) org.headCount = headCount;
+  if (statusMode !== undefined && (statusMode === 'simple' || statusMode === 'advanced')) org.statusMode = statusMode;
   org.updatedAt = new Date().toISOString();
   saveStore('organizations', organizations);
   res.json({ success: true, data: org });
@@ -223,6 +226,74 @@ router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
   organizations.splice(idx, 1);
   saveStore('organizations', organizations);
   res.status(204).send();
+});
+
+/**
+ * POST /api/v1/organizations/:id/status-mode
+ * Switch between simple (Draft/Active/Deprecated) and advanced
+ * (Draft/Proposed/Under Review/Approved/Active/Deprecated) status modes.
+ * Migrates existing entity statuses when switching:
+ * - advanced → simple: PROPOSED/UNDER_REVIEW/APPROVED → DRAFT
+ * - simple → advanced: no migration needed (simple statuses are a subset)
+ */
+router.post('/:id/status-mode', (req: AuthenticatedRequest, res: Response) => {
+  const org = organizations.find((o) => o.id === req.params.id);
+  if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
+
+  const { mode } = req.body;
+  if (mode !== 'simple' && mode !== 'advanced') {
+    res.status(400).json({ success: false, error: 'mode must be "simple" or "advanced"' });
+    return;
+  }
+
+  const oldMode = org.statusMode || 'simple';
+  if (mode === oldMode) {
+    res.json({ success: true, data: org, migrated: 0, message: `Already in ${mode} mode` });
+    return;
+  }
+
+  org.statusMode = mode;
+  org.updatedAt = new Date().toISOString();
+  saveStore('organizations', organizations);
+
+  // Migrate process nodes and data domains in this org's scope
+  let migrated = 0;
+  if (mode === 'simple') {
+    const { getDescendantOrgIds } = accessHelpers();
+    const scopeIds = new Set([org.id, ...getDescendantOrgIds(org.id)]);
+    const legacyStatuses = new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
+
+    // Lazy-require to avoid circular deps
+    const { processNodes } = require('./process-catalog');
+    const { saveStore: save } = require('../lib/persistence');
+    for (const node of processNodes) {
+      if ((scopeIds.has(node.orgId) || (node.orgIds || []).some((id: string) => scopeIds.has(id))) && legacyStatuses.has(node.status)) {
+        node.status = 'DRAFT';
+        migrated++;
+      }
+    }
+    if (migrated > 0) save('processNodes', processNodes);
+
+    const { dataDomains } = require('./data-domains');
+    let domainsMigrated = 0;
+    for (const d of dataDomains) {
+      if (scopeIds.has(d.orgId) && legacyStatuses.has(d.status)) {
+        d.status = 'DRAFT';
+        domainsMigrated++;
+      }
+    }
+    if (domainsMigrated > 0) { save('dataDomains', dataDomains); migrated += domainsMigrated; }
+  }
+
+  logger.info({ orgId: org.id, oldMode, newMode: mode, migrated }, 'Status mode switched');
+  res.json({
+    success: true,
+    data: org,
+    migrated,
+    message: migrated > 0
+      ? `Switched to ${mode} mode. ${migrated} item(s) migrated from review/approval statuses to Draft.`
+      : `Switched to ${mode} mode.`,
+  });
 });
 
 /**

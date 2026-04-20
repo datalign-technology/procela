@@ -11,13 +11,21 @@ const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
 
 // ── Status state machine ────────────────────────────────────────────────
 // Maps each status to the set of statuses it can transition to.
-const VALID_STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'] as const;
-const VALID_TRANSITIONS: Record<string, string[]> = {
+const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   DRAFT:      ['ACTIVE'],
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
   DEPRECATED: ['DRAFT'],
 };
-const LOCKED_STATUSES = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['DRAFT', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UNIVERSAL PROCESS HIERARCHY
@@ -111,7 +119,7 @@ export interface ProcessVersion {
 
 // ── Persistent stores ──
 
-export { VALID_TRANSITIONS, LOCKED_STATUSES };
+export { SIMPLE_TRANSITIONS, ADVANCED_TRANSITIONS, SIMPLE_LOCKED, ADVANCED_LOCKED };
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
@@ -497,7 +505,13 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     || orderIndex !== undefined || orgIds !== undefined || ownerId !== undefined
     || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
     || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined;
-  if (hasFieldEdits && LOCKED_STATUSES.has(node.status)) {
+  // Resolve org's status mode to determine which transitions/locks apply
+  const nodeOrg = organizations.find((o) => o.id === node.orgId);
+  const isAdvanced = nodeOrg?.statusMode === 'advanced';
+  const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;
+  const transitionMap = isAdvanced ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
+
+  if (hasFieldEdits && lockedSet.has(node.status)) {
     res.status(403).json({
       success: false,
       error: `Cannot edit "${node.name}" — it is currently ${node.status.replace('_', ' ')}. Change its status to Draft first.`,
@@ -520,7 +534,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   // Validate status transition against the state machine
   if (status !== undefined && status !== node.status) {
-    const allowed = VALID_TRANSITIONS[node.status] || [];
+    const allowed = transitionMap[node.status] || [];
     if (!allowed.includes(status)) {
       res.status(400).json({
         success: false,

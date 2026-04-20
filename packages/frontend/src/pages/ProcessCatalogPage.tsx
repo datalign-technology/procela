@@ -77,15 +77,24 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
 
 import { getStatusColor } from '@/lib/statusBadge';
 
-const STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'];
-const statusColors = Object.fromEntries(STATUSES.map((s) => [s, getStatusColor(s)]));
+const ALL_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+const statusColors = Object.fromEntries(ALL_STATUSES.map((s) => [s, getStatusColor(s)]));
 
-const STATUS_TRANSITIONS: Record<string, string[]> = {
+const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   DRAFT:      ['ACTIVE'],
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
   DEPRECATED: ['DRAFT'],
 };
-const LOCKED_STATUSES = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:        ['PROPOSED'],
+  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
+  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED:     ['ACTIVE', 'DRAFT'],
+  ACTIVE:       ['DRAFT', 'DEPRECATED'],
+  DEPRECATED:   ['DRAFT'],
+};
+const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 const COMPLIANCE_OPTIONS = [
   'SOX', 'HIPAA', 'GDPR', 'PCI-DSS', 'CCPA', 'FERPA', 'FISMA', 'NERC CIP',
@@ -491,7 +500,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -504,6 +513,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   mappingsByStep: Record<string, MappingInfo[]>;
   onAddMapping: (nodeId: string, assetId: string, linkType: string) => void;
   onRemoveMapping: (mappingId: string) => void;
+  statusMode: 'simple' | 'advanced';
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
@@ -523,6 +533,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   const config = LEVEL_CONFIG[node.level];
   const validChildren = (validChildrenMap[node.level] || []) as NodeLevel[];
   const canAddChildren = validChildren.length > 0;
+  const STATUS_TRANSITIONS = statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
+  const LOCKED_STATUSES = statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED;
   const isLocked = LOCKED_STATUSES.has(node.status);
 
   // Completeness check for value streams
@@ -836,7 +848,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           assetsList={assetsList}
           mappingsByStep={mappingsByStep}
           onAddMapping={onAddMapping}
-          onRemoveMapping={onRemoveMapping} />
+          onRemoveMapping={onRemoveMapping}
+          statusMode={statusMode} />
       ))}
     </div>
   );
@@ -866,6 +879,7 @@ export default function ProcessCatalogPage() {
   const [historyVersions, setHistoryVersions] = useState<ProcessVersion[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [viewingVersion, setViewingVersion] = useState<ProcessVersion | null>(null);
+  const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
 
   const fetchData = useCallback(async () => {
     try {
@@ -891,6 +905,13 @@ export default function ProcessCatalogPage() {
       setAllTags(tagsRes.data || []);
       setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
       setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name })));
+      // Resolve org's statusMode
+      if (activeOrgId) {
+        try {
+          const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
+          setStatusMode((orgRes.data?.statusMode as 'simple' | 'advanced') || 'simple');
+        } catch { /* */ }
+      }
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -1328,7 +1349,8 @@ export default function ProcessCatalogPage() {
               assetsList={assetsList}
               mappingsByStep={mappingsByStep}
               onAddMapping={addMapping}
-              onRemoveMapping={removeMapping} />
+              onRemoveMapping={removeMapping}
+              statusMode={statusMode} />
           ))
         )}
       </div>
