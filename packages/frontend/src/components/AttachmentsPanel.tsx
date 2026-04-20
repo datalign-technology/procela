@@ -76,7 +76,6 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
       const params = new URLSearchParams({
         entityType,
         entityId,
-        filename: file.name,
         name: name || file.name,
         description: description || '',
       });
