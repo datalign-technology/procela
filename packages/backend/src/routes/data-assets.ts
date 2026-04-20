@@ -234,7 +234,8 @@ router.get('/', (req: Request, res: Response) => {
         .filter(Boolean)
         .join(', ') || null;
     }
-    return { ...asset, domainName, ownerName, stewardName };
+    const systemName = asset.systemId ? filteredSystems.find((s) => s.id === asset.systemId)?.name || null : null;
+    return { ...asset, domainName, ownerName, stewardName, systemName };
   });
 
   res.json({ success: true, data: enriched, systems: filteredSystems, dataTypes: STANDARD_DATA_TYPES });

@@ -5,6 +5,7 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { getVisibleOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { organizations } from './organizations';
+import { people } from './people';
 import { createNotification } from './notifications';
 
 const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
@@ -308,10 +309,15 @@ router.get('/', (req: Request, res: Response) => {
       })()
     : processNodes;
   const valueStreams = filtered.filter((n) => n.level === 'VALUE_STREAM');
+  // Enrich with owner names so the frontend can display them inline
+  const enriched = filtered.map((n) => {
+    const ownerName = n.ownerId ? people.find((p) => p.id === n.ownerId)?.name || null : null;
+    return { ...n, ownerName };
+  });
   res.json({
     success: true,
-    data: filtered,
-    tree: buildTree(filtered),
+    data: enriched,
+    tree: buildTree(enriched),
     levels: NODE_LEVELS,
     validChildren: VALID_CHILDREN,
     requiredLevels: REQUIRED_LEVELS,
