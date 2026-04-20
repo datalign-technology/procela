@@ -112,7 +112,15 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET /api/v1/governance-groups */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? governanceGroups.filter((g) => g.orgId === orgId) : governanceGroups;
+  let filtered = orgId ? governanceGroups.filter((g) => g.orgId === orgId) : governanceGroups;
+  // Deduplicate by name+type within the result set
+  const seen = new Set<string>();
+  filtered = filtered.filter((g) => {
+    const key = `${g.name.toLowerCase()}|${g.type}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   res.json({
     success: true,
     data: filtered,
