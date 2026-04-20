@@ -122,11 +122,52 @@ export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
-let activityCounter = 0;
 
-function generateActivityId(): string {
-  activityCounter++;
-  return `ACT-${String(activityCounter).padStart(4, '0')}`;
+// Human-readable ID generators per level.
+// Counters are initialized from existing data on startup so IDs
+// never duplicate after a restart.
+const ID_PREFIXES: Record<string, string> = {
+  VALUE_STREAM: 'VS',
+  PROCESS: 'PRO',
+  SUBPROCESS: 'SP',
+  ACTIVITY: 'ACT',
+  TASK: 'TSK',
+  DOMAIN: 'DOM',
+  CAPABILITY: 'CAP',
+  EXECUTION: 'EXE',
+};
+
+const levelCounters: Record<string, number> = {};
+for (const [level, prefix] of Object.entries(ID_PREFIXES)) {
+  const existing = processNodes
+    .filter((n) => n.level === level && n.activityId)
+    .map((n) => {
+      const m = n.activityId?.match(new RegExp(`^${prefix}-(\\d+)$`));
+      return m ? parseInt(m[1], 10) : 0;
+    });
+  levelCounters[level] = existing.length > 0 ? Math.max(...existing) : 0;
+}
+
+function generateNodeId(level: string): string {
+  const prefix = ID_PREFIXES[level];
+  if (!prefix) return '';
+  levelCounters[level] = (levelCounters[level] || 0) + 1;
+  return `${prefix}-${String(levelCounters[level]).padStart(4, '0')}`;
+}
+
+// Backfill existing nodes that lack a readable ID
+{
+  let backfilled = 0;
+  for (const node of processNodes) {
+    if (!node.activityId && ID_PREFIXES[node.level]) {
+      node.activityId = generateNodeId(node.level);
+      backfilled++;
+    }
+  }
+  if (backfilled > 0) {
+    saveStore('processNodes', processNodes);
+    logger.info({ backfilled }, 'Backfilled readable IDs on existing process nodes');
+  }
 }
 
 // ── Helpers ──
@@ -362,7 +403,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     level: level as NodeLevel,
     name,
     description: description || '',
-    activityId: level === 'ACTIVITY' ? generateActivityId() : null,
+    activityId: generateNodeId(level as string) || null,
     status: status || 'DRAFT',
     orderIndex: siblings.length,
     orgId: DEV_ORG_ID,
@@ -740,7 +781,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
       const vsNode: ProcessNode = {
         id: uuid(), parentId: null, level: 'VALUE_STREAM',
         name: tvs.name, description: tvs.description || `Generated from ${industry} template`,
-        activityId: null, status: 'DRAFT',
+        activityId: generateNodeId('VALUE_STREAM'), status: 'DRAFT',
         orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
         version: 1,
@@ -757,7 +798,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
         const procNode: ProcessNode = {
           id: uuid(), parentId: vsNode.id, level: 'PROCESS',
           name: proc.name, description: proc.description || '',
-          activityId: null, status: 'DRAFT', orderIndex: pIdx,
+          activityId: generateNodeId('PROCESS'), status: 'DRAFT', orderIndex: pIdx,
           orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
           version: 1,
           ...(proc.purpose ? { purpose: proc.purpose } : {}),
@@ -776,7 +817,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
             const spNode: ProcessNode = {
               id: uuid(), parentId: procNode.id, level: 'SUBPROCESS',
               name: sp.name, description: sp.description || '',
-              activityId: null, status: 'DRAFT', orderIndex: spIdx,
+              activityId: generateNodeId('SUBPROCESS'), status: 'DRAFT', orderIndex: spIdx,
               orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
               version: 1,
               createdAt: now, updatedAt: now,
@@ -803,7 +844,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
           const actNode: ProcessNode = {
             id: uuid(), parentId: act._parentId || procNode.id, level: 'ACTIVITY',
             name: act.name, description: act.description || '',
-            activityId: generateActivityId(), status: 'DRAFT', orderIndex: aIdx,
+            activityId: generateNodeId('ACTIVITY'), status: 'DRAFT', orderIndex: aIdx,
             orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
             version: 1,
             createdAt: now, updatedAt: now,
