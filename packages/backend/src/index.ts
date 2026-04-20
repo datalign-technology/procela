@@ -44,6 +44,7 @@ import dataQualityRouter from './routes/data-quality';
 import connectionsRouter from './routes/connections';
 import enterpriseViewRouter from './routes/enterprise-view';
 import gapDetectionRouter from './routes/gap-detection';
+import attachmentsRouter from './routes/attachments';
 import brandingRouter from './routes/branding';
 
 const app = express();
@@ -99,6 +100,7 @@ app.use('/api/v1/data-quality', authenticateToken, dataQualityRouter);
 app.use('/api/v1/connections', authenticateToken, connectionsRouter);
 app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
 app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
+app.use('/api/v1/attachments', authenticateToken, attachmentsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -127,6 +129,7 @@ import { dataLineageLinks } from './routes/data-lineage';
 import { dataQualityRules } from './routes/data-quality';
 import { connections } from './routes/connections';
 import { brandingStoreArray } from './routes/branding';
+import { attachments } from './routes/attachments';
 
 const stores = {
   processNodes: () => processNodes,
@@ -152,6 +155,7 @@ const stores = {
   dataQualityRules: () => dataQualityRules,
   connections: () => connections,
   branding: () => brandingStoreArray,
+  attachments: () => attachments,
 };
 const autoSaveHandle = startAutoSave(stores);
 

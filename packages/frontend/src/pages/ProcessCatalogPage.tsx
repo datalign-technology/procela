@@ -7,6 +7,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
+import AttachmentsPanel from '../components/AttachmentsPanel';
 
 // ── Types ──
 
@@ -671,6 +672,15 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
               disabled={isLocked}
               onAdd={onAddMapping}
               onRemove={onRemoveMapping}
+            />
+          )}
+          {/* Attachments panel — docs, diagrams, external links */}
+          {isExpanded && (node.level === 'PROCESS' || node.level === 'ACTIVITY') && (
+            <AttachmentsPanel
+              entityType="ProcessNode"
+              entityId={node.id}
+              orgId={node.orgIds?.[0]}
+              disabled={isLocked}
             />
           )}
           {/* Guided prompt for missing required children */}
