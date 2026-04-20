@@ -55,12 +55,12 @@ const thStyle: React.CSSProperties = {
   fontSize: '0.75rem',
   fontWeight: 600,
   color: 'var(--color-text-secondary)',
-  borderBottom: '2px solid var(--color-border)',
+  border: '1px solid var(--color-border)',
 };
 
 const tdStyle: React.CSSProperties = {
   padding: '0.375rem 0.5rem',
-  borderBottom: '1px solid var(--color-border)',
+  border: '1px solid var(--color-border)',
   fontSize: '0.8125rem',
 };
 
@@ -228,16 +228,26 @@ export default function RaciMatrixPage() {
                   <th style={{ ...thStyle, position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', minWidth: 280 }}>
                     Process Hierarchy
                   </th>
-                  {sortedColumns.map((col) => (
-                    <th key={col.personId} style={{ ...thStyle, minWidth: 56, maxWidth: 80, textAlign: 'center' }}>
-                      <div style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)', whiteSpace: 'nowrap', fontSize: 11, lineHeight: 1.2, paddingBottom: 4 }}>
-                        {getColumnLabel(col)}
-                      </div>
-                      <div style={{ fontSize: 9, color: 'var(--color-text-muted)', writingMode: 'vertical-lr', transform: 'rotate(180deg)', whiteSpace: 'nowrap' }}>
-                        {getColumnSublabel(col)}
-                      </div>
-                    </th>
-                  ))}
+                  {sortedColumns.map((col, ci) => {
+                    const bgColors = ['#fef3c7', '#dbeafe', '#d1fae5', '#ede9fe', '#fce7f3', '#fee2e2', '#f0fdf4', '#e0e7ff'];
+                    const bg = bgColors[ci % bgColors.length];
+                    return (
+                      <th key={col.personId} style={{
+                        ...thStyle, padding: 0, height: 140, minWidth: 40, maxWidth: 44,
+                        position: 'relative', overflow: 'hidden', background: bg,
+                      }}>
+                        <div style={{
+                          position: 'absolute', bottom: 8, left: '50%',
+                          transformOrigin: 'bottom left',
+                          transform: 'rotate(-55deg)',
+                          whiteSpace: 'nowrap', fontSize: 11, fontWeight: 500,
+                          color: '#374151',
+                        }}>
+                          {getColumnLabel(col)}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
