@@ -129,7 +129,13 @@ router.post('/login', async (req: Request, res: Response) => {
     const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
     const resolvedOrgId = personRecord?.orgIds?.[0] || DEV_ORG_ID;
     const resolvedRole = personRecord?.role || user.role;
-    const resolvedName = personRecord?.name || user.name;
+
+    // Defensive: if no person record and submitted name looks like a password
+    // (contains digits + special chars, no spaces), fall back to email prefix.
+    // This prevents autofilled passwords from landing in the display name.
+    const looksLikePassword = user.name && /[!@#$%^&*()_+=<>?{}[\]|\\:;"']/.test(user.name) && !/\s/.test(user.name);
+    const fallbackName = user.email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const resolvedName = personRecord?.name || (looksLikePassword ? fallbackName : user.name) || fallbackName;
 
     const accessToken = createAccessToken({
       ...user,

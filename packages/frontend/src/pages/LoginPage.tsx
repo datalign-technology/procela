@@ -35,7 +35,6 @@ interface LoginResponse {
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<AuthProvider[]>([]);
@@ -99,7 +98,7 @@ export default function LoginPage() {
       setError('Email is required');
       return;
     }
-    await loginWithEmail(email.trim(), name.trim());
+    await loginWithEmail(email.trim());
   };
 
   const handleSsoClick = (provider: AuthProvider | undefined) => {
@@ -203,20 +202,15 @@ export default function LoginPage() {
                     <span style={styles.devBadgeIcon}>&#9881;</span>
                     Dev Mode
                   </div>
-                  <form onSubmit={handleDevLogin} style={styles.devForm}>
+                  <form onSubmit={handleDevLogin} style={styles.devForm} autoComplete="off">
                     <input
                       type="email"
+                      name="login-email"
                       placeholder="Email address"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      style={styles.input}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Full name (optional)"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="email"
                       style={styles.input}
                     />
                     <button
