@@ -77,18 +77,15 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
 
 import { getStatusColor } from '@/lib/statusBadge';
 
-const STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+const STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'];
 const statusColors = Object.fromEntries(STATUSES.map((s) => [s, getStatusColor(s)]));
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
-  DRAFT:        ['PROPOSED'],
-  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
-  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
-  APPROVED:     ['ACTIVE', 'DRAFT'],
-  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
-  DEPRECATED:   ['DRAFT'],
+  DRAFT:      ['ACTIVE'],
+  ACTIVE:     ['DRAFT', 'DEPRECATED'],
+  DEPRECATED: ['DRAFT'],
 };
-const LOCKED_STATUSES = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
+const LOCKED_STATUSES = new Set(['ACTIVE', 'DEPRECATED']);
 
 const COMPLIANCE_OPTIONS = [
   'SOX', 'HIPAA', 'GDPR', 'PCI-DSS', 'CCPA', 'FERPA', 'FISMA', 'NERC CIP',

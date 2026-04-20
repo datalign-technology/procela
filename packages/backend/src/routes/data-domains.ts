@@ -24,16 +24,23 @@ export interface StoredDataDomain {
 
 export const dataDomains: StoredDataDomain[] = loadStore<StoredDataDomain>('dataDomains');
 
-const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+// Migrate legacy statuses to DRAFT
+{
+  const legacy = new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
+  let migrated = 0;
+  for (const d of dataDomains) {
+    if (legacy.has(d.status)) { d.status = 'DRAFT'; migrated++; }
+  }
+  if (migrated > 0) saveStore('dataDomains', dataDomains);
+}
+
+const VALID_STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'];
 const DOMAIN_TRANSITIONS: Record<string, string[]> = {
-  DRAFT:        ['PROPOSED'],
-  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
-  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
-  APPROVED:     ['ACTIVE', 'DRAFT'],
-  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
-  DEPRECATED:   ['DRAFT'],
+  DRAFT:      ['ACTIVE'],
+  ACTIVE:     ['DRAFT', 'DEPRECATED'],
+  DEPRECATED: ['DRAFT'],
 };
-const DOMAIN_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
+const DOMAIN_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
 
 function enrichDomain(domain: StoredDataDomain) {
   const owner = domain.ownerId ? people.find((p) => p.id === domain.ownerId) : null;

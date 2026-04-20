@@ -81,14 +81,11 @@ interface FormData {
 const emptyForm: FormData = { name: '', description: '', status: 'DRAFT', scopeDefinition: '' };
 
 const DOMAIN_TRANSITIONS: Record<string, string[]> = {
-  DRAFT:        ['PROPOSED'],
-  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
-  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
-  APPROVED:     ['ACTIVE', 'DRAFT'],
-  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
-  DEPRECATED:   ['DRAFT'],
+  DRAFT:      ['ACTIVE'],
+  ACTIVE:     ['DRAFT', 'DEPRECATED'],
+  DEPRECATED: ['DRAFT'],
 };
-const DOMAIN_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
+const DOMAIN_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
 
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();

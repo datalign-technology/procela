@@ -11,18 +11,13 @@ const VALUE_STREAM_ORG_LEVELS = ['company', 'division'];
 
 // ── Status state machine ────────────────────────────────────────────────
 // Maps each status to the set of statuses it can transition to.
-const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'] as const;
+const VALID_STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED'] as const;
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  DRAFT:        ['PROPOSED'],
-  PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
-  UNDER_REVIEW: ['APPROVED', 'DRAFT'],
-  APPROVED:     ['ACTIVE', 'DRAFT'],
-  ACTIVE:       ['UNDER_REVIEW', 'DEPRECATED'],
-  DEPRECATED:   ['DRAFT'],
+  DRAFT:      ['ACTIVE'],
+  ACTIVE:     ['DRAFT', 'DEPRECATED'],
+  DEPRECATED: ['DRAFT'],
 };
-// Statuses where field edits (name, description, owner, etc.) are locked.
-// Status-only changes are still allowed.
-const LOCKED_STATUSES = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
+const LOCKED_STATUSES = new Set(['ACTIVE', 'DEPRECATED']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UNIVERSAL PROCESS HIERARCHY
@@ -167,6 +162,22 @@ function generateNodeId(level: string): string {
   if (backfilled > 0) {
     saveStore('processNodes', processNodes);
     logger.info({ backfilled }, 'Backfilled readable IDs on existing process nodes');
+  }
+}
+
+// Migrate legacy statuses (PROPOSED, UNDER_REVIEW, APPROVED) to DRAFT
+{
+  const legacyStatuses = new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
+  let migrated = 0;
+  for (const node of processNodes) {
+    if (legacyStatuses.has(node.status)) {
+      node.status = 'DRAFT';
+      migrated++;
+    }
+  }
+  if (migrated > 0) {
+    saveStore('processNodes', processNodes);
+    logger.info({ migrated }, 'Migrated legacy statuses to DRAFT');
   }
 }
 
@@ -537,7 +548,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   }
 
   if (status !== undefined) {
-    if (status === 'ACTIVE' || status === 'APPROVED') {
+    if (status === 'ACTIVE') {
       if (node.level === 'VALUE_STREAM') {
         const descendants = getDescendants(node.id);
         const hasProcess = descendants.some((d) => d.level === 'PROCESS');
@@ -568,23 +579,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     // Workflow notifications on status transitions
     if (status !== oldStatus) {
       const levelLabel = node.level.toLowerCase().replace('_', ' ');
-      if (status === 'PROPOSED') {
-        createNotification({
-          orgId: node.orgId,
-          type: 'ACTION',
-          title: `Process '${node.name}' has been proposed for review`,
-          message: `The ${levelLabel} "${node.name}" has been submitted for review and requires attention.`,
-          link: '/processes',
-        });
-      } else if (status === 'APPROVED') {
-        createNotification({
-          orgId: node.orgId,
-          type: 'INFO',
-          title: `Process '${node.name}' has been approved`,
-          message: `The ${levelLabel} "${node.name}" has been approved and can be set to active.`,
-          link: '/processes',
-        });
-      } else if (status === 'ACTIVE') {
+      if (status === 'ACTIVE') {
         createNotification({
           orgId: node.orgId,
           type: 'INFO',

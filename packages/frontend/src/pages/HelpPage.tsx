@@ -153,9 +153,9 @@ export default function HelpPage() {
         <h3 style={h3Style}>Editing and Status</h3>
         <ul style={listStyle}>
           <li>Inline editing — click any item to rename or update its description</li>
-          <li>Status lifecycle: <span style={badgeStyle('#6b7280')}>Draft</span> <span style={badgeStyle('#1e40af')}>Proposed</span> <span style={badgeStyle('#d97706')}>Under Review</span> <span style={badgeStyle('#5b21b6')}>Approved</span> <span style={badgeStyle('#0f4f46')}>Active</span> <span style={badgeStyle('#9d174d')}>Deprecated</span></li>
-          <li>Status transitions are enforced: Draft → Proposed → Under Review → Approved → Active → Deprecated. Each state can return to Draft to restart the cycle.</li>
-          <li>Items in Under Review, Approved, Active, or Deprecated status are <strong>locked for editing</strong>. Change the status back to Draft to make edits.</li>
+          <li>Status lifecycle: <span style={badgeStyle('#6b7280')}>Draft</span> <span style={badgeStyle('#0f4f46')}>Active</span> <span style={badgeStyle('#9d174d')}>Deprecated</span></li>
+          <li>Transitions: Draft ↔ Active, Active → Deprecated, Deprecated → Draft</li>
+          <li>Items in Active or Deprecated status are <strong>locked for editing</strong>. Change the status back to Draft to make edits.</li>
           <li>ACTIVE status is blocked until the required path (Value Stream, Process, Activity) is complete</li>
           <li>Guided prompts and a completeness checklist help you fill in all required information</li>
         </ul>
@@ -298,8 +298,8 @@ export default function HelpPage() {
           <li>Assign a Data Owner and one or more Data Stewards to each domain</li>
           <li>Link data assets to domains to establish governance coverage</li>
           <li><strong>Scope Definition</strong> — define what data falls in or out of this domain</li>
-          <li>Status lifecycle: Draft → Proposed → Under Review → Approved → Active → Deprecated (same as processes)</li>
-          <li>Editing is locked when status is Under Review, Approved, Active, or Deprecated</li>
+          <li>Status lifecycle: Draft ↔ Active → Deprecated → Draft (same as processes)</li>
+          <li>Editing is locked when status is Active or Deprecated</li>
           <li>Track which domains are fully governed and which have gaps</li>
         </ul>
 
