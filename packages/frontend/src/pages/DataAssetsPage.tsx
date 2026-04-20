@@ -854,14 +854,19 @@ export default function DataAssetsPage() {
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <button
-                          onClick={() => toggleExpandColumns(asset.id)}
+                          onClick={(e) => { e.stopPropagation(); toggleExpandColumns(asset.id); }}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 10, padding: 0, width: 14, flexShrink: 0 }}
                           title={isExpanded ? 'Collapse columns' : 'Expand columns'}
                         >
                           {isExpanded ? '\u25BC' : '\u25B6'}
                         </button>
-                        <div style={{ minWidth: 0 }}>
-                          {asset.name}
+                        <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => open360(asset.id)} title="Click to view details">
+                          <span style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'none'; }}
+                          >
+                            {asset.name}
+                          </span>
                           {asset.description && (
                             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
                               {asset.description}
@@ -895,7 +900,6 @@ export default function DataAssetsPage() {
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon="eye" label="View 360" onClick={() => open360(asset.id)} />
                         {binding ? (
                           <>
                             <IconButton size="sm" icon="refresh" label="Change connection" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('change'); }} />
@@ -1077,7 +1081,20 @@ export default function DataAssetsPage() {
                       <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>{viewing360.asset.description}</p>
                     )}
                   </div>
-                  <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {canWrite && (
+                      <button
+                        onClick={() => {
+                          const asset = assets.find((a) => a.id === viewing360.asset.id);
+                          if (asset) { setViewing360(null); openEdit(asset); }
+                        }}
+                        style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
+                  </div>
                 </div>
 
                 {/* Asset Info */}

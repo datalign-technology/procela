@@ -617,7 +617,9 @@ export default function DataDomainsPage() {
                   <td style={{ ...tdStyle, textAlign: 'center', width: 32 }} onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(domain.id)} />
                   </td>
-                  <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>{domain.name}</td>
+                  <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>
+                    <span style={{ color: 'var(--color-primary)' }}>{domain.name}</span>
+                  </td>
                   <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => openDetail(domain)}>
                     {domain.description || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
                   </td>
@@ -650,7 +652,6 @@ export default function DataDomainsPage() {
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                      <IconButton size="sm" icon="eye" label="Details" onClick={() => openDetail(domain)} />
                       {!DOMAIN_LOCKED.has(domain.status) && (
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
                       )}
