@@ -206,6 +206,29 @@ export default function PeoplePage() {
   const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
 
+  // Quick-add row state
+  const [quickName, setQuickName] = useState('');
+  const [quickEmail, setQuickEmail] = useState('');
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickSaving, setQuickSaving] = useState(false);
+
+  const handleQuickAdd = async () => {
+    if (!quickName.trim() || !selectedOrgId) return;
+    setQuickSaving(true);
+    try {
+      await apiClient.post('/people', {
+        name: quickName.trim(),
+        email: quickEmail.trim() || undefined,
+        title: quickTitle.trim() || undefined,
+        role: 'VIEWER',
+        orgIds: [selectedOrgId],
+      });
+      setQuickName(''); setQuickEmail(''); setQuickTitle('');
+      fetchData();
+    } catch { /* */ }
+    finally { setQuickSaving(false); }
+  };
+
   // Governance data for summary column and 360 editing
   const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
   const [allDamaRoles, setAllDamaRoles] = useState<DamaRoleFull[]>([]);
@@ -846,6 +869,20 @@ export default function PeoplePage() {
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
                     <FilePicker accept={peopleImportFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onFileRead={(content, fn) => { setPeopleImportText(content); if (fn.endsWith('.json')) setPeopleImportFormat('json'); if (fn.endsWith('.csv')) setPeopleImportFormat('csv'); }} />
+                    <button
+                      onClick={() => {
+                        const template = 'Name,Email,Role,Title\nJane Smith,jane@example.com,VIEWER,Director of Operations\nJohn Doe,john@example.com,EDITOR,Data Analyst\n';
+                        const blob = new Blob([template], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = 'people-template.csv';
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }}
+                      style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-text-muted)' }}
+                    >
+                      Download CSV Template
+                    </button>
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below. Columns: Name (required), Email, Role, Title</span>
                   </div>
                   <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
@@ -863,9 +900,9 @@ export default function PeoplePage() {
 
               {/* People Table */}
               <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-                {filteredPeople.length === 0 ? (
+                {filteredPeople.length === 0 && !selectedOrgId ? (
                   <div style={{ textAlign: 'center', padding: '2rem' }}>
-                    <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No people in this organization. Use + Add Person or Import People above.</p>
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Select an organization on the left to see and add people.</p>
                   </div>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -885,6 +922,54 @@ export default function PeoplePage() {
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Quick-add row — always visible at the top when an org is selected */}
+                      {selectedOrgId && (
+                        <tr style={{ background: '#f0f9ff' }}>
+                          <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}></td>
+                          <td style={tdStyle}>
+                            <input
+                              value={quickName}
+                              onChange={(e) => setQuickName(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
+                              placeholder="Name *"
+                              style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
+                            />
+                          </td>
+                          <td style={tdStyle}>
+                            <input
+                              value={quickEmail}
+                              onChange={(e) => setQuickEmail(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
+                              placeholder="Email"
+                              style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
+                            />
+                          </td>
+                          <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>Viewer</td>
+                          <td style={tdStyle}></td>
+                          <td style={tdStyle}>
+                            <input
+                              value={quickTitle}
+                              onChange={(e) => setQuickTitle(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
+                              placeholder="Title"
+                              style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
+                            />
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            <button
+                              onClick={handleQuickAdd}
+                              disabled={!quickName.trim() || quickSaving}
+                              style={{
+                                fontSize: 11, padding: '3px 10px', background: quickName.trim() ? 'var(--color-primary)' : '#e5e7eb',
+                                color: quickName.trim() ? '#fff' : '#9ca3af', border: 'none', borderRadius: 3,
+                                cursor: quickName.trim() ? 'pointer' : 'default',
+                              }}
+                            >
+                              {quickSaving ? '...' : 'Add'}
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                       {filteredPeople.map((person) => {
                         const gs = govSummary[person.id];
                         const govText = gs
