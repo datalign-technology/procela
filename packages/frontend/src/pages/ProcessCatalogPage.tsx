@@ -103,6 +103,13 @@ const ROLE_OPTIONS = [
 
 interface PersonRef { id: string; name: string; }
 interface DataAssetRef { id: string; name: string; }
+interface MappingInfo {
+  id: string;
+  processStepId: string;
+  dataAssetId: string;
+  linkType: string;
+  assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; healthScore: number } | null;
+}
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
@@ -316,6 +323,123 @@ function DocMultiSelect({ label, selected, options, onSave, disabled, placeholde
   );
 }
 
+// ── Inputs / Outputs Panel — shows mapped data assets with owner info ──
+
+function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
+  nodeId: string;
+  mappings: MappingInfo[];
+  assetsList: DataAssetRef[];
+  disabled: boolean;
+  onAdd: (nodeId: string, assetId: string, linkType: string) => void;
+  onRemove: (mappingId: string) => void;
+}) {
+  const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
+  const [pickedAsset, setPickedAsset] = useState('');
+
+  const inputs = mappings.filter((m) => m.linkType === 'consumes' || m.linkType === 'references');
+  const outputs = mappings.filter((m) => m.linkType === 'produces');
+  const transforms = mappings.filter((m) => m.linkType === 'transforms');
+
+  const handleAdd = (linkType: string) => {
+    if (!pickedAsset) return;
+    onAdd(nodeId, pickedAsset, linkType);
+    setPickedAsset('');
+    setShowAdd(null);
+  };
+
+  const renderRow = (m: MappingInfo) => {
+    if (!m.assetInfo) return null;
+    const tierBg = m.assetInfo.governanceTier === 'GOLD' ? '#fef3c7' : m.assetInfo.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa';
+    const tierColor = m.assetInfo.governanceTier === 'GOLD' ? '#92400e' : m.assetInfo.governanceTier === 'SILVER' ? '#475569' : '#9a3412';
+    return (
+      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 0', flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
+        <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierBg, color: tierColor }}>
+          {m.assetInfo.governanceTier}
+        </span>
+        {m.linkType === 'transforms' && (
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6' }}>TRANSFORMS</span>
+        )}
+        {m.linkType === 'references' && (
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1e40af' }}>READ-ONLY</span>
+        )}
+        {m.assetInfo.ownerName && (
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Owner: {m.assetInfo.ownerName}</span>
+        )}
+        {m.assetInfo.stewardName && (
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Steward: {m.assetInfo.stewardName}</span>
+        )}
+        {!disabled && (
+          <button onClick={() => onRemove(m.id)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-error)', padding: 0, marginLeft: 'auto' }}>
+            Remove
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderAddRow = (linkType: 'consumes' | 'produces') => {
+    if (showAdd === (linkType === 'consumes' ? 'input' : 'output')) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, marginTop: 4 }}>
+          <select value={pickedAsset} onChange={(e) => setPickedAsset(e.target.value)}
+            autoFocus
+            style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
+            <option value="">-- Select data asset --</option>
+            {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <button onClick={() => handleAdd(linkType)} disabled={!pickedAsset}
+            style={{ fontSize: 10, padding: '2px 8px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, cursor: pickedAsset ? 'pointer' : 'default', opacity: pickedAsset ? 1 : 0.5 }}>
+            Save
+          </button>
+          <button onClick={() => { setShowAdd(null); setPickedAsset(''); }}
+            style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button onClick={() => setShowAdd(linkType === 'consumes' ? 'input' : 'output')}
+        style={{ fontSize: 10, padding: '2px 8px', marginTop: 4, background: 'transparent', border: '1px dashed var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+        + Add {linkType === 'consumes' ? 'Input' : 'Output'}
+      </button>
+    );
+  };
+
+  return (
+    <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            Inputs ({inputs.length})
+          </div>
+          {inputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No inputs defined</div>}
+          {inputs.map(renderRow)}
+          {!disabled && renderAddRow('consumes')}
+        </div>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            Outputs ({outputs.length})
+          </div>
+          {outputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No outputs defined</div>}
+          {outputs.map(renderRow)}
+          {!disabled && renderAddRow('produces')}
+        </div>
+      </div>
+      {transforms.length > 0 && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            Transforms ({transforms.length})
+          </div>
+          {transforms.map(renderRow)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Add Node Form ──
 
 function AddNodeForm({ validChildren, onAdd, onCancel }: {
@@ -369,7 +493,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -379,6 +503,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
   flows: FlowRelationship[];
   peopleList: PersonRef[];
   assetsList: DataAssetRef[];
+  mappingsByStep: Record<string, MappingInfo[]>;
+  onAddMapping: (nodeId: string, assetId: string, linkType: string) => void;
+  onRemoveMapping: (mappingId: string) => void;
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
@@ -530,10 +657,21 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
                     disabled={isLocked}
                     placeholder="Select role..."
                   />
-                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="Data consumed / produced" />
+                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="High-level summary" />
                 </>
               )}
             </div>
+          )}
+          {/* Structured Inputs / Outputs panel — shows mapped data assets with owner info */}
+          {isExpanded && (node.level === 'PROCESS' || node.level === 'ACTIVITY') && (
+            <IOPanel
+              nodeId={node.id}
+              mappings={mappingsByStep[node.id] || []}
+              assetsList={assetsList}
+              disabled={isLocked}
+              onAdd={onAddMapping}
+              onRemove={onRemoveMapping}
+            />
           )}
           {/* Guided prompt for missing required children */}
           {warning && (
@@ -693,7 +831,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           onAddTag={onAddTag}
           onRemoveTag={onRemoveTag}
           peopleList={peopleList}
-          assetsList={assetsList} />
+          assetsList={assetsList}
+          mappingsByStep={mappingsByStep}
+          onAddMapping={onAddMapping}
+          onRemoveMapping={onRemoveMapping} />
       ))}
     </div>
   );
@@ -718,6 +859,7 @@ export default function ProcessCatalogPage() {
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
   const [peopleList, setPeopleList] = useState<PersonRef[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
+  const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [historyVersions, setHistoryVersions] = useState<ProcessVersion[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -726,13 +868,20 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, mappingsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
         apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${qp}`),
+        apiClient.get<{ success: boolean; data: MappingInfo[] }>(`/mappings${qp}`),
       ]);
+      const byStep: Record<string, MappingInfo[]> = {};
+      for (const m of (mappingsRes.data || [])) {
+        if (!byStep[m.processStepId]) byStep[m.processStepId] = [];
+        byStep[m.processStepId].push(m);
+      }
+      setMappingsByStep(byStep);
       setTree(catalogRes.tree || []);
       setStats(catalogRes.stats || {});
       setValidChildrenMap(catalogRes.validChildren || {});
@@ -787,6 +936,27 @@ export default function ProcessCatalogPage() {
   const deleteNode = async (id: string) => {
     await apiClient.delete(`/process-catalog/nodes/${id}`);
     fetchData();
+  };
+
+  const addMapping = async (nodeId: string, assetId: string, linkType: string) => {
+    try {
+      await apiClient.post('/mappings', {
+        processStepId: nodeId,
+        dataAssetId: assetId,
+        linkType,
+        notes: '',
+        aiSuggested: false,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
+      });
+      fetchData();
+    } catch { /* */ }
+  };
+
+  const removeMapping = async (mappingId: string) => {
+    try {
+      await apiClient.delete(`/mappings/${mappingId}`);
+      fetchData();
+    } catch { /* */ }
   };
 
   // ── Bulk select handlers ──
@@ -1153,7 +1323,10 @@ export default function ProcessCatalogPage() {
               onAddTag={addTag}
               onRemoveTag={removeTag}
               peopleList={peopleList}
-              assetsList={assetsList} />
+              assetsList={assetsList}
+              mappingsByStep={mappingsByStep}
+              onAddMapping={addMapping}
+              onRemoveMapping={removeMapping} />
           ))
         )}
       </div>

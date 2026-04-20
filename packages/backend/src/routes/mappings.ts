@@ -6,6 +6,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
+import { people } from './people';
 
 // ── Types ──
 
@@ -56,12 +57,20 @@ function findStepInfo(stepId: string) {
 function findAssetInfo(assetId: string) {
   const asset = dataAssets.find((a) => a.id === assetId);
   if (!asset) return null;
+  const owner = asset.owner ? people.find((p) => p.id === asset.owner) : null;
+  const stewardIds = asset.stewardIds || [];
+  const stewardName = stewardIds
+    .map((sid) => people.find((p) => p.id === sid)?.name)
+    .filter(Boolean)
+    .join(', ') || null;
   return {
     assetId: asset.id,
     assetName: asset.name,
     assetDescription: asset.description,
     governanceTier: asset.governanceTier,
     healthScore: asset.healthScore,
+    ownerName: owner?.name || null,
+    stewardName,
   };
 }
 
