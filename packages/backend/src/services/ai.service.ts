@@ -48,10 +48,13 @@ Return ONLY a valid JSON object — no markdown, no code fences, no explanation:
     {
       "name": "Value Stream Name",
       "description": "What value this stream delivers and to whom",
+      "purpose": "What this value stream accomplishes for the business (one sentence)",
+      "businessOutcome": "The tangible value or result this delivers (one sentence)",
       "processes": [
         {
           "name": "Process Name",
           "description": "What this process achieves",
+          "purpose": "Why this process exists and what it accomplishes (one sentence)",
           "activities": [
             {
               "name": "Activity Name",
@@ -71,8 +74,11 @@ Guidelines:
 - Activities should be ordered in their natural sequence (first to last)
 - Activity names should start with a verb (e.g. "Receive", "Validate", "Approve", "Dispatch")
 - Activity descriptions should mention what triggers it and what it produces
+- Value Stream PURPOSE should answer "what does this accomplish?" — a clear business mission
+- Value Stream BUSINESS OUTCOME should answer "what value does this deliver?" — measurable or tangible result
+- Process PURPOSE should answer "what does this process exist to do?" — its specific operational mission
 - Use clear business language accessible to non-technical users
-- Descriptions should be concise (1-2 sentences)
+- Descriptions and purpose statements should be concise (1-2 sentences)
 - Focus on the most common, standard processes for the industry`,
       messages: [
         {

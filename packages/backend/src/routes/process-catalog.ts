@@ -744,6 +744,8 @@ router.post('/apply-template', (req: Request, res: Response) => {
         orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
         version: 1,
+        ...(tvs.purpose ? { purpose: tvs.purpose } : {}),
+        ...(tvs.businessOutcome ? { businessOutcome: tvs.businessOutcome } : {}),
         createdAt: now, updatedAt: now,
       };
       processNodes.push(vsNode);
@@ -758,6 +760,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
           activityId: null, status: 'DRAFT', orderIndex: pIdx,
           orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
           version: 1,
+          ...(proc.purpose ? { purpose: proc.purpose } : {}),
           createdAt: now, updatedAt: now,
         };
         processNodes.push(procNode);

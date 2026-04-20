@@ -7,8 +7,8 @@ import { useOrgContext } from '../stores/orgContext';
 // ── Types ──
 
 interface TemplateActivity { name: string; description: string; }
-interface TemplateProcess { name: string; description: string; activities: TemplateActivity[]; subProcesses?: any[]; }
-interface TemplateValueStream { name: string; description: string; processes: TemplateProcess[]; selected: boolean; }
+interface TemplateProcess { name: string; description: string; purpose?: string; activities: TemplateActivity[]; subProcesses?: any[]; }
+interface TemplateValueStream { name: string; description: string; purpose?: string; businessOutcome?: string; processes: TemplateProcess[]; selected: boolean; }
 interface GeneratedTemplate { valueStreams: TemplateValueStream[]; }
 
 // ── Styles ──
@@ -248,10 +248,21 @@ export default function ValueStreamWizard() {
 
                   {isExpanded && (
                     <div style={{ padding: '0 14px 12px 44px' }}>
+                      {(vs.purpose || vs.businessOutcome) && (
+                        <div style={{ fontSize: 11, padding: '6px 10px', background: '#f8fafc', borderRadius: 4, marginBottom: 10 }}>
+                          {vs.purpose && <div><span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>Purpose:</span> {vs.purpose}</div>}
+                          {vs.businessOutcome && <div><span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>Business Outcome:</span> {vs.businessOutcome}</div>}
+                        </div>
+                      )}
                       {vs.processes.map((proc, pIdx) => (
                         <div key={pIdx} style={{ marginBottom: 8 }}>
                           <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 2 }}>{proc.name}</div>
                           <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{proc.description}</div>
+                          {proc.purpose && (
+                            <div style={{ fontSize: 10, color: 'var(--color-text-secondary)', marginBottom: 4, fontStyle: 'italic' }}>
+                              Purpose: {proc.purpose}
+                            </div>
+                          )}
                           {(proc.activities || []).length > 0 && (
                             <div style={{ marginLeft: 16 }}>
                               {proc.activities.map((act, aIdx) => (
