@@ -235,11 +235,25 @@ router.get('/:id/360', (req: Request, res: Response) => {
     .filter((a) => (a.stewardIds || []).includes(person.id) && a.owner !== person.id)
     .map((a) => ({ id: a.id, name: a.name, governanceTier: a.governanceTier, relation: 'steward' as const }));
 
-  // All governance groups (for checkbox UI)
-  const allGroups = governanceGroups.map((g) => ({ id: g.id, name: g.name, type: g.type }));
+  // Governance groups scoped to the person's orgs — deduplicated by
+  // name+type to avoid showing multiple "Data Governance Council" entries
+  // that may exist if templates were generated more than once.
+  const personOrgSet = new Set(person.orgIds || []);
+  const orgScopedGroups = governanceGroups.filter((g) => personOrgSet.size === 0 || personOrgSet.has(g.orgId));
+  const seenGroupKeys = new Set<string>();
+  const allGroups = orgScopedGroups
+    .filter((g) => {
+      const key = `${g.name.toLowerCase()}|${g.type}`;
+      if (seenGroupKeys.has(key)) return false;
+      seenGroupKeys.add(key);
+      return true;
+    })
+    .map((g) => ({ id: g.id, name: g.name, type: g.type }));
 
-  // All data domains (for checkbox UI)
-  const allDomains = dataDomains.map((d) => ({ id: d.id, name: d.name, ownerId: d.ownerId, stewardIds: d.stewardIds }));
+  // All data domains (for checkbox UI) — scoped to person's orgs
+  const allDomains = dataDomains
+    .filter((d) => personOrgSet.size === 0 || personOrgSet.has(d.orgId))
+    .map((d) => ({ id: d.id, name: d.name, ownerId: d.ownerId, stewardIds: d.stewardIds }));
 
   // All DAMA role types
   const allDamaRoleTypes = [...DAMA_ROLE_TYPES];
