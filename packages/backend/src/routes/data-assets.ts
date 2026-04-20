@@ -217,9 +217,13 @@ router.get('/', (req: Request, res: Response) => {
     let domainName: string | null = null;
     let ownerName: string | null = null;
     let stewardName: string | null = null;
+    // Resolve owner from asset-level owner (preferred), falling back to domain owner
+    if (asset.owner) {
+      ownerName = people.find((p) => p.id === asset.owner || p.name === asset.owner)?.name || asset.owner;
+    }
     if (domain) {
       domainName = domain.name;
-      if (domain.ownerId) ownerName = people.find((p) => p.id === domain.ownerId)?.name || null;
+      if (!ownerName && domain.ownerId) ownerName = people.find((p) => p.id === domain.ownerId)?.name || null;
     }
     // Resolve steward names from asset-level stewardIds (preferred),
     // falling back to domain stewards if asset has none.
