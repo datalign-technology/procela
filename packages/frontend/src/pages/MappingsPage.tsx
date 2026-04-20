@@ -42,28 +42,13 @@ interface Mapping {
   assetInfo: AssetInfo | null;
 }
 
-interface StoredStep {
+interface FlatNode {
   id: string;
+  parentId: string | null;
+  level: string;
   name: string;
-  description: string;
-}
-
-interface StoredSubProcess {
-  id: string;
-  name: string;
-  steps: StoredStep[];
-}
-
-interface StoredProcess {
-  id: string;
-  name: string;
-  subProcesses: StoredSubProcess[];
-}
-
-interface StoredValueStream {
-  id: string;
-  name: string;
-  processes: StoredProcess[];
+  orgId: string;
+  orgIds: string[];
 }
 
 interface DataAsset {
@@ -141,7 +126,7 @@ export default function MappingsPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const [mappings, setMappings] = useState<Mapping[]>([]);
-  const [valueStreams, setValueStreams] = useState<StoredValueStream[]>([]);
+  const [allNodes, setAllNodes] = useState<FlatNode[]>([]);
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -162,13 +147,13 @@ export default function MappingsPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [mappingsRes, vsRes, assetsRes] = await Promise.all([
+      const [mappingsRes, nodesRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Mapping[] }>(`/mappings${query}`),
-        apiClient.get<{ success: boolean; data: StoredValueStream[] }>(`/process-catalog/value-streams${query}`),
+        apiClient.get<{ success: boolean; data: FlatNode[] }>(`/process-catalog${query}`),
         apiClient.get<{ success: boolean; data: DataAsset[] }>(`/data-assets${query}`),
       ]);
       setMappings(mappingsRes.data || []);
-      setValueStreams(vsRes.data || []);
+      setAllNodes(nodesRes.data || []);
       setDataAssets(assetsRes.data || []);
     } catch {
       /* API may not be running */
@@ -181,13 +166,24 @@ export default function MappingsPage() {
     fetchData();
   }, [fetchData]);
 
-  // Derived selections for hierarchical dropdown
-  const selectedVs = valueStreams.find((vs) => vs.id === selectedVsId);
-  const processes = selectedVs?.processes || [];
-  const selectedProc = processes.find((p) => p.id === selectedProcId);
-  const subProcesses = selectedProc?.subProcesses || [];
-  const selectedSp = subProcesses.find((sp) => sp.id === selectedSpId);
-  const steps = selectedSp?.steps || [];
+  // Cascading dropdowns based on flat node model with parentId relationships.
+  // Each level filters by the parent's selection only — guarantees the
+  // dropdown values are always valid children of the selected parent.
+  const valueStreams = allNodes.filter((n) => n.level === 'VALUE_STREAM');
+  const processes = selectedVsId
+    ? allNodes.filter((n) => n.level === 'PROCESS' && n.parentId === selectedVsId)
+    : [];
+  const subProcesses = selectedProcId
+    ? allNodes.filter((n) => n.level === 'SUBPROCESS' && n.parentId === selectedProcId)
+    : [];
+  // Activities can be direct children of PROCESS (skipping SUBPROCESS) or
+  // children of SUBPROCESS. Show whichever is appropriate based on what's
+  // selected.
+  const steps = selectedSpId
+    ? allNodes.filter((n) => n.level === 'ACTIVITY' && n.parentId === selectedSpId)
+    : selectedProcId && subProcesses.length === 0
+      ? allNodes.filter((n) => n.level === 'ACTIVITY' && n.parentId === selectedProcId)
+      : [];
 
   const resetForm = () => {
     setSelectedVsId('');
@@ -350,17 +346,19 @@ export default function MappingsPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Sub-Process *</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                Sub-Process {subProcesses.length > 0 ? '*' : <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>(optional)</span>}
+              </label>
               <select
                 style={selectStyle}
                 value={selectedSpId}
-                disabled={!selectedProcId}
+                disabled={!selectedProcId || subProcesses.length === 0}
                 onChange={(e) => {
                   setSelectedSpId(e.target.value);
                   setSelectedStepId('');
                 }}
               >
-                <option value="">-- Select sub-process --</option>
+                <option value="">{subProcesses.length === 0 ? '-- No sub-processes --' : '-- Select sub-process --'}</option>
                 {subProcesses.map((sp) => (
                   <option key={sp.id} value={sp.id}>
                     {sp.name}
@@ -369,14 +367,14 @@ export default function MappingsPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Step *</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Activity *</label>
               <select
                 style={selectStyle}
                 value={selectedStepId}
-                disabled={!selectedSpId}
+                disabled={!selectedProcId || (subProcesses.length > 0 && !selectedSpId) || steps.length === 0}
                 onChange={(e) => setSelectedStepId(e.target.value)}
               >
-                <option value="">-- Select step --</option>
+                <option value="">{steps.length === 0 && selectedProcId ? '-- No activities defined --' : '-- Select activity --'}</option>
                 {steps.map((st) => (
                   <option key={st.id} value={st.id}>
                     {st.name}
