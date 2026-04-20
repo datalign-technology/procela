@@ -354,3 +354,27 @@
   .content { padding: 8px; }
   .header { padding: 6px 8px; }
 }
+
+/* ── Print ── */
+
+@media print {
+  .sidebar {
+    display: none !important;
+  }
+  .header {
+    display: none !important;
+  }
+  .sidebarToggle {
+    display: none !important;
+  }
+  .shell {
+    display: block !important;
+  }
+  .main {
+    display: block !important;
+  }
+  .content {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+}

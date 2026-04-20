@@ -117,6 +117,36 @@ body {
     color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
+  /* Hide all application chrome when printing */
+  nav, aside,
+  [class*="sidebar"], [class*="Sidebar"],
+  [class*="header"], [class*="Header"],
+  [class*="chatPanel"], [class*="ChatPanel"],
+  [class*="sessionTimeout"], [class*="toast"], [class*="Toast"],
+  [class*="scopeBanner"], [class*="ScopeBanner"],
+  [class*="breadcrumb"], [class*="Breadcrumb"],
+  [class*="sidebarToggle"],
+  [class*="shortcutsHint"],
+  [class*="densityToggle"] {
+    display: none !important;
+  }
+
+  /* Reset layout so content fills the page */
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  [class*="shell"] {
+    display: block !important;
+  }
+  [class*="main"] {
+    display: block !important;
+  }
+  [class*="content"] {
+    padding: 12px !important;
+    overflow: visible !important;
+  }
 }
 
 
