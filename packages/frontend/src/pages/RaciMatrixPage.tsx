@@ -223,19 +223,31 @@ export default function RaciMatrixPage() {
                   {sortedColumns.map((col, ci) => {
                     const bgColors = ['#fef3c7', '#dbeafe', '#d1fae5', '#ede9fe', '#fce7f3', '#fee2e2', '#f0fdf4', '#e0e7ff'];
                     const bg = bgColors[ci % bgColors.length];
+                    const label = getColumnLabel(col);
                     return (
                       <th key={col.personId} style={{
-                        ...thStyle, padding: 0, height: 140, minWidth: 40, maxWidth: 44,
-                        position: 'relative', overflow: 'hidden', background: bg,
+                        ...thStyle, padding: 0, minWidth: 36, maxWidth: 40,
+                        verticalAlign: 'bottom', background: bg,
                       }}>
                         <div style={{
-                          position: 'absolute', bottom: 8, left: '50%',
-                          transformOrigin: 'bottom left',
-                          transform: 'rotate(-55deg)',
-                          whiteSpace: 'nowrap', fontSize: 11, fontWeight: 500,
-                          color: '#374151',
+                          height: Math.max(120, label.length * 5.5 + 40),
+                          position: 'relative',
+                          width: '100%',
                         }}>
-                          {getColumnLabel(col)}
+                          <div style={{
+                            position: 'absolute',
+                            bottom: 6,
+                            left: '50%',
+                            transformOrigin: 'bottom left',
+                            transform: 'rotate(-55deg)',
+                            whiteSpace: 'nowrap',
+                            fontSize: 11,
+                            fontWeight: 500,
+                            color: '#374151',
+                            padding: '2px 4px',
+                          }}>
+                            {label}
+                          </div>
                         </div>
                       </th>
                     );
