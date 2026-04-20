@@ -626,7 +626,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
                   {node.level === 'VALUE_STREAM' && (
                     <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
                   )}
-                  {/* Stakeholders — multi-select from people */}
                   <DocMultiSelect
                     label="Stakeholders"
                     selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)}
@@ -635,8 +634,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
                     disabled={isLocked}
                     placeholder="Select stakeholders..."
                   />
-                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
-                  {/* Compliance Tags — multi-select from predefined list */}
                   <DocMultiSelect
                     label="Compliance"
                     selected={node.complianceTags || []}
@@ -648,23 +645,21 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
                 </>
               )}
               {node.level === 'ACTIVITY' && (
-                <>
-                  {/* Responsible Role — dropdown from predefined list */}
-                  <DocDropdown
-                    label="Responsible Role"
-                    value={node.responsibleRole || ''}
-                    options={ROLE_OPTIONS}
-                    onSave={(v) => onUpdate(node.id, { responsibleRole: v })}
-                    disabled={isLocked}
-                    placeholder="Select role..."
-                  />
-                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="High-level summary" />
-                </>
+                <DocDropdown
+                  label="Responsible Role"
+                  value={node.responsibleRole || ''}
+                  options={ROLE_OPTIONS}
+                  onSave={(v) => onUpdate(node.id, { responsibleRole: v })}
+                  disabled={isLocked}
+                  placeholder="Select role..."
+                />
               )}
+              {/* Inputs / Outputs summary — consistent across all levels */}
+              <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
             </div>
           )}
           {/* Structured Inputs / Outputs panel — shows mapped data assets with owner info */}
-          {isExpanded && (node.level === 'PROCESS' || node.level === 'ACTIVITY') && (
+          {isExpanded && (
             <IOPanel
               nodeId={node.id}
               mappings={mappingsByStep[node.id] || []}
@@ -675,7 +670,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
             />
           )}
           {/* Attachments panel — docs, diagrams, external links */}
-          {isExpanded && (node.level === 'PROCESS' || node.level === 'ACTIVITY') && (
+          {isExpanded && (
             <AttachmentsPanel
               entityType="ProcessNode"
               entityId={node.id}
