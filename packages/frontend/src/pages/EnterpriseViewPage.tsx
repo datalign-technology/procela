@@ -43,6 +43,59 @@ const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: string; lab
 
 const COLUMN_ORDER: string[] = ['process', 'system', 'data-asset', 'domain', 'person'];
 
+// Preset views — each defines which entity types to show and which edge types matter
+interface ViewPreset {
+  label: string;
+  description: string;
+  entityTypes: Set<string>;
+  edgeTypes: Set<string>;
+}
+
+const VIEW_PRESETS: Record<string, ViewPreset> = {
+  all: {
+    label: 'Everything',
+    description: 'All entities and relationships',
+    entityTypes: new Set(['process', 'system', 'data-asset', 'domain', 'person']),
+    edgeTypes: new Set(['hierarchy', 'hosted-by', 'owned-by', 'mapping', 'governs', 'lineage']),
+  },
+  'process-system-data': {
+    label: 'Process → System → Data',
+    description: 'How processes connect to systems and the data they hold',
+    entityTypes: new Set(['process', 'system', 'data-asset']),
+    edgeTypes: new Set(['hierarchy', 'hosted-by', 'mapping']),
+  },
+  'process-data': {
+    label: 'Process → Data Mappings',
+    description: 'Which data assets each process consumes or produces',
+    entityTypes: new Set(['process', 'data-asset']),
+    edgeTypes: new Set(['hierarchy', 'mapping']),
+  },
+  'system-data': {
+    label: 'System → Data Assets',
+    description: 'Which data lives in which system',
+    entityTypes: new Set(['system', 'data-asset']),
+    edgeTypes: new Set(['hosted-by', 'lineage']),
+  },
+  governance: {
+    label: 'Governance',
+    description: 'Domains, assets, and their owners',
+    entityTypes: new Set(['domain', 'data-asset', 'person']),
+    edgeTypes: new Set(['governs', 'owned-by']),
+  },
+  ownership: {
+    label: 'Ownership & People',
+    description: 'Who owns what across processes, assets, and domains',
+    entityTypes: new Set(['process', 'data-asset', 'domain', 'person']),
+    edgeTypes: new Set(['owned-by']),
+  },
+  lineage: {
+    label: 'Data Lineage',
+    description: 'How data flows between systems',
+    entityTypes: new Set(['system', 'data-asset']),
+    edgeTypes: new Set(['lineage', 'hosted-by']),
+  },
+};
+
 // ── Component ──
 
 export default function EnterpriseViewPage() {
@@ -53,6 +106,7 @@ export default function EnterpriseViewPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
+  const [activeView, setActiveView] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
     try {
@@ -69,23 +123,32 @@ export default function EnterpriseViewPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Group nodes by type
+  const preset = VIEW_PRESETS[activeView] || VIEW_PRESETS.all;
+
+  // Filter nodes and edges by active preset
+  const filteredNodes = nodes.filter((n) => preset.entityTypes.has(n.type));
+  const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+  const filteredEdges = edges.filter((e) =>
+    preset.edgeTypes.has(e.type) && filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target),
+  );
+
+  // Group visible nodes by type
   const byType: Record<string, GraphNode[]> = {};
   for (const col of COLUMN_ORDER) byType[col] = [];
-  for (const n of nodes) {
+  for (const n of filteredNodes) {
     if (byType[n.type]) byType[n.type].push(n);
   }
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  // Impact analysis BFS
+  // Impact analysis BFS — uses filtered edges so it respects the active view
   const impactSet = new Set<string>();
   if (selected) {
     const queue = [selected.id];
     impactSet.add(selected.id);
     while (queue.length > 0) {
       const current = queue.shift()!;
-      for (const e of edges) {
+      for (const e of filteredEdges) {
         if (e.source === current && !impactSet.has(e.target)) {
           impactSet.add(e.target); queue.push(e.target);
         }
@@ -110,7 +173,7 @@ export default function EnterpriseViewPage() {
 
   // Direct connections for the selected node
   const directEdges = selected
-    ? edges.filter((e) => e.source === selected.id || e.target === selected.id)
+    ? filteredEdges.filter((e) => e.source === selected.id || e.target === selected.id)
     : [];
 
   const toggleCol = (type: string) => {
@@ -155,14 +218,48 @@ export default function EnterpriseViewPage() {
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
             Full visibility across processes, systems, data assets, domains, and people.
-            Click any item to see its dependencies and impact.
+            Select a view to focus on specific relationships, then click any item to see its impact.
           </p>
+        </div>
+
+        {/* View selector */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+          {Object.entries(VIEW_PRESETS).map(([key, v]) => (
+            <button key={key}
+              onClick={() => {
+                setActiveView(key);
+                setSelected(null);
+                // Auto-expand entity types in this preset
+                setExpandedCols(new Set(
+                  COLUMN_ORDER.filter((t) => VIEW_PRESETS[key].entityTypes.has(t)),
+                ));
+              }}
+              style={{
+                padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: activeView === key ? 600 : 400,
+                cursor: 'pointer', border: `1px solid ${activeView === key ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                background: activeView === key ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: activeView === key ? '#fff' : 'var(--color-text)',
+              }}
+              title={v.description}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Active view description */}
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16, padding: '6px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontWeight: 600 }}>{preset.label}:</span>
+          <span>{preset.description}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11 }}>
+            {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
+          </span>
         </div>
 
         {/* Summary cards */}
         {summary && (
           <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-            {COLUMN_ORDER.map((type) => {
+            {COLUMN_ORDER.filter((t) => preset.entityTypes.has(t)).map((type) => {
               const cfg = TYPE_CONFIG[type];
               const count = byType[type]?.length || 0;
               const isOpen = expandedCols.has(type);
@@ -188,7 +285,7 @@ export default function EnterpriseViewPage() {
             <div style={{ flex: 1, minWidth: 140, padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderLeft: '4px solid #64748b' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: '#64748b' }}>{summary.edges}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: '#64748b' }}>{filteredEdges.length}</div>
                   <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>Relationships</div>
                 </div>
                 <span style={{ fontSize: 20, opacity: 0.4 }}>{'\u2194'}</span>
@@ -198,7 +295,7 @@ export default function EnterpriseViewPage() {
         )}
 
         {/* Grouped columns — each entity type as an expandable section */}
-        {COLUMN_ORDER.map((type) => {
+        {COLUMN_ORDER.filter((t) => preset.entityTypes.has(t)).map((type) => {
           const cfg = TYPE_CONFIG[type];
           const items = byType[type] || [];
           const isOpen = expandedCols.has(type);
