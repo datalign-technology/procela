@@ -372,7 +372,7 @@ export default function OrgVisualizationPage() {
           </div>
         ) : (
           <div className="viz-scroll-area"
-            style={{ overflow: 'auto', padding: 24, maxHeight: 'calc(100vh - 280px)' }}>
+            style={{ overflow: 'auto', padding: 24 }}>
             <div style={{
               transform: `scale(${zoom})`,
               transformOrigin: 'top center',

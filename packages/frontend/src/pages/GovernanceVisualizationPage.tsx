@@ -539,7 +539,6 @@ export default function GovernanceVisualizationPage() {
             className="gov-viz-scroll-area"
             style={{
               overflow: 'auto', padding: 24,
-              maxHeight: 'calc(100vh - 260px)',
             }}
           >
             <div style={{
