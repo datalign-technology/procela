@@ -151,10 +151,19 @@ router.post('/import', (req: Request, res: Response) => {
     }
 
     const created: StoredSystem[] = [];
+    const skipped: string[] = [];
     const now = new Date().toISOString();
 
     for (const row of rows) {
       if (!row.name) continue;
+      // Skip duplicates — same name in same org
+      const existingDup = systems.find(
+        (s) => s.name.toLowerCase() === row.name.toLowerCase() && s.orgId === orgId,
+      );
+      if (existingDup) {
+        skipped.push(row.name);
+        continue;
+      }
       const sys: StoredSystem = {
         id: uuid(), orgId, name: row.name,
         description: row.description || '',
@@ -166,8 +175,16 @@ router.post('/import', (req: Request, res: Response) => {
     }
 
     saveStore('systems', systems);
-    logger.info({ count: created.length, orgId }, 'Imported systems');
-    res.status(201).json({ success: true, data: created });
+    logger.info({ created: created.length, skipped: skipped.length, orgId }, 'Imported systems');
+    res.status(201).json({
+      success: true,
+      data: created,
+      skipped: skipped.length,
+      skippedNames: skipped,
+      message: skipped.length > 0
+        ? `Imported ${created.length}, skipped ${skipped.length} duplicate(s): ${skipped.join(', ')}`
+        : `Imported ${created.length} system(s)`,
+    });
   } catch (err) {
     logger.error({ err }, 'Systems import failed');
     res.status(500).json({ success: false, error: 'Import failed' });

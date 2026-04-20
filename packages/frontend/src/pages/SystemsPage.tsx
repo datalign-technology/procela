@@ -157,7 +157,10 @@ export default function SystemsPage() {
     try {
       const body: any = { orgId: activeOrgId };
       if (importFormat === 'csv') { body.csv = importText; } else { body.systems = JSON.parse(importText); }
-      await apiClient.post('/systems/import', body);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number }>('/systems/import', body);
+      if (result.skipped && result.skipped > 0 && result.message) {
+        alert(result.message);
+      }
       setShowImport(false); setImportText(''); fetchData();
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
   };

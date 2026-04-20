@@ -306,6 +306,7 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
 
     // Track newly created ids so rows can reference in-scope siblings by name.
     const newlyCreated = new Set<string>();
+    const skipped: string[] = [];
 
     for (const row of rows) {
       let pid = rootParent;
@@ -314,6 +315,15 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
         if (nameToId.has(parentKey)) {
           pid = nameToId.get(parentKey)!;
         }
+      }
+
+      // Skip duplicates — same name + same parent
+      const existingDup = organizations.find(
+        (o) => o.name.toLowerCase() === row.name.toLowerCase() && o.parentId === pid,
+      );
+      if (existingDup) {
+        skipped.push(row.name);
+        continue;
       }
 
       // For restricted users, the resolved parent must be an accessible org
@@ -340,8 +350,17 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
     }
 
     saveStore('organizations', organizations);
-    logger.info({ count: created.length }, 'Imported organizations');
-    res.status(201).json({ success: true, data: created, tree: buildTree(organizations) });
+    logger.info({ created: created.length, skipped: skipped.length }, 'Imported organizations');
+    res.status(201).json({
+      success: true,
+      data: created,
+      tree: buildTree(organizations),
+      skipped: skipped.length,
+      skippedNames: skipped,
+      message: skipped.length > 0
+        ? `Imported ${created.length}, skipped ${skipped.length} duplicate(s): ${skipped.join(', ')}`
+        : `Imported ${created.length} organization(s)`,
+    });
   } catch (err) {
     logger.error({ err }, 'Organization import failed');
     res.status(500).json({ success: false, error: 'Import failed' });

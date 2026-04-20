@@ -341,7 +341,10 @@ export default function OrganizationsPage() {
     try {
       const body: any = { parentId: importParent || null };
       if (importFormat === 'csv') body.csv = importText; else body.organizations = JSON.parse(importText);
-      await apiClient.post('/organizations/import', body);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number }>('/organizations/import', body);
+      if (result.skipped && result.skipped > 0 && result.message) {
+        alert(result.message);
+      }
       setShowImport(false); setImportText(''); fetchData(); expandAll(); triggerRefresh();
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
   };

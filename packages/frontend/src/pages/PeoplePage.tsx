@@ -675,7 +675,10 @@ export default function PeoplePage() {
     try {
       const body: any = { orgId };
       if (peopleImportFormat === 'csv') body.csv = peopleImportText; else body.people = JSON.parse(peopleImportText);
-      await apiClient.post('/people/import', body);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number }>('/people/import', body);
+      if (result.skipped && result.skipped > 0 && result.message) {
+        alert(result.message);
+      }
       setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId('');
       fetchData();
     } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
