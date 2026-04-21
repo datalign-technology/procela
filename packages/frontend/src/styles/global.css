@@ -175,6 +175,28 @@ textarea:focus-visible {
 }
 
 
+/* ── Animated connector keyframes ── */
+
+@keyframes flowPulse {
+  0%   { transform: translateX(-8px); opacity: 0; }
+  20%  { opacity: 0.8; }
+  80%  { opacity: 0.8; }
+  100% { transform: translateX(20px); opacity: 0; }
+}
+
+@keyframes impactPulse {
+  0%   { opacity: 0.3; stroke-width: 1; }
+  50%  { opacity: 1; stroke-width: 3; }
+  100% { opacity: 0.3; stroke-width: 1; }
+}
+
+@keyframes nodeGlow {
+  0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  50%  { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+
 /* ─────────────────────────────────────────────────────────────────────────
  * Row density — `body[data-density="compact"]` reduces table row padding
  * and IconButton row so power users can see more at once. Cozy (default)

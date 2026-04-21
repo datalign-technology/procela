@@ -337,6 +337,7 @@ export default function EnterpriseViewPage() {
                           cursor: 'pointer', opacity: isDimmed ? 0.35 : 1,
                           boxShadow: isSelected ? `0 0 0 2px ${cfg.color}33` : 'none',
                           transition: 'opacity 0.15s, border-color 0.15s',
+                          animation: isImpacted ? 'nodeGlow 2s ease-in-out infinite' : 'none',
                         }}
                         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.borderColor = cfg.color + '88'; }}
                         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.borderColor = isImpacted ? cfg.color + '66' : 'var(--color-border)'; }}

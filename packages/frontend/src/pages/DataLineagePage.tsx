@@ -683,6 +683,27 @@ function LineageVisualization({ nodes, links }: { nodes: VisNode[]; links: VisLi
                 opacity={link.status === 'DEPRECATED' ? 0.3 : link.status === 'INACTIVE' ? 0.5 : 1}
                 strokeDasharray={link.status === 'DEPRECATED' ? '4,4' : link.status === 'INACTIVE' ? '6,3' : undefined}
               />
+              {/* Animated flowing particle */}
+              {link.status === 'ACTIVE' && (
+                <circle r="3" fill={color} opacity="0.8">
+                  <animateMotion
+                    dur={`${2 + Math.random()}s`}
+                    repeatCount="indefinite"
+                    path={`M ${startX} ${startY} L ${endX} ${endY}`}
+                  />
+                </circle>
+              )}
+              {/* Second staggered particle for busy flows */}
+              {link.status === 'ACTIVE' && link.frequency !== 'MANUAL' && (
+                <circle r="2" fill={color} opacity="0.5">
+                  <animateMotion
+                    dur={`${2.5 + Math.random()}s`}
+                    repeatCount="indefinite"
+                    begin="1s"
+                    path={`M ${startX} ${startY} L ${endX} ${endY}`}
+                  />
+                </circle>
+              )}
               <text
                 x={midX} y={midY - 6}
                 textAnchor="middle"

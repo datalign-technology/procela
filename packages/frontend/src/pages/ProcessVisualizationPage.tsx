@@ -85,24 +85,31 @@ function filterTree(nodes: ProcessNode[], hiddenLevels: Set<NodeLevel>): Process
 
 function FlowArrow({ type }: { type: string }) {
   const isSequence = type === 'SEQUENCE';
+  const color = isSequence ? '#065f46' : '#9d174d';
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '0 4px', minWidth: 36,
-      flexShrink: 0,
+      flexShrink: 0, position: 'relative',
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 0,
+        position: 'relative', overflow: 'hidden',
       }}>
-        <div style={{
-          width: 20, height: 2,
-          background: isSequence ? '#065f46' : '#9d174d',
-        }} />
+        <div style={{ width: 20, height: 2, background: color, position: 'relative', overflow: 'hidden' }}>
+          {/* Animated pulse traveling along the line */}
+          <div style={{
+            position: 'absolute', top: -1, left: 0, width: 8, height: 4,
+            background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
+            borderRadius: 2, opacity: 0.7,
+            animation: 'flowPulse 1.5s linear infinite',
+          }} />
+        </div>
         <div style={{
           width: 0, height: 0,
           borderTop: '5px solid transparent',
           borderBottom: '5px solid transparent',
-          borderLeft: `6px solid ${isSequence ? '#065f46' : '#9d174d'}`,
+          borderLeft: `6px solid ${color}`,
         }} />
       </div>
       {!isSequence && (
