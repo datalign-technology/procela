@@ -414,9 +414,16 @@ router.get('/accessible-orgs', authenticateToken, (req: AuthenticatedRequest, re
   const person = people.find((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
 
   if (!person) {
-    // No people record — dev fallback, show all working-level orgs
+    // No people record — dev fallback, show all working-level orgs (deduplicated by name+type)
     const all = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
-    res.json({ success: true, data: all.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
+    const seen = new Set<string>();
+    const deduped = all.filter((o) => {
+      const key = `${o.name.toLowerCase()}|${o.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    res.json({ success: true, data: deduped.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
     return;
   }
 

@@ -102,10 +102,21 @@ export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string;
     if (org && WORKING_LEVELS.includes(org.type)) computed.add(grantId);
   }
 
-  return Array.from(computed).map((id) => {
-    const org = organizations.find((o) => o.id === id)!;
-    return { id: org.id, name: org.name, type: org.type };
-  });
+  // Deduplicate by org ID (Set guarantees uniqueness) and by name
+  // in case the same org appears under different IDs
+  const seen = new Set<string>();
+  return Array.from(computed)
+    .map((id) => {
+      const org = organizations.find((o) => o.id === id);
+      return org ? { id: org.id, name: org.name, type: org.type } : null;
+    })
+    .filter((o): o is { id: string; name: string; type: string } => {
+      if (!o) return false;
+      const key = `${o.name.toLowerCase()}|${o.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 /**
