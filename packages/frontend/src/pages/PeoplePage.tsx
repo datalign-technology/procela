@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { errorToast } from '../lib/errorToast';
@@ -247,6 +248,7 @@ function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
 
 export default function PeoplePage() {
   const { orgs: accessibleOrgs, activeOrgId } = useOrgContext();
+  const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -301,6 +303,7 @@ export default function PeoplePage() {
         role: 'VIEWER',
         orgIds: [selectedOrgId],
       });
+      addToast('success', `${quickName.trim()} added`);
       setQuickName(''); setQuickEmail(''); setQuickTitle('');
       fetchData();
     } catch { /* */ }
@@ -472,7 +475,7 @@ export default function PeoplePage() {
       errorToast(err, 'Failed to save person');
     }
   };
-  const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); fetchData(); };
+  const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); addToast('success', 'Person deleted'); fetchData(); };
 
   // ── Bulk select handlers ──
   const togglePersonSelect = (id: string) => {

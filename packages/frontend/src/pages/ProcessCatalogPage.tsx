@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
+import { useToastStore } from '../stores/toastStore';
 
 // ── Types ──
 
@@ -930,6 +931,7 @@ export default function ProcessCatalogPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   const { canWrite, canContribute } = usePermissions();
+  const addToast = useToastStore((s) => s.addToast);
   const [tree, setTree] = useState<ProcessNode[]>([]);
   const [stats, setStats] = useState<Record<string, any>>({});
   const [validChildrenMap, setValidChildrenMap] = useState<Record<string, string[]>>({});
@@ -1004,6 +1006,7 @@ export default function ProcessCatalogPage() {
 
   const addNode = async (parentId: string | null, name: string, description: string, level: NodeLevel) => {
     await apiClient.post('/process-catalog/nodes', { parentId, level, name, description, orgIds: activeOrgId ? [activeOrgId] : undefined });
+    addToast('success', `${level.replace('_', ' ')} "${name}" created`);
     setAddingTo(null);
     fetchData();
   };
@@ -1027,6 +1030,7 @@ export default function ProcessCatalogPage() {
 
   const deleteNode = async (id: string) => {
     await apiClient.delete(`/process-catalog/nodes/${id}`);
+    addToast('success', 'Process node deleted');
     fetchData();
   };
 

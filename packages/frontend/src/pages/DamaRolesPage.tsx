@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 
@@ -110,6 +111,7 @@ const emptyForm: FormData = { personId: '', roleType: 'CDO', scopeType: 'ORG', s
 
 export default function DamaRolesPage() {
   const { activeOrgId } = useOrgContext();
+  const addToast = useToastStore((s) => s.addToast);
   const [roles, setRoles] = useState<DamaRoleAssignment[]>([]);
   const [roleTypes, setRoleTypes] = useState<string[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -162,6 +164,7 @@ export default function DamaRolesPage() {
     setError('');
     try {
       await apiClient.post('/dama-roles', form);
+      addToast('success', 'Governance role assigned');
       setShowForm(false);
       setForm(emptyForm);
       fetchData();
@@ -172,6 +175,7 @@ export default function DamaRolesPage() {
 
   const handleRemove = async (id: string) => {
     await apiClient.delete(`/dama-roles/${id}`);
+    addToast('success', 'Governance role removed');
     fetchData();
   };
 

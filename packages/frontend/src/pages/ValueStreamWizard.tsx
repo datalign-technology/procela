@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { INDUSTRIES } from '../types';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
 
 // ── Types ──
 
@@ -33,6 +34,7 @@ const btnSecondary: React.CSSProperties = {
 export default function ValueStreamWizard() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName } = useOrgContext();
+  const addToast = useToastStore((s) => s.addToast);
   const [industry, setIndustry] = useState('');
   const [orgIndustry, setOrgIndustry] = useState('');
   const [industrySource, setIndustrySource] = useState<'own' | 'inherited' | ''>('');
@@ -131,6 +133,7 @@ export default function ValueStreamWizard() {
     try {
       const selectedStreams = template.valueStreams.filter((vs) => vs.selected).map(({ selected: _, ...rest }) => rest);
       await apiClient.post('/process-catalog/apply-template', { industry, valueStreams: selectedStreams, orgId: activeOrgId || undefined });
+      addToast('success', `Applied ${selectedStreams.length} value stream${selectedStreams.length === 1 ? '' : 's'}`);
       navigate('/processes');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to apply template.');

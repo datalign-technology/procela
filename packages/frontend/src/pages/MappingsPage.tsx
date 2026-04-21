@@ -7,6 +7,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 
@@ -127,6 +128,7 @@ function formatStepPath(info: StepInfo): string {
 export default function MappingsPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
+  const addToast = useToastStore((s) => s.addToast);
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [allNodes, setAllNodes] = useState<FlatNode[]>([]);
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
@@ -217,6 +219,7 @@ export default function MappingsPage() {
       aiSuggested: false,
       ...(activeOrgId ? { orgId: activeOrgId } : {}),
     });
+    addToast('success', 'Mapping created');
     setShowForm(false);
     resetForm();
     fetchData();
@@ -224,6 +227,7 @@ export default function MappingsPage() {
 
   const handleDelete = async (id: string) => {
     await apiClient.delete(`/mappings/${id}`);
+    addToast('success', 'Mapping deleted');
     fetchData();
   };
 
