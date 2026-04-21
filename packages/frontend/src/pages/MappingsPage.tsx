@@ -7,6 +7,8 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 // ── Types ──
 
@@ -252,6 +254,25 @@ export default function MappingsPage() {
   const totalMappings = mappings.length;
   const aiSuggestedCount = mappings.filter((m) => m.aiSuggested).length;
   const manualCount = totalMappings - aiSuggestedCount;
+
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    mappings,
+    {
+      stepPath: (a, b) => {
+        const pa = a.stepInfo ? formatStepPath(a.stepInfo) : a.processStepId;
+        const pb = b.stepInfo ? formatStepPath(b.stepInfo) : b.processStepId;
+        return pa.localeCompare(pb);
+      },
+      assetName: (a, b) => {
+        const na = a.assetInfo ? a.assetInfo.assetName : a.dataAssetId;
+        const nb = b.assetInfo ? b.assetInfo.assetName : b.dataAssetId;
+        return na.localeCompare(nb);
+      },
+      linkType: (a, b) => a.linkType.localeCompare(b.linkType),
+    },
+    'stepPath',
+  );
 
   const canSave = selectedStepId && selectedAssetId;
 
@@ -560,16 +581,16 @@ export default function MappingsPage() {
                 <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={mappings.length > 0 && selectedIds.size === mappings.length} onChange={toggleSelectAll} />
                 </th>
-                <th style={thStyle}>Process Step</th>
-                <th style={thStyle}>Data Asset</th>
-                <th style={thStyle}>Link Type</th>
+                <SortableTh sortKey="stepPath" active={sortKey} dir={sortDir} onClick={toggleSort}>Process Step</SortableTh>
+                <SortableTh sortKey="assetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>
+                <SortableTh sortKey="linkType" active={sortKey} dir={sortDir} onClick={toggleSort}>Link Type</SortableTh>
                 <th style={thStyle}>AI Suggested</th>
                 <th style={thStyle}>Notes</th>
                 <th style={{ ...thStyle, width: 60, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {mappings.map((m) => (
+              {sorted.map((m) => (
                 <tr
                   key={m.id}
                   style={{ transition: 'background 0.1s', background: selectedIds.has(m.id) ? '#f0f9ff' : '' }}

@@ -10,6 +10,8 @@ import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 import { SkeletonRows } from '../components/Skeleton';
 import OrgChipInput from '../components/OrgChipInput';
 import { OrgPickerModal } from '../components/OrgPicker';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 // ── Types ──
 
@@ -359,6 +361,19 @@ export default function PeoplePage() {
 
   const selectedOrg = flatOrgs.find((o) => o.id === selectedOrgId);
   const filteredPeople = selectedOrgId ? people.filter((p) => p.orgIds.includes(selectedOrgId)) : people;
+
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted: sortedPeople, sortKey, sortDir, toggleSort } = useSortedList(
+    filteredPeople,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      email: (a, b) => (a.email || '').localeCompare(b.email || ''),
+      role: (a, b) => a.role.localeCompare(b.role),
+      title: (a, b) => (a.title || '').localeCompare(b.title || ''),
+    },
+    'name',
+  );
+
   const orgOptions = flattenTreeForSelect(tree);
   // Reserved for future visibility filtering
   void accessibleOrgs;
@@ -1008,11 +1023,11 @@ export default function PeoplePage() {
                             checked={filteredPeople.length > 0 && selectedPersonIds.size === filteredPeople.length}
                             onChange={togglePeopleSelectAll} />
                         </th>
-                        <th style={thStyle}>Name</th>
-                        <th style={thStyle}>Email</th>
-                        <th style={thStyle}>App Role</th>
+                        <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
+                        <SortableTh sortKey="email" active={sortKey} dir={sortDir} onClick={toggleSort}>Email</SortableTh>
+                        <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
                         <th style={thStyle}>Governance</th>
-                        <th style={thStyle}>Title</th>
+                        <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
                         <th style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
@@ -1065,7 +1080,7 @@ export default function PeoplePage() {
                           </td>
                         </tr>
                       )}
-                      {filteredPeople.map((person) => {
+                      {sortedPeople.map((person) => {
                         const gs = govSummary[person.id];
                         const govText = gs
                           ? [gs.groups > 0 && `${gs.groups} group${gs.groups > 1 ? 's' : ''}`, gs.roles > 0 && `${gs.roles} role${gs.roles > 1 ? 's' : ''}`, gs.domains > 0 && `${gs.domains} domain${gs.domains > 1 ? 's' : ''}`].filter(Boolean).join(', ')

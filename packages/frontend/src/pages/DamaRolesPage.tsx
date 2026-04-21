@@ -5,6 +5,8 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 interface DamaRoleAssignment {
   id: string;
@@ -200,6 +202,17 @@ export default function DamaRolesPage() {
   const scopeName = (scopeId: string) => {
     return orgs.find((o) => o.id === scopeId)?.name || scopeId;
   };
+
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted: sortedRoles, sortKey, sortDir, toggleSort } = useSortedList(
+    filteredRoles,
+    {
+      personName: (a, b) => a.personName.localeCompare(b.personName),
+      roleType: (a, b) => (ROLE_TYPE_LABELS[a.roleType] || a.roleType).localeCompare(ROLE_TYPE_LABELS[b.roleType] || b.roleType),
+      scopeName: (a, b) => scopeName(a.scopeId).localeCompare(scopeName(b.scopeId)),
+    },
+    'personName',
+  );
 
   const roleBadge = (roleType: string): React.CSSProperties => {
     const c = ROLE_TYPE_COLORS[roleType] || { bg: '#f1f5f9', color: '#64748b' };
@@ -430,15 +443,15 @@ export default function DamaRolesPage() {
                     checked={filteredRoles.length > 0 && selectedIds.size === filteredRoles.length}
                     onChange={toggleSelectAll} />
                 </th>
-                <th style={thStyle}>Person</th>
-                <th style={thStyle}>Governance Role</th>
-                <th style={thStyle}>Organization</th>
+                <SortableTh sortKey="personName" active={sortKey} dir={sortDir} onClick={toggleSort}>Person</SortableTh>
+                <SortableTh sortKey="roleType" active={sortKey} dir={sortDir} onClick={toggleSort}>Governance Role</SortableTh>
+                <SortableTh sortKey="scopeName" active={sortKey} dir={sortDir} onClick={toggleSort}>Organization</SortableTh>
                 <th style={thStyle}>Since</th>
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredRoles.map((role) => {
+              {sortedRoles.map((role) => {
                 const isSelected = selectedIds.has(role.id);
                 return (
                 <tr key={role.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}

@@ -7,6 +7,8 @@ import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from './../components/IconButton';
 import EmptyState from './../components/EmptyState';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -456,6 +458,17 @@ export default function ConnectionsPage() {
   const untestedCount = visibleConnections.filter((c) => c.status === 'UNTESTED').length;
   const filterSystem = systemFilter ? systems.find((s) => s.id === systemFilter) : null;
 
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
+    visibleConnections,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      connectionType: (a, b) => a.connectionType.localeCompare(b.connectionType),
+      status: (a, b) => a.status.localeCompare(b.status),
+    },
+    'name',
+  );
+
   // -----------------------------------------------------------------------
   // Form fields by connection type
   // -----------------------------------------------------------------------
@@ -806,16 +819,16 @@ export default function ConnectionsPage() {
                     }} />
                 </th>
                 <th style={thStyle}>System</th>
-                <th style={thStyle}>Connection Name</th>
-                <th style={thStyle}>Type</th>
+                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Connection Name</SortableTh>
+                <SortableTh sortKey="connectionType" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
                 <th style={thStyle}>Config</th>
-                <th style={thStyle}>Status</th>
+                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
                 <th style={thStyle}>Last Tested</th>
                 <th style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {visibleConnections.map((conn) => {
+              {sorted.map((conn) => {
                 const statusBadge = STATUS_BADGES[conn.status] || STATUS_BADGES.UNTESTED;
                 const typeBadge = TYPE_BADGES[conn.connectionType] || TYPE_BADGES.DATABASE;
                 const isTesting = testingIds.has(conn.id);

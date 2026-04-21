@@ -12,6 +12,8 @@ import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 interface DataDomain {
   id: string;
@@ -329,6 +331,17 @@ export default function DataDomainsPage() {
     }
   };
 
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted: sortedDomains, sortKey, sortDir, toggleSort } = useSortedList(
+    domains,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      status: (a, b) => a.status.localeCompare(b.status),
+      owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
+    },
+    'name',
+  );
+
   return (
     <div>
       {/* Header */}
@@ -625,17 +638,17 @@ export default function DataDomainsPage() {
                     checked={domains.length > 0 && selectedIds.size === domains.length}
                     onChange={toggleSelectAll} />
                 </th>
-                <th style={thStyle}>Name</th>
+                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 <th style={thStyle}>Description</th>
-                <th style={thStyle}>Owner</th>
+                <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
                 <th style={thStyle}>Stewards</th>
                 <th style={thStyle}>Assets</th>
-                <th style={thStyle}>Status</th>
+                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
                 <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {domains.map((domain) => {
+              {sortedDomains.map((domain) => {
                 const isSelected = selectedIds.has(domain.id);
                 return (
                 <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : '' }}

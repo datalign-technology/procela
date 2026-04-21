@@ -11,6 +11,8 @@ import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
 import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
+import SortableTh from '../components/SortableTh';
+import { useSortedList } from '../hooks/useSortedList';
 
 // Assets tab: we need more than just {id,name} to display source provenance
 // and per-asset stewardship / health — the backend already returns these on
@@ -241,6 +243,19 @@ export default function DataQualityPage() {
   let filteredRules = rules;
   if (filterAssetId) filteredRules = filteredRules.filter((r) => r.dataAssetId === filterAssetId);
   if (filterDimension) filteredRules = filteredRules.filter((r) => r.dimension === filterDimension);
+
+  // Sort: comparators keyed by column name; URL persists ?sort=&dir=
+  const { sorted: sortedRules, sortKey, sortDir, toggleSort } = useSortedList(
+    filteredRules,
+    {
+      dataAssetName: (a, b) => (a.dataAssetName || '').localeCompare(b.dataAssetName || ''),
+      name: (a, b) => a.name.localeCompare(b.name),
+      dimension: (a, b) => a.dimension.localeCompare(b.dimension),
+      status: (a, b) => a.status.localeCompare(b.status),
+      currentScore: (a, b) => a.currentScore - b.currentScore,
+    },
+    'dataAssetName',
+  );
 
   // Stats
   const totalRules = rules.length;
@@ -811,21 +826,21 @@ export default function DataQualityPage() {
                       else setSelectedRuleIds(new Set(filteredRules.map((r) => r.id)));
                     }} />
                 </th>
-                <th style={thStyle}>Data Asset</th>
+                <SortableTh sortKey="dataAssetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>
                 <th style={thStyle}>Column</th>
-                <th style={thStyle}>Rule Name</th>
-                <th style={thStyle}>Dimension</th>
+                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Rule Name</SortableTh>
+                <SortableTh sortKey="dimension" active={sortKey} dir={sortDir} onClick={toggleSort}>Dimension</SortableTh>
                 <th style={thStyle}>Threshold</th>
-                <th style={thStyle}>Current Score</th>
+                <SortableTh sortKey="currentScore" active={sortKey} dir={sortDir} onClick={toggleSort}>Current Score</SortableTh>
                 <th style={thStyle}>Weight</th>
-                <th style={thStyle}>Status</th>
+                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
                 <th style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>
                 <th style={thStyle}>Last Measured</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredRules.map((rule) => {
+              {sortedRules.map((rule) => {
                 const isSelected = selectedRuleIds.has(rule.id);
                 return (
                 <tr key={rule.id} style={{ background: isSelected ? '#f0f9ff' : '' }}>
