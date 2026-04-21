@@ -939,9 +939,7 @@ export default function DashboardPage() {
       </div>
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 16,
+          display: 'none',
         }}
       >
         {/* Process Coverage */}
