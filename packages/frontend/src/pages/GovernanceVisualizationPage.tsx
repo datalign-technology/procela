@@ -487,6 +487,7 @@ export default function GovernanceVisualizationPage() {
           border: '1px solid var(--color-border, #e2e8f0)',
           minHeight: 400,
           position: 'relative',
+          overflow: 'auto',
         }}
       >
         {loading ? (
