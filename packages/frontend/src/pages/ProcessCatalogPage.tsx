@@ -702,6 +702,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
               {/* Value Stream fields */}
               {node.level === 'VALUE_STREAM' && (
                 <>
+                  <DocDropdown label="Owner" value={peopleList.find((p) => p.id === node.ownerId)?.name || ''} options={peopleList.map((p) => p.name)} onSave={(v) => { const person = peopleList.find((p) => p.name === v); onUpdate(node.id, { ownerId: person?.id || null }); }} disabled={isLocked} placeholder="Select owner..." />
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                   <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
                   <DocMultiSelect label="Stakeholders" selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} options={peopleList.map((p) => p.name)} onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })} disabled={isLocked} placeholder="Select stakeholders..." />
@@ -711,6 +712,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
               {/* Process fields */}
               {node.level === 'PROCESS' && (
                 <>
+                  <DocDropdown label="Owner" value={peopleList.find((p) => p.id === node.ownerId)?.name || ''} options={peopleList.map((p) => p.name)} onSave={(v) => { const person = peopleList.find((p) => p.name === v); onUpdate(node.id, { ownerId: person?.id || null }); }} disabled={isLocked} placeholder="Select owner..." />
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                   <DocMultiSelect label="Stakeholders" selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} options={peopleList.map((p) => p.name)} onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })} disabled={isLocked} placeholder="Select stakeholders..." />
                   <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
@@ -735,7 +737,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
             </div>
           )}
           {/* Structured Inputs / Outputs panel — shows mapped data assets with owner info */}
-          {isExpanded && (
+          {isExpanded && node.level !== 'VALUE_STREAM' && (
             <IOPanel
               nodeId={node.id}
               mappings={mappingsByStep[node.id] || []}
