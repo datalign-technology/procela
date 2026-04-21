@@ -299,6 +299,9 @@ export default function Layout() {
         const typeLabel = o.type.charAt(0).toUpperCase() + o.type.slice(1);
         return { id: o.id, name: o.name, type: o.type, label: `${o.name} (${typeLabel})` };
       });
+      // Sort so company comes first, then divisions — ensures the broadest scope is the default
+      const typeOrder: Record<string, number> = { company: 0, division: 1, department: 2, team: 3, unit: 4 };
+      options.sort((a, b) => (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9));
 
       setOrgOptions(options);
       setOrgs(options.map((o) => ({ id: o.id, name: o.name, type: o.type })));
@@ -491,34 +494,27 @@ export default function Layout() {
                 </div>
               )}
             </div>
-            {orgOptions.length > 1 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {orgOptions.length > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>Organization:</span>
                 <select
                   value={activeOrgId}
                   onChange={(e) => handleOrgChange(e.target.value)}
                   style={{
-                    padding: '6px 10px', fontSize: 13, fontWeight: 600,
-                    border: '2px solid var(--color-primary)', borderRadius: 6,
-                    background: 'var(--color-primary-light)',
-                    color: 'var(--color-primary)',
-                    minWidth: 200, maxWidth: '100%', width: 'auto', cursor: 'pointer',
+                    padding: '4px 10px', fontSize: 13, fontWeight: 500,
+                    border: '1px solid var(--color-border)', borderRadius: 4,
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    minWidth: 180, cursor: 'pointer',
                   }}
                 >
-                  {!activeOrgId && <option value="">-- Select Organization --</option>}
+                  {!activeOrgId && <option value="">-- Select --</option>}
                   {orgOptions.map((opt) => (
                     <option key={opt.id} value={opt.id}>{opt.label}</option>
                   ))}
                 </select>
               </div>
-            ) : orgOptions.length === 1 ? (
-              <div style={{
-                padding: '4px 12px', fontSize: 13, fontWeight: 600,
-                background: 'var(--color-primary-light)', color: 'var(--color-primary)',
-                borderRadius: 6, border: '1px solid var(--color-primary)',
-              }}>
-                {orgOptions[0].name}
-              </div>
-            ) : null}
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* Notification Bell */}
