@@ -892,4 +892,169 @@ router.post('/apply-template', (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /apply-governance-template — create a standard data governance
+ * process hierarchy. Unlike business processes (which are industry-specific
+ * and AI-generated), governance processes are universal and use a static
+ * template. Idempotent — skips if governance value streams already exist.
+ */
+router.post('/apply-governance-template', (req: Request, res: Response) => {
+  const { orgId: requestOrgId } = req.body;
+  const templateOrgId = requestOrgId || DEV_ORG_ID;
+
+  // Check if governance processes already exist for this org
+  const existing = processNodes.filter((n) =>
+    n.level === 'VALUE_STREAM' && n.orgId === templateOrgId &&
+    (n.name.includes('Governance') || n.name.includes('Data Management')),
+  );
+  if (existing.length > 0) {
+    res.json({ success: true, data: [], message: 'Governance processes already exist. Delete them to regenerate.' });
+    return;
+  }
+
+  const template = [
+    {
+      name: 'Data Governance Management',
+      description: 'Enterprise-wide data governance strategy, policies, standards, and oversight',
+      purpose: 'Establish and maintain the organizational framework for managing data as a strategic asset',
+      businessOutcome: 'Trusted, well-governed data that supports business decisions and regulatory compliance',
+      processes: [
+        {
+          name: 'Data Strategy & Policy',
+          description: 'Define and maintain data governance charter, policies, and standards',
+          purpose: 'Set the rules and guidelines for how data is managed across the organization',
+          activities: [
+            { name: 'Define Data Governance Charter', description: 'Establish governance mission, vision, principles, and decision rights' },
+            { name: 'Establish Data Policies', description: 'Create policies for data quality, security, privacy, retention, and sharing' },
+            { name: 'Define Data Standards', description: 'Set naming conventions, data definitions, and formatting rules' },
+            { name: 'Review and Update Policies', description: 'Periodic review of policies against regulatory changes and business needs' },
+            { name: 'Communicate Policy Changes', description: 'Distribute updates to stakeholders and ensure awareness' },
+          ],
+        },
+        {
+          name: 'Data Quality Management',
+          description: 'Monitor, measure, and improve data quality across the organization',
+          purpose: 'Ensure data meets defined quality standards for accuracy, completeness, and timeliness',
+          activities: [
+            { name: 'Define Quality Rules & Thresholds', description: 'Establish measurable quality criteria per data asset and domain' },
+            { name: 'Execute Quality Assessments', description: 'Run quality rules against data assets on schedule or on-demand' },
+            { name: 'Analyze Quality Results', description: 'Review scores, identify trends, and flag critical failures' },
+            { name: 'Investigate Root Causes', description: 'Trace quality issues to source systems, processes, or manual errors' },
+            { name: 'Implement Remediation', description: 'Fix data issues and update processes to prevent recurrence' },
+            { name: 'Report Quality Metrics', description: 'Publish quality dashboards and scorecards for stakeholders' },
+          ],
+        },
+        {
+          name: 'Data Domain Management',
+          description: 'Organize data into governed domains with clear ownership and stewardship',
+          purpose: 'Ensure every data asset has an accountable owner and active steward',
+          activities: [
+            { name: 'Define Data Domains', description: 'Identify and scope data domains (Customer, Financial, Operational, etc.)' },
+            { name: 'Assign Domain Owners', description: 'Designate accountable business owners for each domain' },
+            { name: 'Assign Data Stewards', description: 'Designate day-to-day stewards responsible for data quality within domains' },
+            { name: 'Map Assets to Domains', description: 'Link data assets to their governing domains' },
+            { name: 'Review Domain Coverage', description: 'Identify orphaned assets and gaps in domain assignment' },
+            { name: 'Resolve Cross-Domain Issues', description: 'Arbitrate conflicts where data spans multiple domains' },
+          ],
+        },
+        {
+          name: 'Metadata & Catalog Management',
+          description: 'Maintain the enterprise data catalog, business glossary, and lineage',
+          purpose: 'Make data discoverable, understandable, and traceable across the organization',
+          activities: [
+            { name: 'Maintain Data Catalog', description: 'Register and update data asset definitions, owners, and classifications' },
+            { name: 'Define Business Glossary Terms', description: 'Create agreed-upon definitions for key business terms' },
+            { name: 'Map Data Lineage', description: 'Document how data flows from source systems through transformations to consumption' },
+            { name: 'Review Catalog Completeness', description: 'Audit the catalog for missing assets, stale entries, and undocumented sources' },
+          ],
+        },
+        {
+          name: 'Data Access & Security',
+          description: 'Classify data sensitivity and manage access policies',
+          purpose: 'Protect sensitive data while enabling authorized access for business needs',
+          activities: [
+            { name: 'Classify Data Sensitivity', description: 'Apply classification levels (Public, Internal, Confidential, Restricted) to assets' },
+            { name: 'Define Access Policies', description: 'Establish who can access what data under which conditions' },
+            { name: 'Review Access Requests', description: 'Process and approve/deny requests for data access' },
+            { name: 'Audit Access Compliance', description: 'Verify that actual access patterns match approved policies' },
+          ],
+        },
+        {
+          name: 'Issue & Change Management',
+          description: 'Track, prioritize, and resolve data governance issues',
+          purpose: 'Provide a structured process for handling data problems and governance changes',
+          activities: [
+            { name: 'Log Data Issues', description: 'Capture reported data problems with context, impact, and urgency' },
+            { name: 'Prioritize Issues', description: 'Triage issues by business impact, regulatory risk, and effort' },
+            { name: 'Assign and Resolve Issues', description: 'Route issues to responsible parties and track resolution' },
+            { name: 'Implement Changes', description: 'Execute approved changes to data, systems, or processes' },
+            { name: 'Communicate Resolutions', description: 'Notify stakeholders of resolved issues and preventive measures' },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const created: ProcessNode[] = [];
+  const now = new Date().toISOString();
+
+  for (const tvs of template) {
+    const vsNode: ProcessNode = {
+      id: uuid(), parentId: null, level: 'VALUE_STREAM',
+      name: tvs.name, description: tvs.description,
+      activityId: generateNodeId('VALUE_STREAM'), status: 'DRAFT',
+      orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
+      orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+      version: 1,
+      purpose: tvs.purpose, businessOutcome: tvs.businessOutcome,
+      createdAt: now, updatedAt: now,
+    };
+    processNodes.push(vsNode);
+    created.push(vsNode);
+
+    for (let pIdx = 0; pIdx < tvs.processes.length; pIdx++) {
+      const proc = tvs.processes[pIdx];
+      const procNode: ProcessNode = {
+        id: uuid(), parentId: vsNode.id, level: 'PROCESS',
+        name: proc.name, description: proc.description,
+        activityId: generateNodeId('PROCESS'), status: 'DRAFT', orderIndex: pIdx,
+        orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+        version: 1, purpose: proc.purpose,
+        createdAt: now, updatedAt: now,
+      };
+      processNodes.push(procNode);
+      created.push(procNode);
+
+      const prevActivities: ProcessNode[] = [];
+      for (let aIdx = 0; aIdx < proc.activities.length; aIdx++) {
+        const act = proc.activities[aIdx];
+        const actNode: ProcessNode = {
+          id: uuid(), parentId: procNode.id, level: 'ACTIVITY',
+          name: act.name, description: act.description,
+          activityId: generateNodeId('ACTIVITY'), status: 'DRAFT', orderIndex: aIdx,
+          orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
+          version: 1,
+          createdAt: now, updatedAt: now,
+        };
+        processNodes.push(actNode);
+        created.push(actNode);
+
+        if (prevActivities.length > 0) {
+          const prev = prevActivities[prevActivities.length - 1];
+          flowRelationships.push({
+            id: uuid(), fromNodeId: prev.id, toNodeId: actNode.id,
+            type: 'SEQUENCE', condition: null, label: null, createdAt: now,
+          });
+        }
+        prevActivities.push(actNode);
+      }
+    }
+  }
+
+  saveStore('processNodes', processNodes);
+  saveStore('flowRelationships', flowRelationships);
+  logger.info({ created: created.length, orgId: templateOrgId }, 'Applied governance process template');
+  res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes` });
+});
+
 export default router;

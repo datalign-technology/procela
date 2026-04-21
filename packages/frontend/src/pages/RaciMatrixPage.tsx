@@ -150,6 +150,27 @@ export default function RaciMatrixPage() {
     exportCsv(`raci-matrix-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
   };
 
+  // Determine if a row belongs to a governance value stream
+  const governanceVsIds = new Set<string>();
+  if (data) {
+    for (const r of data.rows) {
+      if (r.level === 'VALUE_STREAM' && (r.name.includes('Governance') || r.name.includes('Data Management'))) {
+        governanceVsIds.add(r.id);
+      }
+    }
+  }
+  const isGovernanceRow = (row: RaciRow): boolean => {
+    if (governanceVsIds.has(row.id)) return true;
+    let current = row;
+    while (current.parentId) {
+      if (governanceVsIds.has(current.parentId)) return true;
+      const parent = data?.rows.find((r) => r.id === current.parentId);
+      if (!parent) break;
+      current = parent;
+    }
+    return false;
+  };
+
   const hasData = data && data.rows.length > 0 && data.columns.length > 0;
   const visibleRows = data ? data.rows.filter(isRowVisible) : [];
 
@@ -259,12 +280,14 @@ export default function RaciMatrixPage() {
                   const cfg = LEVEL_CONFIG[row.level] || LEVEL_CONFIG.ACTIVITY;
                   const isExp = expanded.has(row.id);
                   const hasCh = hasChildren(row.id);
+                  const isGov = isGovernanceRow(row);
                   return (
-                    <tr key={row.id} style={{ background: row.level === 'VALUE_STREAM' ? '#fafbfc' : '' }}>
+                    <tr key={row.id} style={{ background: row.level === 'VALUE_STREAM' ? (isGov ? '#eff6ff' : '#fafbfc') : (isGov ? '#f8fbff' : '') }}>
                       <td style={{
                         ...tdStyle,
                         position: 'sticky', left: 0, zIndex: 1,
-                        background: row.level === 'VALUE_STREAM' ? '#fafbfc' : 'var(--color-surface)',
+                        background: row.level === 'VALUE_STREAM' ? (isGov ? '#eff6ff' : '#fafbfc') : (isGov ? '#f8fbff' : 'var(--color-surface)'),
+                        borderLeft: isGov ? '3px solid #3b82f6' : undefined,
                         paddingLeft: 8 + cfg.indent,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -280,9 +303,10 @@ export default function RaciMatrixPage() {
                           )}
                           <span style={{
                             fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-                            background: cfg.badgeBg, color: cfg.badgeColor, flexShrink: 0,
+                            background: isGov ? '#dbeafe' : cfg.badgeBg,
+                            color: isGov ? '#1e40af' : cfg.badgeColor, flexShrink: 0,
                           }}>
-                            {cfg.badge}
+                            {isGov ? 'GOV' : cfg.badge}
                           </span>
                           <span style={{ fontSize: 13, fontWeight: cfg.weight }}>{row.name}</span>
                         </div>

@@ -1129,6 +1129,23 @@ export default function ProcessCatalogPage() {
               <IconButton icon="settings" label="Generate from template"
                 onClick={() => navigate('/processes/wizard')} />
             )}
+            {canWrite && (
+              <IconButton icon="settings"
+                label={
+                  tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))
+                    ? 'Governance processes already exist'
+                    : 'Generate governance processes'
+                }
+                disabled={tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))}
+                onClick={async () => {
+                  try {
+                    const res = await apiClient.post<{ success: boolean; message?: string }>('/process-catalog/apply-governance-template', { orgId: activeOrgId || undefined });
+                    if (res.message) alert(res.message);
+                    fetchData();
+                  } catch { /* */ }
+                }}
+              />
+            )}
             {canContribute && (
               <IconButton icon="plus" label="Add value stream" variant="primary"
                 onClick={() => setAddingTo('__root__')} />
