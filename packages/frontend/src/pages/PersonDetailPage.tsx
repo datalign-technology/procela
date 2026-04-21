@@ -18,7 +18,7 @@ import OrgPicker from '../components/OrgPicker';
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Person360Data {
-  person: { id: string; orgIds: string[]; name: string; email: string; role: string; title: string };
+  person: { id: string; orgIds: string[]; accessibleOrgIds: string[]; name: string; email: string; role: string; title: string };
   orgAssignments: { id: string; name: string; type: string }[];
   damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
   governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
@@ -154,6 +154,25 @@ export default function PersonDetailPage() {
     } catch (err) {
       setData(snapshot);
       errorToast(err, 'Failed to update org assignment');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleAccessGrant = async (orgId: string) => {
+    if (!data) return;
+    const current = data.person.accessibleOrgIds || [];
+    const has = current.includes(orgId);
+    const next = has ? current.filter((x) => x !== orgId) : [...current, orgId];
+    const snapshot = data;
+    setData({ ...data, person: { ...data.person, accessibleOrgIds: next } });
+    setBusy(true);
+    try {
+      await apiClient.put(`/people/${data.person.id}`, { accessibleOrgIds: next });
+      await fetch360();
+    } catch (err) {
+      setData(snapshot);
+      errorToast(err, 'Failed to update org access');
     } finally {
       setBusy(false);
     }
@@ -373,6 +392,50 @@ export default function PersonDetailPage() {
           maxHeight={260}
           placeholder="Search organizations (press / to focus)"
         />
+      </div>
+
+      {/* Additional Org Access */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>Additional org access ({(data.person.accessibleOrgIds || []).length})</div>
+        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+          Grant visibility to organizations outside this person's primary assignments.
+          These orgs appear in their Organization dropdown alongside their assigned orgs.
+        </p>
+        {(data.person.accessibleOrgIds || []).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {(data.person.accessibleOrgIds || []).map((oid) => {
+              const o = allOrgs.find((x) => x.id === oid);
+              if (!o) return null;
+              return (
+                <span key={oid} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 4px 3px 10px', borderRadius: 999,
+                  background: '#fef3c7', color: '#92400e', fontSize: 12,
+                }}>
+                  {o.name}
+                  <span style={{ fontSize: 10, opacity: 0.7, textTransform: 'uppercase' }}>{o.type}</span>
+                  <button
+                    onClick={() => toggleAccessGrant(oid)}
+                    disabled={busy}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 14, padding: '0 6px' }}
+                  >&times;</button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <select
+          value=""
+          onChange={(e) => { if (e.target.value) toggleAccessGrant(e.target.value); }}
+          disabled={busy}
+          style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
+        >
+          <option value="">+ Grant access to an organization...</option>
+          {allOrgs
+            .filter((o) => !(data.person.orgIds || []).includes(o.id) && !(data.person.accessibleOrgIds || []).includes(o.id))
+            .map((o) => <option key={o.id} value={o.id}>{o.name} ({o.type})</option>)
+          }
+        </select>
       </div>
 
       {/* Governance roles */}
