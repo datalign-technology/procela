@@ -25,6 +25,7 @@ interface RaciData {
   rows: RaciRow[];
   columns: RaciColumn[];
   matrix: Record<string, Record<string, string>>;
+  reasons: Record<string, Record<string, string>>;
 }
 
 const RACI_COLORS: Record<string, { bg: string; text: string }> = {
@@ -72,6 +73,9 @@ export default function RaciMatrixPage() {
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [groupBy, setGroupBy] = useState<ColumnGroupBy>('name');
+  const [hideEmpty, setHideEmpty] = useState(false);
+  const [sectionFilter, setSectionFilter] = useState<'all' | 'business' | 'governance'>('all');
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -144,7 +148,7 @@ export default function RaciMatrixPage() {
     if (!data) return;
     const headers = ['Process', 'Level', 'Parent', ...sortedColumns.map((c) => `${c.name} (${getColumnLabel(c)})`)];
     const rows = data.rows.map((row) => {
-      const cells = sortedColumns.map((col) => data.matrix[row.id]?.[col.personId] || '-');
+      const cells = activeColumns.map((col) => data.matrix[row.id]?.[col.personId] || '-');
       return [row.name, row.level, row.parentName || '-', ...cells];
     });
     exportCsv(`raci-matrix-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
@@ -171,8 +175,50 @@ export default function RaciMatrixPage() {
     return false;
   };
 
+  // Manual override: cycle R → A → C → I → clear
+  const handleCellClick = async (nodeId: string, personId: string, current: string | undefined) => {
+    const cycle = ['R', 'A', 'C', 'I', ''];
+    const nextIdx = (cycle.indexOf(current || '') + 1) % cycle.length;
+    const nextVal = cycle[nextIdx] || null;
+    try {
+      await apiClient.post('/dashboard/raci/override', { nodeId, personId, value: nextVal });
+      // Refresh
+      const orgParam = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const res = await apiClient.get<{ success: boolean; data: RaciData }>(`/dashboard/raci${orgParam}`);
+      setData(res.data);
+    } catch { /* */ }
+  };
+
   const hasData = data && data.rows.length > 0 && data.columns.length > 0;
-  const visibleRows = data ? data.rows.filter(isRowVisible) : [];
+  // Apply section filter
+  const sectionFilteredRows = data ? data.rows.filter((r) => {
+    if (sectionFilter === 'all') return true;
+    const isGov = isGovernanceRow(r);
+    return sectionFilter === 'governance' ? isGov : !isGov;
+  }) : [];
+  const visibleRows = sectionFilteredRows.filter(isRowVisible);
+
+  // Hide empty columns: only show people with at least one assignment in visible rows
+  const activeColumns = sortedColumns.filter((col) => {
+    if (!hideEmpty || !data) return true;
+    return visibleRows.some((row) => data.matrix[row.id]?.[col.personId]);
+  });
+
+  // Validation warnings per row
+  const rowWarnings = data ? visibleRows.map((row) => {
+    const cells = data.matrix[row.id] || {};
+    const values = Object.values(cells);
+    const hasR = values.includes('R');
+    const hasA = values.includes('A');
+    const aCount = values.filter((v) => v === 'A').length;
+    const warnings: string[] = [];
+    if (!hasR) warnings.push('No R (Responsible)');
+    if (!hasA) warnings.push('No A (Accountable)');
+    if (aCount > 1) warnings.push(`${aCount} A's (should be 1)`);
+    return { id: row.id, warnings };
+  }) : [];
+  const warningMap = new Map(rowWarnings.map((w) => [w.id, w.warnings]));
+  const totalWarnings = rowWarnings.reduce((sum, w) => sum + w.warnings.length, 0);
 
   return (
     <div>
@@ -231,7 +277,34 @@ export default function RaciMatrixPage() {
               <option value="jobRole">Job Role</option>
               <option value="orgUnit">Org Unit</option>
             </select>
+            <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
+            <label style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
+              Hide empty columns
+            </label>
+            <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
+            <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Show:</label>
+            <select value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value as any)}
+              style={{ fontSize: 12, padding: '3px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
+              <option value="all">All Processes</option>
+              <option value="business">Business Only</option>
+              <option value="governance">Governance Only</option>
+            </select>
           </div>
+
+          {/* Validation warnings summary */}
+          {totalWarnings > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', marginBottom: 12,
+              background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 'var(--radius-md)', fontSize: 12,
+            }}>
+              <span style={{ color: '#92400e', fontWeight: 600 }}>{totalWarnings} warning{totalWarnings === 1 ? '' : 's'}</span>
+              <span style={{ color: '#92400e' }}>
+                {rowWarnings.filter((w) => w.warnings.length > 0).length} row{rowWarnings.filter((w) => w.warnings.length > 0).length === 1 ? '' : 's'} missing R or A assignments.
+                Click any cell to manually assign.
+              </span>
+            </div>
+          )}
 
           {/* Table */}
           <div style={{ overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)' }}>
@@ -241,7 +314,7 @@ export default function RaciMatrixPage() {
                   <th style={{ ...thStyle, position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', minWidth: 280 }}>
                     Process Hierarchy
                   </th>
-                  {sortedColumns.map((col, ci) => {
+                  {activeColumns.map((col, ci) => {
                     const bgColors = ['#fef3c7', '#dbeafe', '#d1fae5', '#ede9fe', '#fce7f3', '#fee2e2', '#f0fdf4', '#e0e7ff'];
                     const bg = bgColors[ci % bgColors.length];
                     const label = getColumnLabel(col);
@@ -309,18 +382,33 @@ export default function RaciMatrixPage() {
                             {isGov ? 'GOV' : cfg.badge}
                           </span>
                           <span style={{ fontSize: 13, fontWeight: cfg.weight }}>{row.name}</span>
+                          {(warningMap.get(row.id) || []).length > 0 && (
+                            <span title={(warningMap.get(row.id) || []).join(', ')}
+                              style={{ fontSize: 10, color: '#d97706', marginLeft: 4, flexShrink: 0 }}>
+                              {'⚠'}
+                            </span>
+                          )}
                         </div>
                       </td>
-                      {sortedColumns.map((col) => {
+                      {activeColumns.map((col) => {
                         const value = data.matrix[row.id]?.[col.personId];
+                        const reason = data.reasons?.[row.id]?.[col.personId];
                         const colors = value ? RACI_COLORS[value] : null;
                         return (
-                          <td key={col.personId} style={{
-                            ...tdStyle, textAlign: 'center',
-                            background: colors ? colors.bg : 'transparent',
-                            color: colors ? colors.text : 'var(--color-text-muted)',
-                            fontWeight: colors ? 700 : 400, fontSize: 13,
-                          }}>
+                          <td key={col.personId}
+                            onClick={() => handleCellClick(row.id, col.personId, value)}
+                            onMouseEnter={(e) => {
+                              if (reason) setTooltip({ x: e.clientX, y: e.clientY, text: `${value}: ${reason}` });
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
+                            style={{
+                              ...tdStyle, textAlign: 'center', cursor: 'pointer',
+                              background: colors ? colors.bg : 'transparent',
+                              color: colors ? colors.text : 'var(--color-text-muted)',
+                              fontWeight: colors ? 700 : 400, fontSize: 13,
+                            }}
+                            title={reason ? `${RACI_LABELS[value || ''] || ''}: ${reason}` : 'Click to assign'}
+                          >
                             {value || '-'}
                           </td>
                         );
@@ -333,7 +421,7 @@ export default function RaciMatrixPage() {
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
-            {visibleRows.length} of {data.rows.length} rows visible | {sortedColumns.length} people | Showing: {groupBy === 'orgUnit' ? 'org unit' : groupBy === 'title' ? 'job title' : groupBy === 'jobRole' ? 'job role' : 'person name'}
+            {visibleRows.length} of {data.rows.length} rows | {activeColumns.length} of {sortedColumns.length} people{hideEmpty ? ' (empty hidden)' : ''} | {sectionFilter !== 'all' ? sectionFilter + ' processes' : 'all processes'} | Click any cell to override
           </div>
         </>
       )}

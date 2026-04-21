@@ -8,7 +8,17 @@ import { people } from './people';
 import { dataDomains } from './data-domains';
 import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
+import { loadStore, saveStore } from '../lib/persistence';
 import { AuthenticatedRequest } from '../middleware/auth';
+
+// ── RACI Overrides ──
+interface RaciOverride {
+  nodeId: string;
+  personId: string;
+  value: string; // R, A, C, I
+  reason?: string;
+}
+const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
 
 const router = Router();
 
@@ -305,6 +315,7 @@ router.get('/raci', (req: Request, res: Response) => {
 
   // Build per-row RACI and collect all relevant people
   const matrix: Record<string, Record<string, string>> = {};
+  const reasons: Record<string, Record<string, string>> = {};
   const allRelevantIds = new Set<string>();
 
   // Global fallback roles
@@ -316,32 +327,38 @@ router.get('/raci', (req: Request, res: Response) => {
 
   for (const row of rows) {
     const cellMap: Record<string, string> = {};
+    const reasonMap: Record<string, string> = {};
     const nodeAssets = getAssetsForNode(row.id);
     const nodeOwner = getOwner(row.id);
 
     // R: process/activity owner
     if (nodeOwner) {
       cellMap[nodeOwner] = 'R';
+      const ownerPerson = people.find((p) => p.id === nodeOwner);
+      reasonMap[nodeOwner] = `Owns "${row.name}"${ownerPerson ? ` (${ownerPerson.name})` : ''}`;
       allRelevantIds.add(nodeOwner);
     }
 
     // A: domain owner(s) of mapped data assets
     const accountableForRow = new Set<string>();
+    const accountableReasons: Record<string, string> = {};
     for (const aid of nodeAssets) {
+      const asset = dataAssets.find((a) => a.id === aid);
       const domain = dataDomains.find((d) => d.dataAssetIds.includes(aid));
       if (domain?.ownerId) {
         accountableForRow.add(domain.ownerId);
+        accountableReasons[domain.ownerId] = `Owns domain "${domain.name}" containing "${asset?.name || aid}"`;
       }
-      // Also check asset-level owner
-      const asset = dataAssets.find((a) => a.id === aid);
-      if (asset?.owner) accountableForRow.add(asset.owner);
+      if (asset?.owner && !accountableForRow.has(asset.owner)) {
+        accountableForRow.add(asset.owner);
+        accountableReasons[asset.owner] = `Owns data asset "${asset.name}"`;
+      }
     }
-    // If no domain/asset owners found, fall back to CDO
     if (accountableForRow.size === 0) {
-      for (const id of cdoIds) accountableForRow.add(id);
+      for (const id of cdoIds) { accountableForRow.add(id); accountableReasons[id] = 'CDO (fallback — no domain owner for mapped assets)'; }
     }
     for (const pid of accountableForRow) {
-      if (!cellMap[pid]) cellMap[pid] = 'A';
+      if (!cellMap[pid]) { cellMap[pid] = 'A'; reasonMap[pid] = accountableReasons[pid] || 'Domain/asset owner'; }
       allRelevantIds.add(pid);
     }
 
@@ -360,7 +377,7 @@ router.get('/raci', (req: Request, res: Response) => {
     for (const id of architectIds) consultedForRow.add(id);
     for (const id of techStewardIds) consultedForRow.add(id);
     for (const pid of consultedForRow) {
-      if (!cellMap[pid]) cellMap[pid] = 'C';
+      if (!cellMap[pid]) { cellMap[pid] = 'C'; reasonMap[pid] = architectIds.has(pid) ? 'Data Architect' : techStewardIds.has(pid) ? 'Technical Data Steward' : 'Steward of mapped data asset'; }
       allRelevantIds.add(pid);
     }
 
@@ -378,11 +395,20 @@ router.get('/raci', (req: Request, res: Response) => {
     for (const id of govLeadIds) informedForRow.add(id);
     for (const id of dqAnalystIds) informedForRow.add(id);
     for (const pid of informedForRow) {
-      if (!cellMap[pid]) cellMap[pid] = 'I';
+      if (!cellMap[pid]) { cellMap[pid] = 'I'; reasonMap[pid] = govLeadIds.has(pid) ? 'Data Governance Lead' : dqAnalystIds.has(pid) ? 'Data Quality Analyst' : 'Governance group member'; }
       allRelevantIds.add(pid);
     }
 
+    // Apply manual overrides — they take precedence over derived values
+    const nodeOverrides = raciOverrides.filter((o) => o.nodeId === row.id);
+    for (const ov of nodeOverrides) {
+      cellMap[ov.personId] = ov.value;
+      reasonMap[ov.personId] = ov.reason || 'Manual override';
+      allRelevantIds.add(ov.personId);
+    }
+
     matrix[row.id] = cellMap;
+    reasons[row.id] = reasonMap;
   }
 
   // Build columns from people who appear in at least one cell
@@ -410,8 +436,27 @@ router.get('/raci', (req: Request, res: Response) => {
       rows: rows.map(({ ownerId, ...rest }) => rest),
       columns,
       matrix,
+      reasons,
     },
   });
+});
+
+/** POST /api/v1/dashboard/raci/override — set or clear a manual RACI override */
+router.post('/raci/override', (req: Request, res: Response) => {
+  const { nodeId, personId, value } = req.body;
+  if (!nodeId || !personId) {
+    res.status(400).json({ success: false, error: 'nodeId and personId are required' });
+    return;
+  }
+  // Remove existing override for this cell
+  const idx = raciOverrides.findIndex((o) => o.nodeId === nodeId && o.personId === personId);
+  if (idx !== -1) raciOverrides.splice(idx, 1);
+  // Add new override (unless clearing)
+  if (value && ['R', 'A', 'C', 'I'].includes(value)) {
+    raciOverrides.push({ nodeId, personId, value, reason: 'Manual override' });
+  }
+  saveStore('raciOverrides', raciOverrides);
+  res.json({ success: true });
 });
 
 // ──────────────────────────────────────────────────────────────────────────
