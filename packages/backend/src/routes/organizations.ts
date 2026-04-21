@@ -375,7 +375,9 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
     // Process in order — parents should come before children
     const now = new Date().toISOString();
 
-    // Track newly created ids so rows can reference in-scope siblings by name.
+    // Track which orgs existed before this import so dedup only checks
+    // pre-existing records, not ones created in this batch.
+    const preExistingIds = new Set(organizations.map((o) => o.id));
     const newlyCreated = new Set<string>();
     const skipped: string[] = [];
 
@@ -388,9 +390,10 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
         }
       }
 
-      // Skip duplicates — same name + same parent
+      // Skip duplicates — same name + same parent, but only check
+      // orgs that existed BEFORE this import (not ones created in this batch)
       const existingDup = organizations.find(
-        (o) => o.name.toLowerCase() === row.name.toLowerCase() && o.parentId === pid,
+        (o) => preExistingIds.has(o.id) && o.name.toLowerCase() === row.name.toLowerCase() && o.parentId === pid,
       );
       if (existingDup) {
         skipped.push(row.name);
