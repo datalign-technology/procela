@@ -591,8 +591,11 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
 
   // Owned / stewarded data assets.
   const myAssets = dataAssets
-    .filter((a) => (a as any).ownerId === person.id || (a as any).stewardId === person.id)
-    .map((a) => ({ id: a.id, name: a.name, relation: (a as any).ownerId === person.id ? 'owner' : 'steward' }));
+    .filter((a) => a.owner === person.id || a.owner === person.name || (a.stewardIds || []).includes(person.id))
+    .map((a) => ({
+      id: a.id, name: a.name, governanceTier: a.governanceTier, healthScore: a.healthScore,
+      relation: (a.owner === person.id || a.owner === person.name) ? 'owner' : 'steward',
+    }));
 
   // DAMA governance roles.
   const myRoles = damaRoles
@@ -636,7 +639,30 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
       });
     }
   }
-  // Governance groups where person is CHAIR with no meetings or pending items (simplified: just flag it).
+  // Low-health assets I own/steward.
+  for (const a of myAssets) {
+    if (a.healthScore > 0 && a.healthScore < 50) {
+      actionItems.push({
+        type: 'health',
+        message: `"${a.name}" health is ${a.healthScore}% — needs attention.`,
+        link: '/data-quality',
+      });
+    }
+  }
+  // Domains I own without stewards.
+  for (const d of myDomains) {
+    if (d.relation === 'owner') {
+      const domain = dataDomains.find((dd) => dd.id === d.id);
+      if (domain && (!domain.stewardIds || domain.stewardIds.length === 0)) {
+        actionItems.push({
+          type: 'gap',
+          message: `Domain "${d.name}" has no stewards assigned.`,
+          link: '/governance?tab=domains',
+        });
+      }
+    }
+  }
+  // Governance groups where person is CHAIR.
   for (const g of myGroups) {
     if (g.groupRole === 'CHAIR') {
       actionItems.push({

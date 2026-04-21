@@ -924,9 +924,9 @@ export default function DashboardPage() {
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
           <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
         </div>
-        <GettingStartedChecklist stats={stats} />
+        <MyItems />
         <GovernanceSetupWizard />
-        <RecentActivity activeOrgId={activeOrgId} />
+        <GettingStartedChecklist stats={stats} />
       </div>
     );
   }
@@ -1056,20 +1056,20 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Personalized section — shows what the logged-in user owns. */}
-      <div style={{ marginTop: 24 }}>
-        <MyItems />
-      </div>
+      {/* My Responsibilities — front and center */}
+      <MyItems />
 
-      <div style={{ marginTop: 0 }}>
-        <DashboardAlerts stats={stats} />
-      </div>
+      {/* Governance Setup Wizard — only shows if incomplete */}
+      <GovernanceSetupWizard />
 
+      {/* Alerts */}
+      <DashboardAlerts stats={stats} />
+
+      {/* Getting Started — only shows if sparse data */}
+      <GettingStartedChecklist stats={stats} />
+
+      {/* Quick Actions */}
       <QuickActions />
-
-      <RecentActivity activeOrgId={activeOrgId} />
-
-      <ActivityTrends />
     </div>
   );
 }
