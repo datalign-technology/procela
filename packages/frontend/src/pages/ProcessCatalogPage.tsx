@@ -127,8 +127,17 @@ interface MappingInfo {
   processStepId: string;
   dataAssetId: string;
   linkType: string;
+  criticality?: string;
+  dataFormat?: string;
+  sla?: string;
+  qualityRequirement?: string;
+  sourceSystem?: string;
+  destinationSystem?: string;
   assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; healthScore: number } | null;
 }
+
+const DATA_FORMAT_OPTIONS = ['API', 'CSV', 'JSON', 'XML', 'Database', 'File Transfer', 'Manual Entry', 'Spreadsheet', 'Real-time Stream', 'Batch', 'Paper', 'Other'];
+const CRITICALITY_OPTIONS = ['REQUIRED', 'OPTIONAL'];
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
@@ -354,10 +363,13 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
 }) {
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
   const [pickedAsset, setPickedAsset] = useState('');
+  const [expandedMapping, setExpandedMapping] = useState<string | null>(null);
+  const [localMappings, setLocalMappings] = useState(mappings);
+  useEffect(() => { setLocalMappings(mappings); }, [mappings]);
 
-  const inputs = mappings.filter((m) => m.linkType === 'consumes' || m.linkType === 'references');
-  const outputs = mappings.filter((m) => m.linkType === 'produces');
-  const transforms = mappings.filter((m) => m.linkType === 'transforms');
+  const inputs = localMappings.filter((m) => m.linkType === 'consumes' || m.linkType === 'references');
+  const outputs = localMappings.filter((m) => m.linkType === 'produces');
+  const transforms = localMappings.filter((m) => m.linkType === 'transforms');
 
   const handleAdd = (linkType: string) => {
     if (!pickedAsset) return;
@@ -366,33 +378,79 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
     setShowAdd(null);
   };
 
+  const updateMapping = async (mappingId: string, updates: Record<string, any>) => {
+    try {
+      await apiClient.put(`/mappings/${mappingId}`, updates);
+      setLocalMappings((prev) => prev.map((m) => m.id === mappingId ? { ...m, ...updates } : m));
+    } catch { /* */ }
+  };
+
   const renderRow = (m: MappingInfo) => {
     if (!m.assetInfo) return null;
     const tierBg = m.assetInfo.governanceTier === 'GOLD' ? '#fef3c7' : m.assetInfo.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa';
     const tierColor = m.assetInfo.governanceTier === 'GOLD' ? '#92400e' : m.assetInfo.governanceTier === 'SILVER' ? '#475569' : '#9a3412';
+    const isExp = expandedMapping === m.id;
     return (
-      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 0', flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
-        <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierBg, color: tierColor }}>
-          {m.assetInfo.governanceTier}
-        </span>
-        {m.linkType === 'transforms' && (
-          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6' }}>TRANSFORMS</span>
-        )}
-        {m.linkType === 'references' && (
-          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1e40af' }}>READ-ONLY</span>
-        )}
-        {m.assetInfo.ownerName && (
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Owner: {m.assetInfo.ownerName}</span>
-        )}
-        {m.assetInfo.stewardName && (
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Steward: {m.assetInfo.stewardName}</span>
-        )}
-        {!disabled && (
-          <button onClick={() => onRemove(m.id)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-error)', padding: 0, marginLeft: 'auto' }}>
-            Remove
-          </button>
+      <div key={m.id}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 0', flexWrap: 'wrap' }}>
+          <span onClick={() => setExpandedMapping(isExp ? null : m.id)} style={{ cursor: 'pointer', fontSize: 8, color: 'var(--color-text-muted)' }}>
+            {isExp ? '▼' : '▶'}
+          </span>
+          <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierBg, color: tierColor }}>
+            {m.assetInfo.governanceTier}
+          </span>
+          {m.criticality && (
+            <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: m.criticality === 'REQUIRED' ? '#fee2e2' : '#f1f5f9', color: m.criticality === 'REQUIRED' ? '#991b1b' : '#64748b' }}>
+              {m.criticality}
+            </span>
+          )}
+          {m.dataFormat && (
+            <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#e0e7ff', color: '#3730a3' }}>{m.dataFormat}</span>
+          )}
+          {m.assetInfo.ownerName && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Owner: {m.assetInfo.ownerName}</span>
+          )}
+          {!disabled && (
+            <button onClick={() => onRemove(m.id)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-error)', padding: 0, marginLeft: 'auto' }}>
+              Remove
+            </button>
+          )}
+        </div>
+        {isExp && (
+          <div style={{ paddingLeft: 16, paddingBottom: 6, display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              Criticality:
+              <select value={m.criticality || ''} disabled={disabled} onChange={(e) => updateMapping(m.id, { criticality: e.target.value })}
+                style={{ fontSize: 10, padding: '1px 4px', border: '1px solid var(--color-border)', borderRadius: 3 }}>
+                <option value="">--</option>
+                {CRITICALITY_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              Format:
+              <select value={m.dataFormat || ''} disabled={disabled} onChange={(e) => updateMapping(m.id, { dataFormat: e.target.value })}
+                style={{ fontSize: 10, padding: '1px 4px', border: '1px solid var(--color-border)', borderRadius: 3 }}>
+                <option value="">--</option>
+                {DATA_FORMAT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              SLA:
+              <input value={m.sla || ''} disabled={disabled} placeholder="e.g. By 6am daily"
+                onBlur={(e) => updateMapping(m.id, { sla: e.target.value })}
+                onChange={() => {}}
+                style={{ fontSize: 10, padding: '1px 4px', border: '1px solid var(--color-border)', borderRadius: 3, width: 100 }} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              Quality req:
+              <input value={m.qualityRequirement || ''} disabled={disabled} placeholder="e.g. Completeness > 95%"
+                onBlur={(e) => updateMapping(m.id, { qualityRequirement: e.target.value })}
+                onChange={() => {}}
+                style={{ fontSize: 10, padding: '1px 4px', border: '1px solid var(--color-border)', borderRadius: 3, width: 130 }} />
+            </label>
+          </div>
         )}
       </div>
     );
