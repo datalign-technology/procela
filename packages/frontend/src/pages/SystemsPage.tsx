@@ -82,6 +82,7 @@ export default function SystemsPage() {
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
+  const [filterType, setFilterType] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -222,9 +223,12 @@ export default function SystemsPage() {
     });
   };
 
+  // Filter by system type
+  const filteredSystems = filterType ? systems.filter((s) => s.systemType === filterType) : systems;
+
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
-    systems,
+    filteredSystems,
     {
       name: (a, b) => a.name.localeCompare(b.name),
       type: (a, b) => (a.systemType || '').localeCompare(b.systemType || ''),
@@ -250,7 +254,20 @@ export default function SystemsPage() {
             Applications and platforms where your organization's data lives.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {systemTypes.length > 0 && (
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
+            >
+              <option value="">All Types ({systems.length})</option>
+              {systemTypes.map((t) => {
+                const count = systems.filter((s) => s.systemType === t).length;
+                return count > 0 ? <option key={t} value={t}>{t} ({count})</option> : null;
+              })}
+            </select>
+          )}
           {systems.length > 0 && (
             <IconButton icon="trash" label="Delete all systems" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
