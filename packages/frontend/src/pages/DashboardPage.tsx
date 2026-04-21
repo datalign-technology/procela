@@ -698,6 +698,9 @@ export default function DashboardPage() {
 
   usePolling(fetchData, 30000);
 
+  const layout = useDashboardLayout();
+  const [showCustomize, setShowCustomize] = useState(false);
+
   if (error) {
     return (
       <div>
@@ -730,9 +733,6 @@ export default function DashboardPage() {
     stats.mappings === 0 &&
     stats.organizations <= 1 &&
     stats.people === 0;
-
-  const layout = useDashboardLayout();
-  const [showCustomize, setShowCustomize] = useState(false);
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myItems: <MyItems />,

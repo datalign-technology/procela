@@ -19,6 +19,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    console.error('[ErrorBoundary]', error.message);
+    if (info.componentStack) console.error(info.componentStack);
+  }
+
   handleReload = () => {
     window.location.reload();
   };
@@ -86,6 +91,13 @@ export default class ErrorBoundary extends Component<Props, State> {
               An unexpected error occurred. Please try reloading the page. If the problem persists,
               contact your administrator.
             </p>
+            {this.state.error && (
+              <pre style={{ fontSize: 11, color: '#991b1b', background: '#fef2f2', padding: 12, borderRadius: 6, textAlign: 'left', marginBottom: 16, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {this.state.error.message}
+                {'\n'}
+                {this.state.error.stack}
+              </pre>
+            )}
             <button
               onClick={this.handleReload}
               style={{
