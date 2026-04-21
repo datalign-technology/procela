@@ -900,15 +900,26 @@ router.post('/apply-template', (req: Request, res: Response) => {
  */
 router.post('/apply-governance-template', (req: Request, res: Response) => {
   const { orgId: requestOrgId } = req.body;
-  const templateOrgId = requestOrgId || DEV_ORG_ID;
 
-  // Check if governance processes already exist for this org
+  // Always create governance processes at the company level — governance
+  // is an enterprise function, not per-division. Walk up from the
+  // requested org to find the root company.
+  let companyOrgId = requestOrgId || DEV_ORG_ID;
+  let current = organizations.find((o) => o.id === companyOrgId);
+  while (current?.parentId) {
+    current = organizations.find((o) => o.id === current!.parentId);
+    if (current) companyOrgId = current.id;
+  }
+  const templateOrgId = companyOrgId;
+
+  // Check if governance processes already exist anywhere in the company
   const existing = processNodes.filter((n) =>
     n.level === 'VALUE_STREAM' && n.orgId === templateOrgId &&
     (n.name.includes('Governance') || n.name.includes('Data Management')),
   );
   if (existing.length > 0) {
-    res.json({ success: true, data: [], message: 'Governance processes already exist. Delete them to regenerate.' });
+    const companyName = organizations.find((o) => o.id === templateOrgId)?.name || templateOrgId;
+    res.json({ success: true, data: [], message: `Governance processes already exist at ${companyName}. Delete them to regenerate.` });
     return;
   }
 
@@ -1054,7 +1065,8 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
   saveStore('processNodes', processNodes);
   saveStore('flowRelationships', flowRelationships);
   logger.info({ created: created.length, orgId: templateOrgId }, 'Applied governance process template');
-  res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes` });
+  const companyName = organizations.find((o) => o.id === templateOrgId)?.name || '';
+  res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes at ${companyName} (company level)` });
 });
 
 export default router;
