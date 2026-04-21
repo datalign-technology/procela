@@ -4,11 +4,14 @@ import { systems } from './systems';
 import { dataAssets } from './data-assets';
 import { organizations } from './organizations';
 import { people } from './people';
+import { dataDomains } from './data-domains';
+import { governanceGroups } from './governance-groups';
+import { mappings } from './mappings';
 
 const router = Router();
 
 interface SearchResult {
-  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person';
+  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person' | 'data-domain' | 'governance-group' | 'mapping';
   id: string;
   name: string;
   description: string;
@@ -107,6 +110,61 @@ router.get('/', (req: Request, res: Response) => {
         name: person.name,
         description: person.email,
         meta: { role: person.role, title: person.title },
+      });
+    }
+  }
+
+  // Search data domains
+  for (const domain of dataDomains) {
+    if (results.length >= 20) break;
+    if (
+      domain.name.toLowerCase().includes(q) ||
+      domain.description.toLowerCase().includes(q)
+    ) {
+      results.push({
+        type: 'data-domain',
+        id: domain.id,
+        name: domain.name,
+        description: domain.description,
+        meta: { status: domain.status },
+      });
+    }
+  }
+
+  // Search governance groups
+  for (const group of governanceGroups) {
+    if (results.length >= 20) break;
+    if (
+      group.name.toLowerCase().includes(q) ||
+      group.description.toLowerCase().includes(q)
+    ) {
+      results.push({
+        type: 'governance-group',
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        meta: { type: group.type, status: group.status },
+      });
+    }
+  }
+
+  // Search mappings
+  for (const mapping of mappings) {
+    if (results.length >= 20) break;
+    const step = processNodes.find((n) => n.id === mapping.processStepId);
+    const asset = dataAssets.find((a) => a.id === mapping.dataAssetId);
+    const mappingName = `${step?.name || 'Unknown Step'} ↔ ${asset?.name || 'Unknown Asset'}`;
+    const mappingDesc = mapping.notes || `${mapping.linkType} link`;
+    if (
+      mappingName.toLowerCase().includes(q) ||
+      mappingDesc.toLowerCase().includes(q)
+    ) {
+      results.push({
+        type: 'mapping',
+        id: mapping.id,
+        name: mappingName,
+        description: mappingDesc,
+        meta: { linkType: mapping.linkType },
       });
     }
   }

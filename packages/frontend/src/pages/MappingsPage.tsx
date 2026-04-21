@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState';
 import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import InfoTip from '../components/InfoTip';
 
 // ── Types ──
 
@@ -287,6 +288,7 @@ export default function MappingsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process-Data Mappings</h1>
+            <InfoTip term="Mapping" />
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>

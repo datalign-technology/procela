@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -9,6 +10,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
+import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
@@ -79,6 +81,17 @@ const btnSecondary: React.CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
   cursor: 'pointer',
+};
+
+const bulkBtnStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  fontSize: 11,
+  fontWeight: 500,
+  background: '#fff',
+  border: '1px solid #93c5fd',
+  borderRadius: 4,
+  cursor: 'pointer',
+  color: '#1e40af',
 };
 
 const thStyle: React.CSSProperties = {
@@ -170,6 +183,56 @@ interface DataAssetColumn {
   rulesWarning?: number;
   healthScore?: number | null;
   rules?: ColumnRule[];
+}
+
+function InlineCellEdit({ value, onSave, type = 'text', options }: {
+  value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (!editing) {
+    return (
+      <span
+        onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
+        style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
+        title="Click to edit"
+      >
+        {value || '—'}
+      </span>
+    );
+  }
+
+  if (type === 'select' && options) {
+    return (
+      <select
+        autoFocus
+        value={draft}
+        onChange={(e) => { onSave(e.target.value); setEditing(false); }}
+        onBlur={() => setEditing(false)}
+        onClick={(e) => e.stopPropagation()}
+        style={{ fontSize: 'inherit', padding: '2px 4px', border: '1px solid var(--color-primary)', borderRadius: 3 }}
+      >
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      type={type}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
+        if (e.key === 'Escape') setEditing(false);
+      }}
+      style={{ fontSize: 'inherit', padding: '2px 4px', width: type === 'number' ? 60 : '100%', border: '1px solid var(--color-primary)', borderRadius: 3 }}
+    />
+  );
 }
 
 export default function DataAssetsPage() {
@@ -490,6 +553,49 @@ export default function DataAssetsPage() {
     fetchData();
   };
 
+  const bulkSetTier = async (tier: string) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { governanceTier: tier })));
+      addToast('success', `Set ${ids.length} asset${ids.length === 1 ? '' : 's'} to ${tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to update governance tier');
+    }
+  };
+
+  const bulkSetOwner = async (ownerId: string) => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { owner: ownerId })));
+      const ownerName = peopleList.find((p) => p.id === ownerId)?.name || 'selected owner';
+      addToast('success', `Assigned ${ownerName} as owner to ${ids.length} asset${ids.length === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Failed to assign owner');
+    }
+  };
+
+  const inlineSaveField = async (assetId: string, field: string, value: string) => {
+    try {
+      const payload: Record<string, any> = {};
+      if (field === 'healthScore') {
+        payload[field] = value === '' ? null : Number(value);
+      } else {
+        payload[field] = value;
+      }
+      await apiClient.put(`/data-assets/${assetId}`, payload);
+      addToast('success', `Updated ${field === 'governanceTier' ? 'governance tier' : field === 'healthScore' ? 'health score' : field}`);
+      fetchData();
+    } catch (err) {
+      errorToast(err, `Failed to update ${field}`);
+    }
+  };
+
   const open360 = async (id: string) => {
     setLoading360(true);
     setAssetComments([]);
@@ -546,6 +652,7 @@ export default function DataAssetsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
+            <InfoTip term="Data Asset" />
             <HelpPopover id="data-assets-overview" title="Data assets">
               Define your data in business terms first ("Customer accounts",
               "Billing records") — then link each one to where it actually
@@ -556,6 +663,19 @@ export default function DataAssetsPage() {
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Data assets described in business terms, linked to the systems that hold them.
           </p>
+          {assets.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+              <span>{assets.length} assets</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{assets.filter((a) => a.governanceTier === 'GOLD').length} Gold</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{assets.filter((a) => a.governanceTier === 'SILVER').length} Silver</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{assets.filter((a) => !a.governanceTier || a.governanceTier === 'BRONZE').length} Bronze</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{assets.filter((a) => a.healthScore != null && a.healthScore < 80).length} below 80% health</span>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {assets.length > 0 && canWrite && (
@@ -755,19 +875,36 @@ export default function DataAssetsPage() {
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 'var(--radius-md)',
+          fontSize: 12, flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <span style={{ fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <span style={{ color: '#93c5fd' }}>|</span>
+          <button onClick={() => bulkSetTier('GOLD')} style={bulkBtnStyle}>Set Gold</button>
+          <button onClick={() => bulkSetTier('SILVER')} style={bulkBtnStyle}>Set Silver</button>
+          <button onClick={() => bulkSetTier('BRONZE')} style={bulkBtnStyle}>Set Bronze</button>
+          <span style={{ color: '#93c5fd' }}>|</span>
+          <select
+            onChange={(e) => { if (e.target.value) bulkSetOwner(e.target.value); e.target.value = ''; }}
+            style={bulkBtnStyle}
+          >
+            <option value="">Assign Owner...</option>
+            {peopleList.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <span style={{ color: '#93c5fd' }}>|</span>
           <button
             onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+            style={{ ...bulkBtnStyle, background: '#fef2f2', borderColor: '#fca5a5', color: '#dc2626' }}
           >
             Delete Selected
           </button>
+          <span style={{ flex: 1 }} />
           <button
             onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+            style={{ ...bulkBtnStyle, color: 'var(--color-text-muted)', borderColor: '#d1d5db' }}
           >
             Clear Selection
           </button>
@@ -835,6 +972,8 @@ export default function DataAssetsPage() {
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
                 <th style={thStyle}>Source</th>
+                <th style={thStyle}>Tier</th>
+                <th style={thStyle}>Health</th>
                 <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
                 <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
                 <th style={thStyle}>Steward</th>
@@ -862,13 +1001,22 @@ export default function DataAssetsPage() {
                         >
                           {isExpanded ? '\u25BC' : '\u25B6'}
                         </button>
-                        <div style={{ minWidth: 0, cursor: 'pointer' }} onClick={() => open360(asset.id)} title="Click to view details">
-                          <span style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; }}
-                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'none'; }}
-                          >
-                            {asset.name}
-                          </span>
+                        <div style={{ minWidth: 0 }}>
+                          {canWrite ? (
+                            <InlineCellEdit
+                              value={asset.name}
+                              onSave={(v) => inlineSaveField(asset.id, 'name', v)}
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--color-primary)', cursor: 'pointer' }}
+                              onClick={() => open360(asset.id)}
+                              title="Click to view details"
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'none'; }}
+                            >
+                              {asset.name}
+                            </span>
+                          )}
                           {asset.description && (
                             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
                               {asset.description}
@@ -889,6 +1037,29 @@ export default function DataAssetsPage() {
                         </span>
                       ) : (
                         <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      {canWrite ? (
+                        <InlineCellEdit
+                          value={asset.governanceTier || 'BRONZE'}
+                          onSave={(v) => inlineSaveField(asset.id, 'governanceTier', v)}
+                          type="select"
+                          options={['BRONZE', 'SILVER', 'GOLD']}
+                        />
+                      ) : (
+                        <span>{asset.governanceTier || 'BRONZE'}</span>
+                      )}
+                    </td>
+                    <td style={tdStyle}>
+                      {canWrite ? (
+                        <InlineCellEdit
+                          value={asset.healthScore != null ? String(asset.healthScore) : ''}
+                          onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
+                          type="number"
+                        />
+                      ) : (
+                        <span>{asset.healthScore != null ? `${asset.healthScore}%` : '—'}</span>
                       )}
                     </td>
                     <td style={tdStyle}>
@@ -919,7 +1090,7 @@ export default function DataAssetsPage() {
                   {/* Expanded columns section */}
                   {isExpanded && (
                     <tr>
-                      <td colSpan={8} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                      <td colSpan={10} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
                         <div style={{ padding: '12px 20px 12px 60px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -1047,6 +1218,12 @@ export default function DataAssetsPage() {
                               })}
                             </div>
                           )}
+                          <div style={{ fontSize: 11, marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{ color: 'var(--color-text-muted)' }}>See also:</span>
+                            <Link to={`/mappings?asset=${asset.id}`} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View Mappings</Link>
+                            <Link to="/data-quality" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Quality Rules</Link>
+                            <Link to="/data-lineage" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Data Lineage</Link>
+                          </div>
                         </div>
                       </td>
                     </tr>

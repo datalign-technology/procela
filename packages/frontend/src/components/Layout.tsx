@@ -28,14 +28,22 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    label: 'Workspace',
+    label: 'Govern',
     items: [
-      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u25A8' },
       { to: '/processes', label: 'Processes', icon: '\u2630' },
       { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
-      { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
+      { to: '/data-domains', label: 'Data Domains', icon: '\u25A8' },
       { to: '/mappings', label: 'Mappings', icon: '\u2194' },
+      { to: '/raci', label: 'RACI Matrix', icon: '\u2637' },
+      { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
+    ],
+  },
+  {
+    label: 'Analyze',
+    items: [
+      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u25A8' },
       { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
+      { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
       { to: '/reports', label: 'Reports', icon: '\u26A0' },
     ],
   },
@@ -45,21 +53,21 @@ const navSections: NavSection[] = [
     items: [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/people', label: 'People', icon: '\u263B' },
-      { to: '/agents', label: 'Agents', icon: '\u2734' },
       { to: '/systems', label: 'Systems', icon: '\u2699' },
+      { to: '/governance', label: 'Governance Groups', icon: '\u2637' },
       { to: '/connections', label: 'Connections', icon: '\u26A1' },
-      { to: '/governance', label: 'Governance', icon: '\u2637' },
+      { to: '/agents', label: 'Agents', icon: '\u2734' },
+      { to: '/settings', label: 'Settings', icon: '\u2731' },
     ],
   },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { to: '/settings', label: 'Settings', icon: '\u2731' },
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
 
 interface SearchResult {
-  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person';
+  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person' | 'data-domain' | 'governance-group' | 'mapping';
   id: string;
   name: string;
   description: string;
@@ -72,6 +80,9 @@ const typeRouteMap: Record<string, string> = {
   'data-asset': '/data-assets',
   organization: '/organizations',
   person: '/organizations',
+  'data-domain': '/data-domains',
+  'governance-group': '/governance',
+  mapping: '/mappings',
 };
 
 interface Notification {

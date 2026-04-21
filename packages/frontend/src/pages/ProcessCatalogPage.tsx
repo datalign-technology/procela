@@ -1178,6 +1178,23 @@ export default function ProcessCatalogPage() {
   const totalNodes = stats.total || 0;
   const issues = collectIssues(tree);
 
+  // Governance maturity stats: recursively count nodes, owners, and active status
+  const governanceStats = (() => {
+    let total = 0;
+    let withOwners = 0;
+    let active = 0;
+    const walk = (nodes: ProcessNode[]) => {
+      for (const n of nodes) {
+        total++;
+        if (n.ownerId) withOwners++;
+        if (n.status === 'ACTIVE') active++;
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(tree);
+    return { total, withOwners, active };
+  })();
+
   return (
     <div>
       {/* Header */}
@@ -1249,6 +1266,16 @@ export default function ProcessCatalogPage() {
           </div>
         )}
       </div>
+
+      {governanceStats.total > 0 && (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+          <span>{governanceStats.total} items</span>
+          <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+          <span>{governanceStats.withOwners} with owners</span>
+          <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+          <span>{governanceStats.active} active</span>
+        </div>
+      )}
 
       <ConfirmDialog
         open={showDeleteAll}

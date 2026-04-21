@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -74,6 +74,56 @@ interface FormData {
 }
 
 const emptyForm: FormData = { name: '', description: '', systemType: '', businessCriticality: '', vendor: '', integrationPoints: '' };
+
+function InlineCellEdit({ value, onSave, type = 'text', options }: {
+  value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (!editing) {
+    return (
+      <span
+        onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
+        style={{ cursor: 'pointer', borderBottom: '1px dashed var(--color-border)' }}
+        title="Click to edit"
+      >
+        {value || '—'}
+      </span>
+    );
+  }
+
+  if (type === 'select' && options) {
+    return (
+      <select
+        autoFocus
+        value={draft}
+        onChange={(e) => { onSave(e.target.value); setEditing(false); }}
+        onBlur={() => setEditing(false)}
+        onClick={(e) => e.stopPropagation()}
+        style={{ fontSize: 'inherit', padding: '2px 4px', border: '1px solid var(--color-primary)', borderRadius: 3 }}
+      >
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      type={type}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
+        if (e.key === 'Escape') setEditing(false);
+      }}
+      style={{ fontSize: 'inherit', padding: '2px 4px', width: type === 'number' ? 60 : '100%', border: '1px solid var(--color-primary)', borderRadius: 3 }}
+    />
+  );
+}
 
 export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
@@ -151,6 +201,16 @@ export default function SystemsPage() {
     await apiClient.delete(`/systems/${id}`);
     addToast('success', 'System deleted');
     fetchData();
+  };
+
+  const inlineSaveField = async (systemId: string, field: string, value: string) => {
+    try {
+      await apiClient.put(`/systems/${systemId}`, { [field]: value });
+      addToast('success', `Updated ${field === 'systemType' ? 'system type' : field}`);
+      fetchData();
+    } catch {
+      addToast('error', `Failed to update ${field}`);
+    }
   };
 
   const handleCancel = () => { confirmIfDirty(closeForm); };
@@ -492,9 +552,28 @@ export default function SystemsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
                       <input type="checkbox" checked={selectedIds.has(sys.id)} onChange={() => toggleSelect(sys.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>{sys.name}</td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }}>
+                      <InlineCellEdit
+                        value={sys.name}
+                        onSave={(v) => inlineSaveField(sys.id, 'name', v)}
+                      />
+                      <div style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>See also:</span>
+                        <Link to={`/data-assets?system=${sys.id}`} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Data Assets</Link>
+                        <Link to="/enterprise-view" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Enterprise View</Link>
+                      </div>
+                    </td>
                     <td style={tdStyle}>
-                      {sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                      {systemTypes.length > 0 ? (
+                        <InlineCellEdit
+                          value={sys.systemType || ''}
+                          onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
+                          type="select"
+                          options={systemTypes}
+                        />
+                      ) : (
+                        sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+                      )}
                     </td>
                     <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
                       {sys.description || '--'}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -10,6 +11,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
+import InfoTip from '../components/InfoTip';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SortableTh from '../components/SortableTh';
@@ -350,6 +352,7 @@ export default function DataDomainsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Domains</h1>
+            <InfoTip term="Data Domain" />
             <HelpPopover id="domains-intro" title="Data Domains">
               Domains group related data assets into governed categories (e.g. Customer Data, Financial Data).
               Each domain has an owner, stewards, and a scope definition. Status lifecycle applies —
@@ -359,6 +362,15 @@ export default function DataDomainsPage() {
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Organize data assets into governed domains with assigned owners and stewards.
           </p>
+          {domains.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+              <span>{domains.length} domains</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{domains.filter((d) => d.ownerId).length} with owners</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{domains.filter((d) => d.stewardIds && d.stewardIds.length > 0).length} with stewards</span>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {domains.length > 0 && (
@@ -610,6 +622,13 @@ export default function DataDomainsPage() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div style={{ fontSize: 11, marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ color: 'var(--color-text-muted)' }}>See also:</span>
+            <Link to="/data-assets" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Data Assets</Link>
+            <Link to="/governance" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Governance Groups</Link>
+            <Link to="/raci" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>RACI Matrix</Link>
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>

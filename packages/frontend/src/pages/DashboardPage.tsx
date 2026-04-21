@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -392,8 +392,113 @@ function GettingStartedChecklist({ stats }: { stats: DashboardStats }) {
   );
 }
 
-// RecentActivity and ActivityTrends removed — replaced by My Items
+// ── Stats Overview — compact KPI strip ──
 
+function StatsOverview({ stats }: { stats: DashboardStats }) {
+  const kpis = [
+    { label: 'Value Streams', value: stats.valueStreams, color: '#0f4f46' },
+    { label: 'Processes', value: stats.processes, color: '#92400e' },
+    { label: 'Data Assets', value: stats.dataAssets, color: '#1e40af' },
+    { label: 'Systems', value: stats.systems, color: '#5b21b6' },
+    { label: 'Coverage', value: `${stats.coverage.percentage}%`, color: stats.coverage.percentage >= 80 ? '#16a34a' : stats.coverage.percentage >= 50 ? '#ca8a04' : '#dc2626' },
+    { label: 'Avg Health', value: `${stats.averageHealth}%`, color: stats.averageHealth >= 80 ? '#16a34a' : stats.averageHealth >= 50 ? '#ca8a04' : '#dc2626' },
+  ];
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Overview</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+        {kpis.map((k) => (
+          <div key={k.label} style={{ ...cardStyle, padding: '14px 16px', textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: k.color }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard section ordering (persisted to localStorage) ──
+
+type SectionKey = 'myItems' | 'overview' | 'wizard' | 'alerts' | 'checklist' | 'quickActions';
+
+const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'wizard', 'alerts', 'checklist', 'quickActions'];
+
+const SECTION_LABELS: Record<SectionKey, string> = {
+  myItems: 'My Items',
+  overview: 'Overview',
+  wizard: 'Governance Setup',
+  alerts: 'Alerts',
+  checklist: 'Getting Started',
+  quickActions: 'Quick Actions',
+};
+
+function useDashboardLayout() {
+  const STORAGE_KEY = 'procela_dashboard_layout';
+  const [order, setOrder] = useState<SectionKey[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { order: SectionKey[]; hidden: SectionKey[] };
+        return parsed.order.length > 0 ? parsed.order : DEFAULT_SECTIONS;
+      }
+    } catch { /* */ }
+    return DEFAULT_SECTIONS;
+  });
+  const [hidden, setHidden] = useState<Set<SectionKey>>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { order: SectionKey[]; hidden: SectionKey[] };
+        return new Set(parsed.hidden || []);
+      }
+    } catch { /* */ }
+    return new Set();
+  });
+
+  const persist = (o: SectionKey[], h: Set<SectionKey>) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ order: o, hidden: Array.from(h) }));
+  };
+
+  const moveUp = (key: SectionKey) => {
+    setOrder((prev) => {
+      const idx = prev.indexOf(key);
+      if (idx <= 0) return prev;
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      persist(next, hidden);
+      return next;
+    });
+  };
+
+  const moveDown = (key: SectionKey) => {
+    setOrder((prev) => {
+      const idx = prev.indexOf(key);
+      if (idx < 0 || idx >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      persist(next, hidden);
+      return next;
+    });
+  };
+
+  const toggle = (key: SectionKey) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      persist(order, next);
+      return next;
+    });
+  };
+
+  const reset = () => {
+    setOrder(DEFAULT_SECTIONS);
+    setHidden(new Set());
+    persist(DEFAULT_SECTIONS, new Set());
+  };
+
+  return { order, hidden, moveUp, moveDown, toggle, reset };
+}
 
 const quickActions = [
   { icon: '☰', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
@@ -626,40 +731,93 @@ export default function DashboardPage() {
     stats.organizations <= 1 &&
     stats.people === 0;
 
-  if (allZero) {
-    return (
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
-        </div>
-        <MyItems />
-        <GovernanceSetupWizard />
-        <GettingStartedChecklist stats={stats} />
-      </div>
-    );
-  }
+  const layout = useDashboardLayout();
+  const [showCustomize, setShowCustomize] = useState(false);
+
+  const sectionMap: Record<SectionKey, React.ReactNode> = {
+    myItems: <MyItems />,
+    overview: <StatsOverview stats={stats} />,
+    wizard: <GovernanceSetupWizard />,
+    alerts: <DashboardAlerts stats={stats} />,
+    checklist: allZero ? <GettingStartedChecklist stats={stats} /> : <GettingStartedChecklist stats={stats} />,
+    quickActions: <QuickActions />,
+  };
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
-        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
+          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+        </div>
+        <button
+          onClick={() => setShowCustomize((v) => !v)}
+          style={{
+            padding: '5px 12px', fontSize: 11, fontWeight: 500,
+            background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
+            color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+            cursor: 'pointer', transition: 'all 0.15s',
+          }}
+        >
+          {showCustomize ? 'Done' : 'Customize'}
+        </button>
       </div>
-      {/* My Responsibilities — front and center */}
-      <MyItems />
 
-      {/* Governance Setup Wizard — only shows if incomplete */}
-      <GovernanceSetupWizard />
+      {showCustomize && (
+        <div style={{
+          ...cardStyle, marginBottom: 24, padding: 16,
+          background: 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)',
+          border: '1px solid #93c5fd',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Customize Dashboard</div>
+            <button onClick={layout.reset} style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Reset to Default</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {layout.order.map((key, idx) => (
+              <div key={key} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                background: layout.hidden.has(key) ? 'var(--color-bg)' : 'var(--color-surface)',
+                border: '1px solid var(--color-border)', borderRadius: 4,
+                opacity: layout.hidden.has(key) ? 0.5 : 1,
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <button
+                    onClick={() => layout.moveUp(key)}
+                    disabled={idx === 0}
+                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
+                  >{'▲'}</button>
+                  <button
+                    onClick={() => layout.moveDown(key)}
+                    disabled={idx === layout.order.length - 1}
+                    style={{ background: 'none', border: 'none', cursor: idx === layout.order.length - 1 ? 'default' : 'pointer', fontSize: 10, color: idx === layout.order.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
+                  >{'▼'}</button>
+                </div>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{SECTION_LABELS[key]}</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!layout.hidden.has(key)}
+                    onChange={() => layout.toggle(key)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  Show
+                </label>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 8 }}>
+            Reorder sections with arrows. Uncheck to hide. Your layout is saved automatically.
+          </div>
+        </div>
+      )}
 
-      {/* Alerts */}
-      <DashboardAlerts stats={stats} />
-
-      {/* Getting Started — only shows if sparse data */}
-      <GettingStartedChecklist stats={stats} />
-
-      {/* Quick Actions */}
-      <QuickActions />
+      {layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
+        <React.Fragment key={key}>
+          {sectionMap[key]}
+        </React.Fragment>
+      ))}
     </div>
   );
 }
