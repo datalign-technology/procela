@@ -43,7 +43,6 @@ export default function GovernanceSetupWizard() {
         await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
         setMessages((prev) => [...prev, 'Governance groups created (Council, Office, Committee, Stewardship Teams, Working Group)']);
       } else if (step === 'domains') {
-        const industry = 'General';
         try {
           const orgRes = await apiClient.get<{ success: boolean; data: { industry?: string } }>(`/organizations/${activeOrgId}`);
           if (orgRes.data?.industry) {

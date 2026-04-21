@@ -75,7 +75,6 @@ export default function RaciMatrixPage() {
   const [groupBy, setGroupBy] = useState<ColumnGroupBy>('name');
   const [hideEmpty, setHideEmpty] = useState(false);
   const [sectionFilter, setSectionFilter] = useState<'all' | 'business' | 'governance'>('all');
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -397,10 +396,8 @@ export default function RaciMatrixPage() {
                         return (
                           <td key={col.personId}
                             onClick={() => handleCellClick(row.id, col.personId, value)}
-                            onMouseEnter={(e) => {
-                              if (reason) setTooltip({ x: e.clientX, y: e.clientY, text: `${value}: ${reason}` });
-                            }}
-                            onMouseLeave={() => setTooltip(null)}
+                            onMouseEnter={() => {}}
+                            onMouseLeave={() => {}}
                             style={{
                               ...tdStyle, textAlign: 'center', cursor: 'pointer',
                               background: colors ? colors.bg : 'transparent',

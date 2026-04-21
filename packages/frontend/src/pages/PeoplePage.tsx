@@ -166,10 +166,6 @@ function FilePicker({ accept, onFileRead, label }: { accept: string; onFileRead:
 
 // ── Org Sidebar Tree ──
 
-const TYPE_ICONS: Record<string, string> = {
-  company: '\u{1F3E2}', division: '\u{1F3E4}', department: '\u{1F4C1}',
-  team: '\u{1F465}', unit: '\u{1F4CC}',
-};
 
 function OrgSidebarTree({ nodes, selectedId, onSelect, peopleCounts }: {
   nodes: OrgNode[];

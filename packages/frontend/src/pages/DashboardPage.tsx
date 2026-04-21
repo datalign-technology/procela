@@ -60,45 +60,11 @@ function healthColor(score: number): string {
   return 'var(--color-danger, #ef4444)';
 }
 
-interface AuditLogEntry {
-  id: string;
-  orgId: string;
-  userId: string | null;
-  entityType: string;
-  entityId: string;
-  action: string;
-  before: Record<string, any> | null;
-  after: Record<string, any> | null;
-  timestamp: string;
-}
 
-function relativeTime(ts: string): string {
-  const diff = Date.now() - new Date(ts).getTime();
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
-const ACTION_COLORS: Record<string, string> = {
-  CREATE: '#22c55e',
-  UPDATE: '#3b82f6',
-  DELETE: '#ef4444',
-};
 
-function entityDisplayName(entry: AuditLogEntry): string {
-  if (entry.after && typeof entry.after === 'object' && (entry.after as any).name) {
-    return (entry.after as any).name;
-  }
-  if (entry.before && typeof entry.before === 'object' && (entry.before as any).name) {
-    return (entry.before as any).name;
-  }
-  return entry.entityId.slice(0, 8);
-}
+
+
 
 interface ChecklistStep {
   number: number;
@@ -447,229 +413,16 @@ function GettingStartedChecklist({ stats }: { stats: DashboardStats }) {
   );
 }
 
-function RecentActivity({ activeOrgId }: { activeOrgId: string | null }) {
-  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+// RecentActivity and ActivityTrends removed — replaced by My Items
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: AuditLogEntry[] }>('/audit?limit=10');
-        setEntries(res.data || []);
-      } catch { /* */ }
-      finally { setLoading(false); }
-    })();
-  }, [activeOrgId]);
 
-  return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      padding: 20,
-      boxShadow: 'var(--shadow-sm)',
-      marginTop: 24,
-    }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Recent Activity</h2>
-      {loading ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0' }}>Loading...</div>
-      ) : entries.length === 0 ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0', textAlign: 'center' }}>
-          No recent activity
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {entries.map((entry) => {
-            const actionColor = ACTION_COLORS[entry.action] || 'var(--color-text-muted)';
-            return (
-              <div
-                key={entry.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 0',
-                  borderBottom: '1px solid var(--color-border)',
-                  fontSize: 13,
-                }}
-              >
-                <span style={{
-                  display: 'inline-block',
-                  padding: '2px 8px',
-                  borderRadius: 4,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: '#fff',
-                  background: actionColor,
-                  minWidth: 52,
-                  textAlign: 'center',
-                  textTransform: 'uppercase',
-                  flexShrink: 0,
-                }}>
-                  {entry.action}
-                </span>
-                <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500, flexShrink: 0 }}>
-                  {entry.entityType}
-                </span>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                  {entityDisplayName(entry)}
-                </span>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>
-                  {relativeTime(entry.timestamp)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface TrendDay {
-  date: string;
-  creates: number;
-  updates: number;
-  deletes: number;
-  total: number;
-}
-
-function ActivityTrends() {
-  const [days, setDays] = useState<TrendDay[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: TrendDay[] }>('/trends/activity');
-        // Take last 7 days (data is sorted most recent first)
-        setDays((res.data || []).slice(0, 7));
-      } catch { /* */ }
-      finally { setLoading(false); }
-    })();
-  }, []);
-
-  const maxTotal = Math.max(1, ...days.map((d) => d.total));
-
-  return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      padding: 20,
-      boxShadow: 'var(--shadow-sm)',
-      marginTop: 24,
-    }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 14 }}>Activity Trends (Last 7 Days)</h2>
-      {loading ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0' }}>Loading...</div>
-      ) : days.length === 0 || days.every((d) => d.total === 0) ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: 13, padding: '12px 0', textAlign: 'center' }}>
-          No activity in the last 7 days
-        </div>
-      ) : (
-        <div>
-          {/* Table header */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '100px 1fr 60px 60px 60px 60px',
-            gap: 8,
-            padding: '8px 0',
-            borderBottom: '2px solid var(--color-border)',
-            fontSize: 11,
-            fontWeight: 600,
-            color: 'var(--color-text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}>
-            <span>Date</span>
-            <span>Activity</span>
-            <span style={{ textAlign: 'right' }}>Creates</span>
-            <span style={{ textAlign: 'right' }}>Updates</span>
-            <span style={{ textAlign: 'right' }}>Deletes</span>
-            <span style={{ textAlign: 'right' }}>Total</span>
-          </div>
-          {/* Table rows */}
-          {days.map((day) => (
-            <div
-              key={day.date}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '100px 1fr 60px 60px 60px 60px',
-                gap: 8,
-                padding: '8px 0',
-                borderBottom: '1px solid var(--color-border)',
-                fontSize: 13,
-                alignItems: 'center',
-              }}
-            >
-              <span style={{ fontWeight: 500, fontSize: 12 }}>{day.date}</span>
-              <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 16 }}>
-                {day.creates > 0 && (
-                  <div style={{
-                    height: '100%',
-                    width: `${(day.creates / maxTotal) * 100}%`,
-                    background: '#22c55e',
-                    borderRadius: '3px 0 0 3px',
-                    minWidth: 3,
-                  }} />
-                )}
-                {day.updates > 0 && (
-                  <div style={{
-                    height: '100%',
-                    width: `${(day.updates / maxTotal) * 100}%`,
-                    background: '#3b82f6',
-                    minWidth: 3,
-                  }} />
-                )}
-                {day.deletes > 0 && (
-                  <div style={{
-                    height: '100%',
-                    width: `${(day.deletes / maxTotal) * 100}%`,
-                    background: '#ef4444',
-                    borderRadius: '0 3px 3px 0',
-                    minWidth: 3,
-                  }} />
-                )}
-              </div>
-              <span style={{ textAlign: 'right', color: '#22c55e', fontWeight: day.creates > 0 ? 600 : 400 }}>{day.creates}</span>
-              <span style={{ textAlign: 'right', color: '#3b82f6', fontWeight: day.updates > 0 ? 600 : 400 }}>{day.updates}</span>
-              <span style={{ textAlign: 'right', color: '#ef4444', fontWeight: day.deletes > 0 ? 600 : 400 }}>{day.deletes}</span>
-              <span style={{ textAlign: 'right', fontWeight: 700 }}>{day.total}</span>
-            </div>
-          ))}
-          {/* Legend */}
-          <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#22c55e', display: 'inline-block' }} /> Creates
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#3b82f6', display: 'inline-block' }} /> Updates
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: '#ef4444', display: 'inline-block' }} /> Deletes
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface QuickAction {
-  icon: string;
-  label: string;
-  description: string;
-  link: string;
-}
-
-const quickActions: QuickAction[] = [
-  { icon: '\u2699', label: 'Add System', description: 'Register a new application or platform', link: '/systems' },
-  { icon: '\u26C1', label: 'Add Data Asset', description: 'Define a new data asset in business terms', link: '/data-assets' },
-  { icon: '\u2194', label: 'Create Mapping', description: 'Link data assets to process steps', link: '/mappings' },
-  { icon: '\u2630', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
-  { icon: '\u26A0', label: 'View Gaps', description: 'See unmapped steps and ungoverned assets', link: '/analyze' },
-  { icon: '\u2637', label: 'View Report', description: 'Executive overview of your landscape', link: '/analyze' },
+const quickActions = [
+  { icon: '☰', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
+  { icon: '⛁', label: 'Data Assets', description: 'Define and manage data assets', link: '/data-assets' },
+  { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
+  { icon: '↔', label: 'Mappings', description: 'Link processes to data', link: '/mappings' },
+  { icon: '▨', label: 'Enterprise View', description: 'Full cross-entity visibility', link: '/enterprise-view' },
+  { icon: '⚠', label: 'View Gaps', description: 'See unmapped steps and ungoverned assets', link: '/gap-detection' },
 ];
 
 function QuickActions() {
