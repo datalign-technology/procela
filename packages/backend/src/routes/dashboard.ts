@@ -258,51 +258,141 @@ router.get('/raci', (req: Request, res: Response) => {
     }
   }
 
-  // Determine which people are relevant (appear in at least one RACI cell)
-  // R: process owners + Business Data Stewards
-  const responsibleIds = new Set<string>([
-    ...(rolePersonMap['BUSINESS_DATA_STEWARD'] || []),
-  ]);
-  for (const row of rows) {
-    if (row.ownerId) responsibleIds.add(row.ownerId);
+  // ── Per-process RACI derivation ──
+  //
+  // Instead of assigning global roles (CDO=A everywhere), derive
+  // R/A/C/I for each process row based on actual ownership data:
+  //
+  // R (Responsible): The process/activity OWNER (ownerId on the node).
+  //   If the node has no owner, inherit from the nearest parent that does.
+  //
+  // A (Accountable): The domain OWNER of data assets mapped to this
+  //   process. If multiple domains, the first match wins.
+  //   Falls back to CDO for rows with no mapped assets.
+  //
+  // C (Consulted): Stewards of data assets mapped to this process,
+  //   plus Data Architects and Technical Data Stewards assigned to the org.
+  //
+  // I (Informed): Governance group members whose groups govern the
+  //   relevant domains, plus the Data Governance Lead and DQ Analysts.
+
+  // Build lookup: processNodeId -> mapped data asset IDs
+  const filteredMappings = oid
+    ? mappings.filter((m: any) => m.orgId === oid)
+    : mappings;
+  const assetsByNode: Record<string, string[]> = {};
+  for (const m of filteredMappings) {
+    if (!assetsByNode[m.processStepId]) assetsByNode[m.processStepId] = [];
+    assetsByNode[m.processStepId].push(m.dataAssetId);
   }
 
-  // A: CDO + Data Owners
-  const accountableIds = new Set<string>([
-    ...(rolePersonMap['CDO'] || []),
-    ...(rolePersonMap['DATA_OWNER'] || []),
-  ]);
+  // Get mapped assets for a node, including inherited from children
+  function getAssetsForNode(nodeId: string): string[] {
+    const direct = assetsByNode[nodeId] || [];
+    const childNodes = filteredNodes.filter((n) => n.parentId === nodeId);
+    const childAssets = childNodes.flatMap((c) => getAssetsForNode(c.id));
+    return [...new Set([...direct, ...childAssets])];
+  }
 
-  // C: Data Architects + Technical Data Stewards
-  const consultedIds = new Set<string>([
-    ...(rolePersonMap['DATA_ARCHITECT'] || []),
-    ...(rolePersonMap['TECHNICAL_DATA_STEWARD'] || []),
-  ]);
+  // Get owner for a node, inheriting from parent if not set
+  function getOwner(nodeId: string): string | null {
+    const node = rows.find((r) => r.id === nodeId);
+    if (!node) return null;
+    if (node.ownerId) return node.ownerId;
+    if (node.parentId) return getOwner(node.parentId);
+    return null;
+  }
 
-  // I: Org Admins + Data Quality Analysts + governance group members + Viewers
-  const informedIds = new Set<string>([
-    ...(rolePersonMap['DATA_QUALITY_ANALYST'] || []),
-    ...(rolePersonMap['DATA_GOVERNANCE_LEAD'] || []),
-    ...groupMemberIds,
-    ...filteredPeople.filter((p) => p.role === 'ORG_ADMIN' || p.role === 'VIEWER').map((p) => p.id),
-  ]);
+  // Build per-row RACI and collect all relevant people
+  const matrix: Record<string, Record<string, string>> = {};
+  const allRelevantIds = new Set<string>();
 
-  // Collect all relevant person IDs
-  const allRelevantIds = new Set<string>([
-    ...responsibleIds,
-    ...accountableIds,
-    ...consultedIds,
-    ...informedIds,
-  ]);
+  // Global fallback roles
+  const cdoIds = rolePersonMap['CDO'] || new Set<string>();
+  const govLeadIds = rolePersonMap['DATA_GOVERNANCE_LEAD'] || new Set<string>();
+  const dqAnalystIds = rolePersonMap['DATA_QUALITY_ANALYST'] || new Set<string>();
+  const architectIds = rolePersonMap['DATA_ARCHITECT'] || new Set<string>();
+  const techStewardIds = rolePersonMap['TECHNICAL_DATA_STEWARD'] || new Set<string>();
 
-  // Build columns (one per relevant person)
+  for (const row of rows) {
+    const cellMap: Record<string, string> = {};
+    const nodeAssets = getAssetsForNode(row.id);
+    const nodeOwner = getOwner(row.id);
+
+    // R: process/activity owner
+    if (nodeOwner) {
+      cellMap[nodeOwner] = 'R';
+      allRelevantIds.add(nodeOwner);
+    }
+
+    // A: domain owner(s) of mapped data assets
+    const accountableForRow = new Set<string>();
+    for (const aid of nodeAssets) {
+      const domain = dataDomains.find((d) => d.dataAssetIds.includes(aid));
+      if (domain?.ownerId) {
+        accountableForRow.add(domain.ownerId);
+      }
+      // Also check asset-level owner
+      const asset = dataAssets.find((a) => a.id === aid);
+      if (asset?.owner) accountableForRow.add(asset.owner);
+    }
+    // If no domain/asset owners found, fall back to CDO
+    if (accountableForRow.size === 0) {
+      for (const id of cdoIds) accountableForRow.add(id);
+    }
+    for (const pid of accountableForRow) {
+      if (!cellMap[pid]) cellMap[pid] = 'A';
+      allRelevantIds.add(pid);
+    }
+
+    // C: stewards of mapped assets + architects + tech stewards
+    const consultedForRow = new Set<string>();
+    for (const aid of nodeAssets) {
+      const asset = dataAssets.find((a) => a.id === aid);
+      if (asset?.stewardIds) {
+        for (const sid of asset.stewardIds) consultedForRow.add(sid);
+      }
+      const domain = dataDomains.find((d) => d.dataAssetIds.includes(aid));
+      if (domain?.stewardIds) {
+        for (const sid of domain.stewardIds) consultedForRow.add(sid);
+      }
+    }
+    for (const id of architectIds) consultedForRow.add(id);
+    for (const id of techStewardIds) consultedForRow.add(id);
+    for (const pid of consultedForRow) {
+      if (!cellMap[pid]) cellMap[pid] = 'C';
+      allRelevantIds.add(pid);
+    }
+
+    // I: governance group members for relevant domains + gov leads + DQ analysts
+    const informedForRow = new Set<string>();
+    for (const aid of nodeAssets) {
+      const domain = dataDomains.find((d) => d.dataAssetIds.includes(aid));
+      if (domain) {
+        // Find governance groups that might govern this domain
+        for (const g of filteredGroups) {
+          for (const m of g.members) informedForRow.add(m.personId);
+        }
+      }
+    }
+    for (const id of govLeadIds) informedForRow.add(id);
+    for (const id of dqAnalystIds) informedForRow.add(id);
+    for (const pid of informedForRow) {
+      if (!cellMap[pid]) cellMap[pid] = 'I';
+      allRelevantIds.add(pid);
+    }
+
+    matrix[row.id] = cellMap;
+  }
+
+  // Build columns from people who appear in at least one cell
   const columns = filteredPeople
     .filter((p) => allRelevantIds.has(p.id))
     .map((p) => {
       const personRoles = filteredRoles.filter((r) => r.personId === p.id);
       const primaryRole = personRoles.length > 0 ? personRoles[0].roleType : p.role || '';
       const orgNames = (p.orgIds || [])
-        .map((oid) => organizations.find((o) => o.id === oid)?.name)
+        .map((oid2) => organizations.find((o) => o.id === oid2)?.name)
         .filter(Boolean);
       return {
         personId: p.id,
@@ -313,29 +403,6 @@ router.get('/raci', (req: Request, res: Response) => {
         orgUnit: orgNames[0] || '',
       };
     });
-
-  // Build matrix
-  const matrix: Record<string, Record<string, string>> = {};
-
-  for (const row of rows) {
-    const cellMap: Record<string, string> = {};
-
-    for (const col of columns) {
-      const pid = col.personId;
-      // Priority: A > R > C > I (a person gets the highest-priority designation)
-      if (accountableIds.has(pid)) {
-        cellMap[pid] = 'A';
-      } else if (responsibleIds.has(pid) || row.ownerId === pid) {
-        cellMap[pid] = 'R';
-      } else if (consultedIds.has(pid)) {
-        cellMap[pid] = 'C';
-      } else if (informedIds.has(pid)) {
-        cellMap[pid] = 'I';
-      }
-    }
-
-    matrix[row.id] = cellMap;
-  }
 
   res.json({
     success: true,
