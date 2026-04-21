@@ -1126,11 +1126,12 @@ export default function ProcessCatalogPage() {
                 onClick={() => navigate('/processes/compare')} />
             )}
             {canWrite && (
-              <IconButton icon="settings" label="Generate from template"
+              <IconButton icon="settings" label="Generate business processes"
                 onClick={() => navigate('/processes/wizard')} />
             )}
             {canWrite && (
-              <IconButton icon="settings"
+              <IconButton icon="users"
+                variant="secondary"
                 label={
                   tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))
                     ? 'Governance processes already exist'
