@@ -85,7 +85,7 @@ export default function GovernanceSetupWizard() {
       background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
       border: '1px solid #93c5fd',
       borderRadius: 'var(--radius-md)',
-      padding: 20, marginBottom: 20,
+      padding: 20, marginBottom: 24,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
