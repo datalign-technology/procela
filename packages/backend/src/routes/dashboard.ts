@@ -325,9 +325,100 @@ router.get('/raci', (req: Request, res: Response) => {
   const architectIds = rolePersonMap['DATA_ARCHITECT'] || new Set<string>();
   const techStewardIds = rolePersonMap['TECHNICAL_DATA_STEWARD'] || new Set<string>();
 
+  // ── Governance Group → Process mapping ──
+  // For governance rows only, RACI is derived from governance group
+  // membership and group roles instead of individual assignments.
+  const GOV_GROUP_PROCESS_MAP: Record<string, string[]> = {
+    'COUNCIL': ['Data Strategy & Policy'],
+    'OFFICE': ['Data Strategy & Policy', 'Data Quality Management', 'Data Domain Management', 'Metadata & Catalog Management', 'Data Access & Security', 'Issue & Change Management'],
+    'COMMITTEE': ['Data Domain Management', 'Metadata & Catalog Management'],
+    'STEWARDSHIP_TEAM': ['Data Quality Management', 'Data Domain Management'],
+    'WORKING_GROUP': ['Issue & Change Management', 'Data Access & Security'],
+  };
+
+  // Group role → RACI letter
+  const GROUP_ROLE_TO_RACI: Record<string, string> = {
+    CHAIR: 'A',
+    VICE_CHAIR: 'R',
+    MEMBER: 'R',
+    SECRETARY: 'I',
+    ADVISOR: 'C',
+  };
+
+  // Check if a row is under the governance value stream
+  const govVsIds = new Set(filteredNodes.filter((n) =>
+    n.level === 'VALUE_STREAM' && (n.name.includes('Governance') || n.name.includes('Data Management')),
+  ).map((n) => n.id));
+
+  function isGovernanceNode(nodeId: string): boolean {
+    if (govVsIds.has(nodeId)) return true;
+    const node = filteredNodes.find((n) => n.id === nodeId);
+    if (!node?.parentId) return false;
+    return isGovernanceNode(node.parentId);
+  }
+
+  // Find the process name for a governance node (walk up to PROCESS level)
+  function getGovProcessName(nodeId: string): string | null {
+    const node = filteredNodes.find((n) => n.id === nodeId);
+    if (!node) return null;
+    if (node.level === 'PROCESS') return node.name;
+    if (node.level === 'VALUE_STREAM') return null;
+    if (node.parentId) return getGovProcessName(node.parentId);
+    return null;
+  }
+
   for (const row of rows) {
     const cellMap: Record<string, string> = {};
     const reasonMap: Record<string, string> = {};
+
+    // For governance rows, derive RACI from governance group membership
+    if (isGovernanceNode(row.id)) {
+      const processName = row.level === 'VALUE_STREAM' ? null : (getGovProcessName(row.id) || row.name);
+
+      for (const group of filteredGroups) {
+        // Check if this group type maps to this governance process
+        const mappedProcesses = GOV_GROUP_PROCESS_MAP[group.type] || [];
+        const isVs = row.level === 'VALUE_STREAM';
+        const matches = isVs ? mappedProcesses.length > 0 : mappedProcesses.some((p) => processName?.includes(p));
+
+        if (matches) {
+          for (const member of group.members) {
+            const raciLetter = GROUP_ROLE_TO_RACI[member.groupRole] || GROUP_ROLE_TO_RACI[(member as any).role] || 'I';
+            const personName = people.find((p) => p.id === member.personId)?.name || '';
+            // Higher priority wins: A > R > C > I
+            const priority: Record<string, number> = { A: 4, R: 3, C: 2, I: 1 };
+            const existing = cellMap[member.personId];
+            if (!existing || (priority[raciLetter] || 0) > (priority[existing] || 0)) {
+              cellMap[member.personId] = raciLetter;
+              reasonMap[member.personId] = `${raciLetter === 'A' ? 'Chair' : raciLetter === 'R' ? 'Member' : raciLetter === 'C' ? 'Advisor' : 'Secretary'} of ${group.name}`;
+            }
+            allRelevantIds.add(member.personId);
+          }
+        }
+      }
+
+      // Also add the node owner as R if set
+      const nodeOwner = getOwner(row.id);
+      if (nodeOwner && !cellMap[nodeOwner]) {
+        cellMap[nodeOwner] = 'R';
+        reasonMap[nodeOwner] = `Owns "${row.name}"`;
+        allRelevantIds.add(nodeOwner);
+      }
+
+      // Apply overrides
+      const nodeOverrides = raciOverrides.filter((o) => o.nodeId === row.id);
+      for (const ov of nodeOverrides) {
+        cellMap[ov.personId] = ov.value;
+        reasonMap[ov.personId] = ov.reason || 'Manual override';
+        allRelevantIds.add(ov.personId);
+      }
+
+      matrix[row.id] = cellMap;
+      reasons[row.id] = reasonMap;
+      continue;
+    }
+
+    // ── Business process RACI (existing logic) ──
     const nodeAssets = getAssetsForNode(row.id);
     const nodeOwner = getOwner(row.id);
 
