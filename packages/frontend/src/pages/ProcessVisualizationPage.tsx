@@ -170,8 +170,9 @@ function ActivityRow({ activities, flowMap }: { activities: ProcessNode[]; flowM
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start',
       gap: 0, flexWrap: 'wrap', padding: '4px 0',
+      maxWidth: 1200,
     }}>
       {ordered.map((activity, idx) => {
         const activityFlows = (flowMap.get(activity.id) || []).filter(
@@ -310,7 +311,7 @@ function VisualNode({ node, flowMap }: { node: ProcessNode; flowMap: Map<string,
           {/* Sub-items of activities (tasks, executions) */}
           {activityChildren.some(a => (a.children || []).length > 0) && (
             <div style={{
-              display: 'flex', justifyContent: 'center', gap: 16,
+              display: 'flex', justifyContent: 'flex-start', gap: 16,
               flexWrap: 'wrap', marginTop: 4,
             }}>
               {activityChildren
@@ -326,7 +327,7 @@ function VisualNode({ node, flowMap }: { node: ProcessNode; flowMap: Map<string,
                       {activity.name}
                     </div>
                     <div style={{
-                      display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center',
+                      display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-start',
                     }}>
                       {(activity.children || []).map(child => (
                         <VisualNode key={child.id} node={child} flowMap={flowMap} />
