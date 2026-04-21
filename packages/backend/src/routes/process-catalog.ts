@@ -93,6 +93,10 @@ export interface ProcessNode {
   inputsOutputs?: string;
   responsibleRole?: string;
   statusJustification?: string;
+  frequency?: string;
+  riskLevel?: string;
+  automationLevel?: string;
+  estimatedDuration?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -369,7 +373,7 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 router.post('/nodes', (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, statusJustification } = req.body;
+    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -465,7 +469,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, statusJustification } = req.body;
+    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
   if (version !== undefined && version !== (node.version ?? 1)) {
@@ -510,7 +514,8 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   const hasFieldEdits = name !== undefined || description !== undefined
     || orderIndex !== undefined || orgIds !== undefined || ownerId !== undefined
     || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
-    || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined;
+    || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined
+    || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = organizations.find((o) => o.id === node.orgId);
   const isAdvanced = nodeOrg?.statusMode === 'advanced';
@@ -537,6 +542,10 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   if (inputsOutputs !== undefined) node.inputsOutputs = inputsOutputs;
   if (responsibleRole !== undefined) node.responsibleRole = responsibleRole;
   if (statusJustification !== undefined) node.statusJustification = statusJustification;
+  if (frequency !== undefined) node.frequency = frequency;
+  if (riskLevel !== undefined) node.riskLevel = riskLevel;
+  if (automationLevel !== undefined) node.automationLevel = automationLevel;
+  if (estimatedDuration !== undefined) node.estimatedDuration = estimatedDuration;
 
   // Validate status transition against the state machine
   if (status !== undefined && status !== node.status) {

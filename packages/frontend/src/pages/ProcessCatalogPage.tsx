@@ -32,6 +32,10 @@ interface ProcessNode {
   inputsOutputs?: string;
   responsibleRole?: string;
   statusJustification?: string;
+  frequency?: string;
+  riskLevel?: string;
+  automationLevel?: string;
+  estimatedDuration?: string;
   children?: ProcessNode[];
 }
 
@@ -100,6 +104,14 @@ const COMPLIANCE_OPTIONS = [
   'SOX', 'HIPAA', 'GDPR', 'PCI-DSS', 'CCPA', 'FERPA', 'FISMA', 'NERC CIP',
   'ISO 27001', 'SOC 2', 'NIST', 'GLBA', 'FERC', 'EPA', 'OSHA', 'ADA', 'Other',
 ];
+
+const FREQUENCY_OPTIONS = [
+  'Continuous', 'Real-time', 'Hourly', 'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Annually', 'On-demand', 'Event-driven',
+];
+
+const RISK_OPTIONS = ['High', 'Medium', 'Low'];
+
+const AUTOMATION_OPTIONS = ['Manual', 'Semi-automated', 'Fully automated'];
 
 const ROLE_OPTIONS = [
   'Process Owner', 'Process Manager', 'Business Analyst', 'Data Analyst',
@@ -629,42 +641,39 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           {/* Documentation fields — visible when expanded */}
           {isExpanded && (
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 2 }}>
-              {(node.level === 'VALUE_STREAM' || node.level === 'PROCESS') && (
+              {/* Value Stream fields */}
+              {node.level === 'VALUE_STREAM' && (
                 <>
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                  {node.level === 'VALUE_STREAM' && (
-                    <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
-                  )}
-                  <DocMultiSelect
-                    label="Stakeholders"
-                    selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)}
-                    options={peopleList.map((p) => p.name)}
-                    onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })}
-                    disabled={isLocked}
-                    placeholder="Select stakeholders..."
-                  />
-                  <DocMultiSelect
-                    label="Compliance"
-                    selected={node.complianceTags || []}
-                    options={COMPLIANCE_OPTIONS}
-                    onSave={(vals) => onUpdate(node.id, { complianceTags: vals })}
-                    disabled={isLocked}
-                    placeholder="Select compliance tags..."
-                  />
+                  <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
+                  <DocMultiSelect label="Stakeholders" selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} options={peopleList.map((p) => p.name)} onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })} disabled={isLocked} placeholder="Select stakeholders..." />
+                  <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                 </>
               )}
-              {node.level === 'ACTIVITY' && (
-                <DocDropdown
-                  label="Responsible Role"
-                  value={node.responsibleRole || ''}
-                  options={ROLE_OPTIONS}
-                  onSave={(v) => onUpdate(node.id, { responsibleRole: v })}
-                  disabled={isLocked}
-                  placeholder="Select role..."
-                />
+              {/* Process fields */}
+              {node.level === 'PROCESS' && (
+                <>
+                  <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
+                  <DocMultiSelect label="Stakeholders" selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} options={peopleList.map((p) => p.name)} onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })} disabled={isLocked} placeholder="Select stakeholders..." />
+                  <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                  <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
+                  <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
+                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
+                </>
               )}
-              {/* Inputs / Outputs summary — consistent across all levels */}
-              <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
+              {/* Sub-Process fields */}
+              {node.level === 'SUBPROCESS' && (
+                <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
+              )}
+              {/* Activity fields */}
+              {node.level === 'ACTIVITY' && (
+                <>
+                  <DocDropdown label="Responsible Role" value={node.responsibleRole || ''} options={ROLE_OPTIONS} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} placeholder="Select role..." />
+                  <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
+                  <DocField label="Est. Duration" value={node.estimatedDuration || ''} onSave={(v) => onUpdate(node.id, { estimatedDuration: v })} disabled={isLocked} placeholder="e.g. 2 hours, 1 day" />
+                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
+                </>
+              )}
             </div>
           )}
           {/* Structured Inputs / Outputs panel — shows mapped data assets with owner info */}
