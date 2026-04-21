@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useUrlState } from './useUrlState';
+import { useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 // ──────────────────────────────────────────────────────────────────────────
 // useSortedList — click-to-sort helper for tables. Backs the active sort
@@ -40,9 +40,9 @@ export function useSortedList<T>(
 ): UseSortedListReturn<T> {
   const sortParam = `${paramPrefix}sort`;
   const dirParam = `${paramPrefix}dir`;
-  const [sortKey, setSortKeyParam] = useUrlState(sortParam, defaultKey);
-  const [sortDirRaw, setSortDirParam] = useUrlState(dirParam, defaultDir);
-  const sortDir: SortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sortKey = searchParams.get(sortParam) || defaultKey;
+  const sortDir: SortDir = (searchParams.get(dirParam) || defaultDir) === 'desc' ? 'desc' : 'asc';
 
   const sorted = useMemo(() => {
     const cmp = comparators[sortKey];
@@ -51,19 +51,27 @@ export function useSortedList<T>(
     return sortDir === 'desc' ? out.reverse() : out;
   }, [items, comparators, sortKey, sortDir]);
 
-  const toggleSort = (nextKey: string) => {
-    if (nextKey === sortKey) {
-      setSortDirParam(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKeyParam(nextKey);
-      setSortDirParam('asc');
-    }
-  };
+  const toggleSort = useCallback((nextKey: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nextKey === sortKey) {
+        next.set(dirParam, sortDir === 'asc' ? 'desc' : 'asc');
+      } else {
+        next.set(sortParam, nextKey);
+        next.set(dirParam, 'asc');
+      }
+      return next;
+    }, { replace: true });
+  }, [sortKey, sortDir, sortParam, dirParam, setSearchParams]);
 
-  const setSort = (key: string, dir: SortDir) => {
-    setSortKeyParam(key);
-    setSortDirParam(dir);
-  };
+  const setSort = useCallback((key: string, dir: SortDir) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set(sortParam, key);
+      next.set(dirParam, dir);
+      return next;
+    }, { replace: true });
+  }, [sortParam, dirParam, setSearchParams]);
 
   return { sorted, sortKey, sortDir, toggleSort, setSort };
 }

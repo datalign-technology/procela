@@ -467,6 +467,8 @@ export default function ConnectionsPage() {
       status: (a, b) => a.status.localeCompare(b.status),
     },
     'name',
+    'asc',
+    'c_',
   );
 
   // -----------------------------------------------------------------------

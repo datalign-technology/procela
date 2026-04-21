@@ -372,6 +372,8 @@ export default function PeoplePage() {
       title: (a, b) => (a.title || '').localeCompare(b.title || ''),
     },
     'name',
+    'asc',
+    'p_',
   );
 
   const orgOptions = flattenTreeForSelect(tree);
