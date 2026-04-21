@@ -459,8 +459,8 @@ export default function PeoplePage() {
         if (personForm.orgIds.length === 0) { setPersonFormSave('idle'); return; }
         await apiClient.post('/people', personForm);
       }
+      addToast('success', editingPersonId ? 'Person updated' : 'Person added');
       setPersonFormSave('saved');
-      // Brief moment so users see the indicator before the form closes.
       setTimeout(() => {
         setShowPersonForm(false); setEditingPersonId(null); setPersonForm(emptyPersonForm);
         setPersonFormSave('idle');
@@ -520,6 +520,7 @@ export default function PeoplePage() {
         const merged = Array.from(new Set([...(p.orgIds || []), ...addIds]));
         await apiClient.put(`/people/${pid}`, { orgIds: merged });
       }));
+      addToast('success', `Assigned ${targetIds.length} ${targetIds.length === 1 ? 'person' : 'people'} to ${addIds.length} org${addIds.length === 1 ? '' : 's'}`);
       setBulkAssignOpen(false);
       setBulkAssignOrgIds(new Set());
       fetchData();
@@ -643,6 +644,7 @@ export default function PeoplePage() {
     setSaving360(true);
     try {
       await apiClient.put(`/people/${viewing360.person.id}`, { orgIds: next });
+      addToast('success', 'Org assignment updated');
       await refresh360();
       fetchData();
     } catch (err) { errorToast(err, 'Failed to update org assignment'); }
@@ -654,6 +656,7 @@ export default function PeoplePage() {
     setSaving360(true);
     try {
       await apiClient.put(`/people/${viewing360.person.id}`, { role: newRole });
+      addToast('success', 'Role updated');
       await refresh360();
       fetchData();
     } catch (err) { errorToast(err, 'Failed to change application role'); }
@@ -668,6 +671,7 @@ export default function PeoplePage() {
       await apiClient.put(`/data-domains/${domainId}`, {
         ownerId: isCurrentOwner ? null : viewing360.person.id,
       });
+      addToast('success', isCurrentOwner ? 'Domain owner removed' : 'Domain owner assigned');
       await refresh360();
     } catch (err) { errorToast(err, 'Failed to update data domain owner'); }
     finally { setSaving360(false); }
@@ -681,6 +685,7 @@ export default function PeoplePage() {
         ? currentStewardIds.filter((id) => id !== viewing360.person.id)
         : [...currentStewardIds, viewing360.person.id];
       await apiClient.put(`/data-domains/${domainId}`, { stewardIds: newStewardIds });
+      addToast('success', isSteward ? 'Steward removed' : 'Steward assigned');
       await refresh360();
     } catch (err) { errorToast(err, 'Failed to update steward'); }
     finally { setSaving360(false); }

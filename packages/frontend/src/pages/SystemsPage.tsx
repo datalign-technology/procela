@@ -137,6 +137,7 @@ export default function SystemsPage() {
     if (!form.name.trim()) return;
     if (editingId) { await apiClient.put(`/systems/${editingId}`, form); }
     else { await apiClient.post('/systems', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) }); }
+    addToast('success', editingId ? 'System updated' : 'System created');
     markClean();
     if (keepOpen && !editingId) {
       setForm(emptyForm);
@@ -147,7 +148,9 @@ export default function SystemsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await apiClient.delete(`/systems/${id}`); fetchData();
+    await apiClient.delete(`/systems/${id}`);
+    addToast('success', 'System deleted');
+    fetchData();
   };
 
   const handleCancel = () => { confirmIfDirty(closeForm); };

@@ -249,6 +249,11 @@ function DocField({ label, value, onSave, disabled, placeholder }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(false);
+  const doSave = () => {
+    if (draft !== value) { onSave(draft); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+    setEditing(false);
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
@@ -257,22 +262,25 @@ function DocField({ label, value, onSave, disabled, placeholder }: {
           <input autoFocus style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: '100%' }}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => { if (draft !== value) onSave(draft); setEditing(false); }}
+            onBlur={doSave}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { if (draft !== value) onSave(draft); setEditing(false); }
-            if (e.key === 'Escape') setEditing(false);
-          }}
+              if (e.key === 'Enter') doSave();
+              if (e.key === 'Escape') setEditing(false);
+            }}
           />
           <div style={{ fontSize: 8, color: 'var(--color-text-muted)', marginTop: 1 }}>Enter to save &middot; Esc to cancel</div>
         </div>
       ) : (
-        <span
-          onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}
-          style={{ cursor: disabled ? 'default' : 'pointer', color: value ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: value ? 'normal' : 'italic', opacity: disabled ? 0.6 : 1 }}
-          title={disabled ? 'Locked' : 'Click to edit'}
-        >
-          {value || placeholder}
-        </span>
+        <>
+          <span
+            onClick={() => { if (!disabled) { setDraft(value); setEditing(true); } }}
+            style={{ cursor: disabled ? 'default' : 'pointer', color: value ? 'var(--color-text)' : 'var(--color-text-muted)', fontStyle: value ? 'normal' : 'italic', opacity: disabled ? 0.6 : 1 }}
+            title={disabled ? 'Locked' : 'Click to edit'}
+          >
+            {value || placeholder}
+          </span>
+          {saved && <span style={{ color: '#16a34a', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+        </>
       )}
     </div>
   );
@@ -283,23 +291,25 @@ function DocField({ label, value, onSave, disabled, placeholder }: {
 function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
   label: string; value: string; options: string[]; onSave: (v: string) => void; disabled: boolean; placeholder: string;
 }) {
+  const [saved, setSaved] = useState(false);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
       <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>{label}:</span>
       <select
         value={value}
-        onChange={(e) => onSave(e.target.value)}
+        onChange={(e) => { onSave(e.target.value); setSaved(true); setTimeout(() => setSaved(false), 1500); }}
         disabled={disabled}
         style={{
-          fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4,
-          background: 'var(--color-surface)', cursor: disabled ? 'default' : 'pointer',
+          fontSize: 11, border: `1px solid ${saved ? '#22c55e' : 'var(--color-border)'}`, borderRadius: 4,
+          background: saved ? '#f0fdf4' : 'var(--color-surface)', cursor: disabled ? 'default' : 'pointer',
           color: value ? 'var(--color-text)' : 'var(--color-text-muted)', padding: '2px 6px',
-          opacity: disabled ? 0.6 : 1,
+          opacity: disabled ? 0.6 : 1, transition: 'border-color 0.2s, background 0.2s',
         }}
       >
         <option value="">{placeholder}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
+      {saved && <span style={{ color: '#16a34a', fontSize: 9, fontWeight: 600 }}>Saved</span>}
     </div>
   );
 }
@@ -1017,12 +1027,14 @@ export default function ProcessCatalogPage() {
     const payload = node?.version !== undefined ? { ...data, version: node.version } : data;
     try {
       await apiClient.put(`/process-catalog/nodes/${id}`, payload);
+      addToast('success', 'Saved');
       fetchData();
     } catch (err: any) {
       if (err?.response?.status === 409) {
-        alert('This item was modified by another user. The page will refresh.');
+        addToast('error', 'Modified by another user — refreshing');
         fetchData();
       } else {
+        addToast('error', 'Failed to save');
         throw err;
       }
     }

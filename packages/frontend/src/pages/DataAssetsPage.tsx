@@ -328,6 +328,7 @@ export default function DataAssetsPage() {
   const deleteColumn = async (assetId: string, colId: string) => {
     try {
       await apiClient.delete(`/data-assets/${assetId}/columns/${colId}`);
+      addToast('success', 'Column removed');
       setColumnsMap((prev) => ({
         ...prev,
         [assetId]: (prev[assetId] || []).filter((c) => c.id !== colId),
@@ -340,6 +341,7 @@ export default function DataAssetsPage() {
   const updateColumnType = async (assetId: string, colId: string, dataType: string) => {
     try {
       await apiClient.put(`/data-assets/${assetId}/columns/${colId}`, { dataType });
+      addToast('success', 'Column type updated');
       setColumnsMap((prev) => ({
         ...prev,
         [assetId]: (prev[assetId] || []).map((c) => c.id === colId ? { ...c, dataType } : c),

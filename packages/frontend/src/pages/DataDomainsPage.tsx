@@ -233,6 +233,7 @@ export default function DataDomainsPage() {
       dataAssetIds: detailAssetIds,
     });
     if (res.data) setSelectedDomain(res.data);
+    addToast('success', 'Governance details saved');
     fetchData();
   };
 
