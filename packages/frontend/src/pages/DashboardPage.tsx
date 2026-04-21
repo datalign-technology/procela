@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
+import GovernanceSetupWizard from '../components/GovernanceSetupWizard';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
@@ -924,6 +925,7 @@ export default function DashboardPage() {
           <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
         </div>
         <GettingStartedChecklist stats={stats} />
+        <GovernanceSetupWizard />
         <RecentActivity activeOrgId={activeOrgId} />
       </div>
     );

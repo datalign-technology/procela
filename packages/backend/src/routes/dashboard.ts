@@ -570,4 +570,31 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
   });
 });
 
+/**
+ * GET /api/v1/dashboard/governance-status — check if governance framework
+ * has been set up for the current org (processes, groups, domains).
+ */
+router.get('/governance-status', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const oid = orgId as string | undefined;
+
+  // Check each component
+  const hasGovProcesses = processNodes.some((n) =>
+    n.level === 'VALUE_STREAM' && (n.name.includes('Governance') || n.name.includes('Data Management')) &&
+    (oid ? n.orgId === oid || n.orgIds?.includes(oid) : true),
+  );
+  const hasGovGroups = governanceGroups.some((g) => oid ? g.orgId === oid : true);
+  const hasDomains = dataDomains.some((d) => oid ? d.orgId === oid : true);
+
+  res.json({
+    success: true,
+    data: {
+      hasGovProcesses,
+      hasGovGroups,
+      hasDomains,
+      isComplete: hasGovProcesses && hasGovGroups && hasDomains,
+    },
+  });
+});
+
 export default router;
