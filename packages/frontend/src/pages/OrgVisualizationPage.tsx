@@ -375,12 +375,11 @@ export default function OrgVisualizationPage() {
           <div className="viz-scroll-area"
             style={{ overflow: 'auto', padding: 24 }}>
             <div style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top center',
-              transition: 'transform 0.15s ease',
+              width: svgW * zoom,
+              height: svgH * zoom,
               minWidth: 'fit-content',
             }}>
-              <svg width={svgW} height={svgH} style={{ display: 'block' }}>
+              <svg width={svgW} height={svgH} style={{ display: 'block', transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
                 {/* Edges first so nodes paint over them */}
                 {edges.map((e, i) => {
                   const x1 = e.from.x;

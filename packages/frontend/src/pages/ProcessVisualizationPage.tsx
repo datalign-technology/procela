@@ -746,9 +746,9 @@ export default function ProcessVisualizationPage() {
           >
             <div style={{
               transform: `scale(${zoom})`,
-              transformOrigin: 'top center',
+              transformOrigin: 'top left',
               transition: 'transform 0.15s ease',
-              display: 'flex',
+              display: 'inline-flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 32,
