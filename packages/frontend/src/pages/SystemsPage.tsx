@@ -134,6 +134,7 @@ export default function SystemsPage() {
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
   const [filterType, setFilterType] = useState('');
+  const [filterCriticality, setFilterCriticality] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -288,8 +289,11 @@ export default function SystemsPage() {
     });
   };
 
-  // Filter by system type
-  const filteredSystems = filterType ? systems.filter((s) => s.systemType === filterType) : systems;
+  const filteredSystems = systems.filter((s) => {
+    if (filterType && s.systemType !== filterType) return false;
+    if (filterCriticality && (s.businessCriticality || '') !== filterCriticality) return false;
+    return true;
+  });
 
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -332,6 +336,19 @@ export default function SystemsPage() {
                 return count > 0 ? <option key={t} value={t}>{t} ({count})</option> : null;
               })}
             </select>
+          )}
+          <select
+            value={filterCriticality}
+            onChange={(e) => setFilterCriticality(e.target.value)}
+            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
+          >
+            <option value="">All Criticality</option>
+            <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
+            <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
+            <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
+          </select>
+          {(filterType || filterCriticality) && (
+            <button onClick={() => { setFilterType(''); setFilterCriticality(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
           )}
           {systems.length > 0 && (
             <IconButton icon="trash" label="Delete all systems" variant="danger"
