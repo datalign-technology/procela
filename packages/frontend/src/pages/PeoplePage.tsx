@@ -283,6 +283,8 @@ export default function PeoplePage() {
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
+  const [filterAppRole, setFilterAppRole] = useState('');
+  const [filterGovRole, setFilterGovRole] = useState('');
 
   // Quick-add row state
   const [quickName, setQuickName] = useState('');
@@ -361,7 +363,15 @@ export default function PeoplePage() {
   }
 
   const selectedOrg = flatOrgs.find((o) => o.id === selectedOrgId);
-  const filteredPeople = selectedOrgId ? people.filter((p) => p.orgIds.includes(selectedOrgId)) : people;
+  const filteredPeople = people.filter((p) => {
+    if (selectedOrgId && !p.orgIds.includes(selectedOrgId)) return false;
+    if (filterAppRole && p.role !== filterAppRole) return false;
+    if (filterGovRole) {
+      const hasRole = allDamaRoles.some((r) => r.personId === p.id && r.roleType === filterGovRole);
+      if (!hasRole) return false;
+    }
+    return true;
+  });
 
   // Sort: comparators keyed by column name; URL persists ?sort=&dir=
   const { sorted: sortedPeople, sortKey, sortDir, toggleSort } = useSortedList(
@@ -812,6 +822,38 @@ export default function PeoplePage() {
                   <IconButton icon="plus" label="Add person" variant="primary"
                     onClick={openAddPerson} />
                 </div>
+              </div>
+
+              {/* Filters */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>App Role:</label>
+                  <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '3px 8px' }} value={filterAppRole} onChange={(e) => setFilterAppRole(e.target.value)}>
+                    <option value="">All</option>
+                    {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Governance Role:</label>
+                  <select style={{ ...inputStyle, width: 'auto', minWidth: 160, fontSize: 12, padding: '3px 8px' }} value={filterGovRole} onChange={(e) => setFilterGovRole(e.target.value)}>
+                    <option value="">All</option>
+                    {Object.entries(DAMA_ROLE_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                {(filterAppRole || filterGovRole) && (
+                  <button onClick={() => { setFilterAppRole(''); setFilterGovRole(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                    Clear filters
+                  </button>
+                )}
+                {(filterAppRole || filterGovRole) && (
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    Showing {filteredPeople.length} of {people.length}
+                  </span>
+                )}
               </div>
 
               <ConfirmDialog
