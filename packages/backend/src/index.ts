@@ -46,6 +46,7 @@ import enterpriseViewRouter from './routes/enterprise-view';
 import gapDetectionRouter from './routes/gap-detection';
 import attachmentsRouter from './routes/attachments';
 import brandingRouter from './routes/branding';
+import syncConnectionsRouter from './routes/sync-connections';
 
 const app = express();
 
@@ -101,6 +102,7 @@ app.use('/api/v1/connections', authenticateToken, connectionsRouter);
 app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
 app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
 app.use('/api/v1/attachments', authenticateToken, attachmentsRouter);
+app.use('/api/v1/sync-connections', authenticateToken, syncConnectionsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -130,6 +132,7 @@ import { dataQualityRules } from './routes/data-quality';
 import { connections } from './routes/connections';
 import { brandingStoreArray } from './routes/branding';
 import { attachments } from './routes/attachments';
+import { syncConnections } from './routes/sync-connections';
 
 const stores = {
   processNodes: () => processNodes,
@@ -154,6 +157,7 @@ const stores = {
   dataLineageLinks: () => dataLineageLinks,
   dataQualityRules: () => dataQualityRules,
   connections: () => connections,
+  syncConnections: () => syncConnections,
   branding: () => brandingStoreArray,
   attachments: () => attachments,
 };
