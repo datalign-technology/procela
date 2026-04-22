@@ -4,14 +4,12 @@ import { SkeletonRows } from '../components/Skeleton';
 
 const ExecutiveReportPage = lazy(() => import('./ExecutiveReportPage'));
 const ScorecardPage       = lazy(() => import('./ScorecardPage'));
-const GapDetectionPage    = lazy(() => import('./GapDetectionPage'));
 
-type ReportTab = 'executive' | 'scorecard' | 'gaps';
+type ReportTab = 'executive' | 'scorecard';
 
 const TABS: { id: ReportTab; label: string; description: string }[] = [
   { id: 'executive', label: 'Executive Report', description: 'One-page overview for leadership.' },
   { id: 'scorecard', label: 'Scorecard',        description: 'Data and governance health by dimension.' },
-  { id: 'gaps',      label: 'Gap Detection',    description: 'Process steps and assets missing coverage.' },
 ];
 
 export default function ReportsPage() {
@@ -29,7 +27,6 @@ export default function ReportsPage() {
     switch (active) {
       case 'executive': return <ExecutiveReportPage />;
       case 'scorecard': return <ScorecardPage />;
-      case 'gaps':      return <GapDetectionPage />;
     }
   })();
 
