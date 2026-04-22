@@ -120,10 +120,14 @@ export default function DataDomainsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
+  // Stewardship team option on create
+  const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
+
   // AI generate state
   const [generating, setGenerating] = useState(false);
   const [generatedDomains, setGeneratedDomains] = useState<Array<{ name: string; description: string; selected: boolean }>>([]);
   const [showGeneratePreview, setShowGeneratePreview] = useState(false);
+  const [generateStewardshipTeams, setGenerateStewardshipTeams] = useState(true);
 
   // Detail editing state
   const [detailOwnerId, setDetailOwnerId] = useState<string>('');
@@ -159,6 +163,7 @@ export default function DataDomainsPage() {
     setForm(emptyForm);
     setEditingId(null);
     setSelectedDomain(null);
+    setCreateStewardshipTeam(true);
     setShowForm(true);
   };
 
@@ -189,11 +194,27 @@ export default function DataDomainsPage() {
     } else {
       await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
       addToast('success', 'Data domain created');
+
+      if (createStewardshipTeam) {
+        try {
+          await apiClient.post('/governance-groups', {
+            name: `${form.name.trim()} Stewardship Team`,
+            type: 'STEWARDSHIP_TEAM',
+            description: `Data stewardship team responsible for the ${form.name.trim()} domain. Ensures data quality, standards compliance, and issue resolution.`,
+            status: 'ACTIVE',
+            orgId: activeOrgId || undefined,
+          });
+          addToast('success', `Stewardship team created for ${form.name.trim()}`);
+        } catch {
+          addToast('error', 'Domain created, but stewardship team creation failed');
+        }
+      }
     }
     markClean();
     setShowForm(false);
     setEditingId(null);
     setForm(emptyForm);
+    setCreateStewardshipTeam(true);
     fetchData();
   };
 
@@ -306,7 +327,20 @@ export default function DataDomainsPage() {
           ...(activeOrgId ? { orgId: activeOrgId } : {}),
         }),
       ));
-      addToast('success', `Created ${toCreate.length} data domain${toCreate.length === 1 ? '' : 's'}`);
+      if (generateStewardshipTeams) {
+        await Promise.all(toCreate.map((d) =>
+          apiClient.post('/governance-groups', {
+            name: `${d.name} Stewardship Team`,
+            type: 'STEWARDSHIP_TEAM',
+            description: `Data stewardship team responsible for the ${d.name} domain.`,
+            status: 'ACTIVE',
+            orgId: activeOrgId || undefined,
+          }).catch(() => {}),
+        ));
+        addToast('success', `Created ${toCreate.length} domain${toCreate.length === 1 ? '' : 's'} with stewardship teams`);
+      } else {
+        addToast('success', `Created ${toCreate.length} data domain${toCreate.length === 1 ? '' : 's'}`);
+      }
       setShowGeneratePreview(false);
       setGeneratedDomains([]);
       fetchData();
@@ -554,6 +588,30 @@ export default function DataDomainsPage() {
               />
             </div>
           </div>
+          {!editingId && (
+            <div style={{
+              marginTop: 16, padding: '12px 14px',
+              background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+            }}>
+              <input
+                type="checkbox"
+                id="create-stewardship-team"
+                checked={createStewardshipTeam}
+                onChange={(e) => setCreateStewardshipTeam(e.target.checked)}
+                style={{ marginTop: 2, cursor: 'pointer' }}
+              />
+              <label htmlFor="create-stewardship-team" style={{ cursor: 'pointer' }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>
+                  Create a Data Stewardship Team for this domain
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                  A stewardship team is responsible for data quality, standards compliance, and issue resolution within this domain. You can assign members after creation under Governance Groups.
+                </div>
+              </label>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             <button
@@ -794,7 +852,25 @@ export default function DataDomainsPage() {
                 </label>
               ))}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <div style={{
+              marginTop: 16, padding: '10px 12px',
+              background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+            }}>
+              <input
+                type="checkbox"
+                id="generate-stewardship-teams"
+                checked={generateStewardshipTeams}
+                onChange={(e) => setGenerateStewardshipTeams(e.target.checked)}
+                style={{ marginTop: 2, cursor: 'pointer' }}
+              />
+              <label htmlFor="generate-stewardship-teams" style={{ cursor: 'pointer' }}>
+                <div style={{ fontSize: 12, fontWeight: 500 }}>Also create a Data Stewardship Team for each domain</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>Assign members later under Governance Groups</div>
+              </label>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => setShowGeneratePreview(false)}
                 style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}
