@@ -322,6 +322,17 @@ export default function SystemsPage() {
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Applications and platforms where your organization's data lives.
           </p>
+          {systems.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+              <span>{systems.length} systems</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{new Set(systems.map((s) => s.systemType).filter(Boolean)).size} types</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{systems.filter((s) => s.businessCriticality === 'HIGH').length} high criticality</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{connections.filter((c) => c.status === 'CONNECTED').length} connected</span>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {systems.length > 0 && (
@@ -459,20 +470,6 @@ export default function SystemsPage() {
             <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={() => handleSave(false)}>
               {editingId ? 'Save Changes' : 'Add System'}
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Stats */}
-      {systems.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{systems.length}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Systems</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{new Set(systems.map((s) => s.systemType).filter(Boolean)).size}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>System Types</div>
           </div>
         </div>
       )}

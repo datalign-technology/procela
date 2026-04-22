@@ -33,13 +33,6 @@ interface DataDomain {
   updatedAt: string;
 }
 
-interface DomainSummary {
-  total: number;
-  governed: number;
-  ungoverned: number;
-  totalAssetsInDomains: number;
-}
-
 interface Person {
   id: string;
   name: string;
@@ -106,7 +99,6 @@ export default function DataDomainsPage() {
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
-  const [summary, setSummary] = useState<DomainSummary>({ total: 0, governed: 0, ungoverned: 0, totalAssetsInDomains: 0 });
   const [people, setPeople] = useState<Person[]>([]);
   const [allAssets, setAllAssets] = useState<DataAssetOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,14 +130,12 @@ export default function DataDomainsPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [domainsRes, summaryRes, peopleRes, assetsRes] = await Promise.all([
+      const [domainsRes, peopleRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
-        apiClient.get<{ success: boolean; data: DomainSummary }>(`/data-domains/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataAssetOption[] }>(`/data-assets${query}`),
       ]);
       setDomains(domainsRes.data || []);
-      setSummary(summaryRes.data || { total: 0, governed: 0, ungoverned: 0, totalAssetsInDomains: 0 });
       setPeople(peopleRes.data || []);
       setAllAssets(assetsRes.data || []);
       if (activeOrgId) {
@@ -491,26 +481,6 @@ export default function DataDomainsPage() {
           <style>{`@keyframes procelaGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
-
-      {/* Stats */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-        <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{summary.total}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Domains</div>
-        </div>
-        <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#0f4f46' }}>{summary.governed}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Governed (have owner)</div>
-        </div>
-        <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#dc2626' }}>{summary.ungoverned}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Ungoverned</div>
-        </div>
-        <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{summary.totalAssetsInDomains}</div>
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Assets in Domains</div>
-        </div>
-      </div>
 
       <ConfirmDialog
         open={confirmGenerate}

@@ -653,6 +653,15 @@ export default function ConnectionsPage() {
               ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
               : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); credential validation happens when real drivers are wired in.'}
           </p>
+          {connections.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+              <span>{connections.length} connections</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{connectedCount} connected</span>
+              {errorCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span style={{ color: '#dc2626' }}>{errorCount} error</span></>}
+              {untestedCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span>{untestedCount} untested</span></>}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {connections.length > 0 && (
@@ -694,28 +703,6 @@ export default function ConnectionsPage() {
           </span>
         )}
       </div>
-
-      {/* Stats */}
-      {visibleConnections.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{visibleConnections.length}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Connections</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#0f4f46' }}>{connectedCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Connected</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#9d174d' }}>{errorCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Error / Disconnected</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#92400e' }}>{untestedCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Untested</div>
-          </div>
-        </div>
-      )}
 
       {/* Add/Edit Form */}
       {showForm && (
