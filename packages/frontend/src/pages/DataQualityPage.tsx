@@ -442,6 +442,33 @@ export default function DataQualityPage() {
 
   return (
     <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Quality</h1>
+            <HelpPopover id="dq-overview" title="Data Quality">
+              Define quality rules per data asset, compute health scores, and track
+              data quality across your organization. Rules can run on demand or on a schedule.
+            </HelpPopover>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+            Monitor and improve the quality and reliability of your data assets.
+          </p>
+          {fullAssets.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+              <span>{fullAssets.length} assets</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{rules.length} rules</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore >= 80).length} healthy</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore < 80).length} below 80%</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
         <button style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
         <button style={tabStyle(tab === 'rules')} onClick={() => setTab('rules')}>Rules</button>
@@ -969,6 +996,19 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
   const [columnsMap, setColumnsMap] = useState<Record<string, ColumnWithHealth[]>>({});
   const [loadingCols, setLoadingCols] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState<string | null>(null);
+  const [filterSystem, setFilterSystem] = useState('');
+  const [filterOwner, setFilterOwner] = useState('');
+
+  const systemOptions = [...new Set(assets.map((a) => a.systemId).filter(Boolean))].map((id) => ({
+    id, name: systemNameById[id] || id,
+  }));
+  const ownerOptions = [...new Set(assets.map((a) => a.ownerName).filter(Boolean))] as string[];
+
+  const filteredAssets = assets.filter((a) => {
+    if (filterSystem && a.systemId !== filterSystem) return false;
+    if (filterOwner && a.ownerName !== filterOwner) return false;
+    return true;
+  });
 
   const tdLocal: React.CSSProperties = {
     padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
@@ -1052,9 +1092,33 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
 
   return (
     <div>
-      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-        Expand an asset to see its columns. Add rules per column, or click <strong>Manage Rules</strong> for the full rule editor with templates and scheduling.
-      </p>
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
+          <select style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterSystem} onChange={(e) => setFilterSystem(e.target.value)}>
+            <option value="">All</option>
+            {systemOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Owner:</label>
+          <select style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+            <option value="">All</option>
+            {ownerOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        {(filterSystem || filterOwner) && (
+          <button onClick={() => { setFilterSystem(''); setFilterOwner(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            Clear filters
+          </button>
+        )}
+        {(filterSystem || filterOwner) && (
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            Showing {filteredAssets.length} of {assets.length}
+          </span>
+        )}
+      </div>
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -1069,7 +1133,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
             </tr>
           </thead>
           <tbody>
-            {assets.map((a) => {
+            {filteredAssets.map((a) => {
               const rs = rulesByAsset.get(a.id) || [];
               const measured = rs.filter((r) => r.currentScore > 0);
               const passing = rs.filter((r) => r.status === 'PASSING').length;
