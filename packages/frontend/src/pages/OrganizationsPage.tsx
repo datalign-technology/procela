@@ -9,6 +9,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
+import SyncConnectionWizard from '../components/SyncConnectionWizard';
 
 // ── Types ──
 
@@ -221,6 +222,7 @@ export default function OrganizationsPage() {
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [orgForm, setOrgForm] = useState<OrgFormData>(emptyOrgForm);
   const [showImport, setShowImport] = useState(false);
+  const [showSync, setShowSync] = useState(false);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [importParent, setImportParent] = useState('');
@@ -396,6 +398,7 @@ export default function OrganizationsPage() {
               ]))} />
           )}
           <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
+          <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
           <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />
         </div>
       </div>
@@ -624,6 +627,7 @@ export default function OrganizationsPage() {
         </div>
       </div>
 
+      <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="organizations" orgId={activeOrgId || ''} onCreated={() => { fetchData(); triggerRefresh(); }} />
     </div>
   );
 }

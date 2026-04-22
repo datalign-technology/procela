@@ -13,6 +13,7 @@ import OrgChipInput from '../components/OrgChipInput';
 import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import SyncConnectionWizard from '../components/SyncConnectionWizard';
 
 // ── Types ──
 
@@ -262,6 +263,7 @@ export default function PeoplePage() {
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [personForm, setPersonForm] = useState<PersonFormData>(emptyPersonForm);
   const [showPeopleImport, setShowPeopleImport] = useState(false);
+  const [showPeopleSync, setShowPeopleSync] = useState(false);
   const [peopleImportText, setPeopleImportText] = useState('');
   const [peopleImportFormat, setPeopleImportFormat] = useState<'csv' | 'json'>('csv');
   // Target org for import — defaults to the active filter so "import into
@@ -806,6 +808,7 @@ export default function PeoplePage() {
                   )}
                   <IconButton icon="upload" label="Import people"
                     onClick={() => { setPeopleImportOrgId(selectedOrgId); setShowPeopleImport(true); }} />
+                  <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />
                   <IconButton icon="plus" label="Add person" variant="primary"
                     onClick={openAddPerson} />
                 </div>
@@ -1439,6 +1442,7 @@ export default function PeoplePage() {
           </div>
         </div>
       )}
+      <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
     </div>
   );
 }

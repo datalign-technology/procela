@@ -14,6 +14,7 @@ import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import SyncConnectionWizard from '../components/SyncConnectionWizard';
 
 interface SystemEntity {
   id: string;
@@ -138,6 +139,7 @@ export default function SystemsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [showImport, setShowImport] = useState(false);
+  const [showSync, setShowSync] = useState(false);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,6 +342,7 @@ export default function SystemsPage() {
               onClick={() => exportCsv('systems.csv', ['Name', 'Type', 'Description'], systems.map((s) => [s.name, s.systemType, s.description]))} />
           )}
           <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
+          <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
           <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -610,6 +613,7 @@ export default function SystemsPage() {
           </table>
         )}
       </div>
+      <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
     </div>
   );
 }
