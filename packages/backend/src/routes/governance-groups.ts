@@ -211,8 +211,8 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
   if (!group) { res.status(404).json({ success: false, error: 'Group not found' }); return; }
 
   const validChildTypes = VALID_CHILDREN[group.type] || [];
-  const existingChildren = governanceGroups.filter((g) => g.parentId === group.id);
-  const existingChildNames = new Set(existingChildren.map((c) => c.name.toLowerCase()));
+  const orgGroups = governanceGroups.filter((g) => g.orgId === group.orgId);
+  const allOrgGroupNames = new Set(orgGroups.map((g) => g.name.toLowerCase()));
 
   interface Recommendation {
     name: string;
@@ -238,7 +238,7 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
         description: `Data stewardship team responsible for the ${domain.name} domain. Ensures data quality, standards compliance, and issue resolution.`,
         charter: `Define ${domain.name.toLowerCase()} data standards, resolve data quality issues, manage master data definitions.`,
         reason: `Recommended for the "${domain.name}" data domain`,
-        exists: existingChildNames.has(teamName.toLowerCase()),
+        exists: allOrgGroupNames.has(teamName.toLowerCase()),
       });
     }
 
@@ -252,14 +252,14 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
         description: 'Initiative-focused group driving data quality improvements across the organization.',
         charter: 'Identify data quality issues, implement fixes, measure improvement, report progress.',
         reason: 'DAMA best practice — temporary group for quality initiatives',
-        exists: existingChildNames.has(dqName.toLowerCase()),
+        exists: allOrgGroupNames.has(dqName.toLowerCase()),
       });
     }
   }
 
   if (group.type === 'COUNCIL') {
     // Recommend Office and Committee if not present
-    if (!existingChildren.some((c) => c.type === 'OFFICE')) {
+    if (!orgGroups.some((c) => c.type === 'OFFICE')) {
       recommendations.push({
         name: 'Data Governance Office',
         type: 'OFFICE',
@@ -270,7 +270,7 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
         exists: false,
       });
     }
-    if (!existingChildren.some((c) => c.type === 'COMMITTEE')) {
+    if (!orgGroups.some((c) => c.type === 'COMMITTEE')) {
       recommendations.push({
         name: 'Enterprise Data Committee',
         type: 'COMMITTEE',
@@ -283,7 +283,7 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
     }
   }
 
-  res.json({ success: true, data: recommendations });
+  res.json({ success: true, data: recommendations.filter((r) => !r.exists) });
 });
 
 /** POST /api/v1/governance-groups */

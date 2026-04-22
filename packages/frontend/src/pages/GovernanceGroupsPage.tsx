@@ -329,6 +329,7 @@ export default function GovernanceGroupsPage() {
     exists: boolean;
   }
   const [recommendations, setRecommendations] = useState<GroupRecommendation[]>([]);
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const [creatingRec, setCreatingRec] = useState<string | null>(null);
 
   // Form state
@@ -404,8 +405,10 @@ export default function GovernanceGroupsPage() {
     if (selectedGroupId) {
       fetchGroupDetail(selectedGroupId);
       fetchPeople();
+      setShowRecommendations(false);
     } else {
       setSelectedGroupDetail(null);
+      setRecommendations([]);
     }
   }, [selectedGroupId, fetchGroupDetail, fetchPeople]);
 
@@ -942,19 +945,44 @@ export default function GovernanceGroupsPage() {
           )}
 
           {/* Recommended Child Groups */}
-          {recommendations.filter((r) => !r.exists).length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span style={{ fontSize: 16, color: '#2563eb' }}>{'ℹ'}</span>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Recommended Groups</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    Based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}. Create them as needed.
-                  </div>
+          {recommendations.length > 0 && !showRecommendations && (
+            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => setShowRecommendations(true)}
+                style={{
+                  padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                  background: 'var(--color-surface)', color: '#1e40af',
+                  border: '1px solid #93c5fd', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{'ℹ'}</span>
+                Explore Recommendations ({recommendations.length})
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                DAMA best practices suggest additional groups under this one
+              </span>
+            </div>
+          )}
+          {showRecommendations && recommendations.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14, color: '#2563eb' }}>{'ℹ'}</span>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Recommended Groups</div>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    Based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}
+                  </span>
                 </div>
+                <button
+                  onClick={() => setShowRecommendations(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-text-muted)' }}
+                >
+                  Hide
+                </button>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {recommendations.filter((r) => !r.exists).map((rec) => (
+                {recommendations.map((rec) => (
                   <div key={rec.name} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '10px 14px',
@@ -970,7 +998,6 @@ export default function GovernanceGroupsPage() {
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{rec.reason}</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 1 }}>{rec.description}</div>
                     </div>
                     <button
                       onClick={() => handleCreateRecommended(rec)}
@@ -989,11 +1016,6 @@ export default function GovernanceGroupsPage() {
                   </div>
                 ))}
               </div>
-              {recommendations.some((r) => r.exists) && (
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8 }}>
-                  {recommendations.filter((r) => r.exists).length} recommended group{recommendations.filter((r) => r.exists).length === 1 ? '' : 's'} already created.
-                </div>
-              )}
             </div>
           )}
         </div>
