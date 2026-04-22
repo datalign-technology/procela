@@ -655,37 +655,44 @@ export default function ConnectionsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>System:</label>
-          <select
-            style={{ ...selectStyle, padding: '6px 10px', fontSize: 13, width: 'auto', minWidth: 180 }}
-            value={systemFilter}
-            onChange={(e) => setSystemFilter(e.target.value)}
-          >
-            <option value="">All systems</option>
-            {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
-          </select>
-          <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Type:</label>
-          <select
-            style={{ ...selectStyle, padding: '6px 10px', fontSize: 13, width: 'auto', minWidth: 140 }}
-            value={filterConnType}
-            onChange={(e) => setFilterConnType(e.target.value)}
-          >
-            <option value="">All types</option>
-            {connectionTypes.map((t) => {
-              const count = connections.filter((c) => c.connectionType === t).length;
-              const label = t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-              return count > 0 ? <option key={t} value={t}>{label} ({count})</option> : null;
-            })}
-          </select>
-          {(systemFilter || filterConnType) && (
-            <button onClick={() => { setSystemFilter(''); setFilterConnType(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
-          )}
           {connections.length > 0 && (
             <IconButton icon="trash" label="Delete all connections" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
           )}
           <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
         </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 180, fontSize: 12, padding: '4px 8px' }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
+            <option value="">All</option>
+            {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Type:</label>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterConnType} onChange={(e) => setFilterConnType(e.target.value)}>
+            <option value="">All</option>
+            {connectionTypes.map((t) => {
+              const count = connections.filter((c) => c.connectionType === t).length;
+              const label = t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+              return count > 0 ? <option key={t} value={t}>{label} ({count})</option> : null;
+            })}
+          </select>
+        </div>
+        {(systemFilter || filterConnType) && (
+          <button onClick={() => { setSystemFilter(''); setFilterConnType(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            Clear filters
+          </button>
+        )}
+        {(systemFilter || filterConnType) && (
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            Showing {visibleConnections.length} of {connections.length}
+          </span>
+        )}
       </div>
 
       {/* Stats */}

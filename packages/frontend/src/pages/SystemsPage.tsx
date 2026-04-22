@@ -324,32 +324,6 @@ export default function SystemsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {systemTypes.length > 0 && (
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
-            >
-              <option value="">All Types ({systems.length})</option>
-              {systemTypes.map((t) => {
-                const count = systems.filter((s) => s.systemType === t).length;
-                return count > 0 ? <option key={t} value={t}>{t} ({count})</option> : null;
-              })}
-            </select>
-          )}
-          <select
-            value={filterCriticality}
-            onChange={(e) => setFilterCriticality(e.target.value)}
-            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
-          >
-            <option value="">All Criticality</option>
-            <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
-            <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
-            <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
-          </select>
-          {(filterType || filterCriticality) && (
-            <button onClick={() => { setFilterType(''); setFilterCriticality(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
-          )}
           {systems.length > 0 && (
             <IconButton icon="trash" label="Delete all systems" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
@@ -362,6 +336,39 @@ export default function SystemsPage() {
           <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
           <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
         </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Type:</label>
+          <select style={{ ...inputStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="">All ({systems.length})</option>
+            {systemTypes.map((t) => {
+              const count = systems.filter((s) => s.systemType === t).length;
+              return count > 0 ? <option key={t} value={t}>{t} ({count})</option> : null;
+            })}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Criticality:</label>
+          <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
+            <option value="">All</option>
+            <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
+            <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
+            <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
+          </select>
+        </div>
+        {(filterType || filterCriticality) && (
+          <button onClick={() => { setFilterType(''); setFilterCriticality(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            Clear filters
+          </button>
+        )}
+        {(filterType || filterCriticality) && (
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            Showing {filteredSystems.length} of {systems.length}
+          </span>
+        )}
       </div>
 
       {/* Import Panel */}

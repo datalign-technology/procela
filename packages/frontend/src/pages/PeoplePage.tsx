@@ -828,7 +828,7 @@ export default function PeoplePage() {
               <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>App Role:</label>
-                  <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '3px 8px' }} value={filterAppRole} onChange={(e) => setFilterAppRole(e.target.value)}>
+                  <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterAppRole} onChange={(e) => setFilterAppRole(e.target.value)}>
                     <option value="">All</option>
                     {Object.entries(ROLE_LABELS).map(([key, label]) => (
                       <option key={key} value={key}>{label}</option>
@@ -837,7 +837,7 @@ export default function PeoplePage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Governance Role:</label>
-                  <select style={{ ...inputStyle, width: 'auto', minWidth: 160, fontSize: 12, padding: '3px 8px' }} value={filterGovRole} onChange={(e) => setFilterGovRole(e.target.value)}>
+                  <select style={{ ...inputStyle, width: 'auto', minWidth: 160, fontSize: 12, padding: '4px 8px' }} value={filterGovRole} onChange={(e) => setFilterGovRole(e.target.value)}>
                     <option value="">All</option>
                     {Object.entries(DAMA_ROLE_LABELS).map(([key, label]) => (
                       <option key={key} value={key}>{label}</option>
