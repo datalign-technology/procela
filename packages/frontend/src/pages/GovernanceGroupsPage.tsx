@@ -318,6 +318,19 @@ export default function GovernanceGroupsPage() {
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
   const [assignRoleType, setAssignRoleType] = useState('');
 
+  // Recommendations for selected group
+  interface GroupRecommendation {
+    name: string;
+    type: string;
+    typeLabel: string;
+    description: string;
+    charter: string;
+    reason: string;
+    exists: boolean;
+  }
+  const [recommendations, setRecommendations] = useState<GroupRecommendation[]>([]);
+  const [creatingRec, setCreatingRec] = useState<string | null>(null);
+
   // Form state
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -369,6 +382,12 @@ export default function GovernanceGroupsPage() {
       } else {
         setMemberDamaRoles([]);
       }
+
+      // Fetch recommendations for this group
+      try {
+        const recRes = await apiClient.get<{ success: boolean; data: GroupRecommendation[] }>(`/governance-groups/${id}/recommendations`);
+        setRecommendations(recRes.data || []);
+      } catch { setRecommendations([]); }
     } catch { /* */ }
   }, [activeOrgId]);
 
@@ -510,6 +529,30 @@ export default function GovernanceGroupsPage() {
       if (selectedGroupId) fetchGroupDetail(selectedGroupId);
     } catch {
       addToast('error', 'Failed to remove role');
+    }
+  };
+
+  const handleCreateRecommended = async (rec: GroupRecommendation) => {
+    if (!selectedGroupId) return;
+    setCreatingRec(rec.name);
+    try {
+      await apiClient.post('/governance-groups', {
+        name: rec.name,
+        type: rec.type,
+        description: rec.description,
+        charter: rec.charter,
+        status: 'ACTIVE',
+        orgId: activeOrgId || undefined,
+        parentId: selectedGroupId,
+      });
+      addToast('success', `Created "${rec.name}"`);
+      fetchGroups();
+      fetchGroupDetail(selectedGroupId);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Failed to create group';
+      addToast('error', msg);
+    } finally {
+      setCreatingRec(null);
     }
   };
 
@@ -895,6 +938,62 @@ export default function GovernanceGroupsPage() {
                   Assign Role
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Recommended Child Groups */}
+          {recommendations.filter((r) => !r.exists).length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 16, color: '#2563eb' }}>{'ℹ'}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Recommended Groups</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    Based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}. Create them as needed.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {recommendations.filter((r) => !r.exists).map((rec) => (
+                  <div key={rec.name} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px',
+                    background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: 'var(--radius-md)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{rec.name}</span>
+                        <span style={makeBadge(typeBadgeColors[rec.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>
+                          {GROUP_TYPE_SHORT[rec.type] || rec.typeLabel}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{rec.reason}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 1 }}>{rec.description}</div>
+                    </div>
+                    <button
+                      onClick={() => handleCreateRecommended(rec)}
+                      disabled={creatingRec !== null}
+                      style={{
+                        padding: '5px 14px', fontSize: 11, fontWeight: 500,
+                        background: '#fff', color: '#1e40af',
+                        border: '1px solid #93c5fd', borderRadius: 4,
+                        cursor: creatingRec ? 'default' : 'pointer',
+                        opacity: creatingRec ? 0.6 : 1,
+                        whiteSpace: 'nowrap', flexShrink: 0,
+                      }}
+                    >
+                      {creatingRec === rec.name ? 'Creating...' : 'Create'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {recommendations.some((r) => r.exists) && (
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8 }}>
+                  {recommendations.filter((r) => r.exists).length} recommended group{recommendations.filter((r) => r.exists).length === 1 ? '' : 's'} already created.
+                </div>
+              )}
             </div>
           )}
         </div>

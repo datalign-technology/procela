@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
+import { dataDomains } from './data-domains';
 import { people } from './people';
 import logger from '../lib/logger';
 
@@ -148,10 +149,6 @@ router.post('/generate-template', (req: Request, res: Response) => {
     { type: 'COUNCIL', name: 'Data Governance Council', description: 'Executive steering committee that sets data governance strategy, policy, and priorities.', charter: 'Define data governance vision, approve policies, allocate resources, resolve escalations.' },
     { type: 'OFFICE', name: 'Data Governance Office', description: 'Day-to-day program management and coordination of governance activities.', charter: 'Coordinate governance initiatives, track compliance, manage governance tools, support stewardship teams.', parentType: 'COUNCIL' },
     { type: 'COMMITTEE', name: 'Enterprise Data Committee', description: 'Cross-functional working group that implements governance standards and practices.', charter: 'Develop data standards, review data issues, coordinate across domains, report to the Council.', parentType: 'OFFICE' },
-    { type: 'STEWARDSHIP_TEAM', name: 'Customer Data Stewardship Team', description: 'Manages quality, definitions, and standards for customer data.', charter: 'Define customer data standards, resolve data quality issues, manage customer master data.', parentType: 'COMMITTEE' },
-    { type: 'STEWARDSHIP_TEAM', name: 'Financial Data Stewardship Team', description: 'Manages quality, definitions, and standards for financial data.', charter: 'Define financial data standards, ensure regulatory compliance, manage financial master data.', parentType: 'COMMITTEE' },
-    { type: 'STEWARDSHIP_TEAM', name: 'Operational Data Stewardship Team', description: 'Manages quality, definitions, and standards for operational data.', charter: 'Define operational data standards, manage process data quality, coordinate with system owners.', parentType: 'COMMITTEE' },
-    { type: 'WORKING_GROUP', name: 'Data Quality Improvement', description: 'Initiative-focused group driving data quality improvements.', charter: 'Identify data quality issues, implement fixes, measure improvement, report progress.', parentType: 'COMMITTEE' },
   ];
 
   // Skip items that already exist in this org (prevents duplicates on re-run)
@@ -206,6 +203,87 @@ router.get('/:id', (req: Request, res: Response) => {
       validChildTypes: VALID_CHILDREN[group.type] || [],
     },
   });
+});
+
+/** GET /api/v1/governance-groups/:id/recommendations */
+router.get('/:id/recommendations', (req: Request, res: Response) => {
+  const group = governanceGroups.find((g) => g.id === req.params.id);
+  if (!group) { res.status(404).json({ success: false, error: 'Group not found' }); return; }
+
+  const validChildTypes = VALID_CHILDREN[group.type] || [];
+  const existingChildren = governanceGroups.filter((g) => g.parentId === group.id);
+  const existingChildNames = new Set(existingChildren.map((c) => c.name.toLowerCase()));
+
+  interface Recommendation {
+    name: string;
+    type: string;
+    typeLabel: string;
+    description: string;
+    charter: string;
+    reason: string;
+    exists: boolean;
+  }
+
+  const recommendations: Recommendation[] = [];
+
+  if (group.type === 'COMMITTEE' || group.type === 'OFFICE') {
+    // Recommend a stewardship team for each data domain
+    const orgDomains = dataDomains.filter((d) => d.orgId === group.orgId);
+    for (const domain of orgDomains) {
+      const teamName = `${domain.name} Stewardship Team`;
+      recommendations.push({
+        name: teamName,
+        type: 'STEWARDSHIP_TEAM',
+        typeLabel: GROUP_TYPE_LABELS['STEWARDSHIP_TEAM'],
+        description: `Data stewardship team responsible for the ${domain.name} domain. Ensures data quality, standards compliance, and issue resolution.`,
+        charter: `Define ${domain.name.toLowerCase()} data standards, resolve data quality issues, manage master data definitions.`,
+        reason: `Recommended for the "${domain.name}" data domain`,
+        exists: existingChildNames.has(teamName.toLowerCase()),
+      });
+    }
+
+    // Recommend a working group for data quality
+    if (validChildTypes.includes('WORKING_GROUP')) {
+      const dqName = 'Data Quality Improvement';
+      recommendations.push({
+        name: dqName,
+        type: 'WORKING_GROUP',
+        typeLabel: GROUP_TYPE_LABELS['WORKING_GROUP'],
+        description: 'Initiative-focused group driving data quality improvements across the organization.',
+        charter: 'Identify data quality issues, implement fixes, measure improvement, report progress.',
+        reason: 'DAMA best practice — temporary group for quality initiatives',
+        exists: existingChildNames.has(dqName.toLowerCase()),
+      });
+    }
+  }
+
+  if (group.type === 'COUNCIL') {
+    // Recommend Office and Committee if not present
+    if (!existingChildren.some((c) => c.type === 'OFFICE')) {
+      recommendations.push({
+        name: 'Data Governance Office',
+        type: 'OFFICE',
+        typeLabel: GROUP_TYPE_LABELS['OFFICE'],
+        description: 'Day-to-day program management and coordination of governance activities.',
+        charter: 'Coordinate governance initiatives, track compliance, manage governance tools, support stewardship teams.',
+        reason: 'DAMA best practice — manages the governance program day-to-day',
+        exists: false,
+      });
+    }
+    if (!existingChildren.some((c) => c.type === 'COMMITTEE')) {
+      recommendations.push({
+        name: 'Enterprise Data Committee',
+        type: 'COMMITTEE',
+        typeLabel: GROUP_TYPE_LABELS['COMMITTEE'],
+        description: 'Cross-functional working group that implements governance standards and practices.',
+        charter: 'Develop data standards, review data issues, coordinate across domains, report to the Council.',
+        reason: 'DAMA best practice — implements standards across domains',
+        exists: false,
+      });
+    }
+  }
+
+  res.json({ success: true, data: recommendations });
 });
 
 /** POST /api/v1/governance-groups */
