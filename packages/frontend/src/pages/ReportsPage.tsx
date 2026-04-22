@@ -6,29 +6,24 @@ import { SkeletonRows } from '../components/Skeleton';
 const ExecutiveReportPage = lazy(() => import('./ExecutiveReportPage'));
 const ScorecardPage       = lazy(() => import('./ScorecardPage'));
 const GapDetectionPage    = lazy(() => import('./GapDetectionPage'));
-const RaciMatrixPage      = lazy(() => import('./RaciMatrixPage'));
 const ComparisonPage      = lazy(() => import('./ComparisonPage'));
 
 // ──────────────────────────────────────────────────────────────────────────
-// ReportsPage — consolidated home for the five analysis views that used
-// to be separate sidebar entries (Executive Report, Scorecard, Gap
-// Detection, RACI Matrix, Comparison). Tabs share the same chrome and
+// ReportsPage — consolidated home for analysis views (Executive Report,
+// Scorecard, Gap Detection, Comparison). Tabs share the same chrome and
 // the active tab is encoded in the URL (?tab=scorecard) so links are
 // shareable and refresh preserves the view.
 //
-// Each tab renders the existing page component verbatim — no logic was
-// duplicated. Legacy routes (/report, /scorecard, /gap-detection, /raci,
-// /processes/compare) still resolve directly for deep links that already
-// exist in the wild.
+// RACI Matrix has its own dedicated page under Govern and is no longer
+// included here.
 // ──────────────────────────────────────────────────────────────────────────
 
-type ReportTab = 'executive' | 'scorecard' | 'gaps' | 'raci' | 'compare';
+type ReportTab = 'executive' | 'scorecard' | 'gaps' | 'compare';
 
 const TABS: { id: ReportTab; label: string; description: string }[] = [
   { id: 'executive', label: 'Executive Report', description: 'One-page overview for leadership.' },
   { id: 'scorecard', label: 'Scorecard',        description: 'Data and governance health by dimension.' },
   { id: 'gaps',      label: 'Gap Detection',    description: 'Process steps and assets missing coverage.' },
-  { id: 'raci',      label: 'RACI Matrix',      description: 'Responsibility grid across processes and people.' },
   { id: 'compare',   label: 'Compare Streams',  description: 'Side-by-side value-stream comparison.' },
 ];
 
@@ -51,7 +46,6 @@ export default function ReportsPage() {
       case 'executive': return <ExecutiveReportPage />;
       case 'scorecard': return <ScorecardPage />;
       case 'gaps':      return <GapDetectionPage />;
-      case 'raci':      return <RaciMatrixPage />;
       case 'compare':   return <ComparisonPage />;
     }
   })();
