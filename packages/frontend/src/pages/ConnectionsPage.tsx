@@ -207,6 +207,7 @@ export default function ConnectionsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [filterConnType, setFilterConnType] = useState('');
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // Which assets in the Discover modal are expanded to show their columns.
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
@@ -450,9 +451,11 @@ export default function ConnectionsPage() {
 
   // Stats and the table both operate on the system-filtered view so the
   // numbers line up with what the user is looking at.
-  const visibleConnections = systemFilter
-    ? connections.filter((c) => c.systemId === systemFilter)
-    : connections;
+  const visibleConnections = connections.filter((c) => {
+    if (systemFilter && c.systemId !== systemFilter) return false;
+    if (filterConnType && c.connectionType !== filterConnType) return false;
+    return true;
+  });
   const connectedCount = visibleConnections.filter((c) => c.status === 'CONNECTED').length;
   const errorCount = visibleConnections.filter((c) => c.status === 'ERROR' || c.status === 'DISCONNECTED').length;
   const untestedCount = visibleConnections.filter((c) => c.status === 'UNTESTED').length;
@@ -661,6 +664,22 @@ export default function ConnectionsPage() {
             <option value="">All systems</option>
             {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
           </select>
+          <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Type:</label>
+          <select
+            style={{ ...selectStyle, padding: '6px 10px', fontSize: 13, width: 'auto', minWidth: 140 }}
+            value={filterConnType}
+            onChange={(e) => setFilterConnType(e.target.value)}
+          >
+            <option value="">All types</option>
+            {connectionTypes.map((t) => {
+              const count = connections.filter((c) => c.connectionType === t).length;
+              const label = t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+              return count > 0 ? <option key={t} value={t}>{label} ({count})</option> : null;
+            })}
+          </select>
+          {(systemFilter || filterConnType) && (
+            <button onClick={() => { setSystemFilter(''); setFilterConnType(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+          )}
           {connections.length > 0 && (
             <IconButton icon="trash" label="Delete all connections" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
