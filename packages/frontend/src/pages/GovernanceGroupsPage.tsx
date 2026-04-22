@@ -51,7 +51,43 @@ interface Person {
   name: string;
 }
 
+interface DamaRoleAssignment {
+  id: string;
+  personId: string;
+  personName: string;
+  roleType: string;
+  scopeType: string;
+  scopeId: string;
+  since: string;
+}
+
 // ── Constants ──
+
+const DAMA_ROLE_LABELS: Record<string, string> = {
+  CDO: 'Chief Data Officer',
+  DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
+  DATA_OWNER: 'Data Owner',
+  BUSINESS_DATA_STEWARD: 'Business Data Steward',
+  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+  TECHNICAL_DATA_STEWARD: 'Technical Data Steward',
+  DATA_CUSTODIAN: 'Data Custodian',
+  DATA_ARCHITECT: 'Data Architect',
+  DATA_ENGINEER: 'Data Engineer',
+  DATABASE_ADMINISTRATOR: 'Database Administrator',
+};
+
+const DAMA_ROLE_COLORS: Record<string, { bg: string; color: string }> = {
+  CDO: { bg: '#fce7f3', color: '#9d174d' },
+  DATA_GOVERNANCE_LEAD: { bg: '#ede9fe', color: '#5b21b6' },
+  DATA_OWNER: { bg: '#dbeafe', color: '#1e40af' },
+  BUSINESS_DATA_STEWARD: { bg: '#d1fae5', color: '#065f46' },
+  DATA_QUALITY_ANALYST: { bg: '#fef3c7', color: '#92400e' },
+  TECHNICAL_DATA_STEWARD: { bg: '#e0e7ff', color: '#3730a3' },
+  DATA_CUSTODIAN: { bg: '#f1f5f9', color: '#64748b' },
+  DATA_ARCHITECT: { bg: '#fce7f3', color: '#831843' },
+  DATA_ENGINEER: { bg: '#cffafe', color: '#155e75' },
+  DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#475569' },
+};
 
 const GROUP_TYPE_LABELS: Record<string, string> = {
   COUNCIL: 'Data Governance Council',
@@ -277,6 +313,11 @@ export default function GovernanceGroupsPage() {
   const [memberPersonId, setMemberPersonId] = useState('');
   const [memberRole, setMemberRole] = useState('MEMBER');
 
+  // DAMA roles for the members of the selected group
+  const [memberDamaRoles, setMemberDamaRoles] = useState<DamaRoleAssignment[]>([]);
+  const [assignRolePersonId, setAssignRolePersonId] = useState('');
+  const [assignRoleType, setAssignRoleType] = useState('');
+
   // Form state
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -314,9 +355,21 @@ export default function GovernanceGroupsPage() {
   const fetchGroupDetail = useCallback(async (id: string) => {
     try {
       const res = await apiClient.get<{ success: boolean; data: any }>(`/governance-groups/${id}`);
-      setSelectedGroupDetail(res.data || null);
+      const detail = res.data || null;
+      setSelectedGroupDetail(detail);
+
+      // Fetch DAMA roles for all members of this group
+      if (detail?.members?.length > 0) {
+        const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+        const rolesRes = await apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`);
+        const allRoles = rolesRes.data || [];
+        const memberIds = new Set(detail.members.map((m: GroupMember) => m.personId));
+        setMemberDamaRoles(allRoles.filter((r) => memberIds.has(r.personId)));
+      } else {
+        setMemberDamaRoles([]);
+      }
     } catch { /* */ }
-  }, []);
+  }, [activeOrgId]);
 
   const fetchPeople = useCallback(async () => {
     try {
@@ -428,6 +481,35 @@ export default function GovernanceGroupsPage() {
     await apiClient.delete(`/governance-groups/${selectedGroupId}/members/${personId}`);
     fetchGroupDetail(selectedGroupId);
     fetchGroups();
+  };
+
+  const handleAssignDamaRole = async () => {
+    if (!assignRolePersonId || !assignRoleType || !activeOrgId) return;
+    try {
+      await apiClient.post('/dama-roles', {
+        personId: assignRolePersonId,
+        roleType: assignRoleType,
+        scopeType: 'ORG',
+        scopeId: activeOrgId,
+      });
+      addToast('success', `Assigned ${DAMA_ROLE_LABELS[assignRoleType] || assignRoleType}`);
+      setAssignRolePersonId('');
+      setAssignRoleType('');
+      if (selectedGroupId) fetchGroupDetail(selectedGroupId);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Failed to assign role';
+      addToast('error', msg);
+    }
+  };
+
+  const handleRemoveDamaRole = async (roleId: string) => {
+    try {
+      await apiClient.delete(`/dama-roles/${roleId}`);
+      addToast('success', 'Role removed');
+      if (selectedGroupId) fetchGroupDetail(selectedGroupId);
+    } catch {
+      addToast('error', 'Failed to remove role');
+    }
   };
 
   // ── Computed values ──
@@ -702,34 +784,105 @@ export default function GovernanceGroupsPage() {
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
                     <th style={thStyle}>Person Name</th>
-                    <th style={thStyle}>Role</th>
+                    <th style={thStyle}>Group Role</th>
+                    <th style={thStyle}>DAMA Roles</th>
                     <th style={thStyle}>Since</th>
                     <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedGroupDetail.members.map((member: GroupMember) => (
-                    <tr key={member.personId}
-                      style={{ transition: 'background 0.1s' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                    >
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{member.personName}</td>
-                      <td style={tdStyle}>
-                        <span style={makeBadge(roleBadgeColors[member.groupRole] || roleBadgeColors.MEMBER)}>
-                          {ROLE_LABELS[member.groupRole] || member.groupRole}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
-                        {new Date(member.since).toLocaleDateString()}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }} onClick={() => handleRemoveMember(member.personId)}>Remove</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {selectedGroupDetail.members.map((member: GroupMember) => {
+                    const personRoles = memberDamaRoles.filter((r) => r.personId === member.personId);
+                    return (
+                      <tr key={member.personId}
+                        style={{ transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                      >
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>{member.personName}</td>
+                        <td style={tdStyle}>
+                          <span style={makeBadge(roleBadgeColors[member.groupRole] || roleBadgeColors.MEMBER)}>
+                            {ROLE_LABELS[member.groupRole] || member.groupRole}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          {personRoles.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                              {personRoles.map((r) => (
+                                <span key={r.id} style={{ ...makeBadge(DAMA_ROLE_COLORS[r.roleType] || { bg: '#f1f5f9', color: '#64748b' }), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                  {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
+                                  <button
+                                    onClick={() => handleRemoveDamaRole(r.id)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: 'inherit', padding: 0, lineHeight: 1, opacity: 0.7 }}
+                                    title="Remove role"
+                                  >&times;</button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>None assigned</span>
+                          )}
+                        </td>
+                        <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
+                          {new Date(member.since).toLocaleDateString()}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }} onClick={() => handleRemoveMember(member.personId)}>Remove</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Assign DAMA Role */}
+          {selectedGroupDetail.members?.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                Assign Governance Role
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ flex: 2 }}>
+                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Member</label>
+                  <select style={selectStyle} value={assignRolePersonId} onChange={(e) => setAssignRolePersonId(e.target.value)}>
+                    <option value="">-- Select member --</option>
+                    {(selectedGroupDetail.members || []).map((m: GroupMember) => (
+                      <option key={m.personId} value={m.personId}>{m.personName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 2 }}>
+                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>DAMA Role</label>
+                  <select style={selectStyle} value={assignRoleType} onChange={(e) => setAssignRoleType(e.target.value)}>
+                    <option value="">-- Select role --</option>
+                    <optgroup label="Executive / Strategic">
+                      <option value="CDO">Chief Data Officer</option>
+                      <option value="DATA_GOVERNANCE_LEAD">Data Governance Lead</option>
+                    </optgroup>
+                    <optgroup label="Business">
+                      <option value="DATA_OWNER">Data Owner</option>
+                      <option value="BUSINESS_DATA_STEWARD">Business Data Steward</option>
+                      <option value="DATA_QUALITY_ANALYST">Data Quality Analyst</option>
+                    </optgroup>
+                    <optgroup label="Technical">
+                      <option value="TECHNICAL_DATA_STEWARD">Technical Data Steward</option>
+                      <option value="DATA_CUSTODIAN">Data Custodian</option>
+                      <option value="DATA_ARCHITECT">Data Architect</option>
+                      <option value="DATA_ENGINEER">Data Engineer</option>
+                      <option value="DATABASE_ADMINISTRATOR">Database Administrator</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <button
+                  style={{ ...btnPrimary, padding: '6px 14px', fontSize: 12, opacity: (!assignRolePersonId || !assignRoleType) ? 0.6 : 1, whiteSpace: 'nowrap' }}
+                  disabled={!assignRolePersonId || !assignRoleType}
+                  onClick={handleAssignDamaRole}
+                >
+                  Assign Role
+                </button>
+              </div>
             </div>
           )}
         </div>
