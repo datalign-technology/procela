@@ -1116,6 +1116,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
         systemId: '', owner: '', stewardIds: [],
         governanceTier: def.governanceTier, healthScore: 0,
         dataClassification: def.dataClassification,
+        category: 'GOVERNANCE',
         createdAt: now, updatedAt: now,
       };
       dataAssets.push(asset);

@@ -27,6 +27,7 @@ interface StoredDataAsset {
   sourceAsset?: string;
   sourceColumn?: string;
   dataClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
+  category?: 'OPERATIONAL' | 'GOVERNANCE' | 'REFERENCE' | 'ANALYTICAL' | 'MASTER';
   retentionPolicy?: string;
   refreshFrequency?: 'REAL_TIME' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MANUAL';
   createdAt: string;
@@ -447,7 +448,7 @@ router.get('/:id', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   const { name, description, systemId, owner, stewardIds, governanceTier, healthScore, orgId,
     sourceConnectionId, sourceAsset, sourceColumn,
-    dataClassification, retentionPolicy, refreshFrequency } = req.body;
+    dataClassification, category, retentionPolicy, refreshFrequency } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
 
   const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
@@ -466,6 +467,7 @@ router.post('/', (req: Request, res: Response) => {
     ...(sourceAsset ? { sourceAsset } : {}),
     ...(sourceColumn ? { sourceColumn } : {}),
     ...(dataClassification ? { dataClassification } : {}),
+    ...(category ? { category } : {}),
     ...(retentionPolicy ? { retentionPolicy } : {}),
     ...(refreshFrequency ? { refreshFrequency } : {}),
     createdAt: now, updatedAt: now,
@@ -482,7 +484,7 @@ router.put('/:id', (req: Request, res: Response) => {
 
   const { name, description, systemId, owner, stewardIds, governanceTier, healthScore,
     sourceConnectionId, sourceAsset, sourceColumn,
-    dataClassification, retentionPolicy, refreshFrequency } = req.body;
+    dataClassification, category, retentionPolicy, refreshFrequency } = req.body;
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
   if (systemId !== undefined) asset.systemId = systemId;
@@ -494,6 +496,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (sourceAsset !== undefined) asset.sourceAsset = sourceAsset || undefined;
   if (sourceColumn !== undefined) asset.sourceColumn = sourceColumn || undefined;
   if (dataClassification !== undefined) asset.dataClassification = dataClassification || undefined;
+  if (category !== undefined) asset.category = category || undefined;
   if (retentionPolicy !== undefined) asset.retentionPolicy = retentionPolicy || undefined;
   if (refreshFrequency !== undefined) asset.refreshFrequency = refreshFrequency || undefined;
   asset.updatedAt = new Date().toISOString();

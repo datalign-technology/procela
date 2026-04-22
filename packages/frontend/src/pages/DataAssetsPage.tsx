@@ -29,6 +29,7 @@ interface DataAssetEntity {
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
   dataClassification?: string;
+  category?: string;
   retentionPolicy?: string;
   refreshFrequency?: string;
   sourceConnectionId?: string;
@@ -138,6 +139,7 @@ interface FormData {
   stewardIds: string[];
   governanceTier: string;
   domainId: string;
+  category: string;
   dataClassification: string;
   retentionPolicy: string;
   refreshFrequency: string;
@@ -151,6 +153,7 @@ const emptyForm: FormData = {
   stewardIds: [],
   governanceTier: 'BRONZE',
   domainId: '',
+  category: '',
   dataClassification: '',
   retentionPolicy: '',
   refreshFrequency: '',
@@ -249,6 +252,7 @@ export default function DataAssetsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [filterCategory, setFilterCategory] = useState('');
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
@@ -343,9 +347,11 @@ export default function DataAssetsPage() {
     return sys ? sys.name : '';
   };
 
+  const filteredAssets = filterCategory ? assets.filter((a) => (a.category || '') === filterCategory) : assets;
+
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
-    assets,
+    filteredAssets,
     {
       name: (a, b) => a.name.localeCompare(b.name),
       system: (a, b) => systemName(a.systemId).localeCompare(systemName(b.systemId)),
@@ -432,6 +438,7 @@ export default function DataAssetsPage() {
       stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: dom?.id || '',
+      category: asset.category || '',
       dataClassification: asset.dataClassification || '',
       retentionPolicy: asset.retentionPolicy || '',
       refreshFrequency: asset.refreshFrequency || '',
@@ -449,6 +456,7 @@ export default function DataAssetsPage() {
       stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: '',
+      category: asset.category || '',
       dataClassification: asset.dataClassification || '',
       retentionPolicy: asset.retentionPolicy || '',
       refreshFrequency: asset.refreshFrequency || '',
@@ -700,6 +708,31 @@ export default function DataAssetsPage() {
         </div>
       </div>
 
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Category:</label>
+          <select style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+            <option value="">All ({assets.length})</option>
+            <option value="OPERATIONAL">Operational ({assets.filter((a) => a.category === 'OPERATIONAL').length})</option>
+            <option value="GOVERNANCE">Governance ({assets.filter((a) => a.category === 'GOVERNANCE').length})</option>
+            <option value="REFERENCE">Reference ({assets.filter((a) => a.category === 'REFERENCE').length})</option>
+            <option value="ANALYTICAL">Analytical ({assets.filter((a) => a.category === 'ANALYTICAL').length})</option>
+            <option value="MASTER">Master ({assets.filter((a) => a.category === 'MASTER').length})</option>
+          </select>
+        </div>
+        {filterCategory && (
+          <button onClick={() => setFilterCategory('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            Clear filters
+          </button>
+        )}
+        {filterCategory && (
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            Showing {filteredAssets.length} of {assets.length}
+          </span>
+        )}
+      </div>
+
       {/* Add/Edit Form */}
       {showForm && (
         <div style={{
@@ -754,6 +787,17 @@ export default function DataAssetsPage() {
                 <option value="BRONZE">Bronze</option>
                 <option value="SILVER">Silver</option>
                 <option value="GOLD">Gold</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
+              <select style={selectStyle} value={form.category} onChange={(e) => updateField('category', e.target.value)}>
+                <option value="">-- Select --</option>
+                <option value="OPERATIONAL">Operational</option>
+                <option value="GOVERNANCE">Governance</option>
+                <option value="REFERENCE">Reference</option>
+                <option value="ANALYTICAL">Analytical</option>
+                <option value="MASTER">Master</option>
               </select>
             </div>
             <div>
