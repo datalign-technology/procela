@@ -407,24 +407,23 @@ export default function OrganizationsPage() {
       {showImport && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Organization Structure</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'csv'} onChange={() => setImportFormat('csv')} /> CSV</label>
-              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'json'} onChange={() => setImportFormat('json')} /> JSON</label>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Organizations</h3>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste CSV or JSON, or browse a file. Format is auto-detected.</span>
             </div>
+            <button onClick={() => { setShowImport(false); setImportText(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
             <select style={{ ...inputStyle, width: 'auto', minWidth: 180, appearance: 'auto' as any, fontSize: 12 }} value={importParent} onChange={(e) => setImportParent(e.target.value)}>
               <option value="">Import as top-level</option>
               {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
             </select>
-            <FilePicker accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onFileRead={(content, fileName) => { setImportText(content); if (fileName.endsWith('.json')) setImportFormat('json'); if (fileName.endsWith('.csv')) setImportFormat('csv'); }} />
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below</span>
+            <FilePicker accept=".csv,.json,.txt" onFileRead={(content, fileName) => { setImportText(content); if (fileName.endsWith('.json')) setImportFormat('json'); else setImportFormat('csv'); }} />
           </div>
-          <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={importText} onChange={(e) => setImportText(e.target.value)}
-            placeholder={importFormat === 'csv' ? 'Name,Parent,Type,Industry,Description\nAcme Corp,,company,...' : '[{ "name": "Acme Corp", "type": "company" }]'} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
+          <textarea style={{ ...inputStyle, minHeight: 70, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={importText} onChange={(e) => setImportText(e.target.value)}
+            placeholder={'Name,Parent,Type,Industry,Description\nAcme Corp,,company,Manufacturing,Parent company'} />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name, Parent, Type, Industry, Description</span>
             <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1 }} disabled={!importText.trim()} onClick={handleImport}>Import</button>
           </div>
         </div>

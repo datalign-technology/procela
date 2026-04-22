@@ -351,32 +351,29 @@ export default function SystemsPage() {
       {showImport && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Systems</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'csv'} onChange={() => setImportFormat('csv')} /> CSV</label>
-              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={importFormat === 'json'} onChange={() => setImportFormat('json')} /> JSON</label>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Systems</h3>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste CSV or JSON, or browse a file. Format is auto-detected.</span>
             </div>
+            <button onClick={() => { setShowImport(false); setImportText(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
           </div>
           {!activeOrgId && (
             <div style={{ background: '#fef3c7', padding: '8px 12px', borderRadius: 4, fontSize: 12, color: '#92400e', marginBottom: 10 }}>
-              Select an organization from the "Working in" dropdown in the header before importing.
+              Select an organization from the "Working in" dropdown before importing.
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-            <input ref={fileInputRef} type="file" accept={importFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onChange={handleFileRead} style={{ display: 'none' }} />
+            <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" onChange={handleFileRead} style={{ display: 'none' }} />
             <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below. Columns: Name (required), Description, Type</span>
           </div>
           <textarea
-            style={{ ...inputStyle, width: '100%', minHeight: 100, fontFamily: 'var(--font-mono)', fontSize: 11 }}
+            style={{ ...inputStyle, width: '100%', minHeight: 70, fontFamily: 'var(--font-mono)', fontSize: 11 }}
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
-            placeholder={importFormat === 'csv'
-              ? 'Name,Description,Type\nSAP ERP,Enterprise resource planning,ERP\nSalesforce,Customer relationship management,CRM\nArcGIS,Geographic information system,GIS'
-              : '[{ "name": "SAP ERP", "description": "Enterprise resource planning", "systemType": "ERP" }]'}
+            placeholder={'Name,Description,Type\nSAP ERP,Enterprise resource planning,ERP\nSalesforce,Customer relationship management,CRM'}
           />
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Description, Type</span>
             <button style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1 }} disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</button>
           </div>
         </div>

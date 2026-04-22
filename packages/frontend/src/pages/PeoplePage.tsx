@@ -969,45 +969,28 @@ export default function PeoplePage() {
               {showPeopleImport && (
                 <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 10, boxShadow: 'var(--shadow-sm)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People</h3>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={peopleImportFormat === 'csv'} onChange={() => setPeopleImportFormat('csv')} /> CSV</label>
-                      <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}><input type="radio" checked={peopleImportFormat === 'json'} onChange={() => setPeopleImportFormat('json')} /> JSON</label>
+                    <div>
+                      <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People</h3>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste CSV or JSON, or browse a file. Format is auto-detected.</span>
                     </div>
+                    <button onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, fontWeight: 500 }}>Assign to organization *</label>
+                    <label style={{ fontSize: 11, fontWeight: 500 }}>Organization *</label>
                     <select
-                      style={{ ...inputStyle, width: 'auto', minWidth: 220, appearance: 'auto' as any, fontSize: 12 }}
+                      style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 12 }}
                       value={peopleImportOrgId}
                       onChange={(e) => setPeopleImportOrgId(e.target.value)}
                     >
-                      <option value="">-- Select an organization --</option>
+                      <option value="">-- Select --</option>
                       {orgOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
                     </select>
+                    <FilePicker accept=".csv,.json,.txt" onFileRead={(content, fn) => { setPeopleImportText(content); if (fn.endsWith('.json')) setPeopleImportFormat('json'); else setPeopleImportFormat('csv'); }} />
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
-                    <FilePicker accept={peopleImportFormat === 'csv' ? '.csv,.txt' : '.json,.txt'} onFileRead={(content, fn) => { setPeopleImportText(content); if (fn.endsWith('.json')) setPeopleImportFormat('json'); if (fn.endsWith('.csv')) setPeopleImportFormat('csv'); }} />
-                    <button
-                      onClick={() => {
-                        const template = 'Name,Email,Role,Title\nJane Smith,jane@example.com,VIEWER,Director of Operations\nJohn Doe,john@example.com,EDITOR,Data Analyst\n';
-                        const blob = new Blob([template], { type: 'text/csv' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url; a.download = 'people-template.csv';
-                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                      }}
-                      style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-text-muted)' }}
-                    >
-                      Download CSV Template
-                    </button>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or paste below. Columns: Name (required), Email, Role, Title</span>
-                  </div>
-                  <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
-                    placeholder={peopleImportFormat === 'csv' ? 'Name,Email,Role,Title\nJane Smith,jane@co.com,EDITOR,Director' : '[{ "name": "Jane Smith", "role": "EDITOR" }]'} />
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-                    <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }}>Cancel</button>
+                  <textarea style={{ ...inputStyle, minHeight: 70, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
+                    placeholder={'Name,Email,Role,Title\nJane Smith,jane@co.com,EDITOR,Director of Operations'} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Email, Role, Title</span>
                     <button
                       style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1 }}
                       disabled={!peopleImportText.trim() || !peopleImportOrgId}
