@@ -63,19 +63,19 @@ const inputStyle: React.CSSProperties = {
 };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const btnPrimary: React.CSSProperties = {
-  padding: '6px 14px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
+  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const btnSecondary: React.CSSProperties = {
-  padding: '6px 14px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '8px 10px', fontSize: 10, fontWeight: 600,
+  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
   color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
 };
 const tdStyle: React.CSSProperties = {
-  padding: '8px 10px', fontSize: 12, borderTop: '1px solid var(--color-border)',
+  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 const TYPE_BADGES: Record<string, { bg: string; color: string }> = {
@@ -243,13 +243,13 @@ export default function AgentsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Agents</h1>
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none' }} title="Help">?</Link>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {'Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.'}
           </p>
         </div>

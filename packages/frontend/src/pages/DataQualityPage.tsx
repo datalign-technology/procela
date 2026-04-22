@@ -585,8 +585,8 @@ export default function DataQualityPage() {
                   onClick={() => handleComputeHealth(assetId)}
                   disabled={computingHealth === assetId}
                   style={{
-                    padding: '6px 14px',
-                    fontSize: 12,
+                    padding: '8px 16px',
+                    fontSize: 13,
                     fontWeight: 500,
                     background: computingHealth === assetId ? '#e5e7eb' : '#eff6ff',
                     color: computingHealth === assetId ? '#9ca3af' : '#1e40af',

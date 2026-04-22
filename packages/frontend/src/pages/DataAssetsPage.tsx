@@ -1375,8 +1375,6 @@ export default function DataAssetsPage() {
                         disabled={!newComment.trim()}
                         style={{
                           ...btnPrimary,
-                          padding: '6px 14px',
-                          fontSize: 12,
                           opacity: !newComment.trim() ? 0.5 : 1,
                         }}
                       >

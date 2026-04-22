@@ -82,23 +82,23 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '6px 14px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
+  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const btnSecondary: React.CSSProperties = {
-  padding: '6px 14px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
   padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
 };
 const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '8px 10px', fontSize: 10, fontWeight: 600,
+  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
   color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
 };
 const tdStyle: React.CSSProperties = {
-  padding: '8px 10px', fontSize: 12, borderTop: '1px solid var(--color-border)',
+  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 const typeBadge = (type: string): React.CSSProperties => {
@@ -726,13 +726,13 @@ export default function PeoplePage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>People</h1>
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {people.length} people across {flatOrgs.length} organizations. Filter by organization to narrow the list.
           </p>
         </div>
@@ -1454,9 +1454,9 @@ export default function PeoplePage() {
                   <button
                     onClick={() => setViewing360(null)}
                     style={{
-                      padding: '6px 14px', background: 'var(--color-bg)', color: 'var(--color-text)',
+                      padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
                       border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                      fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                      fontSize: 13, fontWeight: 500, cursor: 'pointer',
                     }}
                   >
                     Close

@@ -28,12 +28,12 @@ const inputStyle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
 const btnPrimary: React.CSSProperties = {
-  padding: '6px 14px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
+  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const btnSecondary: React.CSSProperties = {
-  padding: '6px 14px', background: 'var(--color-bg)', color: 'var(--color-text)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
@@ -364,7 +364,7 @@ export default function OrganizationsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Organizations</h1>
@@ -374,7 +374,7 @@ export default function OrganizationsPage() {
               the app to the org you pick — change it to switch context.
             </HelpPopover>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             The organization hierarchy. Manage people on the <a href="/people" style={{ color: 'var(--color-primary)' }}>People</a> page.
           </p>
         </div>
