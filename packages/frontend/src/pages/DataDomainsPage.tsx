@@ -186,6 +186,15 @@ export default function DataDomainsPage() {
   const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
   const closeForm = () => { markClean(); setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
+  const findCommitteeId = async (): Promise<string | null> => {
+    try {
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const res = await apiClient.get<{ success: boolean; data: Array<{ id: string; type: string }> }>(`/governance-groups${query}`);
+      const committee = (res.data || []).find((g) => g.type === 'COMMITTEE');
+      return committee?.id || null;
+    } catch { return null; }
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) return;
     try {
@@ -198,12 +207,14 @@ export default function DataDomainsPage() {
 
         if (createStewardshipTeam) {
           try {
+            const parentId = await findCommitteeId();
             await apiClient.post('/governance-groups', {
               name: `${form.name.trim()} Stewardship Team`,
               type: 'STEWARDSHIP_TEAM',
               description: `Data stewardship team responsible for the ${form.name.trim()} domain. Ensures data quality, standards compliance, and issue resolution.`,
               status: 'ACTIVE',
               orgId: activeOrgId || undefined,
+              parentId,
             });
             addToast('success', `Stewardship team created for ${form.name.trim()}`);
           } catch {
@@ -339,6 +350,7 @@ export default function DataDomainsPage() {
       skipped = toCreate.length - created;
 
       if (generateStewardshipTeams && succeeded.length > 0) {
+        const parentId = await findCommitteeId();
         await Promise.all(succeeded.map((d) =>
           apiClient.post('/governance-groups', {
             name: `${d.name} Stewardship Team`,
@@ -346,6 +358,7 @@ export default function DataDomainsPage() {
             description: `Data stewardship team responsible for the ${d.name} domain.`,
             status: 'ACTIVE',
             orgId: activeOrgId || undefined,
+            parentId,
           }).catch(() => {}),
         ));
       }
