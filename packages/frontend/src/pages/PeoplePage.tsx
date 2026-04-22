@@ -907,7 +907,7 @@ export default function PeoplePage() {
                     onClick={openBulkAssign}
                     style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                   >
-                    Assign to org\u2026
+                    Assign to org…
                   </button>
                   <button
                     onClick={() => setConfirmBulkDeletePeople(true)}
@@ -969,7 +969,7 @@ export default function PeoplePage() {
                         <div style={{ gridColumn: '1 / -1' }}>
                           <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assign to Organizations *</label>
                           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                            Type to search \u2014 matches show their breadcrumb so same-named orgs are distinguishable.
+                            Type to search — matches show their breadcrumb so same-named orgs are distinguishable.
                           </div>
                           <OrgChipInput
                             orgs={flatOrgs}
