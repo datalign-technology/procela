@@ -144,6 +144,14 @@ router.post('/', (req: Request, res: Response) => {
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
+  const duplicate = dataDomains.find(
+    (d) => d.orgId === orgId && d.name.trim().toLowerCase() === name.trim().toLowerCase(),
+  );
+  if (duplicate) {
+    res.status(409).json({ success: false, error: `A data domain named "${name}" already exists in this organization` });
+    return;
+  }
+
   const now = new Date().toISOString();
   const domain: StoredDataDomain = {
     id: uuid(),

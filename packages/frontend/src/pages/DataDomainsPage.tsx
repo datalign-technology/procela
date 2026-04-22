@@ -188,34 +188,39 @@ export default function DataDomainsPage() {
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
-    if (editingId) {
-      await apiClient.put(`/data-domains/${editingId}`, form);
-      addToast('success', 'Data domain updated');
-    } else {
-      await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-      addToast('success', 'Data domain created');
+    try {
+      if (editingId) {
+        await apiClient.put(`/data-domains/${editingId}`, form);
+        addToast('success', 'Data domain updated');
+      } else {
+        await apiClient.post('/data-domains', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+        addToast('success', 'Data domain created');
 
-      if (createStewardshipTeam) {
-        try {
-          await apiClient.post('/governance-groups', {
-            name: `${form.name.trim()} Stewardship Team`,
-            type: 'STEWARDSHIP_TEAM',
-            description: `Data stewardship team responsible for the ${form.name.trim()} domain. Ensures data quality, standards compliance, and issue resolution.`,
-            status: 'ACTIVE',
-            orgId: activeOrgId || undefined,
-          });
-          addToast('success', `Stewardship team created for ${form.name.trim()}`);
-        } catch {
-          addToast('error', 'Domain created, but stewardship team creation failed');
+        if (createStewardshipTeam) {
+          try {
+            await apiClient.post('/governance-groups', {
+              name: `${form.name.trim()} Stewardship Team`,
+              type: 'STEWARDSHIP_TEAM',
+              description: `Data stewardship team responsible for the ${form.name.trim()} domain. Ensures data quality, standards compliance, and issue resolution.`,
+              status: 'ACTIVE',
+              orgId: activeOrgId || undefined,
+            });
+            addToast('success', `Stewardship team created for ${form.name.trim()}`);
+          } catch {
+            addToast('error', 'Domain created, but stewardship team creation failed');
+          }
         }
       }
+      markClean();
+      setShowForm(false);
+      setEditingId(null);
+      setForm(emptyForm);
+      setCreateStewardshipTeam(true);
+      fetchData();
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to save domain';
+      addToast('error', msg);
     }
-    markClean();
-    setShowForm(false);
-    setEditingId(null);
-    setForm(emptyForm);
-    setCreateStewardshipTeam(true);
-    fetchData();
   };
 
   const handleDelete = async (id: string) => {
@@ -318,8 +323,10 @@ export default function DataDomainsPage() {
   const handleApplyGenerated = async () => {
     const toCreate = generatedDomains.filter((d) => d.selected);
     if (toCreate.length === 0) { setShowGeneratePreview(false); return; }
+    let created = 0;
+    let skipped = 0;
     try {
-      await Promise.all(toCreate.map((d) =>
+      const results = await Promise.allSettled(toCreate.map((d) =>
         apiClient.post('/data-domains', {
           name: d.name,
           description: d.description,
@@ -327,8 +334,12 @@ export default function DataDomainsPage() {
           ...(activeOrgId ? { orgId: activeOrgId } : {}),
         }),
       ));
-      if (generateStewardshipTeams) {
-        await Promise.all(toCreate.map((d) =>
+      const succeeded = toCreate.filter((_, i) => results[i].status === 'fulfilled');
+      created = succeeded.length;
+      skipped = toCreate.length - created;
+
+      if (generateStewardshipTeams && succeeded.length > 0) {
+        await Promise.all(succeeded.map((d) =>
           apiClient.post('/governance-groups', {
             name: `${d.name} Stewardship Team`,
             type: 'STEWARDSHIP_TEAM',
@@ -337,9 +348,14 @@ export default function DataDomainsPage() {
             orgId: activeOrgId || undefined,
           }).catch(() => {}),
         ));
-        addToast('success', `Created ${toCreate.length} domain${toCreate.length === 1 ? '' : 's'} with stewardship teams`);
+      }
+
+      if (created > 0 && skipped > 0) {
+        addToast('info', `Created ${created} domain${created === 1 ? '' : 's'}, skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`);
+      } else if (created > 0) {
+        addToast('success', `Created ${created} domain${created === 1 ? '' : 's'}${generateStewardshipTeams ? ' with stewardship teams' : ''}`);
       } else {
-        addToast('success', `Created ${toCreate.length} data domain${toCreate.length === 1 ? '' : 's'}`);
+        addToast('info', `All ${skipped} domain${skipped === 1 ? '' : 's'} already exist — nothing created`);
       }
       setShowGeneratePreview(false);
       setGeneratedDomains([]);
