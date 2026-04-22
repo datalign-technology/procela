@@ -119,6 +119,7 @@ export default function DataDomainsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [confirmGenerate, setConfirmGenerate] = useState(false);
 
   // Stewardship team option on create
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
@@ -460,7 +461,7 @@ export default function DataDomainsPage() {
                 : 'Generate from industry'
               }
               disabled={generating || domains.length > 0}
-              onClick={handleGenerate}
+              onClick={() => setConfirmGenerate(true)}
             />
           )}
           {canWrite && (
@@ -511,6 +512,15 @@ export default function DataDomainsPage() {
         </div>
       </div>
 
+      <ConfirmDialog
+        open={confirmGenerate}
+        title="Generate Data Domains with AI?"
+        message="AI will suggest data domains based on your organization's industry. You'll see a preview where you can select which domains to create before anything is saved."
+        confirmLabel="Generate"
+        variant="primary"
+        onConfirm={() => { setConfirmGenerate(false); handleGenerate(); }}
+        onCancel={() => setConfirmGenerate(false)}
+      />
       <ConfirmDialog
         open={showDeleteAll}
         title="Delete All Data Domains?"

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import ConfirmDialog from './ConfirmDialog';
 
 interface GovStatus {
   hasGovProcesses: boolean;
@@ -21,6 +22,7 @@ export default function GovernanceSetupWizard() {
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
   const [messages, setMessages] = useState<string[]>([]);
+  const [pendingAction, setPendingAction] = useState<'all' | 'processes' | 'groups' | 'domains' | null>(null);
 
   const checkStatus = async () => {
     try {
@@ -95,7 +97,7 @@ export default function GovernanceSetupWizard() {
           </p>
         </div>
         <button
-          onClick={applyAll}
+          onClick={() => setPendingAction('all')}
           disabled={applying !== null}
           style={{
             padding: '8px 20px', fontSize: 13, fontWeight: 600,
@@ -120,7 +122,7 @@ export default function GovernanceSetupWizard() {
           </div>
         </div>
         {!status.hasGovProcesses && (
-          <button onClick={() => applyStep('processes')} disabled={applying !== null}
+          <button onClick={() => setPendingAction('processes')} disabled={applying !== null}
             style={{ padding: '4px 14px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap', opacity: applying ? 0.6 : 1 }}>
             {applying === 'processes' ? 'Creating...' : 'Create'}
           </button>
@@ -138,7 +140,7 @@ export default function GovernanceSetupWizard() {
           </div>
         </div>
         {!status.hasGovGroups && (
-          <button onClick={() => applyStep('groups')} disabled={applying !== null}
+          <button onClick={() => setPendingAction('groups')} disabled={applying !== null}
             style={{ padding: '4px 14px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap', opacity: applying ? 0.6 : 1 }}>
             {applying === 'groups' ? 'Creating...' : 'Create'}
           </button>
@@ -156,7 +158,7 @@ export default function GovernanceSetupWizard() {
           </div>
         </div>
         {!status.hasDomains && (
-          <button onClick={() => applyStep('domains')} disabled={applying !== null}
+          <button onClick={() => setPendingAction('domains')} disabled={applying !== null}
             style={{ padding: '4px 14px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap', opacity: applying ? 0.6 : 1 }}>
             {applying === 'domains' ? 'Creating...' : 'Create'}
           </button>
@@ -173,6 +175,26 @@ export default function GovernanceSetupWizard() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={pendingAction === 'all' ? 'Set Up Governance Framework?' : pendingAction === 'processes' ? 'Create Governance Processes?' : pendingAction === 'groups' ? 'Create Governance Groups?' : 'Create Data Domains?'}
+        message={pendingAction === 'all'
+          ? 'This will create governance processes, groups, and data domains. Each component can be customized after creation.'
+          : pendingAction === 'processes'
+            ? 'This will create a Data Governance Management value stream with 6 processes and 31 activities.'
+            : pendingAction === 'groups'
+              ? 'This will create the governance organizational structure: Council, Office, Committee, Stewardship Teams, and Working Group.'
+              : 'This will create starter data domains based on your organization\'s industry.'}
+        confirmLabel={pendingAction === 'all' ? 'Set Up All' : 'Create'}
+        variant="primary"
+        onConfirm={() => {
+          const action = pendingAction;
+          setPendingAction(null);
+          if (action === 'all') applyAll();
+          else if (action) applyStep(action);
+        }}
+        onCancel={() => setPendingAction(null)}
+      />
     </div>
   );
 }

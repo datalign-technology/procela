@@ -324,6 +324,7 @@ export default function GovernanceGroupsPage() {
   const [form, setForm] = useState<GroupFormData>(emptyForm);
   // When adding a child, restrict the type dropdown to valid child types
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
+  const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
@@ -586,12 +587,7 @@ export default function GovernanceGroupsPage() {
                   : 'Generate governance template'
               }
               disabled={flatGroups.length > 0}
-              onClick={async () => {
-                try {
-                  await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
-                  fetchGroups();
-                } catch { /* */ }
-              }} />
+              onClick={() => setConfirmGenerate(true)} />
           )}
           {canWrite && (
             <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
@@ -599,6 +595,22 @@ export default function GovernanceGroupsPage() {
         </div>
       </div>
 
+      <ConfirmDialog
+        open={confirmGenerate}
+        title="Generate Governance Structure?"
+        message="This will create a standard DAMA-aligned governance structure: Council, Office, Committee, Stewardship Teams, and Working Group. You can customize the structure after creation."
+        confirmLabel="Generate"
+        variant="primary"
+        onConfirm={async () => {
+          setConfirmGenerate(false);
+          try {
+            await apiClient.post('/governance-groups/generate-template', { orgId: activeOrgId || undefined });
+            addToast('success', 'Governance structure generated');
+            fetchGroups();
+          } catch { addToast('error', 'Failed to generate governance structure'); }
+        }}
+        onCancel={() => setConfirmGenerate(false)}
+      />
       <ConfirmDialog
         open={showDeleteAll}
         title="Delete All Governance Groups?"
