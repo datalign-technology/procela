@@ -227,7 +227,7 @@ const emptyForm: GroupFormData = { name: '', type: 'COUNCIL', parentId: null, de
 
 // ── Tree Node Component ──
 
-function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, selectedId, expanded, toggleExpand }: {
+function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, selectedId, expanded, toggleExpand, checkedIds, onToggleCheck }: {
   node: GovernanceGroup; depth: number;
   onEdit: (group: GovernanceGroupFlat) => void;
   onDelete: (id: string) => void;
@@ -236,6 +236,8 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
   selectedId: string | null;
   expanded: Set<string>;
   toggleExpand: (id: string) => void;
+  checkedIds: Set<string>;
+  onToggleCheck: (id: string) => void;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
@@ -262,6 +264,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none' }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
+        <input type="checkbox" checked={checkedIds.has(node.id)} onChange={() => onToggleCheck(node.id)} onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer', flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
@@ -280,7 +283,8 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
         <GroupTreeNode key={child.id} node={child} depth={depth + 1}
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
           onSelect={onSelect} selectedId={selectedId}
-          expanded={expanded} toggleExpand={toggleExpand} />
+          expanded={expanded} toggleExpand={toggleExpand}
+          checkedIds={checkedIds} onToggleCheck={onToggleCheck} />
       ))}
     </div>
   );
@@ -341,6 +345,18 @@ export default function GovernanceGroupsPage() {
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  const toggleCheck = (id: string) => setCheckedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleCheckAll = () => {
+    if (checkedIds.size === flatGroups.length) setCheckedIds(new Set());
+    else setCheckedIds(new Set(flatGroups.map((g) => g.id)));
+  };
 
   // ── Data fetching ──
 
@@ -480,6 +496,18 @@ export default function GovernanceGroupsPage() {
     await apiClient.delete(`/governance-groups/${id}`);
     if (selectedGroupId === id) { setSelectedGroupId(null); setSelectedGroupDetail(null); }
     addToast('success', 'Governance group deleted');
+    fetchGroups();
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(checkedIds);
+    await Promise.all(ids.map((id) => apiClient.delete(`/governance-groups/${id}`)));
+    addToast('success', `Deleted ${ids.length} governance group${ids.length === 1 ? '' : 's'}`);
+    setCheckedIds(new Set());
+    if (selectedGroupId && checkedIds.has(selectedGroupId)) {
+      setSelectedGroupId(null);
+      setSelectedGroupDetail(null);
+    }
     fetchGroups();
   };
 
@@ -685,6 +713,14 @@ export default function GovernanceGroupsPage() {
         }}
         onCancel={() => setConfirmDelete(null)}
       />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${checkedIds.size} Governance Group${checkedIds.size === 1 ? '' : 's'}?`}
+        message="This will permanently delete the selected governance groups and re-parent any children. This cannot be undone."
+        confirmLabel={`Delete ${checkedIds.size}`}
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
 
       {/* Governance Hierarchy Guidance */}
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
@@ -765,9 +801,20 @@ export default function GovernanceGroupsPage() {
       {/* Tree View */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar */}
-        <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
-          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
+        <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
+          <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
+          {checkedIds.size > 0 ? (
+            <>
+              <span style={{ fontSize: 11, fontWeight: 600 }}>{checkedIds.size} selected</span>
+              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-error, #dc2626)' }} onClick={() => setConfirmBulkDelete(true)}>Delete Selected</button>
+              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => setCheckedIds(new Set())}>Clear</button>
+            </>
+          ) : (
+            <>
+              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
+              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
+            </>
+          )}
         </div>
 
         {/* Tree body — no inner scroll container. The page itself
@@ -785,7 +832,8 @@ export default function GovernanceGroupsPage() {
               <GroupTreeNode key={node.id} node={node} depth={0}
                 onEdit={openEdit} onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
                 onSelect={handleSelect} selectedId={selectedGroupId}
-                expanded={expanded} toggleExpand={toggleExpand} />
+                expanded={expanded} toggleExpand={toggleExpand}
+                checkedIds={checkedIds} onToggleCheck={toggleCheck} />
             ))
           )}
         </div>
