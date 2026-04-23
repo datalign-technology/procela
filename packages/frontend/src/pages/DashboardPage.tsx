@@ -49,42 +49,16 @@ const cardStyle: React.CSSProperties = {
 // user owns, stewards, and may need to act on.
 // ──────────────────────────────────────────────────────────────────────────
 
-interface MyItemsData {
-  person: { id: string; name: string; email: string; role: string; title: string } | null;
-  ownedProcesses: Array<{ id: string; name: string; level: string; status: string }>;
-  myAssets: Array<{ id: string; name: string; relation: string }>;
-  myRoles: Array<{ id: string; roleType: string; scopeType: string; scopeName: string }>;
-  myGroups: Array<{ id: string; name: string; type: string; groupRole: string }>;
-  myDomains: Array<{ id: string; name: string; relation: string }>;
-  actionItems: Array<{ type: string; message: string; link: string }>;
-}
-
-const DAMA_SHORT: Record<string, string> = {
-  CDO: 'CDO', DATA_GOVERNANCE_LEAD: 'Gov Lead', DATA_OWNER: 'Owner',
-  BUSINESS_DATA_STEWARD: 'Biz Steward', DATA_QUALITY_ANALYST: 'DQ Analyst',
-  TECHNICAL_DATA_STEWARD: 'Tech Steward', DATA_CUSTODIAN: 'Custodian',
-  DATA_ARCHITECT: 'Architect', DATA_ENGINEER: 'Engineer', DATABASE_ADMINISTRATOR: 'DBA',
-};
-
-const chipStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 4,
-  padding: '3px 10px', borderRadius: 4,
-  fontSize: 12, fontWeight: 500,
-  background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-  color: 'var(--color-text)',
-  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280,
-};
-
-function MyItems() {
+function MyDashboard() {
   const { user } = useAuthStore();
-  const [data, setData] = useState<MyItemsData | null>(null);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: MyItemsData }>('/dashboard/my-items');
+        const res = await apiClient.get<{ success: boolean; data: any }>('/dashboard/my-dashboard');
         setData(res.data);
       } catch { /* */ }
       finally { setLoading(false); }
@@ -93,146 +67,168 @@ function MyItems() {
 
   if (loading) return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{'My Items'}</h2>
-      <div style={{ ...cardStyle, color: 'var(--color-text-muted)', fontSize: 13 }}>{'Loading\u2026'}</div>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>My Dashboard</h2>
+      <div style={{ ...cardStyle, color: 'var(--color-text-muted)', fontSize: 13 }}>Loading...</div>
     </div>
   );
 
-  if (!data?.person) return null;  // user has no people record — skip silently
+  if (!data?.person) return null;
 
-  const hasAnything = (data.ownedProcesses.length + data.myAssets.length + data.myRoles.length + data.myGroups.length + data.myDomains.length) > 0;
+  const s = data.summary || {};
+  const priorityColor = (p: string) => p === 'CRITICAL' ? '#dc2626' : p === 'HIGH' ? '#f59e0b' : p === 'MEDIUM' ? '#3b82f6' : '#64748b';
+  const priorityBadge = (p: string): React.CSSProperties => ({
+    display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+    background: priorityColor(p) + '18', color: priorityColor(p),
+  });
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-        {'My Items'}
-      </h2>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>My Dashboard</h2>
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-        {'What you own, steward, and belong to \u2014 based on your login '}({data.person.email}).
+        Welcome back, {data.person.name}. Here\u2019s what needs your attention.
       </p>
 
-      {/* Action items */}
-      {data.actionItems.length > 0 && (
-        <div style={{ ...cardStyle, marginBottom: 12, borderLeft: '4px solid #f59e0b', padding: '14px 16px' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            {'Needs attention'}
+      {/* Summary KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)' }}>{s.openTasks || 0}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Open Tasks</div>
+          {s.overdueTasks > 0 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>{s.overdueTasks} overdue</div>}
+        </div>
+        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)' }}>{s.openIssues || 0}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Open Issues</div>
+          {s.criticalIssues > 0 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>{s.criticalIssues} critical</div>}
+        </div>
+        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{(s.domainsOwned || 0) + (s.domainsSteward || 0)}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>My Domains</div>
+        </div>
+        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>{s.upcomingEventsCount || 0}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Upcoming Events</div>
+        </div>
+      </div>
+
+      {/* Two-column: Attention + Schedule */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        {/* Needs Attention */}
+        <div style={{ ...cardStyle, borderLeft: '4px solid #f59e0b', padding: '14px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Needs My Attention
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {data.actionItems.map((a, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 13, color: 'var(--color-text)' }}>{a.message}</span>
-                <Link to={a.link} style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 500, flexShrink: 0, textDecoration: 'none' }}>
-                  View
+          {(data.myTasks || []).filter((t: any) => t.isOverdue).length === 0 &&
+           (data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').length === 0 &&
+           (data.pendingReviews || []).length === 0 ? (
+            <div style={{ color: '#16a34a', fontSize: 13 }}>All clear \u2014 no urgent items.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(data.myTasks || []).filter((t: any) => t.isOverdue).slice(0, 3).map((t: any) => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#dc2626' }}>Overdue: {t.title}</span>
+                  <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
+                </div>
+              ))}
+              {(data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').slice(0, 3).map((i: any) => (
+                <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#dc2626' }}>Critical: {i.title}</span>
+                  <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
+                </div>
+              ))}
+              {(data.pendingReviews || []).slice(0, 3).map((r: any) => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: r.isOverdue ? '#dc2626' : '#92400e' }}>{r.isOverdue ? 'Overdue review' : 'Review due'}: {r.name}</span>
+                  <Link to="/governance-policies" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* My Schedule */}
+        <div style={{ ...cardStyle, borderLeft: '4px solid #3b82f6', padding: '14px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#1e40af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            My Schedule
+          </div>
+          {(data.upcomingEvents || []).length === 0 ? (
+            <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No upcoming events in the next 14 days.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(data.upcomingEvents || []).slice(0, 5).map((e: any, i: number) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12 }}>{e.name}</span>
+                  <span style={{ fontSize: 10, color: e.daysAway === 0 ? '#dc2626' : 'var(--color-text-muted)', fontWeight: e.daysAway === 0 ? 600 : 400 }}>
+                    {e.daysAway === 0 ? 'Today' : e.daysAway === 1 ? 'Tomorrow' : `In ${e.daysAway} days`}
+                  </span>
+                </div>
+              ))}
+              <Link to="/governance-calendar" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 4 }}>View calendar</Link>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* My Domains */}
+      {(data.myDomains || []).length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>My Domains</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+            {(data.myDomains || []).map((d: any) => {
+              const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
+              return (
+                <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{d.name}</span>
+                    <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: d.relation === 'owner' ? '#1e40af' : '#065f46', background: d.relation === 'owner' ? '#dbeafe' : '#d1f0eb', padding: '1px 5px', borderRadius: 3 }}>{d.relation}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{d.assetCount} assets &middot; {healthPct}% healthy</div>
+                  <div style={{ height: 4, background: '#e5e7eb', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${healthPct}%`, background: healthPct >= 80 ? '#22c55e' : healthPct >= 50 ? '#f59e0b' : '#dc2626', borderRadius: 2 }} />
+                  </div>
                 </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* My Tasks (top 5) */}
+      {(data.myTasks || []).length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Tasks</span>
+            <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks.length}</Link>
+          </div>
+          <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+            {(data.myTasks || []).slice(0, 5).map((t: any, i: number) => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
+                <span style={priorityBadge(t.priority)}>{t.priority}</span>
+                <span style={{ flex: 1 }}>{t.title}</span>
+                {t.dueDate && <span style={{ fontSize: 10, color: t.isOverdue ? '#dc2626' : 'var(--color-text-muted)' }}>{t.isOverdue ? 'Overdue' : new Date(t.dueDate).toLocaleDateString()}</span>}
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{t.status.replace(/_/g, ' ')}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {!hasAnything && (
-        <div style={{ ...cardStyle, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13, padding: 24 }}>
-          {'No processes, assets, roles, or groups are assigned to you yet.'}
-        </div>
-      )}
-
-      {hasAnything && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-          {/* Owned processes */}
-          {data.ownedProcesses.length > 0 && (
-            <div style={cardStyle}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                {'My Processes'} ({data.ownedProcesses.length})
+      {/* My Issues (top 5) */}
+      {(data.myIssues || []).length > 0 && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Issues</span>
+            <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues.length}</Link>
+          </div>
+          <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+            {(data.myIssues || []).slice(0, 5).map((issue: any, i: number) => (
+              <div key={issue.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
+                <span style={priorityBadge(issue.severity)}>{issue.severity}</span>
+                <span style={{ flex: 1 }}>{issue.title}</span>
+                {issue.domainName && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.domainName}</span>}
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{issue.status.replace(/_/g, ' ')}</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {data.ownedProcesses.slice(0, 6).map((p) => (
-                  <Link key={p.id} to="/processes" style={{ ...chipStyle, textDecoration: 'none' }}>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{p.level}</span>
-                    {p.name}
-                    <span style={{ fontSize: 10, color: p.status === 'ACTIVE' ? '#0f4f46' : '#64748b', marginLeft: 'auto' }}>{p.status}</span>
-                  </Link>
-                ))}
-                {data.ownedProcesses.length > 6 && (
-                  <Link to="/processes" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>
-                    {`+${data.ownedProcesses.length - 6} more`}
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Data assets */}
-          {data.myAssets.length > 0 && (
-            <div style={cardStyle}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                {'My Data Assets'} ({data.myAssets.length})
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {data.myAssets.slice(0, 6).map((a) => (
-                  <Link key={a.id} to="/data-assets" style={{ ...chipStyle, textDecoration: 'none' }}>
-                    {a.name}
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto', textTransform: 'uppercase' }}>{a.relation}</span>
-                  </Link>
-                ))}
-                {data.myAssets.length > 6 && (
-                  <Link to="/data-assets" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>
-                    {`+${data.myAssets.length - 6} more`}
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Governance roles */}
-          {data.myRoles.length > 0 && (
-            <div style={cardStyle}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                {'My Governance Roles'} ({data.myRoles.length})
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {data.myRoles.map((r) => (
-                  <Link key={r.id} to="/governance?tab=roles" style={{ ...chipStyle, textDecoration: 'none' }}>
-                    <strong>{DAMA_SHORT[r.roleType] || r.roleType}</strong>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{r.scopeName}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Governance groups */}
-          {data.myGroups.length > 0 && (
-            <div style={cardStyle}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                {'My Groups'} ({data.myGroups.length})
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {data.myGroups.map((g) => (
-                  <Link key={g.id} to="/governance?tab=groups" style={{ ...chipStyle, textDecoration: 'none' }}>
-                    {g.name}
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>{g.groupRole}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Domain responsibilities */}
-          {data.myDomains.length > 0 && (
-            <div style={cardStyle}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                {'My Domains'} ({data.myDomains.length})
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {data.myDomains.map((d) => (
-                  <Link key={d.id} to="/governance?tab=domains" style={{ ...chipStyle, textDecoration: 'none' }}>
-                    {d.name}
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 'auto', textTransform: 'uppercase' }}>{d.relation}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -268,12 +264,12 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myItems' | 'overview' | 'programMaturity' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'programMaturity', 'alerts', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'alerts', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
-  myItems: 'My Items',
+  myDashboard: 'My Dashboard',
   overview: 'Overview',
   programMaturity: 'Program Maturity',
   alerts: 'Alerts',
@@ -863,7 +859,7 @@ export default function DashboardPage() {
 
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
-    myItems: <MyItems />,
+    myDashboard: <MyDashboard />,
     overview: <StatsOverview stats={stats} />,
     programMaturity: <ProgramMaturity />,
     alerts: <DashboardAlerts stats={stats} />,
