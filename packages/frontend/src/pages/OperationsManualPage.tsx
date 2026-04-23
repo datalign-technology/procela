@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
+import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
 interface RoleManual {
   roleType: string;
@@ -254,7 +254,7 @@ export default function OperationsManualPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERNANCE_TABS} />
+      <PageTabNav tabs={OPERATE_TABS} />
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
