@@ -52,6 +52,7 @@ import governanceControlsRouter from './routes/governance-controls';
 import governanceTasksRouter from './routes/governance-tasks';
 import governanceIssuesRouter from './routes/governance-issues';
 import controlTowerRouter from './routes/control-tower';
+import governanceProgramRouter from './routes/governance-program';
 
 const app = express();
 
@@ -113,6 +114,7 @@ app.use('/api/v1/governance-controls', authenticateToken, governanceControlsRout
 app.use('/api/v1/governance-tasks', authenticateToken, governanceTasksRouter);
 app.use('/api/v1/governance-issues', authenticateToken, governanceIssuesRouter);
 app.use('/api/v1/control-tower', authenticateToken, controlTowerRouter);
+app.use('/api/v1/governance-program', authenticateToken, governanceProgramRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -147,6 +149,7 @@ import { governancePolicies } from './routes/governance-policies';
 import { governanceControls } from './routes/governance-controls';
 import { governanceTasks } from './routes/governance-tasks';
 import { governanceIssues } from './routes/governance-issues';
+import { governancePrograms } from './routes/governance-program';
 
 const stores = {
   processNodes: () => processNodes,
@@ -178,6 +181,7 @@ const stores = {
   governanceControls: () => governanceControls,
   governanceTasks: () => governanceTasks,
   governanceIssues: () => governanceIssues,
+  governancePrograms: () => governancePrograms,
 };
 const autoSaveHandle = startAutoSave(stores);
 

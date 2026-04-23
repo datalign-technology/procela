@@ -1,0 +1,511 @@
+import { Router, Request, Response } from 'express';
+import { v4 as uuid } from 'uuid';
+import { auditService } from '../services/audit.service';
+import { loadStore, saveStore } from '../lib/persistence';
+import { filterByOrgScope } from '../lib/org-scope';
+import logger from '../lib/logger';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type OperatingModel = 'CENTRALIZED' | 'FEDERATED' | 'HYBRID' | '';
+export type ProgramStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+
+export interface StoredGovernanceProgram {
+  id: string;
+  orgId: string;
+  name: string;
+  scope: {
+    inScope: string;
+    outOfScope: string;
+    boundaries: string;
+    constraints: string;
+  };
+  principles: {
+    vision: string;
+    principles: string[];
+    decisionRights: string;
+    operatingModel: OperatingModel;
+  };
+  targetStartDate: string | null;
+  targetLaunchDate: string | null;
+  status: ProgramStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PhaseCheck {
+  label: string;
+  done: boolean;
+}
+
+interface PhaseInfo {
+  name: string;
+  completed: boolean;
+  progress: number;
+  checks: PhaseCheck[];
+}
+
+interface PhaseStatus {
+  currentPhase: 1 | 2 | 3 | 4;
+  phases: {
+    phase1: PhaseInfo;
+    phase2: PhaseInfo;
+    phase3: PhaseInfo;
+    phase4: PhaseInfo;
+  };
+  overallProgress: number;
+}
+
+interface Recommendation {
+  phase: 1 | 2 | 3 | 4;
+  action: string;
+  link: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+// ---------------------------------------------------------------------------
+// Store
+// ---------------------------------------------------------------------------
+
+export const governancePrograms: StoredGovernanceProgram[] =
+  loadStore<StoredGovernanceProgram>('governancePrograms');
+
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
+function buildDefaultProgram(orgId: string): StoredGovernanceProgram {
+  const now = new Date().toISOString();
+  return {
+    id: uuid(),
+    orgId,
+    name: 'Data Governance Program',
+    scope: { inScope: '', outOfScope: '', boundaries: '', constraints: '' },
+    principles: { vision: '', principles: [], decisionRights: '', operatingModel: '' },
+    targetStartDate: null,
+    targetLaunchDate: null,
+    status: 'PLANNING',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase computation
+// ---------------------------------------------------------------------------
+
+function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
+  // Defensive require avoids circular dependency issues when this module
+  // is imported during the initial load of its siblings.
+  let domains: any[] = [];
+  let governanceGroups: any[] = [];
+  let damaRoles: any[] = [];
+  let processNodes: any[] = [];
+  let policies: any[] = [];
+  let governanceTasks: any[] = [];
+  try { domains = require('./data-domains').dataDomains; } catch {}
+  try { governanceGroups = require('./governance-groups').governanceGroups; } catch {}
+  try { damaRoles = require('./dama-roles').damaRoles; } catch {}
+  try { processNodes = require('./process-catalog').processNodes; } catch {}
+  try { policies = require('./governance-policies').governancePolicies; } catch {}
+  try { governanceTasks = require('./governance-tasks').governanceTasks; } catch {}
+
+  const orgId = program.orgId;
+
+  const orgDomains = domains.filter((d: any) => d.orgId === orgId);
+  const orgGroups = governanceGroups.filter((g: any) => g.orgId === orgId);
+  const orgRoles = damaRoles.filter(
+    (r: any) => r.scopeType === 'ORG' && r.scopeId === orgId,
+  );
+  const orgPolicies = policies.filter((p: any) => p.orgId === orgId);
+  const orgProcesses = processNodes.filter((n: any) => n.orgId === orgId);
+
+  // ── Phase 1 — Foundation Definition
+  const phase1Checks: PhaseCheck[] = [
+    {
+      label: 'Scope defined',
+      done: (program.scope?.inScope || '').trim().length > 0,
+    },
+    {
+      label: 'Guiding principles established',
+      done: (program.principles?.principles || []).length > 0,
+    },
+    {
+      label: 'Operating model selected',
+      done: (program.principles?.operatingModel || '') !== '',
+    },
+  ];
+
+  // ── Phase 2 — Structural Design
+  const phase2Checks: PhaseCheck[] = [
+    {
+      label: 'Data domains defined',
+      done: orgDomains.length >= 1,
+    },
+    {
+      label: 'Governance Council established',
+      done: orgGroups.some((g: any) => g.type === 'COUNCIL'),
+    },
+    {
+      label: 'Governance Committee established',
+      done: orgGroups.some((g: any) => g.type === 'COMMITTEE'),
+    },
+    {
+      label: 'Initial roles assigned',
+      done: orgRoles.length >= 1,
+    },
+  ];
+
+  // ── Phase 3 — People & Processes
+  const hasDataSteward = orgRoles.some(
+    (r: any) =>
+      r.roleType === 'BUSINESS_DATA_STEWARD' ||
+      r.roleType === 'TECHNICAL_DATA_STEWARD',
+  );
+  const hasStewardshipTeam = orgGroups.some(
+    (g: any) => g.type === 'STEWARDSHIP_TEAM',
+  );
+  const allDomainsOwned =
+    orgDomains.length > 0 && orgDomains.every((d: any) => !!d.ownerId);
+
+  const phase3Checks: PhaseCheck[] = [
+    { label: 'Data stewards identified', done: hasDataSteward },
+    { label: 'Stewardship teams formed', done: hasStewardshipTeam },
+    { label: 'Domain ownership assigned', done: allDomainsOwned },
+  ];
+
+  // ── Phase 4 — Operationalization
+  const hasGovernanceProcesses = orgProcesses.some((n: any) => {
+    const name: string = n?.name || '';
+    return /governance|data management/i.test(name);
+  });
+  const hasActivePolicy = orgPolicies.some((p: any) => p.status === 'ACTIVE');
+  const programLaunched = program.status === 'ACTIVE';
+
+  const phase4Checks: PhaseCheck[] = [
+    { label: 'Core processes defined', done: hasGovernanceProcesses },
+    { label: 'Policies activated', done: hasActivePolicy },
+    { label: 'Program launched', done: programLaunched },
+  ];
+
+  function progressOf(checks: PhaseCheck[]): number {
+    if (checks.length === 0) return 0;
+    const done = checks.filter((c) => c.done).length;
+    return Math.round((done / checks.length) * 100);
+  }
+  function completedAll(checks: PhaseCheck[]): boolean {
+    return checks.length > 0 && checks.every((c) => c.done);
+  }
+
+  const phase1: PhaseInfo = {
+    name: 'Foundation Definition',
+    completed: completedAll(phase1Checks),
+    progress: progressOf(phase1Checks),
+    checks: phase1Checks,
+  };
+  const phase2: PhaseInfo = {
+    name: 'Structural Design',
+    completed: completedAll(phase2Checks),
+    progress: progressOf(phase2Checks),
+    checks: phase2Checks,
+  };
+  const phase3: PhaseInfo = {
+    name: 'People & Processes',
+    completed: completedAll(phase3Checks),
+    progress: progressOf(phase3Checks),
+    checks: phase3Checks,
+  };
+  const phase4: PhaseInfo = {
+    name: 'Operationalization',
+    completed: completedAll(phase4Checks),
+    progress: progressOf(phase4Checks),
+    checks: phase4Checks,
+  };
+
+  // Current phase = first incomplete phase; if all complete, stay at 4.
+  let currentPhase: 1 | 2 | 3 | 4 = 4;
+  if (!phase1.completed) currentPhase = 1;
+  else if (!phase2.completed) currentPhase = 2;
+  else if (!phase3.completed) currentPhase = 3;
+  else currentPhase = 4;
+
+  const allChecks = [
+    ...phase1Checks,
+    ...phase2Checks,
+    ...phase3Checks,
+    ...phase4Checks,
+  ];
+  const overallProgress = progressOf(allChecks);
+
+  return {
+    currentPhase,
+    phases: { phase1, phase2, phase3, phase4 },
+    overallProgress,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Recommendations
+// ---------------------------------------------------------------------------
+
+function computeRecommendations(program: StoredGovernanceProgram): Recommendation[] {
+  const status = computePhaseStatus(program);
+  const recs: Recommendation[] = [];
+
+  // Phase 1
+  if (!status.phases.phase1.completed) {
+    for (const check of status.phases.phase1.checks) {
+      if (check.done) continue;
+      if (check.label === 'Scope defined') {
+        recs.push({
+          phase: 1,
+          action: 'Define governance scope',
+          link: '/governance-program',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Guiding principles established') {
+        recs.push({
+          phase: 1,
+          action: 'Establish guiding principles',
+          link: '/governance-program',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Operating model selected') {
+        recs.push({
+          phase: 1,
+          action: 'Select an operating model',
+          link: '/governance-program',
+          priority: 'HIGH',
+        });
+      }
+    }
+    return recs;
+  }
+
+  // Phase 2
+  if (!status.phases.phase2.completed) {
+    for (const check of status.phases.phase2.checks) {
+      if (check.done) continue;
+      if (check.label === 'Data domains defined') {
+        recs.push({
+          phase: 2,
+          action: 'Create at least one data domain',
+          link: '/data-domains',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Governance Council established') {
+        recs.push({
+          phase: 2,
+          action: 'Establish a Data Governance Council',
+          link: '/governance-groups',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Governance Committee established') {
+        recs.push({
+          phase: 2,
+          action: 'Establish a Data Governance Committee',
+          link: '/governance-groups',
+          priority: 'MEDIUM',
+        });
+      } else if (check.label === 'Initial roles assigned') {
+        recs.push({
+          phase: 2,
+          action: 'Assign initial DAMA governance roles',
+          link: '/people',
+          priority: 'MEDIUM',
+        });
+      }
+    }
+    return recs;
+  }
+
+  // Phase 3
+  if (!status.phases.phase3.completed) {
+    for (const check of status.phases.phase3.checks) {
+      if (check.done) continue;
+      if (check.label === 'Data stewards identified') {
+        recs.push({
+          phase: 3,
+          action: 'Assign a Business Data Steward',
+          link: '/people',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Stewardship teams formed') {
+        recs.push({
+          phase: 3,
+          action: 'Form a stewardship team',
+          link: '/governance-groups',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Domain ownership assigned') {
+        recs.push({
+          phase: 3,
+          action: 'Assign owners to every data domain',
+          link: '/data-domains',
+          priority: 'MEDIUM',
+        });
+      }
+    }
+    return recs;
+  }
+
+  // Phase 4
+  if (!status.phases.phase4.completed) {
+    for (const check of status.phases.phase4.checks) {
+      if (check.done) continue;
+      if (check.label === 'Core processes defined') {
+        recs.push({
+          phase: 4,
+          action: 'Define core governance processes',
+          link: '/process-catalog',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Policies activated') {
+        recs.push({
+          phase: 4,
+          action: 'Activate at least one governance policy',
+          link: '/governance-policies',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Program launched') {
+        recs.push({
+          phase: 4,
+          action: 'Launch the governance program (set status to ACTIVE)',
+          link: '/governance-program',
+          priority: 'HIGH',
+        });
+      }
+    }
+    return recs;
+  }
+
+  return recs;
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+
+const router = Router();
+
+/**
+ * GET /api/v1/governance-program?orgId=X
+ * Returns the program for the given org. Creates a default program if none
+ * exists so the UI always has something to render.
+ */
+router.get('/', (req: Request, res: Response) => {
+  const orgIdQuery = req.query.orgId as string | undefined;
+  const orgId = orgIdQuery || DEV_ORG_ID;
+
+  // Prefer an exact-match program for this org. Fall back to org-scope
+  // filter only if no direct match — programs are per-org.
+  let program = governancePrograms.find((p) => p.orgId === orgId);
+  if (!program) {
+    const scoped = filterByOrgScope(governancePrograms, orgId);
+    program = scoped[0];
+  }
+
+  if (!program) {
+    program = buildDefaultProgram(orgId);
+    governancePrograms.push(program);
+    saveStore('governancePrograms', governancePrograms);
+    auditService.log(orgId, null, 'GovernanceProgram', program.id, 'CREATE', null, program);
+    logger.info({ programId: program.id, orgId }, 'Created default governance program');
+  }
+
+  res.json({ success: true, data: program });
+});
+
+/** PUT /api/v1/governance-program/:id — update the program */
+router.put('/:id', (req: Request, res: Response) => {
+  const program = governancePrograms.find((p) => p.id === req.params.id);
+  if (!program) {
+    res.status(404).json({ success: false, error: 'Governance program not found' });
+    return;
+  }
+
+  const before = JSON.parse(JSON.stringify(program));
+  const { name, scope, principles, targetStartDate, targetLaunchDate, status } = req.body || {};
+
+  if (name !== undefined) program.name = String(name);
+
+  if (scope !== undefined && scope && typeof scope === 'object') {
+    program.scope = {
+      inScope: typeof scope.inScope === 'string' ? scope.inScope : program.scope.inScope,
+      outOfScope: typeof scope.outOfScope === 'string' ? scope.outOfScope : program.scope.outOfScope,
+      boundaries: typeof scope.boundaries === 'string' ? scope.boundaries : program.scope.boundaries,
+      constraints: typeof scope.constraints === 'string' ? scope.constraints : program.scope.constraints,
+    };
+  }
+
+  if (principles !== undefined && principles && typeof principles === 'object') {
+    const nextOperatingModel: OperatingModel =
+      principles.operatingModel === 'CENTRALIZED' ||
+      principles.operatingModel === 'FEDERATED' ||
+      principles.operatingModel === 'HYBRID' ||
+      principles.operatingModel === ''
+        ? principles.operatingModel
+        : program.principles.operatingModel;
+
+    program.principles = {
+      vision: typeof principles.vision === 'string' ? principles.vision : program.principles.vision,
+      principles: Array.isArray(principles.principles)
+        ? principles.principles.filter((x: any) => typeof x === 'string')
+        : program.principles.principles,
+      decisionRights: typeof principles.decisionRights === 'string'
+        ? principles.decisionRights
+        : program.principles.decisionRights,
+      operatingModel: nextOperatingModel,
+    };
+  }
+
+  if (targetStartDate !== undefined) {
+    program.targetStartDate = targetStartDate ? String(targetStartDate) : null;
+  }
+  if (targetLaunchDate !== undefined) {
+    program.targetLaunchDate = targetLaunchDate ? String(targetLaunchDate) : null;
+  }
+
+  if (status !== undefined) {
+    const valid: ProgramStatus[] = ['PLANNING', 'ACTIVE', 'PAUSED', 'COMPLETED'];
+    if (!valid.includes(status)) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid status. Must be one of: ${valid.join(', ')}`,
+      });
+      return;
+    }
+    program.status = status;
+  }
+
+  program.updatedAt = new Date().toISOString();
+  saveStore('governancePrograms', governancePrograms);
+  auditService.log(program.orgId, null, 'GovernanceProgram', program.id, 'UPDATE', before, program);
+  logger.info({ programId: program.id }, 'Updated governance program');
+
+  res.json({ success: true, data: program });
+});
+
+/** GET /api/v1/governance-program/:id/status — compute current phase */
+router.get('/:id/status', (req: Request, res: Response) => {
+  const program = governancePrograms.find((p) => p.id === req.params.id);
+  if (!program) {
+    res.status(404).json({ success: false, error: 'Governance program not found' });
+    return;
+  }
+  const status = computePhaseStatus(program);
+  res.json({ success: true, data: status });
+});
+
+/** GET /api/v1/governance-program/:id/recommendations — next-step suggestions */
+router.get('/:id/recommendations', (req: Request, res: Response) => {
+  const program = governancePrograms.find((p) => p.id === req.params.id);
+  if (!program) {
+    res.status(404).json({ success: false, error: 'Governance program not found' });
+    return;
+  }
+  const recommendations = computeRecommendations(program);
+  res.json({ success: true, data: recommendations });
+});
+
+export default router;
