@@ -297,7 +297,7 @@ export default function Layout() {
     setSearchOpen(false);
     setSearchQuery('');
     const route = typeRouteMap[result.type] || '/';
-    navigate(route);
+    navigate(`${route}?highlight=${result.id}`);
   };
 
   const fetchOrgs = useCallback(async () => {

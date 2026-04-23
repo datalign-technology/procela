@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -242,6 +242,8 @@ export default function DataAssetsPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
@@ -341,6 +343,23 @@ export default function DataAssetsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   usePolling(fetchData, 30000);
+
+  // Highlight row when arriving from global search
+  useEffect(() => {
+    if (highlightId) {
+      const el = document.getElementById(`row-${highlightId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.animation = 'highlightPulse 2s ease-out';
+        setTimeout(() => {
+          el.style.animation = '';
+          const params = new URLSearchParams(searchParams);
+          params.delete('highlight');
+          setSearchParams(params, { replace: true });
+        }, 2000);
+      }
+    }
+  }, [highlightId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const systemName = (systemId: string) => {
     const sys = systems.find((s) => s.id === systemId);
@@ -516,8 +535,32 @@ export default function DataAssetsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const asset = assets.find((a) => a.id === id);
     await apiClient.delete(`/data-assets/${id}`);
     fetchData();
+    if (asset) {
+      addToast('success', `"${asset.name}" deleted`, {
+        action: {
+          label: 'Undo',
+          handler: async () => {
+            await apiClient.post('/data-assets', {
+              name: asset.name, description: asset.description,
+              systemId: asset.systemId, owner: asset.owner,
+              stewardIds: asset.stewardIds,
+              governanceTier: asset.governanceTier,
+              category: asset.category,
+              dataClassification: asset.dataClassification,
+              retentionPolicy: asset.retentionPolicy,
+              refreshFrequency: asset.refreshFrequency,
+              ...(activeOrgId ? { orgId: activeOrgId } : {}),
+            });
+            addToast('success', `"${asset.name}" restored`);
+            fetchData();
+          },
+        },
+        duration: 6000,
+      });
+    }
   };
 
   const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
@@ -655,6 +698,7 @@ export default function DataAssetsPage() {
 
   return (
     <div>
+      <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
@@ -1032,7 +1076,7 @@ export default function DataAssetsPage() {
                 const cols = columnsMap[asset.id] || [];
                 return (
                   <React.Fragment key={asset.id}>
-                  <tr style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
+                  <tr id={`row-${asset.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
                       <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelect(asset.id)} />
                     </td>

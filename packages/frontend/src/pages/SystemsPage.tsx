@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -130,6 +130,8 @@ export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
@@ -169,6 +171,23 @@ export default function SystemsPage() {
 
   usePolling(fetchData, 30000);
 
+  // Highlight row when arriving from global search
+  useEffect(() => {
+    if (highlightId) {
+      const el = document.getElementById(`row-${highlightId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.animation = 'highlightPulse 2s ease-out';
+        setTimeout(() => {
+          el.style.animation = '';
+          const params = new URLSearchParams(searchParams);
+          params.delete('highlight');
+          setSearchParams(params, { replace: true });
+        }, 2000);
+      }
+    }
+  }, [highlightId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
   const openEdit = (sys: SystemEntity) => {
@@ -201,9 +220,31 @@ export default function SystemsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const sys = systems.find((s) => s.id === id);
     await apiClient.delete(`/systems/${id}`);
-    addToast('success', 'System deleted');
     fetchData();
+    if (sys) {
+      addToast('success', `"${sys.name}" deleted`, {
+        action: {
+          label: 'Undo',
+          handler: async () => {
+            await apiClient.post('/systems', {
+              name: sys.name, description: sys.description,
+              systemType: sys.systemType,
+              businessCriticality: sys.businessCriticality,
+              vendor: sys.vendor,
+              integrationPoints: sys.integrationPoints,
+              ...(activeOrgId ? { orgId: activeOrgId } : {}),
+            });
+            addToast('success', `"${sys.name}" restored`);
+            fetchData();
+          },
+        },
+        duration: 6000,
+      });
+    } else {
+      addToast('success', 'System deleted');
+    }
   };
 
   const inlineSaveField = async (systemId: string, field: string, value: string) => {
@@ -309,6 +350,7 @@ export default function SystemsPage() {
 
   return (
     <div>
+      <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
@@ -567,7 +609,7 @@ export default function SystemsPage() {
                 const sysConnections = connections.filter((c) => c.systemId === sys.id);
                 const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
                 return (
-                  <tr key={sys.id} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
+                  <tr key={sys.id} id={`row-${sys.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
                     onMouseEnter={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = ''; }}>
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
