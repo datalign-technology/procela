@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import GovernanceTasksPage from './GovernanceTasksPage';
 import GovernanceIssuesPage from './GovernanceIssuesPage';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
+import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceWorkPage — tabbed hub for governance tasks and issues.
@@ -17,6 +18,7 @@ const TABS: { id: WorkTab; label: string }[] = [
 ];
 
 export default function GovernanceWorkPage() {
+  const deps = useDependencyChecks();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as WorkTab | null;
   const active: WorkTab = TABS.some((t) => t.id === tabParam) ? (tabParam as WorkTab) : 'tasks';
@@ -26,6 +28,10 @@ export default function GovernanceWorkPage() {
   return (
     <div>
       <PageTabNav tabs={GOVERNANCE_TABS} />
+      <DependencyBanner phase="Governance work flows from established policies and structure." checks={[
+        { label: 'Create governance policies', met: deps.hasPolicies, link: '/governance-policies' },
+        { label: 'Assign data stewards', met: deps.hasStewards, link: '/people' },
+      ]} />
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Work</h1>

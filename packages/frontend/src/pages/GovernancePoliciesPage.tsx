@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
+import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 // ── Types ──
 
@@ -107,6 +108,7 @@ const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display
 export default function GovernancePoliciesPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
+  const deps = useDependencyChecks();
   const { addToast } = useToastStore();
 
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -222,6 +224,10 @@ export default function GovernancePoliciesPage() {
   return (
     <div>
       <PageTabNav tabs={GOVERNANCE_TABS} />
+      <DependencyBanner phase="Policies should follow governance structure and domain definition." checks={[
+        { label: 'Create data domains', met: deps.hasDomains, link: '/data-domains' },
+        { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },
+      ]} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>

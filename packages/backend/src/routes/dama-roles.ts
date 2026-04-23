@@ -4,6 +4,7 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
+import { governanceTasks } from './governance-tasks';
 
 export const DAMA_ROLE_TYPES = [
   // Executive/Strategic
@@ -115,7 +116,46 @@ router.post('/', (req: Request, res: Response) => {
   };
   damaRoles.push(role);
   saveStore('damaRoles', damaRoles);
-  res.status(201).json({ success: true, data: { ...role, personName: person.name } });
+
+  // Auto-generate onboarding tasks for steward roles
+  let onboardingTaskCount = 0;
+  if (roleType === 'BUSINESS_DATA_STEWARD' || roleType === 'TECHNICAL_DATA_STEWARD') {
+    const STEWARD_ONBOARDING_TASKS = [
+      { title: 'Review governance policies and standards', description: 'Read and acknowledge the organization\'s data governance policies, data standards, and quality guidelines.', taskType: 'STEWARDSHIP', dueOffset: 7 },
+      { title: 'Complete data steward training', description: 'Complete the steward training module covering responsibilities, tools, escalation procedures, and reporting requirements.', taskType: 'STEWARDSHIP', dueOffset: 14 },
+      { title: 'Meet with domain owner and team', description: 'Schedule and complete introductory meetings with your data domain owner, governance lead, and fellow stewards.', taskType: 'STEWARDSHIP', dueOffset: 21 },
+      { title: 'Document initial data quality assessment', description: 'Perform an initial assessment of data quality in your assigned domain and document findings, priorities, and a 90-day improvement plan.', taskType: 'STEWARDSHIP', dueOffset: 90 },
+    ];
+
+    const now = new Date();
+    for (const template of STEWARD_ONBOARDING_TASKS) {
+      const dueDate = new Date(now.getTime() + template.dueOffset * 24 * 60 * 60 * 1000);
+      governanceTasks.push({
+        id: uuid(),
+        orgId: scopeId,
+        title: template.title,
+        description: template.description,
+        taskType: template.taskType as any,
+        status: 'OPEN',
+        priority: 'MEDIUM',
+        assigneeId: personId,
+        dueDate: dueDate.toISOString(),
+        linkedObjectType: 'DamaRole',
+        linkedObjectId: role.id,
+        automationMode: 'HUMAN',
+        resolution: null,
+        createdBy: null,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        completedAt: null,
+      });
+    }
+    saveStore('governanceTasks', governanceTasks);
+    onboardingTaskCount = STEWARD_ONBOARDING_TASKS.length;
+    logger.info({ roleId: role.id, personId, roleType, tasksCreated: onboardingTaskCount }, 'Created steward onboarding tasks');
+  }
+
+  res.status(201).json({ success: true, data: { ...role, personName: person.name }, onboardingTasks: onboardingTaskCount });
 });
 
 /** DELETE /api/v1/dama-roles/:id — remove assignment */

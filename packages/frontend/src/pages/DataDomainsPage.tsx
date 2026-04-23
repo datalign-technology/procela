@@ -17,6 +17,7 @@ import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
+import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 interface DataDomain {
   id: string;
@@ -98,6 +99,7 @@ const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECAT
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
+  const deps = useDependencyChecks();
   const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -404,6 +406,10 @@ export default function DataDomainsPage() {
   return (
     <div>
       <PageTabNav tabs={GOVERNANCE_TABS} />
+      <DependencyBanner phase="Domains depend on scope and principles being defined first." checks={[
+        { label: 'Define governance scope', met: deps.hasScope, link: '/governance-program' },
+        { label: 'Establish guiding principles', met: deps.hasPrinciples, link: '/governance-program' },
+      ]} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>

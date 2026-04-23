@@ -6,6 +6,7 @@ import { exportCsv } from '../lib/exportCsv';
 import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
+import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 interface RaciRow {
   id: string;
@@ -71,6 +72,7 @@ const tdStyle: React.CSSProperties = {
 
 export default function RaciMatrixPage() {
   const { activeOrgId } = useOrgContext();
+  const deps = useDependencyChecks();
   const [data, setData] = useState<RaciData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -225,6 +227,11 @@ export default function RaciMatrixPage() {
   return (
     <div>
       <PageTabNav tabs={GOVERNANCE_TABS} />
+      <DependencyBanner phase="RACI depends on domains and governance structure being defined first." checks={[
+        { label: 'Create at least one data domain', met: deps.hasDomains, link: '/data-domains' },
+        { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },
+        { label: 'Assign governance roles', met: deps.hasRoles, link: '/people' },
+      ]} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.5rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>RACI Matrix</h1>
         <InfoTip term="RACI" />

@@ -420,16 +420,18 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myItems' | 'overview' | 'wizard' | 'alerts' | 'whatsNext' | 'checklist' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myItems' | 'overview' | 'programMaturity' | 'wizard' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'checklist' | 'quickActions' | 'recentActivity';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'wizard', 'alerts', 'whatsNext', 'checklist', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'programMaturity', 'wizard', 'alerts', 'whatsNext', 'stewardOnboarding', 'checklist', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myItems: 'My Items',
   overview: 'Overview',
+  programMaturity: 'Program Maturity',
   wizard: 'Governance Setup',
   alerts: 'Alerts',
   whatsNext: "What's Next",
+  stewardOnboarding: 'Steward Onboarding',
   checklist: 'Getting Started',
   quickActions: 'Quick Actions',
   recentActivity: 'Recent Activity',
@@ -852,6 +854,119 @@ function RecentActivity() {
   );
 }
 
+function ProgramMaturity() {
+  const { activeOrgId } = useOrgContext();
+  const [status, setStatus] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const progRes = await apiClient.get<any>(`/governance-program?orgId=${activeOrgId || ''}`);
+        const prog = progRes.data;
+        if (!prog?.id) return;
+        const [statusRes, recRes] = await Promise.all([
+          apiClient.get<any>(`/governance-program/${prog.id}/status`),
+          apiClient.get<any>(`/governance-program/${prog.id}/recommendations`),
+        ]);
+        setStatus(statusRes.data);
+        setRecommendations(recRes.data || []);
+      } catch { /* */ }
+    })();
+  }, [activeOrgId]);
+
+  if (!status) return null;
+
+  const phaseNames = ['', 'Foundation Definition', 'Structural Design', 'People & Processes', 'Operationalization'];
+  const phaseColors = ['', '#3b82f6', '#8b5cf6', '#22c55e', '#f97316'];
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Program Maturity</h2>
+      <div style={{ ...cardStyle, padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: phaseColors[status.currentPhase],
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 18, fontWeight: 700,
+          }}>
+            {status.currentPhase}
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Phase {status.currentPhase}: {phaseNames[status.currentPhase]}</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{status.overallProgress}% overall progress</div>
+          </div>
+        </div>
+        <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+          <div style={{ height: '100%', width: `${status.overallProgress}%`, background: phaseColors[status.currentPhase], borderRadius: 3, transition: 'width 0.3s' }} />
+        </div>
+        {recommendations.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Next steps to advance</div>
+            {recommendations.slice(0, 3).map((r: any, i: number) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12 }}>
+                <span style={{ color: r.priority === 'HIGH' ? '#dc2626' : '#d97706', fontSize: 8 }}>●</span>
+                <span style={{ flex: 1 }}>{r.action}</span>
+                <Link to={r.link} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontSize: 11, flexShrink: 0 }}>Go</Link>
+              </div>
+            ))}
+          </div>
+        )}
+        <Link to="/governance-program" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}>
+          View full program →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function StewardOnboarding() {
+  const { activeOrgId } = useOrgContext();
+  const [data, setData] = useState<{ total: number; completed: number; overdue: number } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+        const tasksRes = await apiClient.get<{ success: boolean; data: any[] }>(`/governance-tasks${query}&taskType=STEWARDSHIP`);
+        const tasks = tasksRes.data || [];
+        const onboarding = tasks.filter((t: any) => t.linkedObjectType === 'DamaRole');
+        const completed = onboarding.filter((t: any) => t.status === 'COMPLETED').length;
+        const overdue = onboarding.filter((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) < new Date()).length;
+        setData({ total: onboarding.length, completed, overdue });
+      } catch { /* */ }
+    })();
+  }, [activeOrgId]);
+
+  if (!data || data.total === 0) return null;
+
+  const rate = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Steward Onboarding</h2>
+      <div style={{ ...cardStyle, padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{rate}% complete</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{data.completed} of {data.total} tasks</span>
+        </div>
+        <div style={{ height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${rate}%`, background: rate === 100 ? '#22c55e' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.3s' }} />
+        </div>
+        {data.overdue > 0 && (
+          <div style={{ fontSize: 12, color: '#dc2626', marginTop: 6 }}>
+            {data.overdue} overdue task{data.overdue !== 1 ? 's' : ''}
+          </div>
+        )}
+        <Link to="/governance-work?tab=tasks" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 6, display: 'inline-block' }}>
+          View all stewardship tasks
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -912,9 +1027,11 @@ export default function DashboardPage() {
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myItems: <MyItems />,
     overview: <StatsOverview stats={stats} />,
+    programMaturity: <ProgramMaturity />,
     wizard: <GovernanceSetupWizard />,
     alerts: <DashboardAlerts stats={stats} />,
     whatsNext: <WhatsNext stats={stats} />,
+    stewardOnboarding: <StewardOnboarding />,
     checklist: allZero ? <GettingStartedChecklist stats={stats} /> : <GettingStartedChecklist stats={stats} />,
     quickActions: <QuickActions />,
     recentActivity: <RecentActivity />,
