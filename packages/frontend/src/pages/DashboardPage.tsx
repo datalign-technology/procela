@@ -420,15 +420,16 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myItems' | 'overview' | 'wizard' | 'alerts' | 'checklist' | 'quickActions';
+type SectionKey = 'myItems' | 'overview' | 'wizard' | 'alerts' | 'whatsNext' | 'checklist' | 'quickActions';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'wizard', 'alerts', 'checklist', 'quickActions'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'wizard', 'alerts', 'whatsNext', 'checklist', 'quickActions'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myItems: 'My Items',
   overview: 'Overview',
   wizard: 'Governance Setup',
   alerts: 'Alerts',
+  whatsNext: "What's Next",
   checklist: 'Getting Started',
   quickActions: 'Quick Actions',
 };
@@ -677,6 +678,114 @@ function DashboardAlerts({ stats }: { stats: DashboardStats }) {
   );
 }
 
+function WhatsNext({ stats }: { stats: DashboardStats }) {
+  // Build suggestions based on current state
+  const suggestions: Array<{ icon: string; title: string; description: string; link: string }> = [];
+
+  // Phase 1: No processes yet
+  if (stats.valueStreams === 0) {
+    suggestions.push({
+      icon: '☰',
+      title: 'Define your first value stream',
+      description: 'Start by mapping out how your organization delivers value. Use the AI wizard to generate a process hierarchy from your industry.',
+      link: '/processes/wizard',
+    });
+  }
+
+  // Phase 2: Processes exist but no data assets
+  if (stats.valueStreams > 0 && stats.dataAssets === 0) {
+    suggestions.push({
+      icon: '⛁',
+      title: 'Register your data assets',
+      description: `You have ${stats.valueStreams} value stream${stats.valueStreams > 1 ? 's' : ''} defined. Now describe the data your processes depend on.`,
+      link: '/data-assets',
+    });
+  }
+
+  // Phase 3: Assets exist but no mappings
+  if (stats.dataAssets > 0 && stats.mappings === 0) {
+    suggestions.push({
+      icon: '↔',
+      title: 'Map data to processes',
+      description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process steps. Mappings reveal dependencies and gaps.`,
+      link: '/mappings',
+    });
+  }
+
+  // Phase 4: Low coverage
+  if (stats.mappings > 0 && stats.coverage.percentage < 50) {
+    suggestions.push({
+      icon: '⚠',
+      title: 'Improve coverage',
+      description: `Only ${stats.coverage.percentage}% of process steps have data mapped. Review gaps to find unmapped steps.`,
+      link: '/gap-detection',
+    });
+  }
+
+  // Phase 5: Low health
+  if (stats.dataAssets > 0 && stats.averageHealth < 80) {
+    suggestions.push({
+      icon: '✓',
+      title: 'Improve data quality',
+      description: `Average health is ${stats.averageHealth}%. Add quality rules to your data assets to identify and fix issues.`,
+      link: '/data-quality',
+    });
+  }
+
+  // Phase 6: No people assigned
+  if (stats.people === 0 && stats.valueStreams > 0) {
+    suggestions.push({
+      icon: '☻',
+      title: 'Add your team',
+      description: 'Assign owners and stewards to your processes and data assets so everyone knows who is responsible.',
+      link: '/people',
+    });
+  }
+
+  // Phase 7: Bronze-heavy governance
+  if (stats.governance.bronze > 0 && stats.governance.gold === 0) {
+    suggestions.push({
+      icon: '▲',
+      title: 'Elevate governance tiers',
+      description: `All ${stats.governance.bronze} data assets are at Bronze tier. Promote assets to Silver or Gold as you define ownership and quality rules.`,
+      link: '/data-assets',
+    });
+  }
+
+  // Limit to 3 suggestions
+  const shown = suggestions.slice(0, 3);
+
+  if (shown.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>{"What's Next"}</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {shown.map((s) => (
+          <Link key={s.link} to={s.link} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 16px',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            textDecoration: 'none', color: 'var(--color-text)',
+            transition: 'border-color 0.15s',
+          }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+          >
+            <span style={{ fontSize: 20, flexShrink: 0 }}>{s.icon}</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{s.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{s.description}</div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -739,6 +848,7 @@ export default function DashboardPage() {
     overview: <StatsOverview stats={stats} />,
     wizard: <GovernanceSetupWizard />,
     alerts: <DashboardAlerts stats={stats} />,
+    whatsNext: <WhatsNext stats={stats} />,
     checklist: allZero ? <GettingStartedChecklist stats={stats} /> : <GettingStartedChecklist stats={stats} />,
     quickActions: <QuickActions />,
   };
