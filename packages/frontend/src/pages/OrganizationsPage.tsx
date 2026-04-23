@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
+import PageTabNav, { ADMIN_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -363,6 +364,7 @@ export default function OrganizationsPage() {
 
   return (
     <div>
+      <PageTabNav tabs={ADMIN_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>

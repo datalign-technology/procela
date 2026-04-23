@@ -14,6 +14,7 @@ import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
+import PageTabNav, { ADMIN_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -767,6 +768,7 @@ export default function PeoplePage() {
 
   return (
     <div>
+      <PageTabNav tabs={ADMIN_TABS} />
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>

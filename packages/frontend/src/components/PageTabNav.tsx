@@ -77,3 +77,11 @@ export const WORK_TABS: PageTab[] = [
   { to: '/governance-work?tab=tasks', label: 'Tasks' },
   { to: '/governance-work?tab=issues', label: 'Issues' },
 ];
+
+export const ADMIN_TABS: PageTab[] = [
+  { to: '/organizations', label: 'Organizations' },
+  { to: '/people', label: 'People' },
+  { to: '/connections', label: 'Connections' },
+  { to: '/agents', label: 'Agents' },
+  { to: '/settings', label: 'Settings' },
+];

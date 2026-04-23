@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PageTabNav, { ADMIN_TABS } from '../components/PageTabNav';
 
 interface AuthConfigData {
   provider: string;
@@ -217,6 +218,7 @@ export default function SettingsPage() {
 
   return (
     <div>
+      <PageTabNav tabs={ADMIN_TABS} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Settings</h1>
         <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
