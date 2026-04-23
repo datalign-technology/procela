@@ -112,6 +112,7 @@ app.use('/api/v1/governance-policies', authenticateToken, governancePoliciesRout
 app.use('/api/v1/governance-controls', authenticateToken, governanceControlsRouter);
 app.use('/api/v1/governance-tasks', authenticateToken, governanceTasksRouter);
 app.use('/api/v1/governance-issues', authenticateToken, governanceIssuesRouter);
+app.use('/api/v1/control-tower', authenticateToken, controlTowerRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
