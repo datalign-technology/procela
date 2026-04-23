@@ -332,7 +332,8 @@ export default function SystemsPage() {
   };
 
   const filteredSystems = systems.filter((s) => {
-    if (filterType && s.systemType !== filterType) return false;
+    if (filterType === '__none__' && s.systemType) return false;
+    if (filterType && filterType !== '__none__' && s.systemType !== filterType) return false;
     if (filterCriticality && (s.businessCriticality || '') !== filterCriticality) return false;
     return true;
   });
@@ -392,38 +393,102 @@ export default function SystemsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Type:</label>
-          <select style={{ ...inputStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">All ({systems.length})</option>
-            {systemTypes.map((t) => {
-              const count = systems.filter((s) => s.systemType === t).length;
-              return count > 0 ? <option key={t} value={t}>{t} ({count})</option> : null;
-            })}
-          </select>
+      {/* Two-column layout: System Types sidebar + content */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+        {/* System Types Sidebar */}
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: 10,
+          position: 'sticky',
+          top: 12,
+          maxHeight: 'calc(100vh - 180px)',
+          overflowY: 'auto',
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
+            System Types
+          </div>
+          <div
+            onClick={() => setFilterType('')}
+            style={{
+              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+              fontWeight: !filterType ? 600 : 400,
+              background: !filterType ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              color: !filterType ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+            onMouseEnter={(e) => { if (filterType) e.currentTarget.style.background = 'var(--color-bg)'; }}
+            onMouseLeave={(e) => { if (filterType) e.currentTarget.style.background = 'transparent'; }}
+          >
+            All Systems ({systems.length})
+          </div>
+          {systemTypes.map((t) => {
+            const count = systems.filter((s) => s.systemType === t).length;
+            if (count === 0) return null;
+            const isActive = filterType === t;
+            return (
+              <div
+                key={t}
+                onClick={() => setFilterType(isActive ? '' : t)}
+                style={{
+                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                  fontWeight: isActive ? 600 : 400,
+                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span>{t}</span>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
+              </div>
+            );
+          })}
+          {systems.filter((s) => !s.systemType).length > 0 && (
+            <div
+              onClick={() => setFilterType('__none__')}
+              style={{
+                padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                fontWeight: filterType === '__none__' ? 600 : 400,
+                background: filterType === '__none__' ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                color: filterType === '__none__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                fontStyle: 'italic',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+              onMouseEnter={(e) => { if (filterType !== '__none__') e.currentTarget.style.background = 'var(--color-bg)'; }}
+              onMouseLeave={(e) => { if (filterType !== '__none__') e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span>Untyped</span>
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{systems.filter((s) => !s.systemType).length}</span>
+            </div>
+          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Criticality:</label>
-          <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
-            <option value="">All</option>
-            <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
-            <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
-            <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
-          </select>
-        </div>
-        {(filterType || filterCriticality) && (
-          <button onClick={() => { setFilterType(''); setFilterCriticality(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-            Clear filters
-          </button>
-        )}
-        {(filterType || filterCriticality) && (
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-            Showing {filteredSystems.length} of {systems.length}
-          </span>
-        )}
-      </div>
+
+        {/* Content Area */}
+        <div>
+          {/* Content header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
+              {filterType && filterType !== '__none__' ? filterType : filterType === '__none__' ? 'Untyped Systems' : 'All Systems'}
+              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{filteredSystems.length} system{filteredSystems.length !== 1 ? 's' : ''}</span>
+              {filterType && (
+                <button onClick={() => setFilterType('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear filter">&times;</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Criticality:</label>
+              <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
+                <option value="">All</option>
+                <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
+                <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
+                <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
+              </select>
+              {filterCriticality && (
+                <button onClick={() => setFilterCriticality('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+              )}
+            </div>
+          </div>
 
       {/* Import Panel */}
       {showImport && (
@@ -684,6 +749,8 @@ export default function SystemsPage() {
             </tbody>
           </table>
         )}
+      </div>
+        </div>
       </div>
       <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
     </div>
