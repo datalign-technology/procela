@@ -673,37 +673,83 @@ export default function ConnectionsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 180, fontSize: 12, padding: '4px 8px' }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
-            <option value="">All</option>
-            {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
-          </select>
+      {/* Two-column layout: Type sidebar + content */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+        {/* Connection Types Sidebar */}
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: 10,
+          position: 'sticky',
+          top: 12,
+          maxHeight: 'calc(100vh - 180px)',
+          overflowY: 'auto',
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
+            Connection Types
+          </div>
+          <div
+            onClick={() => setFilterConnType('')}
+            style={{
+              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+              fontWeight: !filterConnType ? 600 : 400,
+              background: !filterConnType ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              color: !filterConnType ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+            onMouseEnter={(e) => { if (filterConnType) e.currentTarget.style.background = 'var(--color-bg)'; }}
+            onMouseLeave={(e) => { if (filterConnType) e.currentTarget.style.background = 'transparent'; }}
+          >
+            All Connections ({connections.length})
+          </div>
+          {connectionTypes.map((t) => {
+            const count = connections.filter((c) => c.connectionType === t).length;
+            if (count === 0) return null;
+            const isActive = filterConnType === t;
+            const label = t.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+            return (
+              <div
+                key={t}
+                onClick={() => setFilterConnType(isActive ? '' : t)}
+                style={{
+                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                  fontWeight: isActive ? 600 : 400,
+                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span>{label}</span>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
+              </div>
+            );
+          })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Type:</label>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterConnType} onChange={(e) => setFilterConnType(e.target.value)}>
-            <option value="">All</option>
-            {connectionTypes.map((t) => {
-              const count = connections.filter((c) => c.connectionType === t).length;
-              const label = t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-              return count > 0 ? <option key={t} value={t}>{label} ({count})</option> : null;
-            })}
-          </select>
-        </div>
-        {(systemFilter || filterConnType) && (
-          <button onClick={() => { setSystemFilter(''); setFilterConnType(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-            Clear filters
-          </button>
-        )}
-        {(systemFilter || filterConnType) && (
-          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-            Showing {visibleConnections.length} of {connections.length}
-          </span>
-        )}
-      </div>
+
+        {/* Content Area */}
+        <div>
+          {/* Content header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
+              {filterConnType ? filterConnType.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()) : 'All Connections'}
+              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{visibleConnections.length} connection{visibleConnections.length !== 1 ? 's' : ''}</span>
+              {filterConnType && (
+                <button onClick={() => setFilterConnType('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear filter">&times;</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 160, fontSize: 12, padding: '4px 8px' }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
+                <option value="">All</option>
+                {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
+              </select>
+              {systemFilter && (
+                <button onClick={() => setSystemFilter('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+              )}
+            </div>
+          </div>
 
       {/* Add/Edit Form */}
       {showForm && (
@@ -999,6 +1045,8 @@ export default function ConnectionsPage() {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }
