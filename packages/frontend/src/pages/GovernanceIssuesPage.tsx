@@ -11,9 +11,9 @@ import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 
 // ──────────────────────────────────────────────────────────────────────────
-// GovernanceIssuesPage — full CRUD list page for governance issues.
-// Supports filtering, sorting, and inline add/edit form.
-// Embedded inside GovernanceWorkPage as a tab.
+// GovernanceIssuesPage — full CRUD list page for governance issues. Supports
+// filtering, sorting, bulk selection, and inline add/edit form. Embedded
+// inside GovernanceWorkPage as a tab.
 // ──────────────────────────────────────────────────────────────────────────
 
 // ── Types ──
@@ -28,21 +28,17 @@ interface GovernanceIssue {
   status: string;
   domainId: string | null;
   domainName: string | null;
-  dataAssetId: string | null;
-  systemId: string | null;
   assignedTo: string | null;
-  assignedToName: string | null;
+  assigneeName: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 interface IssueSummary {
   total: number;
-  open: number;
-  inProgress: number;
-  resolved: number;
-  closed: number;
-  critical: number;
+  byStatus: Record<string, number>;
+  bySeverity: Record<string, number>;
+  byIssueType: Record<string, number>;
 }
 
 interface Person {
@@ -50,7 +46,7 @@ interface Person {
   name: string;
 }
 
-interface DataDomainOption {
+interface DataDomain {
   id: string;
   name: string;
 }
@@ -60,22 +56,21 @@ interface FormData {
   description: string;
   issueType: string;
   severity: string;
+  status: string;
   domainId: string;
-  dataAssetId: string;
-  systemId: string;
   assignedTo: string;
 }
 
 const emptyForm: FormData = {
-  title: '', description: '', issueType: 'DATA_QUALITY', severity: 'MEDIUM',
-  domainId: '', dataAssetId: '', systemId: '', assignedTo: '',
+  title: '', description: '', issueType: 'METADATA', severity: 'MEDIUM',
+  status: 'OPEN', domainId: '', assignedTo: '',
 };
 
 // ── Constants ──
 
-const ISSUE_STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const;
+const ISSUE_STATUSES = ['OPEN', 'INVESTIGATING', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'WONT_FIX'] as const;
 const ISSUE_SEVERITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
-const ISSUE_TYPES = ['DATA_QUALITY', 'POLICY_VIOLATION', 'ACCESS_CONTROL', 'COMPLIANCE', 'METADATA', 'LINEAGE', 'OTHER'] as const;
+const ISSUE_TYPES = ['METADATA', 'DATA_QUALITY', 'CLASSIFICATION', 'OWNERSHIP', 'POLICY', 'ACCESS', 'LINEAGE', 'COMPLIANCE', 'WORKFLOW'] as const;
 
 // ── Styles ──
 
@@ -103,10 +98,12 @@ const tdStyle: React.CSSProperties = {
 // ── Badge helpers ──
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  OPEN:        { bg: '#dbeafe', color: '#1e40af' },
-  IN_PROGRESS: { bg: '#fef3c7', color: '#92400e' },
-  RESOLVED:    { bg: '#d1fae5', color: '#065f46' },
-  CLOSED:      { bg: '#f3f4f6', color: '#6b7280' },
+  OPEN:          { bg: '#dbeafe', color: '#1e40af' },
+  INVESTIGATING: { bg: '#ede9fe', color: '#5b21b6' },
+  IN_PROGRESS:   { bg: '#fef3c7', color: '#92400e' },
+  RESOLVED:      { bg: '#d1fae5', color: '#065f46' },
+  CLOSED:        { bg: '#f3f4f6', color: '#6b7280' },
+  WONT_FIX:      { bg: '#f3f4f6', color: '#6b7280' },
 };
 
 const SEVERITY_COLORS: Record<string, { bg: string; color: string }> = {
@@ -117,16 +114,18 @@ const SEVERITY_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const ISSUE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
-  DATA_QUALITY:     { bg: '#fee2e2', color: '#991b1b' },
-  POLICY_VIOLATION: { bg: '#fef3c7', color: '#92400e' },
-  ACCESS_CONTROL:   { bg: '#ede9fe', color: '#5b21b6' },
-  COMPLIANCE:       { bg: '#fce7f3', color: '#9d174d' },
-  METADATA:         { bg: '#dbeafe', color: '#1e40af' },
-  LINEAGE:          { bg: '#ccfbf1', color: '#115e59' },
-  OTHER:            { bg: '#f3f4f6', color: '#6b7280' },
+  METADATA:       { bg: '#dbeafe', color: '#1e40af' },
+  DATA_QUALITY:   { bg: '#fef3c7', color: '#92400e' },
+  CLASSIFICATION: { bg: '#ede9fe', color: '#5b21b6' },
+  OWNERSHIP:      { bg: '#fce7f3', color: '#9d174d' },
+  POLICY:         { bg: '#ccfbf1', color: '#115e59' },
+  ACCESS:         { bg: '#fee2e2', color: '#991b1b' },
+  LINEAGE:        { bg: '#e0e7ff', color: '#3730a3' },
+  COMPLIANCE:     { bg: '#fef9c3', color: '#854d0e' },
+  WORKFLOW:       { bg: '#d1fae5', color: '#065f46' },
 };
 
-function badgeStyle(_text: string, colors: { bg: string; color: string }): React.CSSProperties {
+function badge(_text: string, colors: { bg: string; color: string }): React.CSSProperties {
   return {
     display: 'inline-block', padding: '2px 8px', borderRadius: 4,
     fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color,
@@ -144,12 +143,14 @@ export default function GovernanceIssuesPage() {
   const [issues, setIssues] = useState<GovernanceIssue[]>([]);
   const [summary, setSummary] = useState<IssueSummary | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
-  const [domains, setDomains] = useState<DataDomainOption[]>([]);
+  const [domains, setDomains] = useState<DataDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Filters
   const [filterStatus, setFilterStatus] = useState('');
@@ -163,7 +164,7 @@ export default function GovernanceIssuesPage() {
         apiClient.get<{ success: boolean; data: GovernanceIssue[] }>(`/governance-issues${query}`),
         apiClient.get<{ success: boolean; data: IssueSummary }>(`/governance-issues/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
-        apiClient.get<{ success: boolean; data: DataDomainOption[] }>(`/data-domains${query}`),
+        apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
       ]);
       setIssues(issuesRes.data || []);
       setSummary(summaryRes.data || null);
@@ -195,7 +196,7 @@ export default function GovernanceIssuesPage() {
       },
       status:   (a, b) => a.status.localeCompare(b.status),
       domain:   (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
-      assignee: (a, b) => (a.assignedToName || '').localeCompare(b.assignedToName || ''),
+      assignee: (a, b) => (a.assigneeName || '').localeCompare(b.assigneeName || ''),
       created:  (a, b) => a.createdAt.localeCompare(b.createdAt),
     },
     'title',
@@ -215,9 +216,8 @@ export default function GovernanceIssuesPage() {
       description: issue.description,
       issueType: issue.issueType,
       severity: issue.severity,
+      status: issue.status,
       domainId: issue.domainId || '',
-      dataAssetId: issue.dataAssetId || '',
-      systemId: issue.systemId || '',
       assignedTo: issue.assignedTo || '',
     });
     setEditingId(issue.id);
@@ -236,8 +236,6 @@ export default function GovernanceIssuesPage() {
       const payload = {
         ...form,
         domainId: form.domainId || null,
-        dataAssetId: form.dataAssetId || null,
-        systemId: form.systemId || null,
         assignedTo: form.assignedTo || null,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
       };
@@ -266,27 +264,56 @@ export default function GovernanceIssuesPage() {
     }
   };
 
+  // ── Bulk select ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sorted.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(sorted.map((i) => i.id)));
+  };
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/governance-issues/${id}`)));
+      addToast('success', `Deleted ${selectedIds.size} issue${selectedIds.size === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch {
+      addToast('error', 'Some issues could not be deleted');
+      fetchData();
+    }
+  };
+
+  // ── Helpers ──
   const formatDate = (d: string | null) => {
     if (!d) return '--';
     return new Date(d).toLocaleDateString();
   };
+
+  const openCount = summary ? (summary.byStatus['OPEN'] || 0) : 0;
+  const criticalCount = summary ? (summary.bySeverity['CRITICAL'] || 0) : 0;
 
   return (
     <div>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Issues</h2>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Governance Issues</h2>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Track data governance issues, violations, and exceptions.
+            Track and resolve data governance issues across your organization.
           </p>
           {summary && (
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
               <span>{summary.total} issues</span>
               <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{summary.open} open</span>
+              <span>{openCount} open</span>
               <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span style={{ color: summary.critical > 0 ? '#dc2626' : undefined }}>{summary.critical} critical</span>
+              <span style={{ color: criticalCount > 0 ? '#dc2626' : undefined }}>{criticalCount} critical</span>
             </div>
           )}
         </div>
@@ -300,26 +327,56 @@ export default function GovernanceIssuesPage() {
       {/* Filters */}
       {issues.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Status</label>
           <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All Statuses</option>
             {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
+          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Severity</label>
           <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
             <option value="">All Severities</option>
             {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
+          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Type</label>
           <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
             <option value="">All Types</option>
             {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
           </select>
           {(filterStatus || filterSeverity || filterType) && (
-            <button
-              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-              onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); }}
-            >
-              Clear Filters
-            </button>
+            <>
+              <button
+                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); }}
+              >
+                Clear Filters
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                showing {filtered.length} of {issues.length}
+              </span>
+            </>
           )}
+        </div>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Clear Selection
+          </button>
         </div>
       )}
 
@@ -336,6 +393,15 @@ export default function GovernanceIssuesPage() {
         onCancel={() => setConfirmDelete(null)}
       />
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Issues?"
+        message={`Delete ${selectedIds.size} selected issue${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`}
+        confirmLabel="Delete Selected"
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
       {/* Add/Edit Form */}
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
@@ -350,7 +416,7 @@ export default function GovernanceIssuesPage() {
                 style={inputStyle}
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Duplicate customer records in CRM"
+                placeholder="e.g. Missing metadata on customer records"
               />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -363,7 +429,7 @@ export default function GovernanceIssuesPage() {
               />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Issue Type</label>
               <select style={selectStyle} value={form.issueType} onChange={(e) => setForm({ ...form, issueType: e.target.value })}>
                 {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
               </select>
@@ -377,7 +443,7 @@ export default function GovernanceIssuesPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
               <select style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
-                <option value="">-- None --</option>
+                <option value="">-- No Domain --</option>
                 {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
@@ -388,24 +454,14 @@ export default function GovernanceIssuesPage() {
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Asset ID</label>
-              <input
-                style={inputStyle}
-                value={form.dataAssetId}
-                onChange={(e) => setForm({ ...form, dataAssetId: e.target.value })}
-                placeholder="Optional data asset ID"
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System ID</label>
-              <input
-                style={inputStyle}
-                value={form.systemId}
-                onChange={(e) => setForm({ ...form, systemId: e.target.value })}
-                placeholder="Optional system ID"
-              />
-            </div>
+            {editingId && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
+                <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                </select>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
@@ -423,18 +479,23 @@ export default function GovernanceIssuesPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
-          <SkeletonRows rows={5} columns={8} />
+          <SkeletonRows rows={5} columns={9} />
         ) : issues.length === 0 && !showForm ? (
           <EmptyState
-            icon={'⚠'}
+            icon={'!'}
             title="No governance issues yet"
-            description="Governance issues track data quality problems, policy violations, compliance gaps, and other concerns that need resolution."
+            description="Governance issues track data quality problems, policy violations, and other concerns. Create your first issue to get started."
             action={canWrite ? { label: '+ Add Issue', onClick: openAdd } : undefined}
           />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                  <input type="checkbox"
+                    checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                    onChange={toggleSelectAll} />
+                </th>
                 <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
                 <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
                 <SortableTh sortKey="severity" active={sortKey} dir={sortDir} onClick={toggleSort}>Severity</SortableTh>
@@ -448,49 +509,55 @@ export default function GovernanceIssuesPage() {
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', padding: 24 }}>
+                  <td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', padding: 24 }}>
                     No issues match the current filters.
                   </td>
                 </tr>
-              ) : sorted.map((issue) => (
-                <tr key={issue.id} style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>
-                    <span style={{ color: 'var(--color-primary)' }}>{issue.title}</span>
-                  </td>
-                  <td style={tdStyle}>
-                    <span style={badgeStyle(issue.issueType.replace(/_/g, ' '), ISSUE_TYPE_COLORS[issue.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                      {issue.issueType.replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>
-                    <span style={badgeStyle(issue.severity, SEVERITY_COLORS[issue.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                      {issue.severity}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>
-                    <span style={badgeStyle(issue.status.replace(/_/g, ' '), STATUS_COLORS[issue.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                      {issue.status.replace(/_/g, ' ')}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>
-                    {issue.domainName || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                  </td>
-                  <td style={tdStyle}>
-                    {issue.assignedToName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                  </td>
-                  <td style={tdStyle}>
-                    {formatDate(issue.createdAt)}
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                      {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(issue)} />}
-                      {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(issue.id)} />}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : sorted.map((issue) => {
+                const isSelected = selectedIds.has(issue.id);
+                return (
+                  <tr key={issue.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(issue.id)} />
+                    </td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }}>
+                      <span style={{ color: 'var(--color-primary)' }}>{issue.title}</span>
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={badge(issue.issueType.replace(/_/g, ' '), ISSUE_TYPE_COLORS[issue.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                        {issue.issueType.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={badge(issue.severity, SEVERITY_COLORS[issue.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                        {issue.severity}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>
+                      <span style={badge(issue.status.replace(/_/g, ' '), STATUS_COLORS[issue.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                        {issue.status.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>
+                      {issue.domainName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
+                    </td>
+                    <td style={tdStyle}>
+                      {issue.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
+                    </td>
+                    <td style={tdStyle}>
+                      {formatDate(issue.createdAt)}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(issue)} />}
+                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(issue.id)} />}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
