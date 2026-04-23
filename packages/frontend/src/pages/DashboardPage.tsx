@@ -638,11 +638,13 @@ function RecentActivity() {
     timestamp: string; userId: string | null;
   }>>([]);
   const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+  const DEFAULT_ROWS = 5;
 
   useEffect(() => {
     (async () => {
       try {
-        const query = activeOrgId ? `?orgId=${activeOrgId}&limit=15` : '?limit=15';
+        const query = activeOrgId ? `?orgId=${activeOrgId}&limit=30` : '?limit=30';
         const res = await apiClient.get<{ success: boolean; data: any[] }>(`/audit${query}`);
         setEntries(res.data || []);
       } catch { /* */ }
@@ -676,11 +678,14 @@ function RecentActivity() {
     return `${Math.floor(hrs / 24)}d ago`;
   };
 
+  const visible = showAll ? entries : entries.slice(0, DEFAULT_ROWS);
+  const hasMore = entries.length > DEFAULT_ROWS;
+
   return (
     <div style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Recent Activity</h2>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-        {entries.map((e) => (
+        {visible.map((e) => (
           <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--color-border)', fontSize: 12 }}>
             <span style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: actionColor(e.action) + '18', color: actionColor(e.action), flexShrink: 0 }}>
               {actionIcon(e.action)}
@@ -691,6 +696,18 @@ function RecentActivity() {
             <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>{timeAgo(e.timestamp)}</span>
           </div>
         ))}
+        {hasMore && (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            style={{
+              width: '100%', padding: '8px', fontSize: 12, fontWeight: 500,
+              background: 'var(--color-bg)', color: 'var(--color-primary)',
+              border: 'none', cursor: 'pointer',
+            }}
+          >
+            {showAll ? 'Show less' : `Show all ${entries.length} entries`}
+          </button>
+        )}
       </div>
     </div>
   );
