@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import GovernanceTasksPage from './GovernanceTasksPage';
 import GovernanceIssuesPage from './GovernanceIssuesPage';
-import PageTabNav, { WORK_TABS } from '../components/PageTabNav';
+import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceWorkPage — tabbed hub for governance tasks and issues.
@@ -25,7 +25,7 @@ export default function GovernanceWorkPage() {
 
   return (
     <div>
-      <PageTabNav tabs={WORK_TABS} />
+      <PageTabNav tabs={GOVERNANCE_TABS} />
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Work</h1>

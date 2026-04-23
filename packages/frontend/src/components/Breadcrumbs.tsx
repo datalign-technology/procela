@@ -25,6 +25,12 @@ const ROUTE_LABELS: Record<string, string> = {
   'raci': 'RACI Matrix',
   'data-lineage': 'Data Lineage',
   'data-quality': 'Data Quality',
+  'control-tower': 'Control Tower',
+  'governance-policies': 'Policies & Controls',
+  'governance-work': 'Governance Work',
+  'enterprise-view': 'Enterprise View',
+  'reports': 'Reports',
+  'branding': 'Branding',
   'settings': 'Settings',
   'help': 'Help',
 };

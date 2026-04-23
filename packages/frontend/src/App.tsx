@@ -35,6 +35,7 @@ import BrandingPage from '@/pages/BrandingPage';
 import EnterpriseViewPage from '@/pages/EnterpriseViewPage';
 import GovernanceWorkPage from '@/pages/GovernanceWorkPage';
 import ControlTowerPage from '@/pages/ControlTowerPage';
+import GovernancePoliciesPage from '@/pages/GovernancePoliciesPage';
 
 export default function App() {
   return (
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/data-quality" element={<DataQualityPage />} />
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/governance-work" element={<GovernanceWorkPage />} />
+        <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
         <Route path="/control-tower" element={<ControlTowerPage />} />
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
         <Route path="/reports" element={<ReportsPage />} />
