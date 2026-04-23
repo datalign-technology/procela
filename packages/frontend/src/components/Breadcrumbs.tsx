@@ -38,6 +38,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'governance-calendar': 'Calendar',
   'decision-rights': 'Decision Rights',
   'sops': 'Procedures',
+  'business-glossary': 'Business Glossary',
 };
 
 const containerStyle: React.CSSProperties = {

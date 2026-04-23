@@ -40,6 +40,7 @@ import OperationsManualPage from '@/pages/OperationsManualPage';
 import GovernanceCalendarPage from '@/pages/GovernanceCalendarPage';
 import DecisionRightsPage from '@/pages/DecisionRightsPage';
 import SopsPage from '@/pages/SopsPage';
+import BusinessGlossaryPage from '@/pages/BusinessGlossaryPage';
 
 export default function App() {
   return (
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
         <Route path="/decision-rights" element={<DecisionRightsPage />} />
         <Route path="/sops" element={<SopsPage />} />
+        <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
         <Route path="/governance-program" element={<GovernanceProgramPage />} />
         <Route path="/control-tower" element={<ControlTowerPage />} />
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
