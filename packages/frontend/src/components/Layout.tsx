@@ -26,7 +26,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: '\u25A3' },
       { to: '/processes', label: 'Catalog', icon: '\u26C1' },
-      { to: '/data-domains', label: 'Governance', icon: '\u2637' },
+      { to: '/governance', label: 'Governance', icon: '\u2637' },
       { to: '/enterprise-view', label: 'Analyze', icon: '\u2713' },
     ],
   },

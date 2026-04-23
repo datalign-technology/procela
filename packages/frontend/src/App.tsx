@@ -27,7 +27,6 @@ import RaciMatrixPage from '@/pages/RaciMatrixPage';
 import DataLineagePage from '@/pages/DataLineagePage';
 import DataQualityPage from '@/pages/DataQualityPage';
 import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
-import GovernancePage from '@/pages/GovernancePage';
 import AnalyzePage from '@/pages/AnalyzePage';
 import ConnectionsPage from '@/pages/ConnectionsPage';
 import ReportsPage from '@/pages/ReportsPage';
@@ -49,7 +48,7 @@ export default function App() {
         <Route path="/processes/compare" element={<ComparisonPage />} />
         {/* Combined pages */}
         <Route path="/systems-and-data" element={<SystemsAndDataPage />} />
-        <Route path="/governance" element={<GovernancePage />} />
+        <Route path="/governance" element={<GovernanceGroupsPage />} />
         <Route path="/analyze" element={<AnalyzePage />} />
         {/* Legacy routes — kept for backward compatibility and deep links */}
         <Route path="/data-assets" element={<DataAssetsPage />} />
