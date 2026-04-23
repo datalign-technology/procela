@@ -58,10 +58,10 @@ export const CATALOG_TABS: PageTab[] = [
 
 export const GOVERNANCE_TABS: PageTab[] = [
   { to: '/governance-program', label: 'Program' },
-  { to: '/governance', label: 'Governance Groups' },
   { to: '/data-domains', label: 'Data Domains' },
-  { to: '/raci', label: 'RACI Matrix' },
+  { to: '/governance', label: 'Governance Groups' },
   { to: '/decision-rights', label: 'Decision Rights' },
+  { to: '/raci', label: 'RACI Matrix' },
   { to: '/governance-policies', label: 'Policies' },
 ];
 
@@ -73,11 +73,11 @@ export const OPERATE_TABS: PageTab[] = [
 ];
 
 export const ANALYZE_TABS: PageTab[] = [
+  { to: '/control-tower', label: 'Control Tower' },
   { to: '/enterprise-view', label: 'Enterprise View' },
+  { to: '/gap-detection', label: 'Gap Detection' },
   { to: '/data-quality', label: 'Data Quality' },
   { to: '/data-lineage', label: 'Data Lineage' },
-  { to: '/gap-detection', label: 'Gap Detection' },
-  { to: '/control-tower', label: 'Control Tower' },
   { to: '/reports', label: 'Reports' },
 ];
 

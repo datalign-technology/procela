@@ -28,7 +28,7 @@ const navSections: NavSection[] = [
       { to: '/processes', label: 'Catalog', icon: '\u26C1' },
       { to: '/governance-program', label: 'Govern', icon: '\u2637' },
       { to: '/operations-manual', label: 'Operate', icon: '\u2611' },
-      { to: '/enterprise-view', label: 'Analyze', icon: '\u2713' },
+      { to: '/control-tower', label: 'Analyze', icon: '\u2713' },
     ],
   },
   {
