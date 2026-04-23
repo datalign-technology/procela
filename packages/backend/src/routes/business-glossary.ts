@@ -6,6 +6,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataDomains } from './data-domains';
+import { organizations } from './organizations';
 
 export interface StoredGlossaryTerm {
   id: string;
@@ -53,6 +54,89 @@ const SEED_TERMS = [
   { term: 'Data Classification', definition: 'A label indicating the sensitivity level of data: Public, Internal, Confidential, or Restricted. Determines handling requirements and access controls.', category: 'REGULATORY' as const },
   { term: 'Master Data', definition: 'The core business entities that are shared across multiple systems and processes — customers, products, employees, locations. Requires golden-record governance.', category: 'TECHNICAL' as const },
 ];
+
+const INDUSTRY_TERMS: Record<string, Array<{ term: string; definition: string; category: string }>> = {
+  'Utilities (Electric, Gas, Water)': [
+    { term: 'Meter Data', definition: 'Usage readings collected from electric, gas, or water meters at customer premises. Includes interval data, register reads, and demand measurements.', category: 'BUSINESS' },
+    { term: 'Service Point', definition: 'A specific location where a utility service is delivered to a customer. Tied to a meter, an address, and an account.', category: 'BUSINESS' },
+    { term: 'Rate Schedule', definition: 'A tariff structure that defines how usage is priced for a class of customers. Includes tiers, time-of-use periods, and demand charges.', category: 'BUSINESS' },
+    { term: 'Outage', definition: 'An unplanned interruption in utility service. Tracked by location, duration, affected customers, and root cause.', category: 'BUSINESS' },
+    { term: 'AMI', definition: 'Advanced Metering Infrastructure. The network of smart meters, communication systems, and data management software that enables two-way communication between the utility and customer meters.', category: 'TECHNICAL' },
+    { term: 'SCADA', definition: 'Supervisory Control and Data Acquisition. Industrial control systems used to monitor and control utility infrastructure in real time.', category: 'TECHNICAL' },
+    { term: 'GIS Asset', definition: 'A geographic information system record representing physical infrastructure — poles, transformers, pipes, valves — with spatial coordinates and attributes.', category: 'TECHNICAL' },
+    { term: 'NERC CIP', definition: 'North American Electric Reliability Corporation Critical Infrastructure Protection standards. Mandatory cybersecurity requirements for bulk electric system operators.', category: 'REGULATORY' },
+  ],
+  'Healthcare': [
+    { term: 'Patient', definition: 'An individual receiving or registered to receive medical services. The central entity in clinical and administrative workflows.', category: 'BUSINESS' },
+    { term: 'Encounter', definition: 'A single interaction between a patient and a healthcare provider. Includes office visits, inpatient stays, telehealth sessions, and emergency visits.', category: 'BUSINESS' },
+    { term: 'Diagnosis Code (ICD)', definition: 'A standardized code from the International Classification of Diseases used to classify conditions, symptoms, and procedures for billing and clinical tracking.', category: 'TECHNICAL' },
+    { term: 'Procedure Code (CPT)', definition: 'Current Procedural Terminology code that describes medical, surgical, and diagnostic services for billing and utilization review.', category: 'TECHNICAL' },
+    { term: 'PHI', definition: 'Protected Health Information. Any individually identifiable health information subject to HIPAA privacy and security rules.', category: 'REGULATORY' },
+    { term: 'HIPAA', definition: 'Health Insurance Portability and Accountability Act. Federal law governing the privacy, security, and electronic exchange of health information.', category: 'REGULATORY' },
+    { term: 'EHR', definition: 'Electronic Health Record. A digital version of a patient\'s medical history maintained by the provider, including diagnoses, medications, lab results, and care plans.', category: 'TECHNICAL' },
+    { term: 'Claim', definition: 'A request for payment submitted to an insurer for healthcare services rendered. Contains diagnosis codes, procedure codes, and provider information.', category: 'BUSINESS' },
+  ],
+  'Financial Services': [
+    { term: 'Account', definition: 'A financial arrangement between a customer and an institution — checking, savings, loan, investment, or credit. The core entity for transactions and balances.', category: 'BUSINESS' },
+    { term: 'Transaction', definition: 'A single financial event — deposit, withdrawal, transfer, payment, or trade — recorded with amount, date, parties, and reference codes.', category: 'BUSINESS' },
+    { term: 'KYC', definition: 'Know Your Customer. The regulatory process of verifying the identity, suitability, and risk profile of clients before and during a business relationship.', category: 'REGULATORY' },
+    { term: 'AML', definition: 'Anti-Money Laundering. Regulations and procedures to detect, prevent, and report activities related to money laundering and terrorist financing.', category: 'REGULATORY' },
+    { term: 'Basel III', definition: 'International banking regulation framework governing capital adequacy, stress testing, and liquidity risk management.', category: 'REGULATORY' },
+    { term: 'NAV', definition: 'Net Asset Value. The per-share value of a fund, calculated as total assets minus liabilities divided by shares outstanding.', category: 'METRIC' },
+    { term: 'Credit Score', definition: 'A numerical rating representing a borrower\'s creditworthiness, derived from payment history, outstanding debt, credit history length, and other factors.', category: 'METRIC' },
+    { term: 'Position', definition: 'The quantity and value of a specific security or instrument held in a portfolio at a given point in time.', category: 'BUSINESS' },
+  ],
+  'Manufacturing': [
+    { term: 'BOM', definition: 'Bill of Materials. A structured list of all components, sub-assemblies, and raw materials required to manufacture a finished product, with quantities.', category: 'BUSINESS' },
+    { term: 'Work Order', definition: 'An authorization to manufacture a specific quantity of a product. Tracks materials consumed, labor hours, machine usage, and completion status.', category: 'BUSINESS' },
+    { term: 'SKU', definition: 'Stock Keeping Unit. A unique identifier for a distinct product, including size, color, and packaging variations. Used for inventory tracking.', category: 'BUSINESS' },
+    { term: 'OEE', definition: 'Overall Equipment Effectiveness. A metric combining availability, performance, and quality to measure manufacturing productivity. Target is typically 85%+.', category: 'METRIC' },
+    { term: 'Lot Number', definition: 'A unique identifier assigned to a batch of product manufactured under the same conditions. Enables traceability for quality and recall purposes.', category: 'BUSINESS' },
+    { term: 'MES', definition: 'Manufacturing Execution System. Software that monitors, tracks, and controls manufacturing processes on the shop floor in real time.', category: 'TECHNICAL' },
+    { term: 'Yield', definition: 'The ratio of acceptable output to total output in a manufacturing process. Measures production efficiency and quality performance.', category: 'METRIC' },
+    { term: 'ISO 9001', definition: 'International quality management system standard. Defines requirements for consistent product quality and continuous improvement.', category: 'REGULATORY' },
+  ],
+  'Oil & Gas': [
+    { term: 'Well', definition: 'A drilled hole for extracting oil or gas from underground reservoirs. Tracked by location, depth, production rates, and operating status.', category: 'BUSINESS' },
+    { term: 'Reservoir', definition: 'A subsurface formation containing recoverable hydrocarbons. Characterized by porosity, permeability, pressure, and estimated reserves.', category: 'BUSINESS' },
+    { term: 'Production Volume', definition: 'The quantity of oil, gas, or condensate extracted from a well or field over a period, measured in barrels (oil) or cubic feet (gas).', category: 'METRIC' },
+    { term: 'HSE', definition: 'Health, Safety, and Environment. The operational discipline governing worker safety, environmental protection, and regulatory compliance in oil and gas operations.', category: 'REGULATORY' },
+    { term: 'Lease', definition: 'A legal agreement granting the right to explore and produce hydrocarbons from a specific land area. Defines royalty obligations and term conditions.', category: 'BUSINESS' },
+    { term: 'Pipeline', definition: 'Infrastructure for transporting oil, gas, or refined products from production sites to processing facilities or end markets.', category: 'BUSINESS' },
+    { term: 'SCADA', definition: 'Supervisory Control and Data Acquisition. Systems that monitor and control remote field equipment — pumps, valves, compressors — across oil and gas operations.', category: 'TECHNICAL' },
+    { term: 'API Gravity', definition: 'American Petroleum Institute measure of crude oil density. Higher API means lighter oil. Affects pricing, refining options, and transportation.', category: 'TECHNICAL' },
+  ],
+  'Defense & Shipbuilding': [
+    { term: 'Hull Number', definition: 'A unique identifier assigned to a vessel during construction. Used to track all engineering, procurement, and construction activity.', category: 'BUSINESS' },
+    { term: 'Technical Data Package', definition: 'The complete set of engineering drawings, specifications, and documentation required to manufacture, test, and maintain a defense system.', category: 'TECHNICAL' },
+    { term: 'ITAR', definition: 'International Traffic in Arms Regulations. Federal controls on the export and import of defense articles, services, and technical data.', category: 'REGULATORY' },
+    { term: 'CUI', definition: 'Controlled Unclassified Information. Government information that requires safeguarding per federal regulations, though not classified.', category: 'REGULATORY' },
+    { term: 'CMMC', definition: 'Cybersecurity Maturity Model Certification. DoD framework requiring defense contractors to meet specific cybersecurity practices and processes.', category: 'REGULATORY' },
+    { term: 'WBS', definition: 'Work Breakdown Structure. A hierarchical decomposition of project scope into manageable deliverables, used for planning, scheduling, and cost control.', category: 'BUSINESS' },
+    { term: 'Earned Value', definition: 'A project management metric comparing planned work to completed work and actual costs. Key measures: CPI (Cost Performance Index) and SPI (Schedule Performance Index).', category: 'METRIC' },
+    { term: 'Configuration Item', definition: 'A hardware or software component under configuration management. Changes require formal review, approval, and documentation.', category: 'TECHNICAL' },
+  ],
+  'Transportation & Logistics': [
+    { term: 'Shipment', definition: 'A consignment of goods being transported from origin to destination. Tracked by carrier, route, weight, dimensions, and delivery status.', category: 'BUSINESS' },
+    { term: 'Bill of Lading', definition: 'A legal document issued by a carrier acknowledging receipt of cargo. Serves as a contract of carriage, receipt of goods, and document of title.', category: 'BUSINESS' },
+    { term: 'Freight Class', definition: 'A standardized classification (NMFC) based on density, handling, stowability, and liability that determines shipping rates for LTL freight.', category: 'BUSINESS' },
+    { term: 'ETA', definition: 'Estimated Time of Arrival. A predicted arrival time for a shipment or vehicle, calculated from current location, speed, route, and conditions.', category: 'METRIC' },
+    { term: 'Dwell Time', definition: 'The time cargo or a vehicle spends waiting at a facility — port, warehouse, or terminal — before the next movement. A key efficiency metric.', category: 'METRIC' },
+    { term: 'Intermodal', definition: 'Transportation using two or more modes (truck, rail, ship, air) without handling the cargo itself when changing modes, using standardized containers.', category: 'TECHNICAL' },
+    { term: 'FMCSA', definition: 'Federal Motor Carrier Safety Administration. Regulates commercial motor vehicle safety — driver qualifications, hours of service, vehicle maintenance.', category: 'REGULATORY' },
+    { term: 'Last Mile', definition: 'The final leg of delivery from a distribution hub to the end customer. Typically the most expensive and complex part of the supply chain.', category: 'BUSINESS' },
+  ],
+  'State & Local Government': [
+    { term: 'Constituent', definition: 'A resident, business, or organization within the government\'s jurisdiction that receives services or interacts with government agencies.', category: 'BUSINESS' },
+    { term: 'Permit', definition: 'An official authorization for a specific activity — building construction, business operation, special event — with conditions and an expiration.', category: 'BUSINESS' },
+    { term: 'Case', definition: 'A request for government service — code enforcement, social services, public safety — tracked from intake through resolution.', category: 'BUSINESS' },
+    { term: 'Parcel', definition: 'A legally defined piece of real property identified by a unique parcel number. Used for taxation, zoning, and land use planning.', category: 'BUSINESS' },
+    { term: 'FOIA', definition: 'Freedom of Information Act. Legislation giving the public the right to request access to government records, with defined exemptions.', category: 'REGULATORY' },
+    { term: 'Fund', definition: 'A self-balancing set of accounts used by governments to track revenues and expenditures for specific purposes. General fund, enterprise fund, capital projects fund.', category: 'BUSINESS' },
+    { term: 'Open Data', definition: 'Government data published in machine-readable formats for public access and use, consistent with open data policies and transparency requirements.', category: 'TECHNICAL' },
+    { term: 'ADA Compliance', definition: 'Americans with Disabilities Act compliance. Requirements for accessibility in government services, facilities, and digital content.', category: 'REGULATORY' },
+  ],
+};
 
 const router = Router();
 
@@ -233,7 +317,15 @@ router.post('/seed', (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const created: StoredGlossaryTerm[] = [];
 
-  for (const seed of SEED_TERMS) {
+  // Look up the org's industry to include industry-specific terms
+  const org = organizations.find((o: any) => o.id === orgId);
+  const industry = org?.industry || '';
+  const industryTerms = Object.entries(INDUSTRY_TERMS).find(
+    ([key]) => industry.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(industry.toLowerCase()),
+  );
+  const allSeeds = [...SEED_TERMS, ...(industryTerms ? industryTerms[1] : [])];
+
+  for (const seed of allSeeds) {
     const exists = glossaryTerms.find(
       (t) => t.orgId === orgId && t.term.trim().toLowerCase() === seed.term.trim().toLowerCase(),
     );
@@ -250,7 +342,7 @@ router.post('/seed', (req: Request, res: Response) => {
       domainId: null,
       ownerPersonId: null,
       status: 'DRAFT',
-      category: seed.category,
+      category: seed.category as StoredGlossaryTerm['category'],
       exampleValues: '',
       businessRules: '',
       sourceOfTruth: '',
@@ -264,11 +356,16 @@ router.post('/seed', (req: Request, res: Response) => {
 
   if (created.length > 0) {
     saveStore('glossaryTerms', glossaryTerms);
-    auditService.log('system', orgId, 'GlossaryTerm', '*', 'SEED', null, { count: created.length });
-    logger.info({ orgId, count: created.length }, 'Seeded glossary terms');
+    auditService.log('system', orgId, 'GlossaryTerm', '*', 'SEED', null, { count: created.length, industry });
+    logger.info({ orgId, count: created.length, industry }, 'Seeded glossary terms');
   }
 
-  res.status(201).json({ success: true, data: created.map(enrichTerm), seeded: created.length });
+  res.status(201).json({
+    success: true,
+    data: created.map(enrichTerm),
+    seeded: created.length,
+    industry: industryTerms ? industryTerms[0] : null,
+  });
 });
 
 export default router;
