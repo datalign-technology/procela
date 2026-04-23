@@ -45,6 +45,7 @@ const navSections: NavSection[] = [
       { to: '/enterprise-view', label: 'Enterprise View', icon: '\u25A8' },
       { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
       { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
+      { to: '/control-tower', label: 'Control Tower', icon: '⌘' },
       { to: '/reports', label: 'Reports', icon: '\u26A0' },
     ],
   },
