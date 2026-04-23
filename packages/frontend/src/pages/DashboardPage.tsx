@@ -85,7 +85,7 @@ function MyDashboard() {
     <div style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>My Dashboard</h2>
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-        Welcome back, {data.person.name}. Here\u2019s what needs your attention.
+        Welcome back, {data.person.name}. Here’s what needs your attention.
       </p>
 
       {/* Summary KPIs */}
@@ -120,7 +120,7 @@ function MyDashboard() {
           {(data.myTasks || []).filter((t: any) => t.isOverdue).length === 0 &&
            (data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').length === 0 &&
            (data.pendingReviews || []).length === 0 ? (
-            <div style={{ color: '#16a34a', fontSize: 13 }}>All clear \u2014 no urgent items.</div>
+            <div style={{ color: '#16a34a', fontSize: 13 }}>All clear — no urgent items.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {(data.myTasks || []).filter((t: any) => t.isOverdue).slice(0, 3).map((t: any) => (
