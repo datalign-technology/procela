@@ -79,13 +79,6 @@ const PHASE_COLORS: Record<number, string> = {
   4: '#f97316',
 };
 
-const PHASE_WEEKS: Record<number, string> = {
-  1: 'Weeks 1-3',
-  2: 'Weeks 3-6',
-  3: 'Weeks 6-10',
-  4: 'Weeks 10-12',
-};
-
 const PHASE_TITLES: Record<number, string> = {
   1: 'Foundation Definition',
   2: 'Structural Design',
@@ -157,7 +150,7 @@ function PhaseCard({
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Phase {phaseNum} &middot; {PHASE_WEEKS[phaseNum]}
+            Phase {phaseNum}
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>
             {phase.name || PHASE_TITLES[phaseNum]}
@@ -322,16 +315,16 @@ export default function GovernanceProgramPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Program</h1>
           <HelpPopover id="gov-program-intro" title="Data Governance Program Setup">
-            Procela follows a DAMA-aligned, 4-phase framework for standing up a governance program
-            in roughly 10-12 weeks: (1) Foundation Definition — scope, principles, operating model;
-            (2) Structural Design — domains, roles, and committees; (3) People & Processes — RACI,
-            policies, and stewardship; (4) Operationalization — monitoring, metrics, and continuous
-            improvement. Progress on each phase is tracked automatically as you complete the
-            underlying work.
+            Procela follows a DAMA-aligned, 4-phase framework for standing up a governance program:
+            (1) Foundation Definition — scope, principles, operating model; (2) Structural Design —
+            domains, roles, and committees; (3) People & Processes — RACI, policies, and stewardship;
+            (4) Operationalization — monitoring, metrics, and continuous improvement. Progress on
+            each phase is tracked automatically as you complete the underlying work. Organizations
+            move through these phases at their own pace.
           </HelpPopover>
         </div>
         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-          A phased approach to building your data governance program (10-12 weeks)
+          A phased approach to building your data governance program
         </p>
         {status && (
           <div style={{ marginTop: 14, maxWidth: 600 }}>
