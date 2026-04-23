@@ -79,7 +79,7 @@ const typeRouteMap: Record<string, string> = {
   system: '/systems',
   'data-asset': '/data-assets',
   organization: '/organizations',
-  person: '/organizations',
+  person: '/people',
   'data-domain': '/data-domains',
   'governance-group': '/governance',
   mapping: '/mappings',

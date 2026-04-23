@@ -248,6 +248,7 @@ export default function PeoplePage() {
   const addToast = useToastStore((s) => s.addToast);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
 
   // Org lookup state — we only need the flat list + tree for the "assign
   // to orgs" multi-select in the person form. No tree navigation here.
@@ -345,6 +346,23 @@ export default function PeoplePage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Highlight row when arriving from global search
+  useEffect(() => {
+    if (highlightId) {
+      const el = document.getElementById(`row-${highlightId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.animation = 'highlightPulse 2s ease-out';
+        setTimeout(() => {
+          el.style.animation = '';
+          const params = new URLSearchParams(searchParams);
+          params.delete('highlight');
+          setSearchParams(params, { replace: true });
+        }, 2000);
+      }
+    }
+  }, [highlightId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const peopleCounts: Record<string, number> = {};
   for (const p of people) {
@@ -483,7 +501,30 @@ export default function PeoplePage() {
       errorToast(err, 'Failed to save person');
     }
   };
-  const handleDeletePerson = async (id: string) => { await apiClient.delete(`/people/${id}`); addToast('success', 'Person deleted'); fetchData(); };
+  const handleDeletePerson = async (id: string) => {
+    const person = people.find((p) => p.id === id);
+    await apiClient.delete(`/people/${id}`);
+    fetchData();
+    if (person) {
+      addToast('success', `"${person.name}" deleted`, {
+        action: {
+          label: 'Undo',
+          handler: async () => {
+            await apiClient.post('/people', {
+              name: person.name, email: person.email,
+              role: person.role, title: person.title,
+              orgIds: person.orgIds,
+            });
+            addToast('success', `"${person.name}" restored`);
+            fetchData();
+          },
+        },
+        duration: 6000,
+      });
+    } else {
+      addToast('success', 'Person deleted');
+    }
+  };
 
   // ── Bulk select handlers ──
   const togglePersonSelect = (id: string) => {
@@ -725,6 +766,7 @@ export default function PeoplePage() {
 
   return (
     <div>
+      <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
         <div>
@@ -1121,7 +1163,7 @@ export default function PeoplePage() {
                           : null;
                         const isSelected = selectedPersonIds.has(person.id);
                         return (
-                        <tr key={person.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                        <tr key={person.id} id={`row-${person.id}`} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
                           onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
                           <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
