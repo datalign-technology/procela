@@ -47,6 +47,11 @@ import gapDetectionRouter from './routes/gap-detection';
 import attachmentsRouter from './routes/attachments';
 import brandingRouter from './routes/branding';
 import syncConnectionsRouter from './routes/sync-connections';
+import governancePoliciesRouter from './routes/governance-policies';
+import governanceControlsRouter from './routes/governance-controls';
+import governanceTasksRouter from './routes/governance-tasks';
+import governanceIssuesRouter from './routes/governance-issues';
+import controlTowerRouter from './routes/control-tower';
 
 const app = express();
 
@@ -103,6 +108,10 @@ app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
 app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
 app.use('/api/v1/attachments', authenticateToken, attachmentsRouter);
 app.use('/api/v1/sync-connections', authenticateToken, syncConnectionsRouter);
+app.use('/api/v1/governance-policies', authenticateToken, governancePoliciesRouter);
+app.use('/api/v1/governance-controls', authenticateToken, governanceControlsRouter);
+app.use('/api/v1/governance-tasks', authenticateToken, governanceTasksRouter);
+app.use('/api/v1/governance-issues', authenticateToken, governanceIssuesRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -133,6 +142,10 @@ import { connections } from './routes/connections';
 import { brandingStoreArray } from './routes/branding';
 import { attachments } from './routes/attachments';
 import { syncConnections } from './routes/sync-connections';
+import { governancePolicies } from './routes/governance-policies';
+import { governanceControls } from './routes/governance-controls';
+import { governanceTasks } from './routes/governance-tasks';
+import { governanceIssues } from './routes/governance-issues';
 
 const stores = {
   processNodes: () => processNodes,
@@ -160,6 +173,10 @@ const stores = {
   syncConnections: () => syncConnections,
   branding: () => brandingStoreArray,
   attachments: () => attachments,
+  governancePolicies: () => governancePolicies,
+  governanceControls: () => governanceControls,
+  governanceTasks: () => governanceTasks,
+  governanceIssues: () => governanceIssues,
 };
 const autoSaveHandle = startAutoSave(stores);
 
