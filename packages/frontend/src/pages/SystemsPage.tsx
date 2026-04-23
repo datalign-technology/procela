@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -691,11 +691,6 @@ export default function SystemsPage() {
                         value={sys.name}
                         onSave={(v) => inlineSaveField(sys.id, 'name', v)}
                       />
-                      <div style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span style={{ color: 'var(--color-text-muted)' }}>See also:</span>
-                        <Link to={`/data-assets?system=${sys.id}`} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Data Assets</Link>
-                        <Link to="/enterprise-view" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Enterprise View</Link>
-                      </div>
                     </td>
                     <td style={tdStyle}>
                       {systemTypes.length > 0 ? (

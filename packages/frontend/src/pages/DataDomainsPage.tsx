@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -698,13 +697,6 @@ export default function DataDomainsPage() {
                 ))}
               </div>
             </div>
-          </div>
-
-          <div style={{ fontSize: 11, marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ color: 'var(--color-text-muted)' }}>See also:</span>
-            <Link to="/data-assets" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Data Assets</Link>
-            <Link to="/governance" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Governance Groups</Link>
-            <Link to="/raci" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>RACI Matrix</Link>
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>

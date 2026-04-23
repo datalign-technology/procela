@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -1308,12 +1308,6 @@ export default function DataAssetsPage() {
                               })}
                             </div>
                           )}
-                          <div style={{ fontSize: 11, marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <span style={{ color: 'var(--color-text-muted)' }}>See also:</span>
-                            <Link to={`/mappings?asset=${asset.id}`} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View Mappings</Link>
-                            <Link to="/data-quality" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Quality Rules</Link>
-                            <Link to="/data-lineage" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>Data Lineage</Link>
-                          </div>
                         </div>
                       </td>
                     </tr>
