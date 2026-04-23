@@ -194,7 +194,9 @@ export default function GapDetectionPage() {
       <div>
         <PageTabNav tabs={GOVERN_TABS} />
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Gap Detection</h1>
-        <div style={{ color: 'var(--color-text-muted)' }}>Analyzing gaps...</div>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+          <SkeletonRows rows={5} columns={4} />
+        </div>
       </div>
     );
   }

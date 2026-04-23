@@ -251,7 +251,11 @@ export default function RaciMatrixPage() {
         ))}
       </div>
 
-      {loading && <p style={{ color: 'var(--color-text-muted)' }}>Loading RACI matrix...</p>}
+      {loading && (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+          <SkeletonRows rows={5} columns={4} />
+        </div>
+      )}
       {error && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
       {!loading && !error && !hasData && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center' }}>
