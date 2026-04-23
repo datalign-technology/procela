@@ -9,7 +9,7 @@ import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
-import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
+import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
@@ -1217,7 +1217,7 @@ export default function ProcessCatalogPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERN_TABS} />
+      <PageTabNav tabs={CATALOG_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>

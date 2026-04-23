@@ -49,19 +49,27 @@ export default function PageTabNav({ tabs }: PageTabNavProps) {
   );
 }
 
-export const GOVERN_TABS: PageTab[] = [
+export const CATALOG_TABS: PageTab[] = [
   { to: '/processes', label: 'Processes' },
   { to: '/data-assets', label: 'Data Assets' },
-  { to: '/data-domains', label: 'Data Domains' },
+  { to: '/systems', label: 'Systems' },
   { to: '/mappings', label: 'Mappings' },
+];
+
+export const GOVERNANCE_TABS: PageTab[] = [
+  { to: '/data-domains', label: 'Data Domains' },
+  { to: '/governance', label: 'Groups' },
   { to: '/raci', label: 'RACI Matrix' },
-  { to: '/gap-detection', label: 'Gap Detection' },
+  { to: '/governance-policies', label: 'Policies' },
+  { to: '/governance-work', label: 'Work' },
 ];
 
 export const ANALYZE_TABS: PageTab[] = [
   { to: '/enterprise-view', label: 'Enterprise View' },
-  { to: '/data-lineage', label: 'Data Lineage' },
   { to: '/data-quality', label: 'Data Quality' },
+  { to: '/data-lineage', label: 'Data Lineage' },
+  { to: '/gap-detection', label: 'Gap Detection' },
+  { to: '/control-tower', label: 'Control Tower' },
   { to: '/reports', label: 'Reports' },
 ];
 

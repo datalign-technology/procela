@@ -5,7 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
-import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
+import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 
 interface RaciRow {
   id: string;
@@ -224,7 +224,7 @@ export default function RaciMatrixPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERN_TABS} />
+      <PageTabNav tabs={GOVERNANCE_TABS} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.5rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>RACI Matrix</h1>
         <InfoTip term="RACI" />

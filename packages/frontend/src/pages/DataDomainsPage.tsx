@@ -16,7 +16,7 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
+import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 
 interface DataDomain {
   id: string;
@@ -403,7 +403,7 @@ export default function DataDomainsPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERN_TABS} />
+      <PageTabNav tabs={GOVERNANCE_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
