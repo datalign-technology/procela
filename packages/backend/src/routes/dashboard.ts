@@ -687,6 +687,211 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// GET /api/v1/dashboard/my-dashboard
+//
+// Personalized dashboard for the logged-in user. Aggregates tasks, issues,
+// domains, upcoming events, and pending policy reviews into a single call
+// so the frontend can render a "My Dashboard" page in one fetch.
+// ──────────────────────────────────────────────────────────────────────────
+
+// Defensive imports — these stores may not exist yet in all deployments.
+let governanceTasks: any[] = [];
+let governanceIssues: any[] = [];
+let calendarEvents: any[] = [];
+let governancePolicies: any[] = [];
+try { governanceTasks = require('./governance-tasks').governanceTasks; } catch {}
+try { governanceIssues = require('./governance-issues').governanceIssues; } catch {}
+try { calendarEvents = require('./governance-calendar').calendarEvents; } catch {}
+try { governancePolicies = require('./governance-policies').governancePolicies; } catch {}
+
+const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
+  const email = (req.user?.email || '').toLowerCase();
+  if (!email) {
+    res.json({
+      success: true,
+      data: {
+        person: null,
+        myTasks: [],
+        myIssues: [],
+        myDomains: [],
+        upcomingEvents: [],
+        pendingReviews: [],
+        summary: {
+          openTasks: 0, overdueTasks: 0, openIssues: 0, criticalIssues: 0,
+          domainsOwned: 0, domainsSteward: 0, upcomingEventsCount: 0, pendingReviewsCount: 0,
+        },
+      },
+    });
+    return;
+  }
+
+  const person = people.find((p) => p.email?.toLowerCase() === email);
+  if (!person) {
+    res.json({
+      success: true,
+      data: {
+        person: null,
+        myTasks: [],
+        myIssues: [],
+        myDomains: [],
+        upcomingEvents: [],
+        pendingReviews: [],
+        summary: {
+          openTasks: 0, overdueTasks: 0, openIssues: 0, criticalIssues: 0,
+          domainsOwned: 0, domainsSteward: 0, upcomingEventsCount: 0, pendingReviewsCount: 0,
+        },
+      },
+    });
+    return;
+  }
+
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+
+  // ── Tasks assigned to me (not completed/cancelled) ──
+  const CLOSED_TASK_STATUSES = new Set(['COMPLETED', 'CANCELLED']);
+  const myTasks = governanceTasks
+    .filter((t: any) => t.assigneeId === person.id && !CLOSED_TASK_STATUSES.has(t.status))
+    .map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      taskType: t.taskType,
+      dueDate: t.dueDate || null,
+      isOverdue: t.dueDate ? t.dueDate < todayStr : false,
+    }))
+    .sort((a: any, b: any) => {
+      const pa = PRIORITY_ORDER[a.priority] ?? 99;
+      const pb = PRIORITY_ORDER[b.priority] ?? 99;
+      if (pa !== pb) return pa - pb;
+      // Nulls sort last
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+
+  // ── Issues assigned to me (not closed/resolved/wont_fix) ──
+  const CLOSED_ISSUE_STATUSES = new Set(['CLOSED', 'RESOLVED', 'WONT_FIX']);
+  const myIssues = governanceIssues
+    .filter((i: any) => i.assignedTo === person.id && !CLOSED_ISSUE_STATUSES.has(i.status))
+    .map((i: any) => {
+      const domain = i.domainId ? dataDomains.find((d) => d.id === i.domainId) : null;
+      return {
+        id: i.id,
+        title: i.title,
+        status: i.status,
+        severity: i.severity,
+        issueType: i.issueType,
+        domainName: domain?.name || null,
+      };
+    })
+    .sort((a: any, b: any) => {
+      const sa = SEVERITY_ORDER[a.severity] ?? 99;
+      const sb = SEVERITY_ORDER[b.severity] ?? 99;
+      return sa - sb;
+    });
+
+  // ── Domains I own or steward ──
+  const myDomains = dataDomains
+    .filter((d) => d.ownerId === person.id || (d.stewardIds || []).includes(person.id))
+    .map((d) => {
+      const domainAssets = dataAssets.filter((a) => d.dataAssetIds.includes(a.id));
+      const healthyAssets = domainAssets.filter((a) => a.healthScore >= 80).length;
+      return {
+        id: d.id,
+        name: d.name,
+        relation: (d.ownerId === person.id ? 'owner' : 'steward') as 'owner' | 'steward',
+        assetCount: d.dataAssetIds.length,
+        healthyAssets,
+        totalAssets: domainAssets.length,
+      };
+    });
+
+  // ── Upcoming calendar events (within 14 days, status ACTIVE) ──
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+  const upcomingEvents = calendarEvents
+    .filter((e: any) => {
+      if (e.status !== 'ACTIVE') return false;
+      if (!e.attendees || !e.attendees.includes(person.id)) return false;
+      if (!e.nextOccurrence) return false;
+      const occDate = new Date(e.nextOccurrence);
+      const diffMs = occDate.getTime() - now.getTime();
+      return diffMs >= 0 && diffMs <= fourteenDaysMs;
+    })
+    .map((e: any) => {
+      const occDate = new Date(e.nextOccurrence);
+      const daysAway = Math.ceil((occDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      return {
+        name: e.name,
+        eventType: e.eventType,
+        nextOccurrence: e.nextOccurrence,
+        daysAway: Math.max(0, daysAway),
+      };
+    })
+    .sort((a: any, b: any) => a.daysAway - b.daysAway);
+
+  // ── Policies pending my review (I own them and nextReviewDate is within 30 days or overdue) ──
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const pendingReviews = governancePolicies
+    .filter((p: any) => {
+      if (p.ownerAssignmentId !== person.id) return false;
+      if (!p.nextReviewDate) return false;
+      const reviewDate = new Date(p.nextReviewDate);
+      const diffMs = reviewDate.getTime() - now.getTime();
+      // Overdue (past) or within 30 days (future)
+      return diffMs <= thirtyDaysMs;
+    })
+    .map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      nextReviewDate: p.nextReviewDate || null,
+      isOverdue: p.nextReviewDate ? p.nextReviewDate < todayStr : false,
+    }));
+
+  // ── Summary counts ──
+  const overdueTasks = myTasks.filter((t: any) => t.isOverdue).length;
+  const criticalIssues = myIssues.filter((i: any) => i.severity === 'CRITICAL').length;
+  const domainsOwned = myDomains.filter((d) => d.relation === 'owner').length;
+  const domainsSteward = myDomains.filter((d) => d.relation === 'steward').length;
+
+  const summary = {
+    openTasks: myTasks.length,
+    overdueTasks,
+    openIssues: myIssues.length,
+    criticalIssues,
+    domainsOwned,
+    domainsSteward,
+    upcomingEventsCount: upcomingEvents.length,
+    pendingReviewsCount: pendingReviews.length,
+  };
+
+  res.json({
+    success: true,
+    data: {
+      person: {
+        id: person.id,
+        name: person.name,
+        email: person.email,
+        role: person.role,
+        title: (person as any).title || '',
+      },
+      myTasks,
+      myIssues,
+      myDomains,
+      upcomingEvents,
+      pendingReviews,
+      summary,
+    },
+  });
+});
+
 /**
  * GET /api/v1/dashboard/governance-status — check if governance framework
  * has been set up for the current org (processes, groups, domains).
