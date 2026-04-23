@@ -144,6 +144,9 @@ interface FormData {
   dataClassification: string;
   retentionPolicy: string;
   refreshFrequency: string;
+  sourceConnectionId: string;
+  sourceAsset: string;
+  sourceColumn: string;
 }
 
 const emptyForm: FormData = {
@@ -158,6 +161,9 @@ const emptyForm: FormData = {
   dataClassification: '',
   retentionPolicy: '',
   refreshFrequency: '',
+  sourceConnectionId: '',
+  sourceAsset: '',
+  sourceColumn: '',
 };
 
 interface ColumnRule {
@@ -289,6 +295,7 @@ export default function DataAssetsPage() {
   }
   const [bindingsByAsset, setBindingsByAsset] = useState<Record<string, BindingRow[]>>({});
   const [connectionNameById, setConnectionNameById] = useState<Record<string, string>>({});
+  const [connectionsList, setConnectionsList] = useState<Array<{ id: string; name: string; connectionType: string }>>([]);
   const [linkModalAsset, setLinkModalAsset] = useState<DataAssetEntity | null>(null);
   const [linkModalMode, setLinkModalMode] = useState<'new' | 'change'>('new');
 
@@ -309,9 +316,11 @@ export default function DataAssetsPage() {
       setStandardDataTypes((assetRes as any).dataTypes || []);
       // Build a lookup of connection names so the binding column can show
       // "<conn-name> / <asset>.<col>" without a second trip per row.
+      const connList = connRes.data || [];
       const cmap: Record<string, string> = {};
-      for (const c of connRes.data || []) cmap[c.id] = c.name;
+      for (const c of connList) cmap[c.id] = c.name;
       setConnectionNameById(cmap);
+      setConnectionsList(connList as any);
       // Fan-out: fetch bindings per asset in parallel. Small N in practice;
       // if this grows we'll add a bulk endpoint.
       const entries = await Promise.all(nextAssets.map(async (a) => {
@@ -462,6 +471,9 @@ export default function DataAssetsPage() {
       dataClassification: asset.dataClassification || '',
       retentionPolicy: asset.retentionPolicy || '',
       refreshFrequency: asset.refreshFrequency || '',
+      sourceConnectionId: asset.sourceConnectionId || '',
+      sourceAsset: asset.sourceAsset || '',
+      sourceColumn: asset.sourceColumn || '',
     });
     setEditingId(asset.id);
     setShowForm(true);
@@ -480,6 +492,9 @@ export default function DataAssetsPage() {
       dataClassification: asset.dataClassification || '',
       retentionPolicy: asset.retentionPolicy || '',
       refreshFrequency: asset.refreshFrequency || '',
+      sourceConnectionId: asset.sourceConnectionId || '',
+      sourceAsset: asset.sourceAsset || '',
+      sourceColumn: asset.sourceColumn || '',
     });
     setEditingId(null);
     setShowForm(true);
@@ -925,6 +940,43 @@ export default function DataAssetsPage() {
               <input style={inputStyle} value={form.retentionPolicy} onChange={(e) => updateField('retentionPolicy', e.target.value)} placeholder="e.g. 7 years per regulatory requirement, 90 days rolling" />
             </div>
           </div>
+
+          {/* Source Connection */}
+          <div style={{ marginTop: 16, padding: '14px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 14 }}>&#x26A1;</span>
+              Link to Source
+              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>(optional)</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection</label>
+                <select style={selectStyle} value={form.sourceConnectionId} onChange={(e) => updateField('sourceConnectionId', e.target.value)}>
+                  <option value="">-- No connection --</option>
+                  {connectionsList.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{c.connectionType ? ` (${c.connectionType})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table / File / Asset</label>
+                <input style={inputStyle} value={form.sourceAsset} onChange={(e) => updateField('sourceAsset', e.target.value)} placeholder="e.g. customers, invoices.csv" />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Column (optional)</label>
+                <input style={inputStyle} value={form.sourceColumn} onChange={(e) => updateField('sourceColumn', e.target.value)} placeholder="e.g. email, account_id" />
+              </div>
+            </div>
+            {form.sourceConnectionId && (
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                This asset will be linked to {connectionNameById[form.sourceConnectionId] || 'the selected connection'}
+                {form.sourceAsset ? ` → ${form.sourceAsset}` : ''}
+                {form.sourceColumn ? `.${form.sourceColumn}` : ''}.
+                You can discover columns after saving.
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             {!editingId && (
