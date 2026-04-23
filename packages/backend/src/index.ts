@@ -53,6 +53,9 @@ import governanceTasksRouter from './routes/governance-tasks';
 import governanceIssuesRouter from './routes/governance-issues';
 import controlTowerRouter from './routes/control-tower';
 import governanceProgramRouter from './routes/governance-program';
+import governanceCalendarRouter from './routes/governance-calendar';
+import decisionRightsRouter from './routes/decision-rights';
+import sopsRouter from './routes/sops';
 
 const app = express();
 
@@ -115,6 +118,9 @@ app.use('/api/v1/governance-tasks', authenticateToken, governanceTasksRouter);
 app.use('/api/v1/governance-issues', authenticateToken, governanceIssuesRouter);
 app.use('/api/v1/control-tower', authenticateToken, controlTowerRouter);
 app.use('/api/v1/governance-program', authenticateToken, governanceProgramRouter);
+app.use('/api/v1/governance-calendar', authenticateToken, governanceCalendarRouter);
+app.use('/api/v1/decision-rights', authenticateToken, decisionRightsRouter);
+app.use('/api/v1/sops', authenticateToken, sopsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -150,6 +156,9 @@ import { governanceControls } from './routes/governance-controls';
 import { governanceTasks } from './routes/governance-tasks';
 import { governanceIssues } from './routes/governance-issues';
 import { governancePrograms } from './routes/governance-program';
+import { calendarEvents } from './routes/governance-calendar';
+import { decisionRights } from './routes/decision-rights';
+import { sops } from './routes/sops';
 
 const stores = {
   processNodes: () => processNodes,
@@ -182,6 +191,9 @@ const stores = {
   governanceTasks: () => governanceTasks,
   governanceIssues: () => governanceIssues,
   governancePrograms: () => governancePrograms,
+  calendarEvents: () => calendarEvents,
+  decisionRights: () => decisionRights,
+  sops: () => sops,
 };
 const autoSaveHandle = startAutoSave(stores);
 
