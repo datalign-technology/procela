@@ -321,7 +321,14 @@ export default function DataLineagePage() {
   };
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading...</div>;
+    return (
+      <div>
+        <PageTabNav tabs={ANALYZE_TABS} />
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+          <SkeletonRows rows={5} columns={4} />
+        </div>
+      </div>
+    );
   }
 
   return (

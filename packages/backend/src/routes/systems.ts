@@ -4,6 +4,9 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import logger from '../lib/logger';
+import { dataAssets } from './data-assets';
+import { connections } from './connections';
+import { mappings } from './mappings';
 
 interface StoredSystem {
   id: string;
@@ -87,6 +90,20 @@ router.put('/:id', (req: Request, res: Response) => {
   saveStore('systems', systems);
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
+});
+
+/** GET /api/v1/systems/:id/impact — preview what would be affected by deleting this system */
+router.get('/:id/impact', (req: Request, res: Response) => {
+  const id = req.params.id;
+  const sys = systems.find((s) => s.id === id);
+  if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+
+  const assetsCount = dataAssets.filter((a) => a.systemId === id).length;
+  const connectionsCount = connections.filter((c) => c.systemId === id).length;
+  const assetIds = new Set(dataAssets.filter((a) => a.systemId === id).map((a) => a.id));
+  const mappingsCount = mappings.filter((m) => assetIds.has(m.dataAssetId)).length;
+
+  res.json({ success: true, data: { assets: assetsCount, connections: connectionsCount, mappings: mappingsCount } });
 });
 
 /** DELETE /api/v1/systems/:id */

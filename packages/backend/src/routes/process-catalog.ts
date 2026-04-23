@@ -668,6 +668,45 @@ router.delete('/nodes/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+/** POST /nodes/:id/clone — deep-clone a node and all its descendants */
+router.post('/nodes/:id/clone', (req: Request, res: Response) => {
+  const source = findNode(param(req.params.id));
+  if (!source) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+
+  const { name } = req.body;
+  const now = new Date().toISOString();
+  const idMap = new Map<string, string>(); // old ID -> new ID
+
+  // Collect source node and all descendants
+  const allNodes = [source, ...getDescendants(source.id)];
+
+  // Generate new IDs for every node
+  for (const node of allNodes) {
+    idMap.set(node.id, uuid());
+  }
+
+  // Clone nodes with new IDs and updated parent references
+  const cloned: ProcessNode[] = allNodes.map((node, idx) => ({
+    ...node,
+    id: idMap.get(node.id)!,
+    parentId: idx === 0 ? source.parentId : idMap.get(node.parentId!) || null,
+    name: idx === 0 ? (name || `${node.name} (copy)`) : node.name,
+    activityId: generateNodeId(node.level),
+    status: 'DRAFT',
+    ownerId: null,
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  processNodes.push(...cloned);
+  saveStore('processNodes', processNodes);
+  auditService.log(DEV_ORG_ID, null, 'ProcessNode', cloned[0].id, 'CLONE', null, { sourceId: source.id, count: cloned.length });
+  logger.info({ sourceId: source.id, clonedRoot: cloned[0].id, count: cloned.length }, 'Cloned process node tree');
+
+  res.status(201).json({ success: true, data: cloned, message: `Cloned ${cloned.length} nodes` });
+});
+
 /** GET /nodes/:id/validate — validate a value stream's integrity */
 router.get('/nodes/:id/validate', (req: Request, res: Response) => {
   const result = validateProcessIntegrity(param(req.params.id));

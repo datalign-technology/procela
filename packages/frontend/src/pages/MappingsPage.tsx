@@ -11,7 +11,9 @@ import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import InfoTip from '../components/InfoTip';
+import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
+import BatchMappingWizard from '../components/BatchMappingWizard';
 
 // ── Types ──
 
@@ -140,6 +142,7 @@ export default function MappingsPage() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [showBatchWizard, setShowBatchWizard] = useState(false);
 
   // Form state — hierarchical step selection
   const [selectedVsId, setSelectedVsId] = useState('');
@@ -311,6 +314,9 @@ export default function MappingsPage() {
                 m.aiSuggested ? 'Yes' : 'No',
                 m.notes,
               ]))} />
+          )}
+          {canWrite && (
+            <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
           )}
           {canWrite && (
             <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
@@ -574,7 +580,7 @@ export default function MappingsPage() {
         }}
       >
         {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+          <SkeletonRows rows={5} columns={4} />
         ) : mappings.length === 0 && !showForm ? (
           <EmptyState
             icon={'\u2194'}
@@ -666,6 +672,13 @@ export default function MappingsPage() {
           </table>
         )}
       </div>
+
+      <BatchMappingWizard
+        open={showBatchWizard}
+        onClose={() => setShowBatchWizard(false)}
+        orgId={activeOrgId || ''}
+        onCreated={fetchData}
+      />
     </div>
   );
 }

@@ -281,6 +281,7 @@ export default function PeoplePage() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
+  const [deletePersonImpact, setDeletePersonImpact] = useState<{ ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number } | null>(null);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
@@ -928,14 +929,19 @@ export default function PeoplePage() {
               <ConfirmDialog
                 open={confirmDeletePerson !== null}
                 title="Delete Person?"
-                message="This will permanently remove this person. This cannot be undone."
+                message={
+                  deletePersonImpact && (deletePersonImpact.ownedProcesses > 0 || deletePersonImpact.governanceGroups > 0 || deletePersonImpact.damaRoles > 0 || deletePersonImpact.domainOwner > 0 || deletePersonImpact.domainSteward > 0)
+                    ? `This will permanently remove this person. This person owns ${deletePersonImpact.ownedProcesses} process${deletePersonImpact.ownedProcesses !== 1 ? 'es' : ''}, belongs to ${deletePersonImpact.governanceGroups} governance group${deletePersonImpact.governanceGroups !== 1 ? 's' : ''}, has ${deletePersonImpact.damaRoles} DAMA role${deletePersonImpact.damaRoles !== 1 ? 's' : ''}, and owns ${deletePersonImpact.domainOwner} data domain${deletePersonImpact.domainOwner !== 1 ? 's' : ''}${deletePersonImpact.domainSteward > 0 ? ` (steward of ${deletePersonImpact.domainSteward})` : ''}. This cannot be undone.`
+                    : 'This will permanently remove this person. This cannot be undone.'
+                }
                 confirmLabel="Delete"
                 onConfirm={async () => {
                   const id = confirmDeletePerson;
                   setConfirmDeletePerson(null);
+                  setDeletePersonImpact(null);
                   if (id) await handleDeletePerson(id);
                 }}
-                onCancel={() => setConfirmDeletePerson(null)}
+                onCancel={() => { setConfirmDeletePerson(null); setDeletePersonImpact(null); }}
               />
 
               {/* Bulk Action Bar */}
@@ -1184,7 +1190,13 @@ export default function PeoplePage() {
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
                               <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
-                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeletePerson(person.id)} />
+                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                                try {
+                                  const res = await apiClient.get<{ success: boolean; data: { ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number } }>(`/people/${person.id}/impact`);
+                                  setDeletePersonImpact(res.data || null);
+                                } catch { setDeletePersonImpact(null); }
+                                setConfirmDeletePerson(person.id);
+                              }} />
                             </div>
                           </td>
                         </tr>

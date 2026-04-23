@@ -9,6 +9,7 @@ import IconButton from './../components/IconButton';
 import EmptyState from './../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import { SkeletonRows } from '../components/Skeleton';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -813,7 +814,7 @@ export default function ConnectionsPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+          <SkeletonRows rows={5} columns={4} />
         ) : visibleConnections.length === 0 && !showForm ? (
           <EmptyState
             icon={'\u26A1'}

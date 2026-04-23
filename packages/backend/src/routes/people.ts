@@ -348,6 +348,24 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: person });
 });
 
+/** GET /api/v1/people/:id/impact — preview what would be affected by deleting this person */
+router.get('/:id/impact', (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const person = people.find((p) => p.id === id);
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+
+  const ownedProcesses = processNodes.filter((n) => n.ownerId === id).length;
+  const govGroups = governanceGroups.filter((g) => g.members.some((m) => m.personId === id)).length;
+  const damaRoleCount = damaRoles.filter((r) => r.personId === id).length;
+  const domainOwner = dataDomains.filter((d) => d.ownerId === id).length;
+  const domainSteward = dataDomains.filter((d) => d.stewardIds.includes(id)).length;
+
+  res.json({
+    success: true,
+    data: { ownedProcesses, governanceGroups: govGroups, damaRoles: damaRoleCount, domainOwner, domainSteward },
+  });
+});
+
 /** DELETE /api/v1/people/:id */
 router.delete('/:id', (req: Request, res: Response) => {
   const idx = people.findIndex((p) => p.id === req.params.id);

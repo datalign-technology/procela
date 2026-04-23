@@ -218,6 +218,20 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: enrichDomain(domain) });
 });
 
+/** GET /api/v1/data-domains/:id/impact — preview what would be affected by deleting this domain */
+router.get('/:id/impact', (req: Request, res: Response) => {
+  const domain = dataDomains.find((d) => d.id === req.params.id);
+  if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+
+  res.json({
+    success: true,
+    data: {
+      assets: domain.dataAssetIds.length,
+      stewards: domain.stewardIds.length,
+    },
+  });
+});
+
 /** DELETE /api/v1/data-domains/:id */
 router.delete('/:id', (req: Request, res: Response) => {
   const idx = dataDomains.findIndex((d) => d.id === req.params.id);

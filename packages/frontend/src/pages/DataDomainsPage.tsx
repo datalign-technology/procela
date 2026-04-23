@@ -16,6 +16,7 @@ import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
 
 interface DataDomain {
@@ -110,6 +111,7 @@ export default function DataDomainsPage() {
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<{ assets: number; stewards: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
@@ -543,14 +545,19 @@ export default function DataDomainsPage() {
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Delete Data Domain?"
-        message="This will permanently delete this data domain. This cannot be undone."
+        message={
+          deleteImpact && (deleteImpact.assets > 0 || deleteImpact.stewards > 0)
+            ? `This will permanently delete this data domain. This domain has ${deleteImpact.assets} data asset${deleteImpact.assets !== 1 ? 's' : ''} and ${deleteImpact.stewards} steward${deleteImpact.stewards !== 1 ? 's' : ''} assigned. This cannot be undone.`
+            : 'This will permanently delete this data domain. This cannot be undone.'
+        }
         confirmLabel="Delete"
         onConfirm={async () => {
           const id = confirmDelete;
           setConfirmDelete(null);
+          setDeleteImpact(null);
           if (id) await handleDelete(id);
         }}
-        onCancel={() => setConfirmDelete(null)}
+        onCancel={() => { setConfirmDelete(null); setDeleteImpact(null); }}
       />
 
       {/* Add/Edit Form */}
@@ -710,7 +717,7 @@ export default function DataDomainsPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+          <SkeletonRows rows={5} columns={4} />
         ) : domains.length === 0 && !showForm ? (
           <EmptyState
             icon={'\u2637'}
@@ -785,7 +792,13 @@ export default function DataDomainsPage() {
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
                       )}
                       {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(domain.id)} />
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                          try {
+                            const res = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number } }>(`/data-domains/${domain.id}/impact`);
+                            setDeleteImpact(res.data || null);
+                          } catch { setDeleteImpact(null); }
+                          setConfirmDelete(domain.id);
+                        }} />
                       )}
                     </div>
                   </td>

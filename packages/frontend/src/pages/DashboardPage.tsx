@@ -420,9 +420,9 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myItems' | 'overview' | 'wizard' | 'alerts' | 'whatsNext' | 'checklist' | 'quickActions';
+type SectionKey = 'myItems' | 'overview' | 'wizard' | 'alerts' | 'whatsNext' | 'checklist' | 'quickActions' | 'recentActivity';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'wizard', 'alerts', 'whatsNext', 'checklist', 'quickActions'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'wizard', 'alerts', 'whatsNext', 'checklist', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myItems: 'My Items',
@@ -432,6 +432,7 @@ const SECTION_LABELS: Record<SectionKey, string> = {
   whatsNext: "What's Next",
   checklist: 'Getting Started',
   quickActions: 'Quick Actions',
+  recentActivity: 'Recent Activity',
 };
 
 function useDashboardLayout() {
@@ -786,6 +787,71 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   );
 }
 
+function RecentActivity() {
+  const { activeOrgId } = useOrgContext();
+  const [entries, setEntries] = useState<Array<{
+    id: string; entityType: string; entityId: string; action: string;
+    timestamp: string; userId: string | null;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const query = activeOrgId ? `?orgId=${activeOrgId}&limit=15` : '?limit=15';
+        const res = await apiClient.get<{ success: boolean; data: any[] }>(`/audit${query}`);
+        setEntries(res.data || []);
+      } catch { /* */ }
+      finally { setLoading(false); }
+    })();
+  }, [activeOrgId]);
+
+  if (loading || entries.length === 0) return null;
+
+  const actionIcon = (action: string) => {
+    if (action === 'CREATE') return '+';
+    if (action === 'UPDATE') return '~';
+    if (action === 'DELETE') return '×';
+    return '•';
+  };
+
+  const actionColor = (action: string) => {
+    if (action === 'CREATE') return '#16a34a';
+    if (action === 'UPDATE') return '#2563eb';
+    if (action === 'DELETE') return '#dc2626';
+    return '#64748b';
+  };
+
+  const timeAgo = (ts: string) => {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Recent Activity</h2>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+        {entries.map((e) => (
+          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--color-border)', fontSize: 12 }}>
+            <span style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: actionColor(e.action) + '18', color: actionColor(e.action), flexShrink: 0 }}>
+              {actionIcon(e.action)}
+            </span>
+            <span style={{ flex: 1, color: 'var(--color-text)' }}>
+              <strong>{e.action.toLowerCase()}</strong> {e.entityType.replace(/([A-Z])/g, ' $1').trim()}
+            </span>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>{timeAgo(e.timestamp)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -851,6 +917,7 @@ export default function DashboardPage() {
     whatsNext: <WhatsNext stats={stats} />,
     checklist: allZero ? <GettingStartedChecklist stats={stats} /> : <GettingStartedChecklist stats={stats} />,
     quickActions: <QuickActions />,
+    recentActivity: <RecentActivity />,
   };
 
   return (

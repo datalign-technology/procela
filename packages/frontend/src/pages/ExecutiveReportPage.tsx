@@ -171,7 +171,9 @@ export default function ExecutiveReportPage() {
     <div className="executive-report">
       <style>{`
         @media print {
-          .no-print { display: none !important; }
+          nav, header, aside, button, .no-print { display: none !important; }
+          body { background: white !important; }
+          main { padding: 0 !important; margin: 0 !important; }
           .executive-report { padding: 0; }
           .report-content { box-shadow: none !important; border: none !important; }
         }
@@ -186,7 +188,17 @@ export default function ExecutiveReportPage() {
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
           <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
         </div>
-        <IconButton icon="download" label="Export PDF" variant="primary" onClick={() => window.print()} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => window.print()} className="no-print" style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+          }}>
+            Print / Export PDF
+          </button>
+          <IconButton icon="download" label="Export PDF" variant="primary" onClick={() => window.print()} />
+        </div>
       </div>
 
       <div className="report-content" style={{

@@ -7,6 +7,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
+import { SkeletonRows } from '../components/Skeleton';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -238,7 +239,13 @@ export default function AgentsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>{'Loading\u2026'}</p>;
+  if (loading) return (
+    <div>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+        <SkeletonRows rows={5} columns={4} />
+      </div>
+    </div>
+  );
 
   return (
     <div>

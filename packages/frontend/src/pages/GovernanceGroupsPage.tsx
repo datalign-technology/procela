@@ -7,6 +7,7 @@ import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
 
@@ -618,7 +619,13 @@ export default function GovernanceGroupsPage() {
 
   // ── Render ──
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>;
+  if (loading) return (
+    <div>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+        <SkeletonRows rows={5} columns={4} />
+      </div>
+    </div>
+  );
 
   return (
     <div>

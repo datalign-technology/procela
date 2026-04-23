@@ -149,6 +149,7 @@ export default function SystemsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -556,14 +557,19 @@ export default function SystemsPage() {
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Delete System?"
-        message="This will permanently delete this system. This cannot be undone."
+        message={
+          deleteImpact && (deleteImpact.assets > 0 || deleteImpact.connections > 0 || deleteImpact.mappings > 0)
+            ? `This will permanently delete this system. Affected: ${deleteImpact.assets} data asset${deleteImpact.assets !== 1 ? 's' : ''}, ${deleteImpact.connections} connection${deleteImpact.connections !== 1 ? 's' : ''}, ${deleteImpact.mappings} mapping${deleteImpact.mappings !== 1 ? 's' : ''}. This cannot be undone.`
+            : 'This will permanently delete this system. This cannot be undone.'
+        }
         confirmLabel="Delete"
         onConfirm={async () => {
           const id = confirmDelete;
           setConfirmDelete(null);
+          setDeleteImpact(null);
           if (id) await handleDelete(id);
         }}
-        onCancel={() => setConfirmDelete(null)}
+        onCancel={() => { setConfirmDelete(null); setDeleteImpact(null); }}
       />
 
       <ConfirmDialog
@@ -663,7 +669,13 @@ export default function SystemsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sys)} />
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(sys.id)} />
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                          try {
+                            const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
+                            setDeleteImpact(res.data || null);
+                          } catch { setDeleteImpact(null); }
+                          setConfirmDelete(sys.id);
+                        }} />
                       </div>
                     </td>
                   </tr>

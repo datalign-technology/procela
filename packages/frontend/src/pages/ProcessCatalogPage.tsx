@@ -10,6 +10,7 @@ import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
 import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
+import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
 
@@ -582,10 +583,11 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
+  onClone: (id: string) => void;
   onAddChild: (parentId: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void;
   validChildrenMap: Record<string, string[]>;
@@ -908,6 +910,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
           )
         )}
         <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onShowHistory(node.id)} title="Version History">Hist</button>
+        {node.level === 'VALUE_STREAM' && (
+          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onClone(node.id)} title="Clone Value Stream">Clone</button>
+        )}
         {!isLocked && (
           <button style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete">&times;</button>
         )}
@@ -916,7 +921,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onAddChild, expanded, toggl
       {/* Children */}
       {isExpanded && (node.children || []).map((child, idx, arr) => (
         <TreeNode key={child.id} node={child} depth={depth + 1}
-          onUpdate={onUpdate} onDelete={onDelete} onAddChild={onAddChild}
+          onUpdate={onUpdate} onDelete={onDelete} onClone={onClone} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand}
           selectedIds={selectedIds} toggleSelect={toggleSelect}
           validChildrenMap={validChildrenMap} flows={flows}
@@ -1046,6 +1051,19 @@ export default function ProcessCatalogPage() {
     await apiClient.delete(`/process-catalog/nodes/${id}`);
     addToast('success', 'Process node deleted');
     fetchData();
+  };
+
+  const cloneNode = async (id: string) => {
+    const node = findNodeInTree(tree, id);
+    const name = prompt(`Clone "${node?.name || 'Value Stream'}" as:`, `${node?.name || 'Value Stream'} (copy)`);
+    if (!name) return;
+    try {
+      const res = await apiClient.post<{ success: boolean; data: ProcessNode[]; message?: string }>(`/process-catalog/nodes/${id}/clone`, { name });
+      addToast('success', res.message || 'Value stream cloned');
+      fetchData();
+    } catch {
+      addToast('error', 'Failed to clone value stream');
+    }
   };
 
   const addMapping = async (nodeId: string, assetId: string, linkType: string) => {
@@ -1425,7 +1443,7 @@ export default function ProcessCatalogPage() {
       {/* Tree */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden', minHeight: 300 }}>
         {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+          <SkeletonRows rows={5} columns={4} />
         ) : tree.length === 0 && addingTo !== '__root__' ? (
           <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
             <div style={{ marginBottom: 20 }}>
@@ -1480,7 +1498,7 @@ export default function ProcessCatalogPage() {
         ) : (
           tree.map((node, idx) => (
             <TreeNode key={node.id} node={node} depth={0}
-              onUpdate={updateNode} onDelete={deleteNode}
+              onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
               expanded={expanded} toggleExpand={toggleExpand}
               selectedIds={selectedIds} toggleSelect={toggleNodeSelect}
