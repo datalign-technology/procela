@@ -64,3 +64,8 @@ export const ANALYZE_TABS: PageTab[] = [
   { to: '/data-quality', label: 'Data Quality' },
   { to: '/reports', label: 'Reports' },
 ];
+
+export const WORK_TABS: PageTab[] = [
+  { to: '/governance-work?tab=tasks', label: 'Tasks' },
+  { to: '/governance-work?tab=issues', label: 'Issues' },
+];

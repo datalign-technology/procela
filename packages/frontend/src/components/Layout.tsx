@@ -36,6 +36,7 @@ const navSections: NavSection[] = [
       { to: '/mappings', label: 'Mappings', icon: '\u2194' },
       { to: '/raci', label: 'RACI Matrix', icon: '\u2637' },
       { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
+      { to: '/governance-work', label: 'Work', icon: '☑' },
     ],
   },
   {

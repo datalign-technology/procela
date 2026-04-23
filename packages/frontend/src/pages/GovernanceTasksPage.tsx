@@ -128,7 +128,7 @@ const MODE_COLORS: Record<string, { bg: string; color: string }> = {
   HYBRID: { bg: '#ccfbf1', color: '#115e59' },
 };
 
-function badge(text: string, colors: { bg: string; color: string }): React.CSSProperties {
+function badge(_text: string, colors: { bg: string; color: string }): React.CSSProperties {
   return {
     display: 'inline-block', padding: '2px 8px', borderRadius: 4,
     fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.color,
