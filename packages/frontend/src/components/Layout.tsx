@@ -25,47 +25,16 @@ const navSections: NavSection[] = [
     label: null,
     items: [
       { to: '/', label: 'Dashboard', icon: '\u25A3' },
+      { to: '/processes', label: 'Catalog', icon: '\u26C1' },
+      { to: '/data-domains', label: 'Governance', icon: '\u2637' },
+      { to: '/enterprise-view', label: 'Analyze', icon: '\u2713' },
     ],
   },
   {
-    label: 'Catalog',
-    items: [
-      { to: '/processes', label: 'Processes', icon: '\u2630' },
-      { to: '/data-assets', label: 'Data Assets', icon: '\u26C1' },
-      { to: '/systems', label: 'Systems', icon: '\u2699' },
-      { to: '/mappings', label: 'Mappings', icon: '\u2194' },
-    ],
-  },
-  {
-    label: 'Governance',
-    items: [
-      { to: '/data-domains', label: 'Data Domains', icon: '\u25A8' },
-      { to: '/governance', label: 'Groups', icon: '\u2637' },
-      { to: '/raci', label: 'RACI Matrix', icon: '\u2261' },
-      { to: '/governance-policies', label: 'Policies', icon: '\u2696' },
-      { to: '/governance-work', label: 'Work', icon: '\u2611' },
-    ],
-  },
-  {
-    label: 'Analyze',
-    items: [
-      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u25A8' },
-      { to: '/data-quality', label: 'Data Quality', icon: '\u2713' },
-      { to: '/data-lineage', label: 'Data Lineage', icon: '\u21C4' },
-      { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
-      { to: '/control-tower', label: 'Control Tower', icon: '\u2318' },
-      { to: '/reports', label: 'Reports', icon: '\u25A3' },
-    ],
-  },
-  {
-    label: 'Admin',
+    label: null,
     adminOnly: true,
     items: [
-      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
-      { to: '/people', label: 'People', icon: '\u263B' },
-      { to: '/connections', label: 'Connections', icon: '\u26A1' },
-      { to: '/agents', label: 'Agents', icon: '\u2734' },
-      { to: '/settings', label: 'Settings', icon: '\u2731' },
+      { to: '/organizations', label: 'Admin', icon: '\u2699' },
     ],
   },
 ];
