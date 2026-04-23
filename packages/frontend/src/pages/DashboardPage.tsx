@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
-import GovernanceSetupWizard from '../components/GovernanceSetupWizard';
 import { usePolling } from '../hooks/usePolling';
 
 interface DashboardStats {
@@ -44,13 +43,6 @@ const cardStyle: React.CSSProperties = {
 
 
 
-interface ChecklistStep {
-  number: number;
-  title: string;
-  description: string;
-  link: string;
-  complete: boolean;
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // My Items — personalized dashboard section showing what the logged-in
@@ -247,150 +239,6 @@ function MyItems() {
   );
 }
 
-function GettingStartedChecklist({ stats }: { stats: DashboardStats }) {
-  const steps: ChecklistStep[] = [
-    {
-      number: 1,
-      title: 'Set up your organization',
-      description: 'Create your company structure to organize processes and data by business unit.',
-      link: '/organizations',
-      complete: stats.organizations > 1,
-    },
-    {
-      number: 2,
-      title: 'Add people to your org',
-      description: 'Add team members so you can assign ownership of processes and data assets.',
-      link: '/organizations',
-      complete: stats.people > 0,
-    },
-    {
-      number: 3,
-      title: 'Define your processes',
-      description: 'Build your process catalog with value streams, processes, and activities.',
-      link: '/processes',
-      complete: stats.valueStreams > 0,
-    },
-    {
-      number: 4,
-      title: 'Register your systems',
-      description: 'Add the applications and platforms where your organization\'s data lives.',
-      link: '/systems',
-      complete: stats.systems > 0,
-    },
-    {
-      number: 5,
-      title: 'Define data assets',
-      description: 'Describe the data your organization relies on in business terms.',
-      link: '/data-assets',
-      complete: stats.dataAssets > 0,
-    },
-    {
-      number: 6,
-      title: 'Map data to processes',
-      description: 'Link data assets to process steps to track dependencies and discover gaps.',
-      link: '/mappings',
-      complete: stats.mappings > 0,
-    },
-  ];
-
-  const completedCount = steps.filter((s) => s.complete).length;
-
-  return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      padding: 28,
-      marginBottom: 24,
-      boxShadow: 'var(--shadow-sm)',
-    }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: 'var(--color-primary)' }}>
-        Getting Started with Procela
-      </h2>
-      <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
-        Follow these steps to set up your process-data landscape. {completedCount} of {steps.length} complete.
-      </p>
-      <div style={{
-        height: 6,
-        background: 'var(--color-border)',
-        borderRadius: 3,
-        marginBottom: 24,
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          height: '100%',
-          width: `${(completedCount / steps.length) * 100}%`,
-          background: 'var(--color-primary)',
-          borderRadius: 3,
-          transition: 'width 0.3s',
-        }} />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {steps.map((step) => (
-          <div
-            key={step.number}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              padding: '14px 16px',
-              background: step.complete ? '#d1f0eb' : 'var(--color-bg)',
-              border: `1px solid ${step.complete ? '#0f4f4633' : 'var(--color-border)'}`,
-              borderRadius: 'var(--radius-md)',
-              transition: 'background 0.15s',
-            }}
-          >
-            <div style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 14,
-              fontWeight: 700,
-              flexShrink: 0,
-              background: step.complete ? 'var(--color-primary)' : 'var(--color-border)',
-              color: step.complete ? '#fff' : 'var(--color-text-muted)',
-            }}>
-              {step.complete ? '\u2713' : step.number}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: step.complete ? 'var(--color-primary)' : 'var(--color-text)',
-                textDecoration: step.complete ? 'line-through' : 'none',
-              }}>
-                {step.title}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                {step.description}
-              </div>
-            </div>
-            <Link
-              to={step.link}
-              style={{
-                padding: '6px 14px',
-                background: step.complete ? 'transparent' : 'var(--color-primary)',
-                color: step.complete ? 'var(--color-primary)' : '#fff',
-                border: step.complete ? '1px solid var(--color-primary)' : 'none',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 12,
-                fontWeight: 500,
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-                cursor: 'pointer',
-              }}
-            >
-              {step.complete ? 'View' : 'Get Started'}
-            </Link>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Stats Overview — compact KPI strip ──
 
@@ -420,19 +268,17 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myItems' | 'overview' | 'programMaturity' | 'wizard' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'checklist' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myItems' | 'overview' | 'programMaturity' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'programMaturity', 'wizard', 'alerts', 'whatsNext', 'stewardOnboarding', 'checklist', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myItems', 'overview', 'programMaturity', 'alerts', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myItems: 'My Items',
   overview: 'Overview',
   programMaturity: 'Program Maturity',
-  wizard: 'Governance Setup',
   alerts: 'Alerts',
   whatsNext: "What's Next",
   stewardOnboarding: 'Steward Onboarding',
-  checklist: 'Getting Started',
   quickActions: 'Quick Actions',
   recentActivity: 'Recent Activity',
 };
@@ -1015,24 +861,14 @@ export default function DashboardPage() {
     );
   }
 
-  const allZero =
-    stats.valueStreams === 0 &&
-    stats.processes === 0 &&
-    stats.systems === 0 &&
-    stats.dataAssets === 0 &&
-    stats.mappings === 0 &&
-    stats.organizations <= 1 &&
-    stats.people === 0;
 
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myItems: <MyItems />,
     overview: <StatsOverview stats={stats} />,
     programMaturity: <ProgramMaturity />,
-    wizard: <GovernanceSetupWizard />,
     alerts: <DashboardAlerts stats={stats} />,
     whatsNext: <WhatsNext stats={stats} />,
     stewardOnboarding: <StewardOnboarding />,
-    checklist: allZero ? <GettingStartedChecklist stats={stats} /> : <GettingStartedChecklist stats={stats} />,
     quickActions: <QuickActions />,
     recentActivity: <RecentActivity />,
   };
