@@ -57,6 +57,7 @@ export const CATALOG_TABS: PageTab[] = [
 ];
 
 export const GOVERNANCE_TABS: PageTab[] = [
+  { to: '/governance-program', label: 'Program' },
   { to: '/governance', label: 'Groups' },
   { to: '/data-domains', label: 'Data Domains' },
   { to: '/raci', label: 'RACI Matrix' },

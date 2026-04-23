@@ -17,6 +17,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'gap-detection': 'Gap Detection',
   'governance': 'Governance',
   'governance-groups': 'Governance Groups',
+  'governance-program': 'Program',
   'data-domains': 'Data Domains',
   'dama-roles': 'Governance Roles',
   'analyze': 'Analyze',
