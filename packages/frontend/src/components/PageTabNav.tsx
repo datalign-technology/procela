@@ -55,6 +55,7 @@ export const CATALOG_TABS: PageTab[] = [
   { to: '/systems', label: 'Systems' },
   { to: '/mappings', label: 'Mappings' },
   { to: '/business-glossary', label: 'Glossary' },
+  { to: '/data-dictionary', label: 'Data Dictionary' },
 ];
 
 export const GOVERNANCE_TABS: PageTab[] = [

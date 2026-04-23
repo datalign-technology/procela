@@ -39,6 +39,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'decision-rights': 'Decision Rights',
   'sops': 'Procedures',
   'business-glossary': 'Business Glossary',
+  'data-dictionary': 'Data Dictionary',
 };
 
 const containerStyle: React.CSSProperties = {

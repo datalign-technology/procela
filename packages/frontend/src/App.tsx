@@ -41,6 +41,7 @@ import GovernanceCalendarPage from '@/pages/GovernanceCalendarPage';
 import DecisionRightsPage from '@/pages/DecisionRightsPage';
 import SopsPage from '@/pages/SopsPage';
 import BusinessGlossaryPage from '@/pages/BusinessGlossaryPage';
+import DataDictionaryPage from '@/pages/DataDictionaryPage';
 
 export default function App() {
   return (
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/decision-rights" element={<DecisionRightsPage />} />
         <Route path="/sops" element={<SopsPage />} />
         <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
+        <Route path="/data-dictionary" element={<DataDictionaryPage />} />
         <Route path="/governance-program" element={<GovernanceProgramPage />} />
         <Route path="/control-tower" element={<ControlTowerPage />} />
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
