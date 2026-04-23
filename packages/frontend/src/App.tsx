@@ -36,6 +36,10 @@ import GovernanceWorkPage from '@/pages/GovernanceWorkPage';
 import ControlTowerPage from '@/pages/ControlTowerPage';
 import GovernancePoliciesPage from '@/pages/GovernancePoliciesPage';
 import GovernanceProgramPage from '@/pages/GovernanceProgramPage';
+import OperationsManualPage from '@/pages/OperationsManualPage';
+import GovernanceCalendarPage from '@/pages/GovernanceCalendarPage';
+import DecisionRightsPage from '@/pages/DecisionRightsPage';
+import SopsPage from '@/pages/SopsPage';
 
 export default function App() {
   return (
@@ -73,6 +77,10 @@ export default function App() {
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/governance-work" element={<GovernanceWorkPage />} />
         <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
+        <Route path="/operations-manual" element={<OperationsManualPage />} />
+        <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
+        <Route path="/decision-rights" element={<DecisionRightsPage />} />
+        <Route path="/sops" element={<SopsPage />} />
         <Route path="/governance-program" element={<GovernanceProgramPage />} />
         <Route path="/control-tower" element={<ControlTowerPage />} />
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />

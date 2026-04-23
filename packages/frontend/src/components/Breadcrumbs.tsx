@@ -34,6 +34,10 @@ const ROUTE_LABELS: Record<string, string> = {
   'branding': 'Branding',
   'settings': 'Settings',
   'help': 'Help',
+  'operations-manual': 'Operations Manual',
+  'governance-calendar': 'Calendar',
+  'decision-rights': 'Decision Rights',
+  'sops': 'Procedures',
 };
 
 const containerStyle: React.CSSProperties = {

@@ -61,7 +61,11 @@ export const GOVERNANCE_TABS: PageTab[] = [
   { to: '/governance', label: 'Groups' },
   { to: '/data-domains', label: 'Data Domains' },
   { to: '/raci', label: 'RACI Matrix' },
+  { to: '/decision-rights', label: 'Decision Rights' },
   { to: '/governance-policies', label: 'Policies' },
+  { to: '/sops', label: 'SOPs' },
+  { to: '/governance-calendar', label: 'Calendar' },
+  { to: '/operations-manual', label: 'Operations' },
   { to: '/governance-work', label: 'Work' },
 ];
 
