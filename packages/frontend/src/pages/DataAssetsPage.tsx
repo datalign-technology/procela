@@ -18,6 +18,7 @@ import { errorToast } from '../lib/errorToast';
 import LinkConnectionModal from '../components/LinkConnectionModal';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
 
 interface DataAssetEntity {
   id: string;
@@ -698,6 +699,7 @@ export default function DataAssetsPage() {
 
   return (
     <div>
+      <PageTabNav tabs={GOVERN_TABS} />
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>

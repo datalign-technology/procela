@@ -11,6 +11,7 @@ import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import InfoTip from '../components/InfoTip';
+import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -283,6 +284,7 @@ export default function MappingsPage() {
 
   return (
     <div>
+      <PageTabNav tabs={GOVERN_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>

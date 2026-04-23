@@ -7,6 +7,7 @@ import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
+import PageTabNav, { ANALYZE_TABS } from '../components/PageTabNav';
 
 interface LineageLink {
   id: string;
@@ -325,6 +326,7 @@ export default function DataLineagePage() {
 
   return (
     <div>
+      <PageTabNav tabs={ANALYZE_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>

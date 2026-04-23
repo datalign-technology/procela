@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import HelpPopover from '../components/HelpPopover';
+import PageTabNav, { ANALYZE_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -203,7 +204,10 @@ export default function EnterpriseViewPage() {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 140px)' }}>
+    <div>
+      <PageTabNav tabs={ANALYZE_TABS} />
+      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 180px)' }}>
+      <div style={{ display: 'flex', gap: 0, flex: 1, minHeight: 0 }}>
       {/* Main content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 20px 0' }}>
         {/* Header */}
@@ -584,6 +588,8 @@ export default function EnterpriseViewPage() {
             )}
           </div>
         )}
+      </div>
+      </div>
       </div>
     </div>
   );

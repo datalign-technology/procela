@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
+import PageTabNav, { GOVERN_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -191,6 +192,7 @@ export default function GapDetectionPage() {
   if (loading) {
     return (
       <div>
+        <PageTabNav tabs={GOVERN_TABS} />
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Gap Detection</h1>
         <div style={{ color: 'var(--color-text-muted)' }}>Analyzing gaps...</div>
       </div>
@@ -200,6 +202,7 @@ export default function GapDetectionPage() {
   if (!data || !summary) {
     return (
       <div>
+        <PageTabNav tabs={GOVERN_TABS} />
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Gap Detection</h1>
         <div style={{ color: 'var(--color-text-muted)' }}>No data available.</div>
       </div>
@@ -212,6 +215,7 @@ export default function GapDetectionPage() {
 
   return (
     <div>
+      <PageTabNav tabs={GOVERN_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Gap Detection</h1>
