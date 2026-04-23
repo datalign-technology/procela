@@ -142,6 +142,7 @@ export default function BusinessGlossaryPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
   const [activeLetter, setActiveLetter] = useState('');
+  const [groupByCategory, setGroupByCategory] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
@@ -336,6 +337,32 @@ export default function BusinessGlossaryPage() {
         })}
       </div>
 
+      {/* View toggle */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button
+          onClick={() => setGroupByCategory(true)}
+          style={{
+            padding: '4px 12px', fontSize: 11, fontWeight: groupByCategory ? 600 : 500,
+            background: groupByCategory ? 'var(--color-primary)' : 'var(--color-surface)',
+            color: groupByCategory ? '#fff' : 'var(--color-text-secondary)',
+            border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer',
+          }}
+        >
+          Group by Category
+        </button>
+        <button
+          onClick={() => setGroupByCategory(false)}
+          style={{
+            padding: '4px 12px', fontSize: 11, fontWeight: !groupByCategory ? 600 : 500,
+            background: !groupByCategory ? 'var(--color-primary)' : 'var(--color-surface)',
+            color: !groupByCategory ? '#fff' : 'var(--color-text-secondary)',
+            border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer',
+          }}
+        >
+          Alphabetical
+        </button>
+      </div>
+
       {/* Add/Edit Form */}
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
@@ -420,6 +447,74 @@ export default function BusinessGlossaryPage() {
             <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
               No terms match your current filters.
             </div>
+          ) : groupByCategory ? (
+            (() => {
+              const CATEGORY_ORDER = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'];
+              const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+                BUSINESS: 'Core business concepts and entities used across the organization.',
+                TECHNICAL: 'Technical terms, systems, and infrastructure concepts.',
+                REGULATORY: 'Compliance, privacy, and regulatory terms.',
+                METRIC: 'Key performance indicators and measurements.',
+                GENERAL: 'General governance and data management terms.',
+              };
+              const grouped: Record<string, GlossaryTerm[]> = {};
+              for (const t of filteredTerms) {
+                const cat = t.category || 'GENERAL';
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(t);
+              }
+              return CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => (
+                <div key={cat} style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={badgeStyle(CATEGORY_COLORS[cat] || CATEGORY_COLORS.GENERAL)}>{cat}</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                      {CATEGORY_DESCRIPTIONS[cat] || ''} ({grouped[cat].length} term{grouped[cat].length !== 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  {grouped[cat].map((t) => {
+                    const isExpanded = expandedId === t.id;
+                    return (
+                      <div key={t.id} style={termCardStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{t.term}</span>
+                              <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
+                            </div>
+                            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55, margin: 0, marginBottom: 8 }}>{t.definition}</p>
+                            {t.synonyms && t.synonyms.length > 0 && (
+                              <div style={{ marginBottom: 6 }}>{t.synonyms.map((syn, i) => <span key={i} style={pillStyle}>{syn}</span>)}</div>
+                            )}
+                            {(t.context || t.businessRules || t.sourceOfTruth) && (
+                              <button style={{ fontSize: 12, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 4 }}
+                                onClick={() => setExpandedId(isExpanded ? null : t.id)}>
+                                {isExpanded ? 'Hide details' : 'Show details'}
+                              </button>
+                            )}
+                            {isExpanded && (
+                              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
+                                {t.context && <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Context: </span>{t.context}</div>}
+                                {t.businessRules && <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Business Rules: </span>{t.businessRules}</div>}
+                                {t.exampleValues && <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Examples: </span>{t.exampleValues}</div>}
+                                {t.sourceOfTruth && <div><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Source of Truth: </span>{t.sourceOfTruth}</div>}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, marginLeft: 16 }}>
+                            {t.domainName && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.domainName}</span>}
+                            {t.ownerName && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.ownerName}</span>}
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
+                              {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ));
+            })()
           ) : (
             filteredTerms.map((t) => {
               const isExpanded = expandedId === t.id;
