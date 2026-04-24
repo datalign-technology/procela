@@ -152,7 +152,7 @@ function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
     },
     {
       label: 'Governance leadership roles established',
-      done: ['CDO', 'DATA_GOVERNANCE_LEAD', 'DATA_OWNER', 'BUSINESS_DATA_STEWARD'].every(
+      done: ['CDO', 'DATA_GOVERNANCE_LEAD'].every(
         (rt) => orgRoles.some((r: any) => r.roleType === rt),
       ),
     },
@@ -170,7 +170,10 @@ function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
   const allDomainsOwned =
     orgDomains.length > 0 && orgDomains.every((d: any) => !!d.ownerId);
 
+  const hasDataOwner = orgRoles.some((r: any) => r.roleType === 'DATA_OWNER');
+
   const phase3Checks: PhaseCheck[] = [
+    { label: 'Data owners assigned', done: hasDataOwner },
     { label: 'Data stewards identified', done: hasDataSteward },
     { label: 'Stewardship teams formed', done: hasStewardshipTeam },
     { label: 'Domain ownership assigned', done: allDomainsOwned },
@@ -325,7 +328,14 @@ function computeRecommendations(program: StoredGovernanceProgram): Recommendatio
   if (!status.phases.phase3.completed) {
     for (const check of status.phases.phase3.checks) {
       if (check.done) continue;
-      if (check.label === 'Data stewards identified') {
+      if (check.label === 'Data owners assigned') {
+        recs.push({
+          phase: 3,
+          action: 'Assign Data Owners to be accountable for each data domain',
+          link: '/governance-program',
+          priority: 'HIGH',
+        });
+      } else if (check.label === 'Data stewards identified') {
         recs.push({
           phase: 3,
           action: 'Assign a Business Data Steward',

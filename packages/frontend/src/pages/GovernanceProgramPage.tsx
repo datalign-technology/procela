@@ -204,6 +204,7 @@ const PHASE_CHECK_LINKS: Record<string, string> = {
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
   'Governance leadership roles established': '#2',
+  'Data owners assigned': '#2',
   'Data stewards identified': '#2',
   'Stewardship teams formed': '/governance',
   'Domain ownership assigned': '/data-domains',
@@ -758,16 +759,16 @@ export default function GovernanceProgramPage() {
                       <div ref={(el) => { cardRefs.current[2] = el; }}>
                         {(() => {
                           const totalRoles = ROLE_GUIDE.length;
-                          const essentialRoles = ROLE_GUIDE.filter((r) => r.priority === 'ESSENTIAL');
+                          const leadershipTypes = ['CDO', 'DATA_GOVERNANCE_LEAD'];
                           const filledRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
                           const filledCount = ROLE_GUIDE.filter((r) => filledRoleTypes.has(r.roleType)).length;
-                          const essentialFilled = essentialRoles.filter((r) => filledRoleTypes.has(r.roleType)).length;
+                          const leadershipFilled = leadershipTypes.filter((rt) => filledRoleTypes.has(rt)).length;
                           return (
                             <>
                               <div style={{ marginBottom: 20 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                                   <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
-                                  <span style={{ fontSize: 12, color: essentialFilled === essentialRoles.length ? '#16a34a' : '#dc2626' }}>{essentialFilled} of {essentialRoles.length} essential roles filled</span>
+                                  <span style={{ fontSize: 12, color: leadershipFilled === leadershipTypes.length ? '#16a34a' : '#dc2626' }}>{leadershipFilled} of {leadershipTypes.length} leadership roles filled</span>
                                 </div>
                                 <ProgressBar value={(filledCount / totalRoles) * 100} />
                               </div>
