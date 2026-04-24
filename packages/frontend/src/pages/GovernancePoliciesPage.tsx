@@ -253,7 +253,7 @@ export default function GovernancePoliciesPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Policies &amp; Controls</h2>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Policies & Controls</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Define governance policies and the controls that enforce them.
           </p>

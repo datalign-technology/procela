@@ -307,7 +307,7 @@ export default function BusinessGlossaryPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Business Glossary</h2>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Business Glossary</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Agreed-upon definitions for key business terms across the organization.
           </p>

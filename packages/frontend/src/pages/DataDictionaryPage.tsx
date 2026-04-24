@@ -270,7 +270,7 @@ export default function DataDictionaryPage() {
         <div className="no-print">
           <PageTabNav tabs={CATALOG_TABS} />
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Data Dictionary</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Data Dictionary</h1>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading data dictionary...</div>
       </div>
     );
@@ -282,7 +282,7 @@ export default function DataDictionaryPage() {
         <div className="no-print">
           <PageTabNav tabs={CATALOG_TABS} />
         </div>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Data Dictionary</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Data Dictionary</h1>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
     );
@@ -309,7 +309,7 @@ export default function DataDictionaryPage() {
         <PageTabNav tabs={CATALOG_TABS} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0 }}>Data Dictionary</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Data Dictionary</h1>
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
               Comprehensive catalog of data assets, definitions, ownership, and technical details.
             </p>

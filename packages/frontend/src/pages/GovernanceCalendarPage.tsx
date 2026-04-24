@@ -379,7 +379,7 @@ export default function GovernanceCalendarPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Governance Calendar</h2>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Calendar</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Recurring events and activities that keep your program running.
           </p>

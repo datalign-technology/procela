@@ -321,7 +321,7 @@ export default function GovernanceTasksPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Tasks</h2>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Tasks</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Track and manage governance tasks, reviews, and approvals.
           </p>
