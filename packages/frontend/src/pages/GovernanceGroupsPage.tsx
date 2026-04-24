@@ -808,23 +808,31 @@ export default function GovernanceGroupsPage() {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {checkedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{checkedIds.size} selected</span>
+          <button onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Delete Selected
+          </button>
+          <button onClick={() => setCheckedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Tree View */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar */}
         <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
           <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
-          {checkedIds.size > 0 ? (
-            <>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>{checkedIds.size} selected</span>
-              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-error, #dc2626)' }} onClick={() => setConfirmBulkDelete(true)}>Delete Selected</button>
-              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => setCheckedIds(new Set())}>Clear</button>
-            </>
-          ) : (
-            <>
-              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-              <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
-            </>
-          )}
+          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
+          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
         </div>
 
         {/* Tree body — no inner scroll container. The page itself
