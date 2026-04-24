@@ -206,6 +206,8 @@ export default function ConnectionsPage() {
   const [discoveringId, setDiscoveringId] = useState<string | null>(null);
   const [discoveredAssets, setDiscoveredAssets] = useState<DiscoveredAsset[]>([]);
   const [discoverModal, setDiscoverModal] = useState<{ connId: string; systemId: string; systemName: string } | null>(null);
+  const [formTestResult, setFormTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [formTesting, setFormTesting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -272,7 +274,7 @@ export default function ConnectionsPage() {
   // CRUD
   // -----------------------------------------------------------------------
 
-  const openAdd = () => {
+  const openAdd = () => { setFormTestResult(null);
     // Pre-fill systemId from the active filter so "+ Add Connection" under a
     // System filter keeps the user's context.
     setForm({ ...emptyForm, systemId: systemFilter });
@@ -349,10 +351,35 @@ export default function ConnectionsPage() {
 
       setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null);
       fetchData();
+      return savedId;
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Save failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleSaveAndTest = async () => {
+    const savedId = await handleSave();
+    if (!savedId) return;
+    setFormTesting(true);
+    setFormTestResult(null);
+    setShowForm(true); // keep form open to show result
+    setEditingId(savedId);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: { success: boolean; message: string } }>(`/connections/${savedId}/test`);
+      setFormTestResult({ success: res.data.success, message: res.data.message });
+      if (res.data.success) {
+        addToast('success', `Test passed: ${res.data.message}`);
+      } else {
+        addToast('error', `Test failed: ${res.data.message}`);
+      }
+      fetchData();
+    } catch {
+      setFormTestResult({ success: false, message: 'Connection test failed' });
+      addToast('error', 'Connection test failed');
+    } finally {
+      setFormTesting(false);
     }
   };
 
@@ -391,7 +418,7 @@ export default function ConnectionsPage() {
     } catch { addToast('error', 'Bulk delete failed'); }
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null); };
+  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null); setFormTestResult(null); };
 
   // -----------------------------------------------------------------------
   // Test
@@ -795,8 +822,29 @@ export default function ConnectionsPage() {
             {renderTypeFields()}
           </div>
 
+          {/* Test result */}
+          {formTestResult && (
+            <div style={{
+              marginBottom: 12, padding: '10px 14px', borderRadius: 'var(--radius-md)',
+              background: formTestResult.success ? '#f0fdf4' : '#fef2f2',
+              border: `1px solid ${formTestResult.success ? '#86efac' : '#fca5a5'}`,
+              fontSize: 13, color: formTestResult.success ? '#166534' : '#991b1b',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{ fontSize: 16 }}>{formTestResult.success ? '\u2713' : '\u2717'}</span>
+              {formTestResult.message}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={handleCancel} disabled={uploading}>Cancel</button>
+            <button style={btnSecondary} onClick={handleCancel} disabled={uploading || formTesting}>Cancel</button>
+            <button
+              style={{ ...btnSecondary, opacity: !form.name.trim() || uploading || formTesting ? 0.6 : 1 }}
+              disabled={!form.name.trim() || uploading || formTesting}
+              onClick={handleSaveAndTest}
+            >
+              {formTesting ? 'Testing\u2026' : 'Save & Test'}
+            </button>
             <button
               style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1 }}
               disabled={!form.name.trim() || uploading}
