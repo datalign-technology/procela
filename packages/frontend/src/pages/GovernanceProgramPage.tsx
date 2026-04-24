@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -153,29 +153,31 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
 }
 
 const PHASE_CHECK_LINKS: Record<string, string> = {
-  'Scope defined': '/governance-program',
-  'Guiding principles established': '/governance-program',
-  'Operating model selected': '/governance-program',
+  'Scope defined': '#foundation',
+  'Guiding principles established': '#foundation',
+  'Operating model selected': '#foundation',
   'Data domains defined': '/data-domains',
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
-  'Initial roles assigned': '/governance-program',
-  'Data stewards identified': '/governance-program',
+  'Initial roles assigned': '#roles',
+  'Data stewards identified': '#roles',
   'Stewardship teams formed': '/governance',
   'Domain ownership assigned': '/data-domains',
   'Core processes defined': '/processes',
   'Policies activated': '/governance-policies',
-  'Program launched': '/governance-program',
+  'Program launched': '#launch',
 };
 
 function PhaseCard({
   phaseNum,
   phase,
   isCurrent,
+  onSectionOpen,
 }: {
   phaseNum: 1 | 2 | 3 | 4;
   phase: { name: string; completed: boolean; progress: number; checks: PhaseCheck[] };
   isCurrent: boolean;
+  onSectionOpen?: (hash: string) => void;
 }) {
   const navigate = useNavigate();
   const color = PHASE_COLORS[phaseNum];
@@ -235,7 +237,13 @@ function PhaseCard({
           return (
             <div
               key={idx}
-              onClick={link ? () => navigate(link) : undefined}
+              onClick={link ? () => {
+                if (link.startsWith('#')) {
+                  onSectionOpen?.(link.slice(1));
+                } else {
+                  navigate(link);
+                }
+              } : undefined}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
                 padding: '5px 8px', borderRadius: 4,
@@ -274,9 +282,78 @@ function PhaseCard({
   );
 }
 
+function CollapsibleSection({
+  phaseLabel,
+  phaseColor,
+  title,
+  subtitle,
+  open,
+  onToggle,
+  children,
+  sectionRef,
+}: {
+  phaseLabel: string;
+  phaseColor: string;
+  title: string;
+  subtitle?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  sectionRef?: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <div
+      ref={sectionRef}
+      style={{
+        background: 'var(--color-surface)',
+        border: `1px solid ${open ? phaseColor + '40' : 'var(--color-border)'}`,
+        borderRadius: 'var(--radius-md)',
+        marginBottom: 12,
+        boxShadow: 'var(--shadow-sm)',
+        overflow: 'hidden',
+        transition: 'border-color 0.2s',
+      }}
+    >
+      <div
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 20px',
+          cursor: 'pointer',
+          borderBottom: open ? '1px solid var(--color-border)' : 'none',
+          transition: 'background-color 0.12s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)', width: 12 }}>{open ? '▼' : '▶'}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: phaseColor + '18', color: phaseColor,
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>
+            {phaseLabel}
+          </span>
+          <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h3>
+          {subtitle && (
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{subtitle}</span>
+          )}
+        </div>
+      </div>
+      {open && (
+        <div style={{ padding: 20 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GovernanceProgramPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
+  const location = useLocation();
 
   const [program, setProgram] = useState<Program | null>(null);
   const [status, setStatus] = useState<PhaseStatus | null>(null);
@@ -285,8 +362,35 @@ export default function GovernanceProgramPage() {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'scope' | 'principles'>('scope');
 
-  // Role assignment section (Phase 2) — expanded/collapsed
-  const [showRoleAssignment, setShowRoleAssignment] = useState(false);
+  // Collapsible sections
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const foundationRef = useRef<HTMLDivElement>(null);
+  const rolesRef = useRef<HTMLDivElement>(null);
+  const launchRef = useRef<HTMLDivElement>(null);
+
+  const toggleSection = (id: string) => {
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const openAndScrollTo = (sectionId: string) => {
+    setOpenSections((prev) => ({ ...prev, [sectionId]: true }));
+    const refMap: Record<string, React.RefObject<HTMLDivElement | null>> = {
+      foundation: foundationRef,
+      roles: rolesRef,
+      launch: launchRef,
+    };
+    const ref = refMap[sectionId];
+    setTimeout(() => {
+      ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  useEffect(() => {
+    const hash = location.hash?.slice(1);
+    if (hash && ['foundation', 'roles', 'launch'].includes(hash)) {
+      openAndScrollTo(hash);
+    }
+  }, [location.hash]);
 
   // Editable form state
   const [inScope, setInScope] = useState('');
@@ -431,10 +535,10 @@ export default function GovernanceProgramPage() {
   }, [activeOrgId]);
 
   useEffect(() => {
-    if (showRoleAssignment && !rolesLoaded) {
+    if (openSections.roles && !rolesLoaded) {
       fetchRolesData();
     }
-  }, [showRoleAssignment, rolesLoaded, fetchRolesData]);
+  }, [openSections.roles, rolesLoaded, fetchRolesData]);
 
   // Reset rolesLoaded when org changes so data is re-fetched
   useEffect(() => {
@@ -567,6 +671,7 @@ export default function GovernanceProgramPage() {
                     phaseNum={n}
                     phase={status.phases[key]}
                     isCurrent={status.currentPhase === n}
+                    onSectionOpen={openAndScrollTo}
                   />
                 );
               })}
@@ -628,15 +733,19 @@ export default function GovernanceProgramPage() {
             </div>
           )}
 
-          {/* Scope & Principles editor */}
+          {/* ── Collapsible work sections ── */}
+
+          {/* Phase 1: Foundation — Scope, Principles & Dates */}
           {program && (
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20,
-              boxShadow: 'var(--shadow-sm)',
-            }}>
+            <CollapsibleSection
+              phaseLabel="Phase 1"
+              phaseColor={PHASE_COLORS[1]}
+              title="Scope, Principles & Dates"
+              open={!!openSections.foundation}
+              onToggle={() => toggleSection('foundation')}
+              sectionRef={foundationRef}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Foundation: Scope & Principles</h3>
                 <HelpPopover id="gov-program-foundation" title="Phase 1: Foundation">
                   Document what is in/out of scope for your governance program, the guiding
                   principles that will shape decisions, and the operating model (who decides what).
@@ -791,77 +900,57 @@ export default function GovernanceProgramPage() {
                 </div>
               )}
 
-            </div>
-          )}
-
-          {/* Program dates */}
-          {program && (
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20,
-              boxShadow: 'var(--shadow-sm)',
-            }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Program Dates</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label>
-                  <input
-                    type="date"
-                    style={inputStyle}
-                    value={targetStartDate}
-                    onChange={(e) => setTargetStartDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label>
-                  <input
-                    type="date"
-                    style={inputStyle}
-                    value={targetLaunchDate}
-                    onChange={(e) => setTargetLaunchDate(e.target.value)}
-                  />
+              {/* Program dates */}
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--color-text-secondary)' }}>Program Dates</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label>
+                    <input
+                      type="date"
+                      style={inputStyle}
+                      value={targetStartDate}
+                      onChange={(e) => setTargetStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label>
+                    <input
+                      type="date"
+                      style={inputStyle}
+                      value={targetLaunchDate}
+                      onChange={(e) => setTargetLaunchDate(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Save bar */}
-          {program && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button
-                style={{ ...btnPrimary, opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
-                disabled={saving}
-                onClick={handleSave}
-              >
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          )}
-
-          {/* Phase 2: Role Assignment */}
-          <div style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)', padding: showRoleAssignment ? 20 : 0, marginBottom: 20,
-            boxShadow: 'var(--shadow-sm)', overflow: 'hidden',
-          }}>
-            <div
-              onClick={() => { setShowRoleAssignment((v) => !v); }}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: showRoleAssignment ? '0 0 16px 0' : '16px 20px',
-                cursor: 'pointer',
-                borderBottom: showRoleAssignment ? '1px solid var(--color-border)' : 'none',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{showRoleAssignment ? '▼' : '▶'}</span>
-                <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Phase 2: Assign Governance Roles</h3>
-                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                  {roleAssignments.length > 0 ? `${new Set(roleAssignments.map((r) => r.roleType)).size} of ${ROLE_GUIDE.length} roles assigned` : 'No roles assigned yet'}
-                </span>
+              {/* Save bar */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  style={{ ...btnPrimary, opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+                  disabled={saving}
+                  onClick={handleSave}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
-            </div>
-            {showRoleAssignment && (() => {
+            </CollapsibleSection>
+          )}
+
+          {/* Phase 2: Assign Governance Roles */}
+          <CollapsibleSection
+            phaseLabel="Phase 2"
+            phaseColor={PHASE_COLORS[2]}
+            title="Assign Governance Roles"
+            subtitle={roleAssignments.length > 0
+              ? `${new Set(roleAssignments.map((r) => r.roleType)).size} of ${ROLE_GUIDE.length} roles assigned`
+              : 'No roles assigned yet'}
+            open={!!openSections.roles}
+            onToggle={() => toggleSection('roles')}
+            sectionRef={rolesRef}
+          >
+            {(() => {
               const totalRoles = ROLE_GUIDE.length;
               const essentialRoles = ROLE_GUIDE.filter((r) => r.priority === 'ESSENTIAL');
               const filledRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
@@ -869,7 +958,7 @@ export default function GovernanceProgramPage() {
               const essentialFilled = essentialRoles.filter((r) => filledRoleTypes.has(r.roleType)).length;
 
               return (
-                <div style={{ paddingTop: 16 }}>
+                <>
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
@@ -927,10 +1016,52 @@ export default function GovernanceProgramPage() {
                       </div>
                     );
                   })}
-                </div>
+                </>
               );
             })()}
-          </div>
+          </CollapsibleSection>
+
+          {/* Phase 4: Program Launch */}
+          {program && (
+            <CollapsibleSection
+              phaseLabel="Phase 4"
+              phaseColor={PHASE_COLORS[4]}
+              title="Program Launch"
+              subtitle={program.status === 'ACTIVE' ? 'Launched' : 'Not yet launched'}
+              open={!!openSections.launch}
+              onToggle={() => toggleSection('launch')}
+              sectionRef={launchRef}
+            >
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
+                When all foundation, structural, and people requirements are in place, launch the program to move it into active operations.
+                Launching sets the program status to Active and signals readiness for day-to-day governance.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 13 }}>
+                  Current status: <strong>{program.status === 'ACTIVE' ? 'Active' : program.status === 'PAUSED' ? 'Paused' : program.status === 'COMPLETED' ? 'Completed' : 'Planning'}</strong>
+                </span>
+                {program.status !== 'ACTIVE' && (
+                  <button
+                    style={{ ...btnPrimary, fontSize: 13 }}
+                    onClick={async () => {
+                      if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
+                      try {
+                        const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, { status: 'ACTIVE' });
+                        if (res.data) { setProgram(res.data); hydrateFromProgram(res.data); }
+                        addToast('success', 'Program launched!');
+                        fetchAll();
+                      } catch { addToast('error', 'Failed to launch program'); }
+                    }}
+                  >
+                    Launch Program
+                  </button>
+                )}
+                {program.status === 'ACTIVE' && (
+                  <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Program is live</span>
+                )}
+              </div>
+            </CollapsibleSection>
+          )}
 
           {!program && !loading && (
             <div style={{
