@@ -102,23 +102,10 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DEPRECATED: { bg: '#fee2e2', color: '#991b1b' },
 };
 
-const DAMA_ROLES = [
-  'CDO', 'DATA_GOVERNANCE_LEAD', 'DATA_OWNER', 'BUSINESS_DATA_STEWARD',
-  'TECHNICAL_DATA_STEWARD', 'DATA_QUALITY_ANALYST', 'DATA_CUSTODIAN',
-  'DATA_ARCHITECT', 'DATA_ENGINEER', 'DATABASE_ADMINISTRATOR',
-];
-const ROLE_LABELS: Record<string, string> = {
-  CDO: 'CDO',
-  DATA_GOVERNANCE_LEAD: 'Gov Lead',
-  DATA_OWNER: 'Data Owner',
-  BUSINESS_DATA_STEWARD: 'Biz Steward',
-  TECHNICAL_DATA_STEWARD: 'Tech Steward',
-  DATA_QUALITY_ANALYST: 'DQ Analyst',
-  DATA_CUSTODIAN: 'Custodian',
-  DATA_ARCHITECT: 'Architect',
-  DATA_ENGINEER: 'Engineer',
-  DATABASE_ADMINISTRATOR: 'DBA',
-};
+import { DAMA_ROLE_LABELS } from '../types';
+
+const DAMA_ROLES = Object.keys(DAMA_ROLE_LABELS);
+const ROLE_LABELS = DAMA_ROLE_LABELS;
 
 const badge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   display: 'inline-block', padding: '2px 8px', borderRadius: 4,

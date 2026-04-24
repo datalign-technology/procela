@@ -159,3 +159,39 @@ export interface ProcessDataLink {
   createdBy?: string;
   createdAt: string;
 }
+
+// ── DAMA Role Labels (single source of truth) ──
+
+export const DAMA_ROLE_TYPES = [
+  'CDO', 'DATA_GOVERNANCE_LEAD', 'DATA_OWNER', 'BUSINESS_DATA_STEWARD',
+  'TECHNICAL_DATA_STEWARD', 'DATA_QUALITY_ANALYST', 'DATA_CUSTODIAN',
+  'DATA_ARCHITECT', 'DATA_ENGINEER', 'DATABASE_ADMINISTRATOR',
+] as const;
+
+export type DamaRoleType = (typeof DAMA_ROLE_TYPES)[number];
+
+export const DAMA_ROLE_LABELS: Record<string, string> = {
+  CDO: 'Chief Data Officer',
+  DATA_GOVERNANCE_LEAD: 'Data Governance Lead',
+  DATA_OWNER: 'Data Owner',
+  BUSINESS_DATA_STEWARD: 'Business Data Steward',
+  DATA_QUALITY_ANALYST: 'Data Quality Analyst',
+  TECHNICAL_DATA_STEWARD: 'Technical Data Steward',
+  DATA_CUSTODIAN: 'Data Custodian',
+  DATA_ARCHITECT: 'Data Architect',
+  DATA_ENGINEER: 'Data Engineer',
+  DATABASE_ADMINISTRATOR: 'Database Administrator',
+};
+
+export const DAMA_ROLE_SHORT: Record<string, string> = {
+  CDO: 'CDO',
+  DATA_GOVERNANCE_LEAD: 'Gov Lead',
+  DATA_OWNER: 'Owner',
+  BUSINESS_DATA_STEWARD: 'Biz Steward',
+  DATA_QUALITY_ANALYST: 'DQ Analyst',
+  TECHNICAL_DATA_STEWARD: 'Tech Steward',
+  DATA_CUSTODIAN: 'Custodian',
+  DATA_ARCHITECT: 'Architect',
+  DATA_ENGINEER: 'Engineer',
+  DATABASE_ADMINISTRATOR: 'DBA',
+};
