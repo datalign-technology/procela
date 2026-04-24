@@ -152,7 +152,9 @@ function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
     },
     {
       label: 'Governance leadership roles established',
-      done: orgRoles.length >= 1,
+      done: ['CDO', 'DATA_GOVERNANCE_LEAD', 'DATA_OWNER', 'BUSINESS_DATA_STEWARD'].every(
+        (rt) => orgRoles.some((r: any) => r.roleType === rt),
+      ),
     },
   ];
 
