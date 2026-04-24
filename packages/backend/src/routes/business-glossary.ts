@@ -306,9 +306,9 @@ router.delete('/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-/** POST /api/v1/business-glossary/seed — create starter terms for an org */
+/** POST /api/v1/business-glossary/seed — create or preview starter terms for an org */
 router.post('/seed', (req: Request, res: Response) => {
-  const { orgId } = req.body;
+  const { orgId, preview, selectedTerms } = req.body;
   if (!orgId || typeof orgId !== 'string') {
     res.status(400).json({ success: false, error: 'orgId is required' });
     return;
@@ -325,12 +325,27 @@ router.post('/seed', (req: Request, res: Response) => {
   );
   const allSeeds = [...SEED_TERMS, ...(industryTerms ? industryTerms[1] : [])];
 
-  for (const seed of allSeeds) {
-    const exists = glossaryTerms.find(
-      (t) => t.orgId === orgId && t.term.trim().toLowerCase() === seed.term.trim().toLowerCase(),
-    );
-    if (exists) continue;
+  // Filter out terms that already exist
+  const existingNames = new Set(glossaryTerms.filter((t) => t.orgId === orgId).map((t) => t.term.trim().toLowerCase()));
+  const available = allSeeds.filter((s) => !existingNames.has(s.term.trim().toLowerCase()));
 
+  // Preview mode: return available terms without creating
+  if (preview) {
+    res.json({
+      success: true,
+      preview: true,
+      terms: available.map((s) => ({ term: s.term, definition: s.definition, category: s.category })),
+      industry: industryTerms ? industryTerms[0] : null,
+    });
+    return;
+  }
+
+  // If selectedTerms provided, only create those
+  const toCreate = selectedTerms && Array.isArray(selectedTerms)
+    ? available.filter((s) => selectedTerms.includes(s.term))
+    : available;
+
+  for (const seed of toCreate) {
     const newTerm: StoredGlossaryTerm = {
       id: uuid(),
       orgId,

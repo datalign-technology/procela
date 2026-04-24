@@ -266,13 +266,38 @@ export default function BusinessGlossaryPage() {
     } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete term'); }
   };
 
-  const handleSeed = async () => {
+  const [generatedTerms, setGeneratedTerms] = useState<Array<{ term: string; definition: string; category: string; selected: boolean }>>([]);
+  const [showGeneratePreview, setShowGeneratePreview] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [detectedIndustry, setDetectedIndustry] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    setGenerating(true);
     try {
-      await apiClient.post('/business-glossary/seed', activeOrgId ? { orgId: activeOrgId } : {});
-      addToast('success', 'Standard terms seeded');
+      const res = await apiClient.post<{ success: boolean; terms: Array<{ term: string; definition: string; category: string }>; industry: string | null }>('/business-glossary/seed', { orgId: activeOrgId, preview: true });
+      const terms = (res.terms || []).map((t) => ({ ...t, selected: true }));
+      if (terms.length === 0) {
+        addToast('info', 'All standard terms already exist. Nothing to add.');
+        return;
+      }
+      setGeneratedTerms(terms);
+      setDetectedIndustry(res.industry || null);
+      setShowGeneratePreview(true);
+    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to generate terms'); }
+    finally { setGenerating(false); }
+  };
+
+  const handleApplyGenerated = async () => {
+    const selected = generatedTerms.filter((t) => t.selected).map((t) => t.term);
+    if (selected.length === 0) { setShowGeneratePreview(false); return; }
+    try {
+      await apiClient.post('/business-glossary/seed', { orgId: activeOrgId, selectedTerms: selected });
+      addToast('success', `Created ${selected.length} glossary term${selected.length !== 1 ? 's' : ''}`);
+      setShowGeneratePreview(false);
+      setGeneratedTerms([]);
       fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to seed terms'); }
+    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to create terms'); }
   };
 
   return (
@@ -287,6 +312,7 @@ export default function BusinessGlossaryPage() {
             Agreed-upon definitions for key business terms across the organization.
           </p>
         </div>
+        {canWrite && <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />}
         {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
       </div>
 
@@ -489,6 +515,59 @@ export default function BusinessGlossaryPage() {
         </div>
       )}
 
+      {/* Generate Preview */}
+      {showGeneratePreview && (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <h3 style={{ fontSize: 15, fontWeight: 600 }}>Generate Industry Terms</h3>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                {detectedIndustry
+                  ? `${generatedTerms.length} terms available for ${detectedIndustry}. Select which to add.`
+                  : `${generatedTerms.length} standard governance terms available.`}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setGeneratedTerms((prev) => prev.map((t) => ({ ...t, selected: true })))} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>Select All</button>
+              <button onClick={() => setGeneratedTerms((prev) => prev.map((t) => ({ ...t, selected: false })))} style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Deselect All</button>
+            </div>
+          </div>
+          <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4 }}>
+            {generatedTerms.map((t, i) => (
+              <div key={t.term} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
+                borderBottom: i < generatedTerms.length - 1 ? '1px solid var(--color-border)' : 'none',
+                background: t.selected ? '#f0f9ff' : 'transparent',
+              }}>
+                <input type="checkbox" checked={t.selected} onChange={() => setGeneratedTerms((prev) => prev.map((x, j) => j === i ? { ...x, selected: !x.selected } : x))} style={{ marginTop: 3, cursor: 'pointer' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{t.term}</span>
+                    <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2, lineHeight: 1.4 }}>{t.definition}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              {generatedTerms.filter((t) => t.selected).length} of {generatedTerms.length} selected
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={btnSecondary} onClick={() => { setShowGeneratePreview(false); setGeneratedTerms([]); }}>Cancel</button>
+              <button
+                style={{ ...btnPrimary, opacity: generatedTerms.filter((t) => t.selected).length === 0 ? 0.6 : 1 }}
+                disabled={generatedTerms.filter((t) => t.selected).length === 0}
+                onClick={handleApplyGenerated}
+              >
+                Add {generatedTerms.filter((t) => t.selected).length} Term{generatedTerms.filter((t) => t.selected).length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Terms list */}
       {loading ? (
         <SkeletonRows rows={5} columns={4} />
@@ -496,7 +575,7 @@ export default function BusinessGlossaryPage() {
         <EmptyState icon={'📖'} title="No glossary terms yet"
           description="The business glossary is a shared dictionary of agreed-upon terms. Define terms so everyone speaks the same language."
           action={canWrite ? { label: '+ Add Term', onClick: openAdd } : undefined}
-          secondaryAction={canWrite ? { label: 'Seed Standard Terms', onClick: handleSeed, variant: 'secondary' } : undefined} />
+          secondaryAction={canWrite ? { label: 'Generate Industry Terms', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
         <>
           {filteredTerms.length === 0 ? (
