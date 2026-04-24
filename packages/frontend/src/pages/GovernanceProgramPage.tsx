@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -152,6 +152,22 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
   );
 }
 
+const PHASE_CHECK_LINKS: Record<string, string> = {
+  'Scope defined': '/governance-program',
+  'Guiding principles established': '/governance-program',
+  'Operating model selected': '/governance-program',
+  'Data domains defined': '/data-domains',
+  'Governance Council established': '/governance',
+  'Governance Committee established': '/governance',
+  'Initial roles assigned': '/governance-program',
+  'Data stewards identified': '/governance-program',
+  'Stewardship teams formed': '/governance',
+  'Domain ownership assigned': '/data-domains',
+  'Core processes defined': '/processes',
+  'Policies activated': '/governance-policies',
+  'Program launched': '/governance-program',
+};
+
 function PhaseCard({
   phaseNum,
   phase,
@@ -161,6 +177,7 @@ function PhaseCard({
   phase: { name: string; completed: boolean; progress: number; checks: PhaseCheck[] };
   isCurrent: boolean;
 }) {
+  const navigate = useNavigate();
   const color = PHASE_COLORS[phaseNum];
   const isCompleted = phase.completed;
   const statusLabel = isCompleted ? 'Complete' : phase.progress > 0 ? 'In Progress' : 'Not Started';
@@ -212,27 +229,46 @@ function PhaseCard({
         <ProgressBar value={phase.progress} color={isCompleted ? '#22c55e' : color} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {phase.checks.map((check, idx) => (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-            <span style={{
-              width: 16, height: 16, borderRadius: '50%',
-              background: check.done ? '#22c55e' : 'transparent',
-              border: check.done ? 'none' : '1.5px solid #d1d5db',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, fontWeight: 700, flexShrink: 0,
-            }}>
-              {check.done ? '✓' : ''}
-            </span>
-            <span style={{
-              color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)',
-              textDecoration: check.done ? 'none' : 'none',
-            }}>
-              {check.label}
-            </span>
-          </div>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {phase.checks.map((check, idx) => {
+          const link = PHASE_CHECK_LINKS[check.label];
+          return (
+            <div
+              key={idx}
+              onClick={link ? () => navigate(link) : undefined}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
+                padding: '5px 8px', borderRadius: 4,
+                cursor: link ? 'pointer' : 'default',
+                transition: 'background-color 0.12s',
+              }}
+              onMouseEnter={(e) => { if (link) e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            >
+              <span style={{
+                width: 16, height: 16, borderRadius: '50%',
+                background: check.done ? '#22c55e' : 'transparent',
+                border: check.done ? 'none' : '1.5px solid #d1d5db',
+                color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 700, flexShrink: 0,
+              }}>
+                {check.done ? '✓' : ''}
+              </span>
+              <span style={{
+                flex: 1,
+                color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)',
+              }}>
+                {check.label}
+              </span>
+              {link && (
+                <span style={{ fontSize: 11, color: 'var(--color-primary)', flexShrink: 0, opacity: 0.7 }}>
+                  &rarr;
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
