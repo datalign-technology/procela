@@ -312,8 +312,10 @@ export default function BusinessGlossaryPage() {
             Agreed-upon definitions for key business terms across the organization.
           </p>
         </div>
-        {canWrite && <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />}
-        {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {canWrite && <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />}
+          {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
+        </div>
       </div>
 
       {/* Inline stats */}
