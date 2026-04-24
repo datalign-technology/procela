@@ -109,6 +109,26 @@ const GROUP_TYPE_SHORT: Record<string, string> = {
   COMMUNITY_OF_PRACTICE: 'CoP',
 };
 
+const EXPECTED_ROLES_BY_GROUP: Record<string, { roleType: string; label: string; purpose: string }[]> = {
+  COUNCIL: [
+    { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, and represents governance at the executive level.' },
+    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.' },
+  ],
+  COMMITTEE: [
+    { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.' },
+    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.' },
+  ],
+  STEWARDSHIP_TEAM: [
+    { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution.' },
+    { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation — lineage, infrastructure, and system-level quality.' },
+    { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality.' },
+  ],
+  OFFICE: [
+    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.' },
+    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.' },
+  ],
+};
+
 const ROLE_LABELS: Record<string, string> = {
   CHAIR: 'Chair',
   VICE_CHAIR: 'Vice Chair',
@@ -872,6 +892,59 @@ export default function GovernanceGroupsPage() {
             </div>
             <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
           </div>
+
+          {/* Expected Governance Roles */}
+          {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (
+            <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
+                Expected Governance Roles
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type].map((expected) => {
+                  const assigned = memberDamaRoles.filter((r) => r.roleType === expected.roleType);
+                  const isFilled = assigned.length > 0;
+                  return (
+                    <div key={expected.roleType} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 12px',
+                      background: 'var(--color-surface)',
+                      border: `1px solid ${isFilled ? '#bbf7d0' : 'var(--color-border)'}`,
+                      borderLeft: `3px solid ${isFilled ? '#22c55e' : '#d1d5db'}`,
+                      borderRadius: 'var(--radius-md)',
+                    }}>
+                      <span style={{
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: isFilled ? '#22c55e' : 'transparent',
+                        border: isFilled ? 'none' : '1.5px solid #d1d5db',
+                        color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {isFilled ? '✓' : ''}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                          {expected.label}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{expected.purpose}</div>
+                      </div>
+                      {isFilled ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flexShrink: 0 }}>
+                          {assigned.map((a) => (
+                            <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12 }}>
+                              {a.personName}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 11, color: '#dc2626', flexShrink: 0 }}>Not assigned</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Add Member Form */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
