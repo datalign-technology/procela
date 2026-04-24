@@ -182,12 +182,48 @@ export default function DataDomainsPage() {
   const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
   const closeForm = () => { markClean(); setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
-  const findCommitteeId = async (): Promise<string | null> => {
+  const ensureGovernanceHierarchy = async (): Promise<string | null> => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const res = await apiClient.get<{ success: boolean; data: Array<{ id: string; type: string }> }>(`/governance-groups${query}`);
-      const committee = (res.data || []).find((g) => g.type === 'COMMITTEE');
-      return committee?.id || null;
+      const res = await apiClient.get<{ success: boolean; data: Array<{ id: string; type: string; name: string }> }>(`/governance-groups${query}`);
+      const groups = res.data || [];
+
+      let council = groups.find((g) => g.type === 'COUNCIL');
+      let office = groups.find((g) => g.type === 'OFFICE');
+      let committee = groups.find((g) => g.type === 'COMMITTEE');
+
+      if (committee) return committee.id;
+
+      // Create missing hierarchy levels
+      if (!council) {
+        const r = await apiClient.post<{ success: boolean; data: { id: string } }>('/governance-groups', {
+          name: 'Data Governance Council', type: 'COUNCIL',
+          description: 'Executive steering committee that sets data governance strategy, policy, and priorities.',
+          status: 'ACTIVE', orgId: activeOrgId || undefined,
+        });
+        council = { id: r.data.id, type: 'COUNCIL', name: 'Data Governance Council' };
+      }
+
+      if (!office) {
+        const r = await apiClient.post<{ success: boolean; data: { id: string } }>('/governance-groups', {
+          name: 'Data Governance Office', type: 'OFFICE',
+          description: 'Day-to-day program management and coordination of governance activities.',
+          status: 'ACTIVE', orgId: activeOrgId || undefined, parentId: council.id,
+        });
+        office = { id: r.data.id, type: 'OFFICE', name: 'Data Governance Office' };
+      }
+
+      if (!committee) {
+        const r = await apiClient.post<{ success: boolean; data: { id: string } }>('/governance-groups', {
+          name: 'Enterprise Data Committee', type: 'COMMITTEE',
+          description: 'Cross-functional working group that implements governance standards and practices.',
+          status: 'ACTIVE', orgId: activeOrgId || undefined, parentId: office.id,
+        });
+        committee = { id: r.data.id, type: 'COMMITTEE', name: 'Enterprise Data Committee' };
+        addToast('info', 'Governance hierarchy created (Council, Office, Committee)');
+      }
+
+      return committee.id;
     } catch { return null; }
   };
 
@@ -203,7 +239,7 @@ export default function DataDomainsPage() {
 
         if (createStewardshipTeam) {
           try {
-            const parentId = await findCommitteeId();
+            const parentId = await ensureGovernanceHierarchy();
             await apiClient.post('/governance-groups', {
               name: `${form.name.trim()} Stewardship Team`,
               type: 'STEWARDSHIP_TEAM',
@@ -347,7 +383,7 @@ export default function DataDomainsPage() {
       skipped = toCreate.length - created;
 
       if (generateStewardshipTeams && succeeded.length > 0) {
-        const parentId = await findCommitteeId();
+        const parentId = await ensureGovernanceHierarchy();
         await Promise.all(succeeded.map((d) =>
           apiClient.post('/governance-groups', {
             name: `${d.name} Stewardship Team`,
