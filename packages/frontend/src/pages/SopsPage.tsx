@@ -126,6 +126,7 @@ export default function SopsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterOwner, setFilterOwner] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -265,6 +266,7 @@ export default function SopsPage() {
   const filtered = sops.filter((s) => {
     if (filterCategory && s.category !== filterCategory) return false;
     if (filterStatus && s.status !== filterStatus) return false;
+    if (filterOwner && (s.ownerPersonId || '') !== filterOwner) return false;
     return true;
   });
 
@@ -308,8 +310,15 @@ export default function SopsPage() {
             {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
           </select>
         </div>
-        {(filterCategory || filterStatus) && (
-          <button onClick={() => { setFilterCategory(''); setFilterStatus(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear filters</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Owner:</label>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+            <option value="">All</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        {(filterCategory || filterStatus || filterOwner) && (
+          <button onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterOwner(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear filters</button>
         )}
       </div>
 
