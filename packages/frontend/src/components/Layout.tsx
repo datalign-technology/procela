@@ -303,19 +303,21 @@ export default function Layout() {
       setOrgOptions(options);
       setOrgs(options.map((o) => ({ id: o.id, name: o.name, type: o.type })));
 
+      // Filter to top-level companies only for the selector
+      const companies = options.filter((o) => o.type === 'company');
+
       // If active org is no longer accessible, clear it
-      if (activeOrgId && !options.find((o) => o.id === activeOrgId)) {
-        // Active org no longer accessible — select first available
-        if (options.length > 0) {
-          setActiveOrg(options[0].id, options[0].name, options[0].type);
+      if (activeOrgId && !companies.find((o) => o.id === activeOrgId)) {
+        if (companies.length > 0) {
+          setActiveOrg(companies[0].id, companies[0].name, companies[0].type);
         } else {
           clearActiveOrg();
         }
       }
 
-      // Auto-select first org if none is selected
-      if (!activeOrgId && options.length > 0) {
-        setActiveOrg(options[0].id, options[0].name, options[0].type);
+      // Auto-select first company if none is selected
+      if (!activeOrgId && companies.length > 0) {
+        setActiveOrg(companies[0].id, companies[0].name, companies[0].type);
       }
     } catch { /* */ }
   }, [activeOrgId, setOrgs, clearActiveOrg, setActiveOrg, refreshKey]);
@@ -497,27 +499,38 @@ export default function Layout() {
                 </div>
               )}
             </div>
-            {orgOptions.length > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>Organization:</span>
-                <select
-                  value={activeOrgId}
-                  onChange={(e) => handleOrgChange(e.target.value)}
-                  style={{
-                    padding: '4px 10px', fontSize: 13, fontWeight: 500,
-                    border: '1px solid var(--color-border)', borderRadius: 4,
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    minWidth: 180, cursor: 'pointer',
-                  }}
-                >
-                  {!activeOrgId && <option value="">-- Select --</option>}
-                  {orgOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {(() => {
+              const companies = orgOptions.filter((o) => o.type === 'company');
+              if (companies.length === 0) return (
+                <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>No organization defined</span>
+              );
+              if (companies.length === 1) return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>Organization:</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>{companies[0].name}</span>
+                </div>
+              );
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>Organization:</span>
+                  <select
+                    value={activeOrgId}
+                    onChange={(e) => handleOrgChange(e.target.value)}
+                    style={{
+                      padding: '4px 10px', fontSize: 13, fontWeight: 500,
+                      border: '1px solid var(--color-border)', borderRadius: 4,
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                      minWidth: 180, cursor: 'pointer',
+                    }}
+                  >
+                    {companies.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* Notification Bell */}
@@ -706,7 +719,32 @@ export default function Layout() {
         <ScopeBanner />
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
-          <Outlet />
+          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' && location.pathname !== '/' ? (
+            <div style={{
+              textAlign: 'center', padding: '4rem 2rem',
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{ fontSize: 36, marginBottom: 12, color: 'var(--color-text-muted)' }}>&#x2616;</div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Organization Required</h2>
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
+                You need to create an organization before you can use this feature.
+                Go to Administer to set up your company.
+              </p>
+              <button
+                onClick={() => navigate('/organizations')}
+                style={{
+                  padding: '8px 20px', background: 'var(--color-primary)', color: '#fff',
+                  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13,
+                  fontWeight: 500, cursor: 'pointer',
+                }}
+              >
+                Set Up Organization
+              </button>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
         <ChatPanel />
         <SessionTimeout />
