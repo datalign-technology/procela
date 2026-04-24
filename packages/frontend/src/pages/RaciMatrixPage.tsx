@@ -58,7 +58,7 @@ type ColumnGroupBy = 'name' | 'title' | 'jobRole' | 'orgUnit';
 const thStyle: React.CSSProperties = {
   padding: '0.5rem 0.5rem',
   textAlign: 'left',
-  fontSize: '0.75rem',
+  fontSize: 11,
   fontWeight: 600,
   color: 'var(--color-text-secondary)',
   border: '1px solid var(--color-border)',
@@ -67,7 +67,7 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: '0.375rem 0.5rem',
   border: '1px solid var(--color-border)',
-  fontSize: '0.8125rem',
+  fontSize: 13,
 };
 
 export default function RaciMatrixPage() {
