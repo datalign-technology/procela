@@ -44,6 +44,14 @@ const bottomNavItems: NavItem[] = [
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
 
+const ROUTE_GROUPS: Record<string, string[]> = {
+  '/processes': ['/processes', '/data-assets', '/systems', '/mappings', '/business-glossary', '/data-dictionary'],
+  '/governance-program': ['/governance-program', '/governance', '/governance-groups', '/data-domains', '/raci', '/decision-rights', '/governance-policies'],
+  '/operations-manual': ['/operations-manual', '/sops', '/governance-calendar', '/governance-work'],
+  '/control-tower': ['/control-tower', '/enterprise-view', '/data-quality', '/data-lineage', '/gap-detection', '/reports'],
+  '/organizations': ['/organizations', '/people', '/connections', '/agents', '/settings'],
+};
+
 interface SearchResult {
   type: 'process' | 'system' | 'data-asset' | 'organization' | 'person' | 'data-domain' | 'governance-group' | 'mapping';
   id: string;
@@ -365,18 +373,24 @@ export default function Layout() {
               {section.label && !sidebarCollapsed && (
                 <div className={styles.navGroupLabel}>{section.label}</div>
               )}
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) => clsx(styles.navLink, isActive && styles.navLinkActive)}
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <span className={styles.navIcon}>{item.icon}</span>
-                  {!sidebarCollapsed && item.label}
-                </NavLink>
-              ))}
+              {section.items.map((item) => {
+                const groupRoutes = ROUTE_GROUPS[item.to];
+                const isGroupActive = groupRoutes
+                  ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                  : location.pathname === item.to;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
+                    title={sidebarCollapsed ? item.label : undefined}
+                  >
+                    <span className={styles.navIcon}>{item.icon}</span>
+                    {!sidebarCollapsed && item.label}
+                  </NavLink>
+                );
+              })}
             </div>
           ))}
 
