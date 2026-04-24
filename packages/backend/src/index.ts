@@ -57,6 +57,7 @@ import governanceCalendarRouter from './routes/governance-calendar';
 import decisionRightsRouter from './routes/decision-rights';
 import sopsRouter from './routes/sops';
 import businessGlossaryRouter from './routes/business-glossary';
+import operationsManualsRouter from './routes/operations-manuals';
 
 const app = express();
 
@@ -123,6 +124,7 @@ app.use('/api/v1/governance-calendar', authenticateToken, governanceCalendarRout
 app.use('/api/v1/decision-rights', authenticateToken, decisionRightsRouter);
 app.use('/api/v1/sops', authenticateToken, sopsRouter);
 app.use('/api/v1/business-glossary', authenticateToken, businessGlossaryRouter);
+app.use('/api/v1/operations-manuals', authenticateToken, operationsManualsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -162,6 +164,7 @@ import { calendarEvents } from './routes/governance-calendar';
 import { decisionRights } from './routes/decision-rights';
 import { sops } from './routes/sops';
 import { glossaryTerms } from './routes/business-glossary';
+import { operationsManuals } from './routes/operations-manuals';
 
 const stores = {
   processNodes: () => processNodes,
@@ -198,6 +201,7 @@ const stores = {
   decisionRights: () => decisionRights,
   sops: () => sops,
   glossaryTerms: () => glossaryTerms,
+  operationsManuals: () => operationsManuals,
 };
 const autoSaveHandle = startAutoSave(stores);
 

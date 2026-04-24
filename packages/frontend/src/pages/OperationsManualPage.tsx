@@ -1,7 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
+import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
-interface RoleManual {
+// ── Types ──
+
+interface OperationsManual {
+  id: string;
+  orgId: string;
   roleType: string;
   label: string;
   purpose: string;
@@ -10,230 +20,16 @@ interface RoleManual {
   monthly: string[];
   quarterly: string[];
   escalation: string[];
+  customContent: string;
+  isCustom: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const ROLE_MANUALS: RoleManual[] = [
-  {
-    roleType: 'CDO',
-    label: 'Chief Data Officer',
-    purpose: 'Set strategy, own outcomes, secure resources, and represent data governance at the executive level.',
-    daily: [
-      'Review critical data quality alerts and high-severity incidents',
-      'Scan open escalations in your queue',
-    ],
-    weekly: [
-      'Meet with Data Governance Lead to review program health',
-      'Review pending policy decisions and approvals',
-      'Track progress against quarterly governance OKRs',
-    ],
-    monthly: [
-      'Chair Data Governance Council meeting',
-      'Report program metrics to executive leadership',
-      'Review maturity dashboard and identify investment priorities',
-      'Approve policy exceptions that meet escalation criteria',
-    ],
-    quarterly: [
-      'Present governance scorecard to the board or executive committee',
-      'Review and ratify governance strategy and roadmap',
-      'Approve annual policy updates',
-      'Sponsor cross-functional governance initiatives',
-    ],
-    escalation: [
-      'Unresolved policy violations with regulatory implications → CEO and legal counsel',
-      'Governance funding or resourcing gaps → CFO and executive committee',
-      'Board-level concerns (regulator, audit, major incident) → Board risk committee',
-    ],
-  },
-  {
-    roleType: 'DATA_GOVERNANCE_LEAD',
-    label: 'Data Governance Lead',
-    purpose: 'Run the governance program day to day — drive execution, measure progress, coach stewards.',
-    daily: [
-      'Triage new governance issues and assign owners',
-      'Monitor steward activity and task completion',
-      'Respond to steward questions and unblock work',
-    ],
-    weekly: [
-      'Review stewardship team metrics',
-      'Facilitate committee pre-reads and agendas',
-      'Check policy review pipeline for upcoming reviews',
-      'Update governance dashboard',
-    ],
-    monthly: [
-      'Chair Data Governance Committee meeting',
-      'Publish monthly governance report to the Council',
-      'Coach underperforming stewardship teams',
-      'Review program risks and mitigation plans',
-    ],
-    quarterly: [
-      'Lead quarterly governance maturity review',
-      'Refresh the governance roadmap with the CDO',
-      'Evaluate steward performance and recognize contributors',
-      'Plan the next quarter\'s governance initiatives',
-    ],
-    escalation: [
-      'Policy violations or repeated quality failures → CDO',
-      'Cross-domain decisions that can\'t be resolved → Governance Committee',
-      'Resource or prioritization conflicts → CDO and affected business leads',
-    ],
-  },
-  {
-    roleType: 'DATA_OWNER',
-    label: 'Data Owner',
-    purpose: 'Accountable for a data domain — set direction, approve changes, and own outcomes.',
-    daily: [
-      'Review critical quality alerts for your domain',
-      'Approve urgent data access or usage requests',
-    ],
-    weekly: [
-      'Sync with your Data Stewards on open issues',
-      'Review domain health metrics',
-      'Prioritize incoming governance requests',
-    ],
-    monthly: [
-      'Attend the Governance Committee',
-      'Review domain policies and their effectiveness',
-      'Approve or deny policy exceptions within your domain',
-      'Report domain metrics: quality, coverage, issues resolved',
-    ],
-    quarterly: [
-      'Validate domain scope and boundaries',
-      'Review steward assignments and propose changes',
-      'Update domain roadmap and initiatives',
-      'Present domain status to the Council',
-    ],
-    escalation: [
-      'Cross-domain conflicts → Governance Committee',
-      'Material domain risk → Governance Lead and CDO',
-      'Regulatory concerns → Compliance and CDO',
-    ],
-  },
-  {
-    roleType: 'BUSINESS_DATA_STEWARD',
-    label: 'Business Data Steward',
-    purpose: 'Day-to-day management of data quality, definitions, and issue resolution within your domain.',
-    daily: [
-      'Review data quality alerts for your assets',
-      'Respond to questions from data consumers',
-      'Progress open governance tasks',
-    ],
-    weekly: [
-      'Attend stewardship team sync',
-      'Review business glossary updates and approve new terms',
-      'Close resolved issues and document outcomes',
-      'Coordinate with Technical Stewards on remediation',
-    ],
-    monthly: [
-      'Report domain quality trends to the Data Owner',
-      'Validate metadata completeness and accuracy',
-      'Review data asset classifications',
-      'Update SOP documentation based on lessons learned',
-    ],
-    quarterly: [
-      'Lead a quarterly data quality deep-dive for your domain',
-      'Review and update data retention practices',
-      'Participate in maturity assessment for your domain',
-      'Propose new quality rules or controls',
-    ],
-    escalation: [
-      'Quality issues that cross domains → Governance Committee',
-      'Policy exceptions needed → Data Owner',
-      'Resource constraints blocking remediation → Governance Lead',
-    ],
-  },
-  {
-    roleType: 'TECHNICAL_DATA_STEWARD',
-    label: 'Technical Data Steward',
-    purpose: 'Technical implementation of governance — lineage, infrastructure, automation, and system-level quality.',
-    daily: [
-      'Monitor automated quality checks and pipelines',
-      'Triage technical incidents affecting data availability',
-      'Support business stewards with technical questions',
-    ],
-    weekly: [
-      'Review data lineage updates and verify accuracy',
-      'Audit access logs and flag anomalies',
-      'Collaborate with Data Engineers on remediation',
-      'Review system-level metrics (latency, uptime, error rates)',
-    ],
-    monthly: [
-      'Report technical posture to the Data Owner',
-      'Review infrastructure roadmap impact on governance',
-      'Validate classification tags and data masking rules',
-      'Update technical documentation',
-    ],
-    quarterly: [
-      'Review data architecture alignment with governance policies',
-      'Participate in security and privacy audits',
-      'Plan technical debt reduction initiatives',
-      'Evaluate new tools or automation opportunities',
-    ],
-    escalation: [
-      'Infrastructure failures affecting governance → CDO and infrastructure lead',
-      'Security or privacy concerns → CISO and privacy officer',
-      'Tooling gaps blocking the program → Governance Lead',
-    ],
-  },
-  {
-    roleType: 'DATA_QUALITY_ANALYST',
-    label: 'Data Quality Analyst',
-    purpose: 'Measure, report, and drive improvements in data quality across domains.',
-    daily: [
-      'Review overnight quality rule results',
-      'Investigate quality incidents and document root causes',
-    ],
-    weekly: [
-      'Publish weekly quality dashboard',
-      'Coordinate remediation with stewards',
-      'Refine quality rules based on false positives',
-    ],
-    monthly: [
-      'Present monthly quality report to the Committee',
-      'Audit critical data assets for quality drift',
-      'Propose new quality rules based on trends',
-    ],
-    quarterly: [
-      'Benchmark quality against industry standards',
-      'Review and refresh quality KPIs',
-      'Conduct deep-dive analysis on chronic quality issues',
-    ],
-    escalation: [
-      'Systemic quality failures → Governance Committee',
-      'Regulatory-impacting quality issues → CDO and Compliance',
-    ],
-  },
-  {
-    roleType: 'DATA_ARCHITECT',
-    label: 'Data Architect',
-    purpose: 'Ensure data architecture aligns with governance principles and supports long-term scalability.',
-    daily: [
-      'Review architecture review board submissions',
-      'Answer technical questions from stewards and engineers',
-    ],
-    weekly: [
-      'Attend architecture review board',
-      'Review lineage and integration changes',
-      'Validate new data model designs',
-    ],
-    monthly: [
-      'Report architecture alignment metrics',
-      'Review and update reference architectures',
-      'Assess impact of new technology adoption on governance',
-    ],
-    quarterly: [
-      'Present architecture roadmap to the Committee',
-      'Review and refresh data standards',
-      'Lead cross-team architecture alignment sessions',
-    ],
-    escalation: [
-      'Architecture decisions affecting multiple domains → Governance Committee',
-      'Misalignment with governance principles → CDO',
-    ],
-  },
-];
+type SectionKey = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'escalation';
 
 interface SectionDef {
-  key: keyof Pick<RoleManual, 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'escalation'>;
+  key: SectionKey;
   name: string;
   accentColor: string;
   description: string;
@@ -247,150 +43,350 @@ const SECTIONS: SectionDef[] = [
   { key: 'escalation', name: 'Escalation paths', accentColor: '#dc2626', description: 'When to escalate and to whom' },
 ];
 
-export default function OperationsManualPage() {
-  const [selectedRole, setSelectedRole] = useState<string>('CDO');
+const inputStyle: React.CSSProperties = {
+  padding: '6px 10px', fontSize: 13, border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', background: 'var(--color-surface)',
+  color: 'var(--color-text)', width: '100%',
+};
+const btnPrimary: React.CSSProperties = {
+  padding: '6px 14px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)',
+  color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+};
+const btnSecondary: React.CSSProperties = {
+  padding: '6px 14px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)',
+  color: 'var(--color-text)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', cursor: 'pointer',
+};
+const btnDanger: React.CSSProperties = {
+  ...btnSecondary, color: '#dc2626', borderColor: '#fca5a5',
+};
 
-  const role = ROLE_MANUALS.find((r) => r.roleType === selectedRole) || ROLE_MANUALS[0];
+export default function OperationsManualPage() {
+  const { activeOrgId } = useOrgContext();
+  const addToast = useToastStore((s) => s.addToast);
+  const [manuals, setManuals] = useState<OperationsManual[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [addInputs, setAddInputs] = useState<Record<string, string>>({});
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [headerForm, setHeaderForm] = useState({ label: '', purpose: '' });
+  const [showAddManual, setShowAddManual] = useState(false);
+  const [newManualLabel, setNewManualLabel] = useState('');
+
+  const fetchManuals = useCallback(async () => {
+    if (!activeOrgId) { setManuals([]); setLoading(false); return; }
+    try {
+      const res = await apiClient.get<{ success: boolean; data: OperationsManual[] }>(
+        `/operations-manuals?orgId=${activeOrgId}`,
+      );
+      setManuals(res.data || []);
+    } catch { /* */ }
+    finally { setLoading(false); }
+  }, [activeOrgId]);
+
+  useEffect(() => { setLoading(true); fetchManuals(); }, [fetchManuals]);
+
+  // Auto-select first manual when list changes
+  useEffect(() => {
+    if (manuals.length > 0 && (!selectedId || !manuals.find((m) => m.id === selectedId))) {
+      setSelectedId(manuals[0].id);
+    } else if (manuals.length === 0) {
+      setSelectedId(null);
+    }
+  }, [manuals, selectedId]);
+
+  const manual = manuals.find((m) => m.id === selectedId) || null;
+
+  // ── Seed ──
+  const handleSeed = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
+    setSeeding(true);
+    try {
+      await apiClient.post('/operations-manuals/seed', { orgId: activeOrgId });
+      addToast('success', 'Standard manuals seeded');
+      await fetchManuals();
+    } catch { addToast('error', 'Failed to seed manuals'); }
+    finally { setSeeding(false); }
+  };
+
+  // ── Add / Remove items ──
+  const updateManual = async (id: string, patch: Partial<OperationsManual>) => {
+    try {
+      const res = await apiClient.put<{ success: boolean; data: OperationsManual }>(
+        `/operations-manuals/${id}`, patch,
+      );
+      setManuals((prev) => prev.map((m) => m.id === id ? res.data : m));
+    } catch { addToast('error', 'Failed to save changes'); }
+  };
+
+  const addItem = (section: SectionKey) => {
+    const text = (addInputs[section] || '').trim();
+    if (!text || !manual) return;
+    const updated = [...manual[section], text];
+    updateManual(manual.id, { [section]: updated });
+    setAddInputs((p) => ({ ...p, [section]: '' }));
+  };
+
+  const removeItem = (section: SectionKey, idx: number) => {
+    if (!manual) return;
+    const updated = manual[section].filter((_, i) => i !== idx);
+    updateManual(manual.id, { [section]: updated });
+  };
+
+  // ── Header edit ──
+  const startEditHeader = () => {
+    if (!manual) return;
+    setHeaderForm({ label: manual.label, purpose: manual.purpose });
+    setEditingHeader(true);
+  };
+  const saveHeader = async () => {
+    if (!manual || !headerForm.label.trim()) return;
+    await updateManual(manual.id, { label: headerForm.label, purpose: headerForm.purpose });
+    setEditingHeader(false);
+    addToast('success', 'Manual updated');
+  };
+
+  // ── Custom content ──
+  const saveCustomContent = (value: string) => {
+    if (!manual) return;
+    updateManual(manual.id, { customContent: value });
+  };
+
+  // ── Delete ──
+  const handleDelete = async (id: string) => {
+    try {
+      await apiClient.delete(`/operations-manuals/${id}`);
+      addToast('success', 'Manual deleted');
+      setConfirmDeleteId(null);
+      await fetchManuals();
+    } catch { addToast('error', 'Failed to delete manual'); }
+  };
+
+  // ── Add custom manual ──
+  const handleAddManual = async () => {
+    if (!activeOrgId || !newManualLabel.trim()) return;
+    try {
+      await apiClient.post('/operations-manuals', {
+        orgId: activeOrgId, label: newManualLabel.trim(), roleType: 'CUSTOM', isCustom: true,
+      });
+      addToast('success', 'Manual created');
+      setNewManualLabel('');
+      setShowAddManual(false);
+      await fetchManuals();
+    } catch { addToast('error', 'Failed to create manual'); }
+  };
+
+  // ── Render ──
+  if (loading) return <div><PageTabNav tabs={OPERATE_TABS} /><SkeletonRows rows={5} /></div>;
+
+  if (!activeOrgId) return (
+    <div>
+      <PageTabNav tabs={OPERATE_TABS} />
+      <EmptyState title="No organization selected" description="Select an organization from the header to view operations manuals." />
+    </div>
+  );
+
+  if (manuals.length === 0) return (
+    <div>
+      <PageTabNav tabs={OPERATE_TABS} />
+      <EmptyState
+        title="No operations manuals yet"
+        description="Seed the standard DAMA role manuals to get started, or create a custom manual."
+        action={{ label: seeding ? 'Seeding...' : 'Seed Standard Manuals', onClick: handleSeed }}
+        secondaryAction={{ label: '+ Add Manual', onClick: () => setShowAddManual(true) }}
+      />
+      {showAddManual && renderAddManualDialog()}
+    </div>
+  );
+
+  function renderAddManualDialog() {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowAddManual(false)}>
+        <div style={{ background: '#fff', borderRadius: 12, padding: 24, maxWidth: 400, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }} onClick={(e) => e.stopPropagation()}>
+          <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}>New Manual</h3>
+          <input style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={btnSecondary} onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: !newManualLabel.trim() ? 0.6 : 1 }} onClick={handleAddManual} disabled={!newManualLabel.trim()}>Create</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <PageTabNav tabs={OPERATE_TABS} />
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Operations Manual</h1>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-          Role-specific guidance for running your governance program.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Operations Manual</h1>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+            Role-specific guidance for running your governance program.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={btnSecondary} onClick={handleSeed} disabled={seeding}>
+            {seeding ? 'Seeding...' : 'Seed Standard Manuals'}
+          </button>
+          <button style={btnPrimary} onClick={() => setShowAddManual(true)}>+ Add Manual</button>
+        </div>
       </div>
 
       {/* Role selector tabs */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {ROLE_MANUALS.map((r) => {
-          const isActive = r.roleType === selectedRole;
+        {manuals.map((m) => {
+          const isActive = m.id === selectedId;
           return (
             <button
-              key={r.roleType}
-              onClick={() => setSelectedRole(r.roleType)}
+              key={m.id}
+              onClick={() => { setSelectedId(m.id); setEditingHeader(false); }}
               style={{
-                padding: '8px 14px',
-                fontSize: 13,
+                padding: '8px 14px', fontSize: 13,
                 fontWeight: isActive ? 600 : 500,
                 background: isActive ? 'var(--color-primary)' : 'var(--color-surface)',
                 color: isActive ? '#fff' : 'var(--color-text)',
                 border: isActive ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
+                borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.15s ease',
               }}
             >
-              {r.label}
+              {m.label}
             </button>
           );
         })}
       </div>
 
       {/* Selected role manual */}
-      <div>
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 20,
-          marginBottom: 16,
-          boxShadow: 'var(--shadow-sm)',
-        }}>
+      {manual && (
+        <div>
+          {/* Header card */}
           <div style={{
-            fontSize: 10,
-            fontWeight: 600,
-            color: 'var(--color-text-muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: 4,
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)',
           }}>
-            Role Manual
-          </div>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>{role.label}</h2>
-          <p style={{
-            fontSize: 13,
-            color: 'var(--color-text-secondary)',
-            marginTop: 8,
-            fontStyle: 'italic',
-            lineHeight: 1.5,
-          }}>
-            {role.purpose}
-          </p>
-        </div>
-
-        {SECTIONS.map((section) => {
-          const items = role[section.key];
-          return (
-            <div
-              key={section.key}
-              style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderLeft: `4px solid ${section.accentColor}`,
-                borderRadius: 'var(--radius-md)',
-                padding: 16,
-                marginBottom: 12,
-                boxShadow: 'var(--shadow-sm)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                <span style={{
-                  display: 'inline-block',
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: section.accentColor,
-                  flexShrink: 0,
-                }} />
-                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{section.name}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                Role Manual{manual.isCustom ? ' (Custom)' : ''}
               </div>
-              <div style={{
-                fontSize: 11,
-                color: 'var(--color-text-muted)',
-                marginBottom: 10,
-                marginLeft: 18,
-              }}>
-                {section.description}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button style={btnSecondary} onClick={startEditHeader}>Edit</button>
+                <button style={btnDanger} onClick={() => setConfirmDeleteId(manual.id)}>Delete</button>
               </div>
-              {items.length === 0 ? (
-                <div style={{
-                  fontSize: 12,
-                  color: 'var(--color-text-muted)',
-                  fontStyle: 'italic',
-                  marginLeft: 18,
-                }}>
-                  No activities defined for this role.
-                </div>
-              ) : (
-                <ul style={{
-                  margin: 0,
-                  paddingLeft: 34,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}>
-                  {items.map((item, idx) => (
-                    <li
-                      key={idx}
-                      style={{
-                        fontSize: 13,
-                        color: 'var(--color-text)',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
-          );
-        })}
-      </div>
+            {editingHeader ? (
+              <div style={{ marginTop: 8 }}>
+                <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
+                <textarea style={{ ...inputStyle, minHeight: 60 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button style={btnPrimary} onClick={saveHeader}>Save</button>
+                  <button style={btnSecondary} onClick={() => setEditingHeader(false)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>{manual.label}</h2>
+                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>
+                  {manual.purpose || 'No purpose defined.'}
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Sections */}
+          {SECTIONS.map((section) => {
+            const items = manual[section.key];
+            const inputKey = section.key;
+            return (
+              <div key={section.key} style={{
+                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                borderLeft: `4px solid ${section.accentColor}`, borderRadius: 'var(--radius-md)',
+                padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: section.accentColor, flexShrink: 0 }} />
+                  <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{section.name}</h3>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10, marginLeft: 18 }}>
+                  {section.description}
+                </div>
+                {items.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', marginLeft: 18, marginBottom: 8 }}>
+                    No activities defined.
+                  </div>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 34, display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                    {items.map((item, idx) => (
+                      <li key={idx} style={{ fontSize: 13, color: 'var(--color-text)', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <span style={{ flex: 1 }}>{item}</span>
+                        <button
+                          onClick={() => removeItem(section.key, idx)}
+                          title="Remove item"
+                          style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 14, fontWeight: 700, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                        >
+                          x
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div style={{ display: 'flex', gap: 6, marginLeft: 18 }}>
+                  <input
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={addInputs[inputKey] || ''}
+                    onChange={(e) => setAddInputs((p) => ({ ...p, [inputKey]: e.target.value }))}
+                    placeholder="Add item..."
+                    onKeyDown={(e) => e.key === 'Enter' && addItem(section.key)}
+                  />
+                  <button
+                    style={{ ...btnPrimary, opacity: !(addInputs[inputKey] || '').trim() ? 0.6 : 1 }}
+                    onClick={() => addItem(section.key)}
+                    disabled={!(addInputs[inputKey] || '').trim()}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Custom Content */}
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)',
+          }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 8px' }}>Custom Content</h3>
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+              Free-form notes, pasted manual text, or any additional content for this role.
+            </p>
+            <textarea
+              style={{ ...inputStyle, minHeight: 120, fontFamily: 'inherit', lineHeight: 1.6 }}
+              value={manual.customContent}
+              onChange={(e) => {
+                const val = e.target.value;
+                setManuals((prev) => prev.map((m) => m.id === manual.id ? { ...m, customContent: val } : m));
+              }}
+              onBlur={(e) => saveCustomContent(e.target.value)}
+              placeholder="Paste or type additional content here..."
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete */}
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Delete Manual"
+        message="Are you sure you want to delete this operations manual? This cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
+      {showAddManual && renderAddManualDialog()}
     </div>
   );
 }
