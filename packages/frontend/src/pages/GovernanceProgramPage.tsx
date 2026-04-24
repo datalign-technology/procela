@@ -292,12 +292,30 @@ export default function GovernanceProgramPage() {
   const addPrinciple = () => {
     const trimmed = newPrinciple.trim();
     if (!trimmed) return;
-    setPrinciples((prev) => [...prev, trimmed]);
+    const updated = [...principles, trimmed];
+    setPrinciples(updated);
     setNewPrinciple('');
+    if (program) {
+      apiClient.put(`/governance-program/${program.id}`, {
+        principles: { vision, principles: updated, decisionRights, operatingModel },
+      }).then(() => {
+        addToast('success', 'Principle added');
+        fetchAll();
+      }).catch(() => addToast('error', 'Failed to add principle'));
+    }
   };
 
   const removePrinciple = (index: number) => {
-    setPrinciples((prev) => prev.filter((_, i) => i !== index));
+    const updated = principles.filter((_, i) => i !== index);
+    setPrinciples(updated);
+    if (program) {
+      apiClient.put(`/governance-program/${program.id}`, {
+        principles: { vision, principles: updated, decisionRights, operatingModel },
+      }).then(() => {
+        addToast('success', 'Principle removed');
+        fetchAll();
+      }).catch(() => addToast('error', 'Failed to remove principle'));
+    }
   };
 
   const priorityColor = (p: Recommendation['priority']): { bg: string; color: string } => {
