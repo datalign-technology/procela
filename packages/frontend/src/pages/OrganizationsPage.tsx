@@ -106,7 +106,7 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
 }
 
 // Root org is system-protected — never selectable for bulk delete.
-const ROOT_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
 
 function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect }: {
   node: OrgNode; depth: number;
@@ -122,7 +122,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
   const count = peopleCounts[node.id] || 0;
   const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs);
   const isSelected = selectedIds.has(node.id);
-  const isRoot = node.id === ROOT_ORG_ID;
+  const isRoot = false;
 
   return (
     <div>
@@ -295,7 +295,7 @@ export default function OrganizationsPage() {
   };
   // Selectable orgs = everything in the user's edit scope, minus the root.
   const selectableOrgIds = flatOrgs
-    .filter((o) => o.id !== ROOT_ORG_ID && (accessibleOrgIds.size === 0 || accessibleOrgIds.has(o.id) || (() => {
+    .filter((o) => (accessibleOrgIds.size === 0 || accessibleOrgIds.has(o.id) || (() => {
       let pid = o.parentId;
       while (pid) { if (accessibleOrgIds.has(pid)) return true; pid = flatOrgs.find((p) => p.id === pid)?.parentId || null; }
       return false;

@@ -39,8 +39,7 @@ const DEFAULT_ORG: StoredOrg = {
   updatedAt: new Date().toISOString(),
 };
 
-const loaded = loadStore<StoredOrg>('organizations');
-export const organizations: StoredOrg[] = loaded.length > 0 ? loaded : [DEFAULT_ORG];
+export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations');
 
 // ── Helpers ──
 
@@ -66,26 +65,17 @@ function buildTree(orgs: StoredOrg[]): any[] {
 
 const router = Router();
 
-/** DELETE /api/v1/organizations/all — delete all organizations except the default org */
+/** DELETE /api/v1/organizations/all — delete all organizations */
 router.delete('/all', (req: AuthenticatedRequest, res: Response) => {
   const { getVisibleOrgIds } = accessHelpers();
-  // Bulk-wipe is destructive across tenants — only unrestricted users may run it.
   if (getVisibleOrgIds(req.user) !== null) {
     res.status(403).json({ success: false, error: 'Only super admins can delete all organizations' });
     return;
   }
-  const defaultOrgId = '00000000-0000-0000-0000-000000000010';
-  const count = organizations.filter((o) => o.id !== defaultOrgId).length;
-  for (let i = organizations.length - 1; i >= 0; i--) {
-    if (organizations[i].id !== defaultOrgId) {
-      organizations.splice(i, 1);
-    }
-  }
-  // Reset default org parentId in case it was nested
-  const defaultOrg = organizations.find((o) => o.id === defaultOrgId);
-  if (defaultOrg) defaultOrg.parentId = null;
+  const count = organizations.length;
+  organizations.splice(0, organizations.length);
   saveStore('organizations', organizations);
-  logger.info({ count }, 'Deleted all organizations except default');
+  logger.info({ count }, 'Deleted all organizations');
   res.json({ success: true, deleted: count });
 });
 
