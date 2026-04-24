@@ -93,7 +93,7 @@
 }
 
 .navSpacer {
-  flex: 1;
+  height: 0;
 }
 
 .navDivider {
