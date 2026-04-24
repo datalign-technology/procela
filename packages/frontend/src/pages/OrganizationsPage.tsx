@@ -280,9 +280,28 @@ export default function OrganizationsPage() {
     else await apiClient.post('/organizations', orgForm);
     setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData(); triggerRefresh();
   };
+  const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<string | null>(null);
+  const [deleteOrgImpact, setDeleteOrgImpact] = useState<Record<string, number> | null>(null);
+
+  const promptDeleteOrg = async (id: string) => {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: Record<string, number> }>(`/organizations/${id}/impact`);
+      setDeleteOrgImpact(res.data || null);
+    } catch { setDeleteOrgImpact(null); }
+    setConfirmDeleteOrg(id);
+  };
+
   const handleDeleteOrg = async (id: string) => {
-    try { await apiClient.delete(`/organizations/${id}`); fetchData(); triggerRefresh(); }
-    catch (e) { alert(e instanceof Error ? e.message : 'Cannot delete'); }
+    try {
+      await apiClient.delete(`/organizations/${id}`);
+      addToast('success', 'Organization deleted with all associated data');
+      setConfirmDeleteOrg(null);
+      setDeleteOrgImpact(null);
+      fetchData();
+      triggerRefresh();
+    } catch (e: any) {
+      addToast('error', e?.response?.data?.error || e?.message || 'Cannot delete');
+    }
   };
 
   // ── Bulk select handlers ──
@@ -543,6 +562,35 @@ export default function OrganizationsPage() {
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
+      <ConfirmDialog
+        open={confirmDeleteOrg !== null}
+        title="Delete Organization?"
+        message={(() => {
+          if (!deleteOrgImpact) return 'This will permanently delete this organization and all its data. This cannot be undone.';
+          const items: string[] = [];
+          if (deleteOrgImpact.childOrgs > 0) items.push(`${deleteOrgImpact.childOrgs} child org${deleteOrgImpact.childOrgs !== 1 ? 's' : ''}`);
+          if (deleteOrgImpact.people > 0) items.push(`${deleteOrgImpact.people} people`);
+          if (deleteOrgImpact.processes > 0) items.push(`${deleteOrgImpact.processes} processes`);
+          if (deleteOrgImpact.dataAssets > 0) items.push(`${deleteOrgImpact.dataAssets} data assets`);
+          if (deleteOrgImpact.systems > 0) items.push(`${deleteOrgImpact.systems} systems`);
+          if (deleteOrgImpact.dataDomains > 0) items.push(`${deleteOrgImpact.dataDomains} data domains`);
+          if (deleteOrgImpact.mappings > 0) items.push(`${deleteOrgImpact.mappings} mappings`);
+          if (deleteOrgImpact.governanceGroups > 0) items.push(`${deleteOrgImpact.governanceGroups} governance groups`);
+          if (deleteOrgImpact.policies > 0) items.push(`${deleteOrgImpact.policies} policies`);
+          if (deleteOrgImpact.tasks > 0) items.push(`${deleteOrgImpact.tasks} tasks`);
+          if (deleteOrgImpact.issues > 0) items.push(`${deleteOrgImpact.issues} issues`);
+          if (deleteOrgImpact.glossaryTerms > 0) items.push(`${deleteOrgImpact.glossaryTerms} glossary terms`);
+          if (deleteOrgImpact.sops > 0) items.push(`${deleteOrgImpact.sops} SOPs`);
+          if (deleteOrgImpact.calendarEvents > 0) items.push(`${deleteOrgImpact.calendarEvents} calendar events`);
+          if (items.length === 0) return 'This organization has no associated data. It will be permanently deleted.';
+          return `This will permanently delete this organization and ALL associated data:\n\n${items.join(', ')}.\n\nThis cannot be undone.`;
+        })()}
+        confirmLabel="Delete Everything"
+        requireTypedConfirmation="DELETE"
+        onConfirm={async () => { const id = confirmDeleteOrg; setConfirmDeleteOrg(null); setDeleteOrgImpact(null); if (id) await handleDeleteOrg(id); }}
+        onCancel={() => { setConfirmDeleteOrg(null); setDeleteOrgImpact(null); }}
+      />
+
       {/* ══ MAIN BODY — full-width tree ══ */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar — select-all, expand/collapse */}
@@ -619,7 +667,7 @@ export default function OrganizationsPage() {
           ) : (
             tree.map((node) => (
               <OrgTreeNode key={node.id} node={node} depth={0}
-                onEdit={openEditOrg} onDelete={handleDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
+                onEdit={openEditOrg} onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
                 expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
                 selectedIds={selectedIds} toggleSelect={toggleOrgSelect} />
