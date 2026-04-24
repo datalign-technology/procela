@@ -151,7 +151,7 @@ function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
       done: orgGroups.some((g: any) => g.type === 'COMMITTEE'),
     },
     {
-      label: 'Initial roles assigned',
+      label: 'Governance leadership roles established',
       done: orgRoles.length >= 1,
     },
   ];
@@ -307,11 +307,11 @@ function computeRecommendations(program: StoredGovernanceProgram): Recommendatio
           link: '/governance',
           priority: 'MEDIUM',
         });
-      } else if (check.label === 'Initial roles assigned') {
+      } else if (check.label === 'Governance leadership roles established') {
         recs.push({
           phase: 2,
-          action: 'Assign initial DAMA governance roles',
-          link: '/people',
+          action: 'Assign governance leadership roles (CDO, Governance Lead) to establish the governance structure',
+          link: '/governance-program',
           priority: 'MEDIUM',
         });
       }

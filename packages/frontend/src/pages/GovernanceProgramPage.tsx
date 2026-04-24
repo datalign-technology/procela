@@ -159,7 +159,7 @@ const PHASE_CHECK_LINKS: Record<string, string> = {
   'Data domains defined': '/data-domains',
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
-  'Initial roles assigned': '#2',
+  'Governance leadership roles established': '#2',
   'Data stewards identified': '#2',
   'Stewardship teams formed': '/governance',
   'Domain ownership assigned': '/data-domains',
@@ -712,6 +712,11 @@ export default function GovernanceProgramPage() {
                     {/* Phase 2: Assign Governance Roles */}
                     {n === 2 && (
                       <div ref={(el) => { cardRefs.current[2] = el; }}>
+                        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
+                          Establish the governance leadership structure by assigning people to key roles.
+                          Focus on the essential roles first — CDO, Governance Lead, Data Owners, and Business Data Stewards
+                          form the core of your governance operating model.
+                        </div>
                         {(() => {
                           const totalRoles = ROLE_GUIDE.length;
                           const essentialRoles = ROLE_GUIDE.filter((r) => r.priority === 'ESSENTIAL');
