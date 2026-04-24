@@ -8,7 +8,7 @@ import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
 import ShortcutsModal from './ShortcutsModal';
 import ShortcutsHint from './ShortcutsHint';
-import ScopeBanner from './ScopeBanner';
+
 import DensityToggle from './DensityToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
@@ -716,7 +716,6 @@ export default function Layout() {
         >
           Skip to main content
         </a>
-        <ScopeBanner />
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
           {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' && location.pathname !== '/' ? (
