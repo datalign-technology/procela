@@ -274,7 +274,8 @@ export default function ConnectionsPage() {
   // CRUD
   // -----------------------------------------------------------------------
 
-  const openAdd = () => { setFormTestResult(null);
+  const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setFormTestResult(null);
     // Pre-fill systemId from the active filter so "+ Add Connection" under a
     // System filter keeps the user's context.
     setForm({ ...emptyForm, systemId: systemFilter });

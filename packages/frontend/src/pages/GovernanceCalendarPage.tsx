@@ -196,7 +196,8 @@ export default function GovernanceCalendarPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
+  const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
   const openEdit = (e: CalendarEvent) => {
     setForm({

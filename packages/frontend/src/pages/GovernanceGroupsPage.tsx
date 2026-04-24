@@ -446,6 +446,7 @@ export default function GovernanceGroupsPage() {
   // ── Form handlers ──
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
     setEditingId(null);
     setAllowedTypes(null); // all types allowed for top-level

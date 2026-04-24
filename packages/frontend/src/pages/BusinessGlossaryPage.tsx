@@ -194,7 +194,8 @@ export default function BusinessGlossaryPage() {
 
   // ── CRUD ──
 
-  const openAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
+  const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
   const openEdit = (t: GlossaryTerm) => {
     setForm({
       term: t.term, definition: t.definition, category: t.category, status: t.status,

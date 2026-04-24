@@ -155,6 +155,7 @@ export default function DataDomainsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
     setEditingId(null);
     setSelectedDomain(null);

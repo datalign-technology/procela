@@ -229,6 +229,7 @@ export default function DataLineagePage() {
   usePolling(fetchData, 30000);
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
     setEditingId(null);
     setShowForm(true);

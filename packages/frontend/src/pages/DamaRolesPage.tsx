@@ -151,6 +151,7 @@ export default function DamaRolesPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm({
       ...emptyForm,
       scopeId: activeOrgId || (orgs.length > 0 ? orgs[0].id : ''),

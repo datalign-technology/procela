@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -94,6 +96,8 @@ const STATUS_BADGES: Record<string, { bg: string; color: string }> = {
 };
 
 export default function AgentsPage() {
+  const { activeOrgId } = useOrgContext();
+  const { addToast } = useToastStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [orgs, setOrgs] = useState<OrganizationRef[]>([]);
@@ -149,6 +153,7 @@ export default function AgentsPage() {
     : agents;
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm({ ...emptyForm, orgIds: selectedOrgId ? [selectedOrgId] : [] });
     setEditingId(null);
     setShowForm(true);

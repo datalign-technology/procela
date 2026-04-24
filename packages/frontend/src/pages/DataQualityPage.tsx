@@ -267,6 +267,7 @@ export default function DataQualityPage() {
   const avgScore = totalRules > 0 ? Math.round(rules.reduce((sum, r) => sum + r.currentScore, 0) / totalRules) : 0;
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
     setEditingId(null);
     setShowForm(true);

@@ -147,7 +147,8 @@ export default function GovernancePoliciesPage() {
 
   // ── Policy CRUD ──
 
-  const openAdd = () => { setForm(emptyPolicyForm); setEditingId(null); setShowForm(true); };
+  const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyPolicyForm); setEditingId(null); setShowForm(true); };
   const openEdit = (p: Policy) => {
     setForm({ name: p.name, description: p.description, category: p.category, status: p.status,
       ownerAssignmentId: p.ownerAssignmentId || '', reviewFrequency: p.reviewFrequency, content: p.content });

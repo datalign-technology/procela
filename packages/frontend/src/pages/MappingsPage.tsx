@@ -205,6 +205,7 @@ export default function MappingsPage() {
   };
 
   const openForm = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     resetForm();
     setShowForm(true);
   };

@@ -205,6 +205,7 @@ export default function GovernanceIssuesPage() {
   // ── CRUD ──
 
   const openAdd = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setForm(emptyForm);
     setEditingId(null);
     setShowForm(true);
