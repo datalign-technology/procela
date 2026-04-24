@@ -380,8 +380,6 @@ export default function SopsPage() {
                     <input style={{ ...inputStyle, marginBottom: 4 }} value={step.title} onChange={(e) => updateStep(idx, { title: e.target.value })} placeholder="Step title" />
                     <textarea style={{ ...inputStyle, minHeight: 40, fontFamily: 'inherit', marginBottom: 4 }} value={step.description} onChange={(e) => updateStep(idx, { description: e.target.value })} placeholder="What to do in this step" />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <label style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Est. minutes:</label>
-                      <input type="number" style={{ ...inputStyle, width: 80 }} value={step.estimatedMinutes} onChange={(e) => updateStep(idx, { estimatedMinutes: Number(e.target.value) || 0 })} />
                     </div>
                   </div>
                   <button onClick={() => removeStep(idx)} disabled={form.steps.length <= 1} style={{ background: 'none', border: 'none', cursor: form.steps.length <= 1 ? 'default' : 'pointer', color: form.steps.length <= 1 ? 'var(--color-border)' : 'var(--color-error, #dc2626)', fontSize: 14, padding: 4 }}>×</button>
@@ -514,7 +512,6 @@ export default function SopsPage() {
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{step.title}</div>
                                     <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>{step.description}</div>
-                                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>~{step.estimatedMinutes} minutes</div>
                                   </div>
                                 </li>
                               ))}
