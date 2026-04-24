@@ -247,7 +247,10 @@ export default function GovernanceProgramPage() {
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scope' | 'principles' | 'roles'>('scope');
+  const [activeTab, setActiveTab] = useState<'scope' | 'principles'>('scope');
+
+  // Role assignment section (Phase 2) — expanded/collapsed
+  const [showRoleAssignment, setShowRoleAssignment] = useState(false);
 
   // Editable form state
   const [inScope, setInScope] = useState('');
@@ -392,10 +395,10 @@ export default function GovernanceProgramPage() {
   }, [activeOrgId]);
 
   useEffect(() => {
-    if (activeTab === 'roles' && !rolesLoaded) {
+    if (showRoleAssignment && !rolesLoaded) {
       fetchRolesData();
     }
-  }, [activeTab, rolesLoaded, fetchRolesData]);
+  }, [showRoleAssignment, rolesLoaded, fetchRolesData]);
 
   // Reset rolesLoaded when org changes so data is re-fetched
   useEffect(() => {
@@ -607,7 +610,7 @@ export default function GovernanceProgramPage() {
 
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
-                {(['scope', 'principles', 'roles'] as const).map((t) => (
+                {(['scope', 'principles'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setActiveTab(t)}
@@ -752,125 +755,6 @@ export default function GovernanceProgramPage() {
                 </div>
               )}
 
-              {activeTab === 'roles' && (() => {
-                const totalRoles = ROLE_GUIDE.length;
-                const essentialRoles = ROLE_GUIDE.filter((r) => r.priority === 'ESSENTIAL');
-                const assignedRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
-                const assignedCount = ROLE_GUIDE.filter((r) => assignedRoleTypes.has(r.roleType)).length;
-                const essentialFilled = essentialRoles.filter((r) => assignedRoleTypes.has(r.roleType)).length;
-
-                return (
-                  <div>
-                    {/* Progress summary */}
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 16,
-                      padding: '10px 14px', marginBottom: 14,
-                      background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-md)', fontSize: 13,
-                    }}>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                        {assignedCount} of {totalRoles} roles assigned
-                      </span>
-                      <span style={{ color: 'var(--color-text-muted)' }}>
-                        {essentialFilled} of {essentialRoles.length} essential roles filled
-                      </span>
-                    </div>
-
-                    {/* Role cards */}
-                    {ROLE_GUIDE.map((role) => {
-                      const pc = PRIORITY_COLORS[role.priority];
-                      const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
-                      const selectedPerson = roleSelections[role.roleType] || '';
-                      const isAssigning = assigningRole === role.roleType;
-
-                      return (
-                        <div
-                          key={role.roleType}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                            borderRadius: 'var(--radius-md)', marginBottom: 8,
-                            borderLeft: `4px solid ${pc.border}`,
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 14, fontWeight: 600 }}>{role.label}</span>
-                              <span style={{
-                                display: 'inline-block', padding: '1px 8px', borderRadius: 10,
-                                fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                                background: pc.bg, color: pc.text,
-                              }}>
-                                {role.priority}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {role.purpose}
-                            </div>
-                            {assignees.length > 0 ? (
-                              <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                {assignees.map((a) => (
-                                  <span
-                                    key={a.id}
-                                    style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                                      fontSize: 11, padding: '2px 8px',
-                                      background: '#d1f0eb', color: '#0f4f46', borderRadius: 12,
-                                    }}
-                                  >
-                                    {a.personName}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveRole(a.id)}
-                                      aria-label={`Remove ${a.personName}`}
-                                      style={{
-                                        background: 'none', border: 'none', cursor: 'pointer',
-                                        fontSize: 13, color: '#0f4f46', padding: 0, lineHeight: 1,
-                                        marginLeft: 2,
-                                      }}
-                                    >
-                                      &times;
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>Not assigned</div>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                            <select
-                              style={{ ...selectStyle, width: 'auto', minWidth: 140 }}
-                              value={selectedPerson}
-                              onChange={(e) =>
-                                setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))
-                              }
-                            >
-                              <option value="">Select person...</option>
-                              {people.map((p) => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              style={{
-                                ...btnPrimary,
-                                padding: '6px 14px',
-                                opacity: !selectedPerson || isAssigning ? 0.5 : 1,
-                                cursor: !selectedPerson || isAssigning ? 'not-allowed' : 'pointer',
-                              }}
-                              disabled={!selectedPerson || isAssigning}
-                              onClick={() => handleAssignRole(role.roleType)}
-                            >
-                              {isAssigning ? 'Assigning...' : 'Assign'}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
             </div>
           )}
 
@@ -917,6 +801,100 @@ export default function GovernanceProgramPage() {
               </button>
             </div>
           )}
+
+          {/* Phase 2: Role Assignment */}
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', padding: showRoleAssignment ? 20 : 0, marginBottom: 20,
+            boxShadow: 'var(--shadow-sm)', overflow: 'hidden',
+          }}>
+            <div
+              onClick={() => { setShowRoleAssignment((v) => !v); }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: showRoleAssignment ? '0 0 16px 0' : '16px 20px',
+                cursor: 'pointer',
+                borderBottom: showRoleAssignment ? '1px solid var(--color-border)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{showRoleAssignment ? '▼' : '▶'}</span>
+                <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Phase 2: Assign Governance Roles</h3>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  {roleAssignments.length > 0 ? `${new Set(roleAssignments.map((r) => r.roleType)).size} of ${ROLE_GUIDE.length} roles assigned` : 'No roles assigned yet'}
+                </span>
+              </div>
+            </div>
+            {showRoleAssignment && (() => {
+              const totalRoles = ROLE_GUIDE.length;
+              const essentialRoles = ROLE_GUIDE.filter((r) => r.priority === 'ESSENTIAL');
+              const filledRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
+              const filledCount = ROLE_GUIDE.filter((r) => filledRoleTypes.has(r.roleType)).length;
+              const essentialFilled = essentialRoles.filter((r) => filledRoleTypes.has(r.roleType)).length;
+
+              return (
+                <div style={{ paddingTop: 16 }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
+                      <span style={{ fontSize: 12, color: essentialFilled === essentialRoles.length ? '#16a34a' : '#dc2626' }}>
+                        {essentialFilled} of {essentialRoles.length} essential roles filled
+                      </span>
+                    </div>
+                    <ProgressBar value={(filledCount / totalRoles) * 100} />
+                  </div>
+                  {ROLE_GUIDE.map((role) => {
+                    const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
+                    const pc = PRIORITY_COLORS[role.priority];
+                    return (
+                      <div key={role.roleType} style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                        background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                        borderLeft: `4px solid ${pc.border}`, borderRadius: 'var(--radius-md)', marginBottom: 8,
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 14, fontWeight: 600 }}>{role.label}</span>
+                            <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: pc.bg, color: pc.text, textTransform: 'uppercase' }}>{role.priority}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>{role.purpose}</div>
+                          {assignees.length > 0 ? (
+                            <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {assignees.map((a) => (
+                                <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                  {a.personName}
+                                  <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>Not assigned</div>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                          <select
+                            style={{ ...selectStyle, width: 'auto', minWidth: 160, fontSize: 12 }}
+                            value={roleSelections[role.roleType] || ''}
+                            onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}
+                          >
+                            <option value="">Select person...</option>
+                            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          <button
+                            style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1 }}
+                            disabled={!roleSelections[role.roleType] || !!assigningRole}
+                            onClick={() => handleAssignRole(role.roleType)}
+                          >
+                            Assign
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
 
           {!program && !loading && (
             <div style={{
