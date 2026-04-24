@@ -297,14 +297,14 @@ function computeRecommendations(program: StoredGovernanceProgram): Recommendatio
         recs.push({
           phase: 2,
           action: 'Establish a Data Governance Council',
-          link: '/governance-groups',
+          link: '/governance',
           priority: 'HIGH',
         });
       } else if (check.label === 'Governance Committee established') {
         recs.push({
           phase: 2,
           action: 'Establish a Data Governance Committee',
-          link: '/governance-groups',
+          link: '/governance',
           priority: 'MEDIUM',
         });
       } else if (check.label === 'Initial roles assigned') {
@@ -334,7 +334,7 @@ function computeRecommendations(program: StoredGovernanceProgram): Recommendatio
         recs.push({
           phase: 3,
           action: 'Form a stewardship team',
-          link: '/governance-groups',
+          link: '/governance',
           priority: 'HIGH',
         });
       } else if (check.label === 'Domain ownership assigned') {
@@ -357,7 +357,7 @@ function computeRecommendations(program: StoredGovernanceProgram): Recommendatio
         recs.push({
           phase: 4,
           action: 'Define core governance processes',
-          link: '/process-catalog',
+          link: '/processes',
           priority: 'HIGH',
         });
       } else if (check.label === 'Policies activated') {
