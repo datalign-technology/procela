@@ -504,15 +504,63 @@ export default function SopsPage() {
                                 <div style={{ fontSize: 13 }}>{sop.triggerEvent}</div>
                               </div>
                             )}
-                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Steps</div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Steps</div>
+                              {canWrite && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const newStep = { order: (sop.steps?.length || 0) + 1, title: 'New step', description: '', estimatedMinutes: 0 };
+                                    const updatedSteps = [...(sop.steps || []), newStep];
+                                    await apiClient.put(`/sops/${sop.id}`, { steps: updatedSteps });
+                                    addToast('success', 'Step added');
+                                    fetchData();
+                                  }}
+                                  style={{ ...btnSecondary, fontSize: 11, padding: '3px 10px' }}
+                                >+ Add Step</button>
+                              )}
+                            </div>
                             <ol style={{ paddingLeft: 0, listStyle: 'none', margin: 0 }}>
-                              {(sop.steps || []).map((step) => (
+                              {(sop.steps || []).map((step, stepIdx) => (
                                 <li key={step.order} style={{ display: 'flex', gap: 12, padding: '10px 12px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
-                                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{step.order}</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{step.order}</div>
+                                    {canWrite && (
+                                      <>
+                                        <button disabled={stepIdx === 0} onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const steps = [...sop.steps];
+                                          [steps[stepIdx - 1], steps[stepIdx]] = [steps[stepIdx], steps[stepIdx - 1]];
+                                          await apiClient.put(`/sops/${sop.id}`, { steps: steps.map((s, i) => ({ ...s, order: i + 1 })) });
+                                          fetchData();
+                                        }} style={{ background: 'none', border: 'none', cursor: stepIdx === 0 ? 'default' : 'pointer', fontSize: 9, color: stepIdx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0 }}>&#9650;</button>
+                                        <button disabled={stepIdx === sop.steps.length - 1} onClick={async (e) => {
+                                          e.stopPropagation();
+                                          const steps = [...sop.steps];
+                                          [steps[stepIdx], steps[stepIdx + 1]] = [steps[stepIdx + 1], steps[stepIdx]];
+                                          await apiClient.put(`/sops/${sop.id}`, { steps: steps.map((s, i) => ({ ...s, order: i + 1 })) });
+                                          fetchData();
+                                        }} style={{ background: 'none', border: 'none', cursor: stepIdx === sop.steps.length - 1 ? 'default' : 'pointer', fontSize: 9, color: stepIdx === sop.steps.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0 }}>&#9660;</button>
+                                      </>
+                                    )}
+                                  </div>
                                   <div style={{ flex: 1 }}>
                                     <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{step.title}</div>
-                                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>{step.description}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{step.description}</div>
                                   </div>
+                                  {canWrite && (
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        const updatedSteps = sop.steps.filter((_, i) => i !== stepIdx).map((s, i) => ({ ...s, order: i + 1 }));
+                                        await apiClient.put(`/sops/${sop.id}`, { steps: updatedSteps });
+                                        addToast('success', 'Step removed');
+                                        fetchData();
+                                      }}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error, #dc2626)', fontSize: 14, padding: 4, flexShrink: 0, alignSelf: 'flex-start' }}
+                                      title="Remove step"
+                                    >&times;</button>
+                                  )}
                                 </li>
                               ))}
                             </ol>
