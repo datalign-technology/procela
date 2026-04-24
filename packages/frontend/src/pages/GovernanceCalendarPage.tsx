@@ -288,6 +288,32 @@ export default function GovernanceCalendarPage() {
     }
   };
 
+  const downloadIcs = (ev: CalendarEvent) => {
+    const nextDate = ev.nextOccurrence ? new Date(ev.nextOccurrence) : new Date();
+    const endDate = new Date(nextDate.getTime() + (ev.durationMinutes || 60) * 60000);
+    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Procela//Governance Calendar//EN',
+      'BEGIN:VEVENT',
+      `DTSTART:${fmt(nextDate)}`,
+      `DTEND:${fmt(endDate)}`,
+      `SUMMARY:${ev.name}`,
+      `DESCRIPTION:${(ev.description || '').replace(/\n/g, '\\n')}`,
+      `UID:${ev.id}@procela`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ];
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${ev.name.replace(/[^a-zA-Z0-9]/g, '-')}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleSeed = async () => {
     if (!activeOrgId) {
       addToast('error', 'Select an organization first');
@@ -684,6 +710,12 @@ export default function GovernanceCalendarPage() {
                             onClick={() => handleRun(ev.id)}
                           />
                         )}
+                        <IconButton
+                          size="sm"
+                          icon="download"
+                          label="Add to calendar (.ics)"
+                          onClick={() => downloadIcs(ev)}
+                        />
                         {canWrite && (
                           <IconButton
                             size="sm"
