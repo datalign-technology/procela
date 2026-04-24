@@ -257,6 +257,7 @@ export default function GovernanceProgramPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleSave = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!program) return;
     setSaving(true);
     try {
@@ -290,6 +291,7 @@ export default function GovernanceProgramPage() {
   };
 
   const addPrinciple = () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     const trimmed = newPrinciple.trim();
     if (!trimmed) return;
     const updated = [...principles, trimmed];
@@ -306,6 +308,7 @@ export default function GovernanceProgramPage() {
   };
 
   const removePrinciple = (index: number) => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     const updated = principles.filter((_, i) => i !== index);
     setPrinciples(updated);
     if (program) {
