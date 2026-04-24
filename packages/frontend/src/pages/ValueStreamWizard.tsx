@@ -129,6 +129,7 @@ export default function ValueStreamWizard() {
   };
 
   const handleApply = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!template) return;
     setApplying(true);
     setError('');

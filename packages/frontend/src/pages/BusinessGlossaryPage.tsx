@@ -229,6 +229,7 @@ export default function BusinessGlossaryPage() {
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
   const handleSave = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!form.term.trim() || !form.definition.trim()) return;
     try {
       const synonymsArray = form.synonyms
@@ -266,6 +267,7 @@ export default function BusinessGlossaryPage() {
   };
 
   const handleSeed = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     try {
       await apiClient.post('/business-glossary/seed', activeOrgId ? { orgId: activeOrgId } : {});
       addToast('success', 'Standard terms seeded');

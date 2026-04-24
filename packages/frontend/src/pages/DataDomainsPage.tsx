@@ -261,6 +261,7 @@ export default function DataDomainsPage() {
   const handleCancel = () => { confirmIfDirty(closeForm); };
 
   const handleDetailSave = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!selectedDomain) return;
     const res = await apiClient.put<{ success: boolean; data: DataDomain }>(`/data-domains/${selectedDomain.id}`, {
       ownerId: detailOwnerId || null,

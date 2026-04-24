@@ -199,6 +199,7 @@ export default function SopsPage() {
   };
 
   const handleSeed = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setSeeding(true);
     try {
       await apiClient.post(`/sops/seed`, { orgId: activeOrgId });

@@ -169,6 +169,7 @@ export default function AgentsPage() {
   };
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
   const handleSave = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!form.name.trim() || form.orgIds.length === 0) return;
     try {
       if (editingId) await apiClient.put(`/agents/${editingId}`, form);
@@ -210,6 +211,7 @@ export default function AgentsPage() {
 
   // ── Import handlers ──
   const handleImport = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     const orgId = importOrgId || selectedOrgId;
     if (!importText.trim() || !orgId) { alert('Select an organization and provide data to import.'); return; }
     try {

@@ -196,6 +196,7 @@ export default function GovernancePoliciesPage() {
   const closeControlForm = () => { setShowControlForm(false); setEditingControlId(null); setControlForm(emptyControlForm); };
 
   const handleSaveControl = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!controlForm.name.trim() || !expandedPolicyId) return;
     try {
       const payload = { ...controlForm, policyId: expandedPolicyId,

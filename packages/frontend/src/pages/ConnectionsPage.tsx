@@ -314,6 +314,7 @@ export default function ConnectionsPage() {
   };
 
   const handleSave = async () => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!form.name.trim()) return;
     try {
       setUploading(!!pendingFile);
