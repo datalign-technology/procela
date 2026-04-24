@@ -121,6 +121,8 @@ export default function GovernancePoliciesPage() {
   const [form, setForm] = useState<PolicyForm>(emptyPolicyForm);
   const [expandedPolicyId, setExpandedPolicyId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Control form state
   const [showControlForm, setShowControlForm] = useState(false);
@@ -218,6 +220,24 @@ export default function GovernancePoliciesPage() {
     } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete control'); }
   };
 
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === policies.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(policies.map((i) => i.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => apiClient.delete(`/governance-policies/${id}`)));
+    addToast('success', `Deleted ${ids.length} polic${ids.length === 1 ? 'y' : 'ies'}`);
+    setSelectedIds(new Set());
+    fetchData();
+  };
+
   const controlsForPolicy = (policyId: string) => controls.filter((c) => c.policyId === policyId);
 
   const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : '--';
@@ -302,6 +322,33 @@ export default function GovernancePoliciesPage() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} polic${selectedIds.size === 1 ? 'y' : 'ies'}?`}
+        message="This cannot be undone."
+        confirmLabel={`Delete ${selectedIds.size}`}
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Policies Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
@@ -314,6 +361,9 @@ export default function GovernancePoliciesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                  <input type="checkbox" checked={policies.length > 0 && selectedIds.size === policies.length} onChange={toggleSelectAll} />
+                </th>
                 <th style={thStyle}>Code</th>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Category</th>
@@ -333,6 +383,9 @@ export default function GovernancePoliciesPage() {
                     onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                     onClick={() => { setExpandedPolicyId(isExpanded ? null : pol.id); closeControlForm(); }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.has(pol.id)} onChange={() => toggleSelect(pol.id)} />
+                    </td>
                     <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'monospace', fontSize: 12 }}>{pol.code}</td>
                     <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>{pol.name}</td>
                     <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>

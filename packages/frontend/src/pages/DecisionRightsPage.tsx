@@ -237,6 +237,8 @@ export default function DecisionRightsPage() {
   const [form, setForm] = useState<DecisionForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -323,6 +325,24 @@ export default function DecisionRightsPage() {
     } finally {
       setSeeding(false);
     }
+  };
+
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === rows.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(rows.map((i) => i.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => apiClient.delete(`/decision-rights/${id}`)));
+    addToast('success', `Deleted ${ids.length} decision right${ids.length === 1 ? '' : 's'}`);
+    setSelectedIds(new Set());
+    fetchData();
   };
 
   const filteredRows = rows.filter((r) => categoryFilter === 'ALL' || r.category === categoryFilter);
@@ -509,6 +529,33 @@ export default function DecisionRightsPage() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} decision right${selectedIds.size === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        confirmLabel={`Delete ${selectedIds.size}`}
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
@@ -529,6 +576,9 @@ export default function DecisionRightsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)' }}>
+                  <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                    <input type="checkbox" checked={rows.length > 0 && selectedIds.size === rows.length} onChange={toggleSelectAll} />
+                  </th>
                   <th style={thStyle}>Decision</th>
                   <th style={thStyle}>Category</th>
                   <th style={thStyle}>Decides</th>
@@ -545,6 +595,9 @@ export default function DecisionRightsPage() {
                     || (r.decider ? labelFor(r.decider, people, groups) : null);
                   return (
                     <tr key={r.id}>
+                      <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                        <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
+                      </td>
                       <td style={{ ...tdStyle, fontWeight: 500 }}>
                         <div style={{ color: 'var(--color-text)' }}>{r.decision}</div>
                         {r.description && (

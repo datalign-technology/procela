@@ -141,6 +141,8 @@ export default function SopsPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -253,6 +255,24 @@ export default function SopsPage() {
       [next[idx], next[target]] = [next[target], next[idx]];
       return { ...f, steps: next.map((s, i) => ({ ...s, order: i + 1 })) };
     });
+  };
+
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sops.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(sops.map((i) => i.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => apiClient.delete(`/sops/${id}`)));
+    addToast('success', `Deleted ${ids.length} SOP${ids.length === 1 ? '' : 's'}`);
+    setSelectedIds(new Set());
+    fetchData();
   };
 
   const filtered = sops.filter((s) => {
@@ -392,6 +412,33 @@ export default function SopsPage() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} SOP${selectedIds.size === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        confirmLabel={`Delete ${selectedIds.size}`}
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
@@ -410,6 +457,9 @@ export default function SopsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
+                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                  <input type="checkbox" checked={sops.length > 0 && selectedIds.size === sops.length} onChange={toggleSelectAll} />
+                </th>
                 <th style={{ ...thStyle, width: 80 }}>Code</th>
                 <th style={thStyle}>Title</th>
                 <th style={thStyle}>Category</th>
@@ -426,6 +476,9 @@ export default function SopsPage() {
                 return (
                   <>
                     <tr key={sop.id} onClick={() => setExpandedId(isExpanded ? null : sop.id)} style={{ cursor: 'pointer' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(sop.id)} onChange={() => toggleSelect(sop.id)} />
+                      </td>
                       <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.code}</td>
                       <td style={{ ...tdStyle, fontWeight: 500 }}>
                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginRight: 6 }}>{isExpanded ? '▼' : '▶'}</span>
@@ -452,7 +505,7 @@ export default function SopsPage() {
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={8} style={{ background: 'var(--color-bg)', padding: 16, borderTop: '1px solid var(--color-border)' }}>
+                        <td colSpan={9} style={{ background: 'var(--color-bg)', padding: 16, borderTop: '1px solid var(--color-border)' }}>
                           <div style={{ maxWidth: 800 }}>
                             {sop.purpose && (
                               <div style={{ marginBottom: 12 }}>

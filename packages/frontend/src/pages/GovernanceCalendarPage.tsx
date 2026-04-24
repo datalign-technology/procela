@@ -177,6 +177,8 @@ export default function GovernanceCalendarPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EventForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -302,6 +304,24 @@ export default function GovernanceCalendarPage() {
     } catch (err: any) {
       addToast('error', err?.message || 'Failed to seed events');
     }
+  };
+
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === events.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(events.map((i) => i.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => apiClient.delete(`/governance-calendar/${id}`)));
+    addToast('success', `Deleted ${ids.length} event${ids.length === 1 ? '' : 's'}`);
+    setSelectedIds(new Set());
+    fetchData();
   };
 
   const toggleAttendee = (id: string) => {
@@ -524,6 +544,33 @@ export default function GovernanceCalendarPage() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} event${selectedIds.size === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        confirmLabel={`Delete ${selectedIds.size}`}
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Two-column layout: Upcoming + All */}
       <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Upcoming panel */}
@@ -587,6 +634,9 @@ export default function GovernanceCalendarPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)' }}>
+                  <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                    <input type="checkbox" checked={events.length > 0 && selectedIds.size === events.length} onChange={toggleSelectAll} />
+                  </th>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Type</th>
                   <th style={thStyle}>Cadence</th>
@@ -600,6 +650,9 @@ export default function GovernanceCalendarPage() {
                   <tr key={ev.id} style={{ transition: 'background 0.1s' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                      <input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => toggleSelect(ev.id)} />
+                    </td>
                     <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
                       {ev.name}
                       {ev.attendeeNames.length > 0 && (

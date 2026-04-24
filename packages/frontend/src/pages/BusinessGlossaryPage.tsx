@@ -135,6 +135,8 @@ export default function BusinessGlossaryPage() {
   const [form, setForm] = useState<TermForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,6 +193,24 @@ export default function BusinessGlossaryPage() {
     if (activeLetter) result = result.filter((t) => t.term.charAt(0).toUpperCase() === activeLetter);
     return result.sort((a, b) => a.term.localeCompare(b.term));
   }, [terms, searchQuery, filterStatus, filterCategory, filterDomain, activeLetter]);
+
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === terms.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(terms.map((i) => i.id)));
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => apiClient.delete(`/business-glossary/${id}`)));
+    addToast('success', `Deleted ${ids.length} term${ids.length === 1 ? '' : 's'}`);
+    setSelectedIds(new Set());
+    fetchData();
+  };
 
   // ── CRUD ──
 
@@ -278,6 +298,15 @@ export default function BusinessGlossaryPage() {
         onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); if (id) await handleDelete(id); }}
         onCancel={() => setConfirmDelete(null)} />
 
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} term${selectedIds.size === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        confirmLabel={`Delete ${selectedIds.size}`}
+        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
       {/* Search bar */}
       <div style={{ marginBottom: 12 }}>
         <input
@@ -303,6 +332,30 @@ export default function BusinessGlossaryPage() {
           {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
       </div>
+
+      {/* Select all + Bulk action bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={terms.length > 0 && selectedIds.size === terms.length} onChange={toggleSelectAll} />
+          Select all ({terms.length})
+        </label>
+      </div>
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+          <button onClick={() => setConfirmBulkDelete(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            Clear Selection
+          </button>
+        </div>
+      )}
 
       {/* Alphabetical index */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -475,8 +528,11 @@ export default function BusinessGlossaryPage() {
                   {grouped[cat].map((t) => {
                     const isExpanded = expandedId === t.id;
                     return (
-                      <div key={t.id} style={termCardStyle}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div key={t.id} style={{ ...termCardStyle, position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: 12, left: 12 }}>
+                          <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginLeft: 28 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                               <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{t.term}</span>
@@ -520,8 +576,11 @@ export default function BusinessGlossaryPage() {
             filteredTerms.map((t) => {
               const isExpanded = expandedId === t.id;
               return (
-                <div key={t.id} style={termCardStyle}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div key={t.id} style={{ ...termCardStyle, position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: 12, left: 12 }}>
+                    <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginLeft: 28 }}>
                     {/* Left side */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
