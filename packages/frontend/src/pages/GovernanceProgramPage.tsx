@@ -160,9 +160,9 @@ const PHASE_CHECK_LINKS: Record<string, string> = {
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
   'Initial roles assigned': '#roles',
-  'Data stewards identified': '#roles',
-  'Stewardship teams formed': '/governance',
-  'Domain ownership assigned': '/data-domains',
+  'Data stewards identified': '#people',
+  'Stewardship teams formed': '#people',
+  'Domain ownership assigned': '#people',
   'Core processes defined': '/processes',
   'Policies activated': '/governance-policies',
   'Program launched': '#launch',
@@ -366,6 +366,7 @@ export default function GovernanceProgramPage() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const foundationRef = useRef<HTMLDivElement>(null);
   const rolesRef = useRef<HTMLDivElement>(null);
+  const peopleRef = useRef<HTMLDivElement>(null);
   const launchRef = useRef<HTMLDivElement>(null);
 
   const toggleSection = (id: string) => {
@@ -377,6 +378,7 @@ export default function GovernanceProgramPage() {
     const refMap: Record<string, React.RefObject<HTMLDivElement | null>> = {
       foundation: foundationRef,
       roles: rolesRef,
+      people: peopleRef,
       launch: launchRef,
     };
     const ref = refMap[sectionId];
@@ -387,7 +389,7 @@ export default function GovernanceProgramPage() {
 
   useEffect(() => {
     const hash = location.hash?.slice(1);
-    if (hash && ['foundation', 'roles', 'launch'].includes(hash)) {
+    if (hash && ['foundation', 'roles', 'people', 'launch'].includes(hash)) {
       openAndScrollTo(hash);
     }
   }, [location.hash]);
@@ -1019,6 +1021,80 @@ export default function GovernanceProgramPage() {
                 </>
               );
             })()}
+          </CollapsibleSection>
+
+          {/* Phase 3: People & Processes */}
+          <CollapsibleSection
+            phaseLabel="Phase 3"
+            phaseColor={PHASE_COLORS[3]}
+            title="People & Processes"
+            subtitle={status ? (() => {
+              const p3 = status.phases.phase3;
+              const done = p3.checks.filter((c) => c.done).length;
+              return `${done} of ${p3.checks.length} complete`;
+            })() : undefined}
+            open={!!openSections.people}
+            onToggle={() => toggleSection('people')}
+            sectionRef={peopleRef}
+          >
+            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
+              Identify the people who will own and steward your data, form stewardship teams within each domain,
+              and ensure every data domain has an assigned owner accountable for its quality and governance.
+            </div>
+            {status && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {status.phases.phase3.checks.map((check, idx) => {
+                  const linkMap: Record<string, { route: string; label: string }> = {
+                    'Data stewards identified': { route: '/governance-program', label: 'Assign in Phase 2 Roles above' },
+                    'Stewardship teams formed': { route: '/governance', label: 'Governance Groups' },
+                    'Domain ownership assigned': { route: '/data-domains', label: 'Data Domains' },
+                  };
+                  const target = linkMap[check.label];
+                  return (
+                    <div key={idx} style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 16px',
+                      background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border)',
+                      borderLeft: `4px solid ${check.done ? '#22c55e' : '#d1d5db'}`,
+                      borderRadius: 'var(--radius-md)',
+                    }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: '50%',
+                        background: check.done ? '#22c55e' : 'transparent',
+                        border: check.done ? 'none' : '2px solid #d1d5db',
+                        color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {check.done ? '✓' : ''}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                          {check.label}
+                        </div>
+                      </div>
+                      {target && !check.done && (
+                        <Link
+                          to={target.route}
+                          onClick={target.route === '/governance-program' ? (e) => { e.preventDefault(); openAndScrollTo('roles'); } : undefined}
+                          style={{
+                            fontSize: 12, fontWeight: 500,
+                            color: 'var(--color-primary)', textDecoration: 'none',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {target.label} &rarr;
+                        </Link>
+                      )}
+                      {check.done && (
+                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Done</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CollapsibleSection>
 
           {/* Phase 4: Program Launch */}
