@@ -109,23 +109,23 @@ const GROUP_TYPE_SHORT: Record<string, string> = {
   COMMUNITY_OF_PRACTICE: 'CoP',
 };
 
-const EXPECTED_ROLES_BY_GROUP: Record<string, { roleType: string; label: string; purpose: string }[]> = {
+const EXPECTED_ROLES_BY_GROUP: Record<string, { roleType: string; label: string; purpose: string; required: boolean; multiAssign: boolean }[]> = {
   COUNCIL: [
-    { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, and represents governance at the executive level.' },
-    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.' },
+    { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, and represents governance at the executive level.', required: true, multiAssign: false },
+    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.', required: true, multiAssign: false },
   ],
   COMMITTEE: [
-    { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.' },
-    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.' },
+    { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.', required: true, multiAssign: true },
+    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.', required: false, multiAssign: true },
   ],
   STEWARDSHIP_TEAM: [
-    { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution.' },
-    { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation — lineage, infrastructure, and system-level quality.' },
-    { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality.' },
+    { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution.', required: true, multiAssign: true },
+    { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation — lineage, infrastructure, and system-level quality.', required: false, multiAssign: true },
+    { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality.', required: false, multiAssign: true },
   ],
   OFFICE: [
-    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.' },
-    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.' },
+    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.', required: true, multiAssign: false },
+    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.', required: false, multiAssign: true },
   ],
 };
 
@@ -894,57 +894,103 @@ export default function GovernanceGroupsPage() {
           </div>
 
           {/* Expected Governance Roles */}
-          {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (
-            <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
-                Expected Governance Roles
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type].map((expected) => {
-                  const assigned = memberDamaRoles.filter((r) => r.roleType === expected.roleType);
-                  const isFilled = assigned.length > 0;
-                  return (
-                    <div key={expected.roleType} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '8px 12px',
-                      background: 'var(--color-surface)',
-                      border: `1px solid ${isFilled ? '#bbf7d0' : 'var(--color-border)'}`,
-                      borderLeft: `3px solid ${isFilled ? '#22c55e' : '#d1d5db'}`,
-                      borderRadius: 'var(--radius-md)',
-                    }}>
-                      <span style={{
-                        width: 18, height: 18, borderRadius: '50%',
-                        background: isFilled ? '#22c55e' : 'transparent',
-                        border: isFilled ? 'none' : '1.5px solid #d1d5db',
-                        color: '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 10, fontWeight: 700, flexShrink: 0,
+          {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (() => {
+            const expectedRoles = EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type];
+            const requiredCount = expectedRoles.filter((r) => r.required).length;
+            const requiredFilled = expectedRoles.filter((r) => r.required && memberDamaRoles.some((d) => d.roleType === r.roleType)).length;
+            return (
+              <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Governance Roles
+                  </div>
+                  <span style={{ fontSize: 11, color: requiredFilled === requiredCount ? '#16a34a' : '#dc2626' }}>
+                    {requiredFilled} of {requiredCount} required roles filled
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {expectedRoles.map((expected) => {
+                    const assigned = memberDamaRoles.filter((r) => r.roleType === expected.roleType);
+                    const isFilled = assigned.length > 0;
+                    const canAddMore = expected.multiAssign || assigned.length === 0;
+                    return (
+                      <div key={expected.roleType} style={{
+                        padding: '10px 14px',
+                        background: 'var(--color-surface)',
+                        border: `1px solid ${isFilled ? '#bbf7d0' : expected.required ? '#fecaca' : 'var(--color-border)'}`,
+                        borderLeft: `3px solid ${isFilled ? '#22c55e' : expected.required ? '#ef4444' : '#d1d5db'}`,
+                        borderRadius: 'var(--radius-md)',
                       }}>
-                        {isFilled ? '✓' : ''}
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                          {expected.label}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <span style={{
+                            width: 18, height: 18, borderRadius: '50%', marginTop: 1,
+                            background: isFilled ? '#22c55e' : 'transparent',
+                            border: isFilled ? 'none' : '1.5px solid #d1d5db',
+                            color: '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 10, fontWeight: 700, flexShrink: 0,
+                          }}>
+                            {isFilled ? '✓' : ''}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                {expected.label}
+                              </span>
+                              <span style={{
+                                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                background: expected.required ? '#fef2f2' : '#f0f9ff',
+                                color: expected.required ? '#b91c1c' : '#0369a1',
+                              }}>
+                                {expected.required ? 'Required' : 'Optional'}
+                              </span>
+                              {expected.multiAssign && (
+                                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Multiple
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
+                            {assigned.length > 0 && (
+                              <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                {assigned.map((a) => (
+                                  <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    {a.personName}
+                                    <button onClick={() => handleRemoveDamaRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {canAddMore && (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                              <select
+                                style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 11, padding: '4px 8px' }}
+                                value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
+                                onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); }}
+                              >
+                                <option value="">Select person...</option>
+                                {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1 }}
+                                disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
+                                onClick={handleAssignDamaRole}
+                              >
+                                Assign
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{expected.purpose}</div>
                       </div>
-                      {isFilled ? (
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flexShrink: 0 }}>
-                          {assigned.map((a) => (
-                            <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12 }}>
-                              {a.personName}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: 11, color: '#dc2626', flexShrink: 0 }}>Not assigned</span>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Add Member Form */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
