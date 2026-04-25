@@ -643,9 +643,7 @@ export default function GovernanceProgramPage() {
               {([1, 2, 3, 4] as const).map((n) => {
                 const key = `phase${n}` as 'phase1' | 'phase2' | 'phase3' | 'phase4';
                 const isExpanded = expandedPhase === n;
-                const hasContent = n === 1 || n === 2 || n === 4;
-
-                const cardChildren = hasContent ? (
+                const cardChildren = (
                   <>
                     {/* Phase 1: Foundation — Scope, Principles & Dates */}
                     {n === 1 && program && (
@@ -839,6 +837,73 @@ export default function GovernanceProgramPage() {
                       </div>
                     )}
 
+                    {/* Phase 3: People & Processes */}
+                    {n === 3 && (
+                      <div ref={(el) => { cardRefs.current[3] = el; }}>
+                        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
+                          With the governance structure in place, assign Data Owners to each domain, identify stewards
+                          for day-to-day governance, and form stewardship teams to manage data quality and definitions.
+                        </div>
+                        {status && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {status.phases.phase3.checks.map((check, idx) => {
+                              const actionMap: Record<string, { route: string; label: string }> = {
+                                'Data owners assigned': { route: '/governance-program', label: 'Assign Roles' },
+                                'Data stewards identified': { route: '/governance-program', label: 'Assign Roles' },
+                                'Stewardship teams formed': { route: '/governance', label: 'Governance Groups' },
+                                'Domain ownership assigned': { route: '/data-domains', label: 'Data Domains' },
+                              };
+                              const target = actionMap[check.label];
+                              return (
+                                <Link
+                                  key={idx}
+                                  to={target?.route || '#'}
+                                  onClick={target?.route === '/governance-program' ? (e) => { e.preventDefault(); expandAndScroll(2); } : undefined}
+                                  style={{ textDecoration: 'none' }}
+                                >
+                                  <div style={{
+                                    display: 'flex', alignItems: 'center', gap: 12,
+                                    padding: '12px 16px',
+                                    background: 'var(--color-bg)',
+                                    border: '1px solid var(--color-border)',
+                                    borderLeft: `4px solid ${check.done ? '#22c55e' : '#d1d5db'}`,
+                                    borderRadius: 'var(--radius-md)',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.12s',
+                                  }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface)'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}
+                                  >
+                                    <span style={{
+                                      width: 20, height: 20, borderRadius: '50%',
+                                      background: check.done ? '#22c55e' : 'transparent',
+                                      border: check.done ? 'none' : '2px solid #d1d5db',
+                                      color: '#fff',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: 11, fontWeight: 700, flexShrink: 0,
+                                    }}>
+                                      {check.done ? '✓' : ''}
+                                    </span>
+                                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                      {check.label}
+                                    </span>
+                                    {target && !check.done && (
+                                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', flexShrink: 0 }}>
+                                        {target.label} &rarr;
+                                      </span>
+                                    )}
+                                    {check.done && (
+                                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Done</span>
+                                    )}
+                                  </div>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Phase 4: Program Launch */}
                     {n === 4 && program && (
                       <div ref={(el) => { cardRefs.current[4] = el; }}>
@@ -867,7 +932,7 @@ export default function GovernanceProgramPage() {
                       </div>
                     )}
                   </>
-                ) : undefined;
+                );
 
                 return (
                   <PhaseCard
@@ -876,7 +941,7 @@ export default function GovernanceProgramPage() {
                     phase={status.phases[key]}
                     isCurrent={status.currentPhase === n}
                     expanded={isExpanded}
-                    onToggle={() => { if (hasContent) togglePhase(n); }}
+                    onToggle={() => togglePhase(n)}
                     onExpandPhase={expandAndScroll}
                   >
                     {cardChildren}
