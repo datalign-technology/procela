@@ -863,12 +863,38 @@ export default function DashboardPage() {
     );
   }
 
+  if (!stats && !activeOrgId) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Dashboard</h1>
+        </div>
+        <div style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>&#9881;</div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No organization selected</h2>
+          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+            Create an organization to get started with your data governance program.
+          </p>
+          <Link to="/organizations" style={{
+            display: 'inline-block', padding: '8px 20px', background: 'var(--color-primary)',
+            color: '#fff', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500,
+            textDecoration: 'none',
+          }}>
+            Go to Organizations
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!stats) {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Dashboard</h1>
         </div>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
       </div>
