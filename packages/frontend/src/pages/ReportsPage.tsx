@@ -60,7 +60,7 @@ export default function ReportsPage() {
               aria-selected={isActive}
               onClick={() => setActive(t.id)}
               style={{
-                padding: '10px 18px',
+                padding: '8px 16px',
                 fontSize: 13, fontWeight: isActive ? 600 : 500,
                 background: 'transparent',
                 border: 'none',

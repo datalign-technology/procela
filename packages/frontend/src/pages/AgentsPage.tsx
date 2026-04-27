@@ -364,40 +364,40 @@ export default function AgentsPage() {
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit Agent' : 'Add Agent'}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Name *</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nightly Billing ETL" />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Type</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
               <select style={selectStyle} value={form.agentType} onChange={(e) => setForm({ ...form, agentType: e.target.value })}>
                 {agentTypes.map((t) => <option key={t} value={t}>{t.replace('_', ' ')}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Provider</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Provider</label>
               <input style={inputStyle} value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} placeholder="e.g. Anthropic, Airflow, Custom" />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Status</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
               <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
                 {agentStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Description</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What the agent does" />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Responsible Person (optional)</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Responsible Person (optional)</label>
               <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assigned Organizations *</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assigned Organizations *</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--color-border)', borderRadius: 4, padding: 8, background: 'var(--color-bg)', maxHeight: 160, overflowY: 'auto' }}>
                 {orgs.map((o) => (
                   <label key={o.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}>

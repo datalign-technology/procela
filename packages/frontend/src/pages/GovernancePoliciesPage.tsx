@@ -422,7 +422,7 @@ export default function GovernancePoliciesPage() {
           {showControlForm && (
             <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12 }}>
               <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{editingControlId ? 'Edit Control' : 'Add Control'}</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={labelStyle}>Name *</label>
                   <input autoFocus style={inputStyle} value={controlForm.name} onChange={(e) => setControlForm({ ...controlForm, name: e.target.value })} />

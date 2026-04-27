@@ -7,6 +7,7 @@ import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
@@ -746,13 +747,13 @@ export default function GovernanceGroupsPage() {
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
             {editingId ? 'Edit Governance Group' : allowedTypes ? 'Add Child Group' : 'Add New Governance Group'}
           </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Name *</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Data Governance Council" />
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Type *</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type *</label>
               <select style={selectStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, parentId: form.parentId })}>
                 {typeOptions.map((t) => {
                   const isRecommended = recommendedTypes.length > 0 && recommendedTypes.includes(t);
@@ -762,25 +763,25 @@ export default function GovernanceGroupsPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Parent Group</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent Group</label>
               <select style={selectStyle} value={form.parentId || ''} onChange={(e) => setForm({ ...form, parentId: e.target.value || null })}>
                 <option value="">-- No parent (top-level) --</option>
                 {getValidParentOptions().map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Status</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
               <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 <option value="ACTIVE">Active</option>
                 <option value="INACTIVE">Inactive</option>
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Description</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of this group's purpose" />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Charter</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Charter</label>
               <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.charter} onChange={(e) => setForm({ ...form, charter: e.target.value })} placeholder="Group charter, responsibilities, and scope" />
             </div>
           </div>
@@ -827,9 +828,12 @@ export default function GovernanceGroupsPage() {
             overshoot. */}
         <div>
           {tree.length === 0 && !showForm ? (
-            <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>No governance groups defined yet. Use the + Add Group button above to get started.</p>
-            </div>
+            <EmptyState
+              icon={'☷'}
+              title="No governance groups defined yet"
+              description="Use the + Add Group button above to get started."
+              action={{ label: '+ Add Group', onClick: openAdd }}
+            />
           ) : (
             tree.map((node) => (
               <GroupTreeNode key={node.id} node={node} depth={0}
@@ -960,14 +964,14 @@ export default function GovernanceGroupsPage() {
           {/* Add Member Form */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
             <div style={{ flex: 2 }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Person</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
               <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
                 <option value="">-- Select person --</option>
                 {availablePeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Role</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Role</label>
               <select style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
                 {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
               </select>
@@ -1053,7 +1057,7 @@ export default function GovernanceGroupsPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
                 <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Member</label>
+                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Member</label>
                   <select style={selectStyle} value={assignRolePersonId} onChange={(e) => setAssignRolePersonId(e.target.value)}>
                     <option value="">-- Select member --</option>
                     {(selectedGroupDetail.members || []).map((m: GroupMember) => (
@@ -1062,7 +1066,7 @@ export default function GovernanceGroupsPage() {
                   </select>
                 </div>
                 <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>DAMA Role</label>
+                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>DAMA Role</label>
                   <select style={selectStyle} value={assignRoleType} onChange={(e) => setAssignRoleType(e.target.value)}>
                     <option value="">-- Select role --</option>
                     <optgroup label="Executive / Strategic">

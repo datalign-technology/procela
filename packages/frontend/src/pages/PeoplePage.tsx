@@ -997,17 +997,17 @@ export default function PeoplePage() {
                       ? 'Edit identity fields here. Org assignments and application role live under Manage.'
                       : 'Create the person and assign them to an org. Refine details and governance roles via Manage afterwards.'}
                   </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Name *</label>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
                       <input autoFocus style={inputStyle} value={personForm.name} onChange={(e) => setPersonForm({ ...personForm, name: e.target.value })} placeholder="Full name" />
                     </div>
                     <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Email</label>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Email</label>
                       <input style={inputStyle} value={personForm.email} onChange={(e) => setPersonForm({ ...personForm, email: e.target.value })} placeholder="email@example.com" />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Title</label>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title</label>
                       <input style={inputStyle} value={personForm.title} onChange={(e) => setPersonForm({ ...personForm, title: e.target.value })} placeholder="e.g. Director of Operations" />
                     </div>
                     {/* The Add form keeps an Assigned Organization picker so
@@ -1017,7 +1017,7 @@ export default function PeoplePage() {
                     {!editingPersonId && (
                       <>
                         <div style={{ gridColumn: '1 / -1' }}>
-                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Assign to Organizations *</label>
+                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assign to Organizations *</label>
                           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 4 }}>
                             Type to search — matches show their breadcrumb so same-named orgs are distinguishable.
                           </div>
@@ -1030,7 +1030,7 @@ export default function PeoplePage() {
                           />
                         </div>
                         <div>
-                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Application Role</label>
+                          <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Application Role</label>
                           <select style={{ ...inputStyle, appearance: 'auto' as any }} value={personForm.role} onChange={(e) => setPersonForm({ ...personForm, role: e.target.value })}>
                             {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
                           </select>

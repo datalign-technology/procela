@@ -30,7 +30,7 @@ const cardStyle: React.CSSProperties = {
 };
 
 const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6,
+  display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 4,
   color: 'var(--color-text-secondary)',
 };
 

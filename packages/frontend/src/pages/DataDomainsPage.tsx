@@ -841,67 +841,75 @@ export default function DataDomainsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredDomains.map((domain) => {
-                const isSelected = selectedIds.has(domain.id);
-                return (
-                <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : '' }}
-                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                  <td style={{ ...tdStyle, textAlign: 'center', width: 32 }} onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(domain.id)} />
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>
-                    <span style={{ color: 'var(--color-primary)' }}>{domain.name}</span>
-                  </td>
-                  <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => openDetail(domain)}>
-                    {domain.description || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                  </td>
-                  <td style={tdStyle} onClick={() => openDetail(domain)}>
-                    {domain.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                  </td>
-                  <td style={tdStyle} onClick={() => openDetail(domain)}>
-                    {domain.stewards.length > 0
-                      ? <span style={{ fontSize: 12 }}>{domain.stewards.length} steward{domain.stewards.length !== 1 ? 's' : ''}</span>
-                      : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
-                    }
-                  </td>
-                  <td style={tdStyle} onClick={() => openDetail(domain)}>
-                    {domain.assets.length > 0
-                      ? <span style={{ fontSize: 12 }}>{domain.assets.length} asset{domain.assets.length !== 1 ? 's' : ''}</span>
-                      : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
-                    }
-                  </td>
-                  <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                    <select
-                      value={domain.status}
-                      onChange={(e) => { if (e.target.value !== domain.status) handleStatusChange(domain.id, e.target.value); }}
-                      style={{ ...statusBadgeStyle(domain.status), border: 'none', cursor: 'pointer', appearance: 'auto' as any, paddingRight: 16 }}
-                    >
-                      <option value={domain.status}>{domain.status.replace('_', ' ')}</option>
-                      {((statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS)[domain.status] || []).map((s) => (
-                        <option key={s} value={s}>{s.replace('_', ' ')}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                      {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
-                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
-                      )}
-                      {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
-                          try {
-                            const res = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number } }>(`/data-domains/${domain.id}/impact`);
-                            setDeleteImpact(res.data || null);
-                          } catch { setDeleteImpact(null); }
-                          setConfirmDelete(domain.id);
-                        }} />
-                      )}
-                    </div>
+              {hasFilters && filteredDomains.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                    No domains match your filters. <button onClick={() => { setFilterOwner(''); setFilterSteward(''); setFilterAsset(''); setFilterStatus(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13 }}>Clear filters</button>
                   </td>
                 </tr>
-                );
-              })}
+              ) : (
+                filteredDomains.map((domain) => {
+                  const isSelected = selectedIds.has(domain.id);
+                  return (
+                  <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : '' }}
+                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(domain.id)} />
+                    </td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>
+                      <span style={{ color: 'var(--color-primary)' }}>{domain.name}</span>
+                    </td>
+                    <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => openDetail(domain)}>
+                      {domain.description || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                    </td>
+                    <td style={tdStyle} onClick={() => openDetail(domain)}>
+                      {domain.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
+                    </td>
+                    <td style={tdStyle} onClick={() => openDetail(domain)}>
+                      {domain.stewards.length > 0
+                        ? <span style={{ fontSize: 12 }}>{domain.stewards.length} steward{domain.stewards.length !== 1 ? 's' : ''}</span>
+                        : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
+                      }
+                    </td>
+                    <td style={tdStyle} onClick={() => openDetail(domain)}>
+                      {domain.assets.length > 0
+                        ? <span style={{ fontSize: 12 }}>{domain.assets.length} asset{domain.assets.length !== 1 ? 's' : ''}</span>
+                        : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
+                      }
+                    </td>
+                    <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={domain.status}
+                        onChange={(e) => { if (e.target.value !== domain.status) handleStatusChange(domain.id, e.target.value); }}
+                        style={{ ...statusBadgeStyle(domain.status), border: 'none', cursor: 'pointer', appearance: 'auto' as any, paddingRight: 16 }}
+                      >
+                        <option value={domain.status}>{domain.status.replace('_', ' ')}</option>
+                        {((statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS)[domain.status] || []).map((s) => (
+                          <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
+                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
+                        )}
+                        {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
+                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                            try {
+                              const res = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number } }>(`/data-domains/${domain.id}/impact`);
+                              setDeleteImpact(res.data || null);
+                            } catch { setDeleteImpact(null); }
+                            setConfirmDelete(domain.id);
+                          }} />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         )}

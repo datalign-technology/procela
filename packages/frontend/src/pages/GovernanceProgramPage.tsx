@@ -208,7 +208,7 @@ function PhaseCard({
           </div>
         </div>
         {children && (
-          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{expanded ? '▲' : '▼'}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{expanded ? '▼' : '▶'}</span>
         )}
       </div>
 
@@ -601,7 +601,7 @@ export default function GovernanceProgramPage() {
                         </div>
 
                         {activeTab === 'scope' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div>
                               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label>
                               <textarea style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" />
@@ -622,7 +622,7 @@ export default function GovernanceProgramPage() {
                         )}
 
                         {activeTab === 'principles' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div style={{ gridColumn: '1 / -1' }}>
                               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vision</label>
                               <textarea style={textareaStyle} value={vision} onChange={(e) => setVision(e.target.value)} placeholder="What does success look like for your data governance program?" />
@@ -665,7 +665,7 @@ export default function GovernanceProgramPage() {
 
                         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
                           <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--color-text-secondary)' }}>Program Dates</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div>
                               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label>
                               <input type="date" style={inputStyle} value={targetStartDate} onChange={(e) => setTargetStartDate(e.target.value)} />
