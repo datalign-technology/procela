@@ -327,6 +327,7 @@ export default function GovernanceGroupsPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [memberPersonId, setMemberPersonId] = useState('');
   const [memberRole, setMemberRole] = useState('MEMBER');
+  const [showAddMember, setShowAddMember] = useState(false);
 
   // DAMA roles for the members of the selected group
   const [memberDamaRoles, setMemberDamaRoles] = useState<DamaRoleAssignment[]>([]);
@@ -555,6 +556,18 @@ export default function GovernanceGroupsPage() {
         scopeType: 'ORG',
         scopeId: activeOrgId,
       });
+      // Auto-add as group member if not already a member
+      if (selectedGroupId && selectedGroupDetail) {
+        const isMember = (selectedGroupDetail.members || []).some((m: GroupMember) => m.personId === assignRolePersonId);
+        if (!isMember) {
+          try {
+            await apiClient.post(`/governance-groups/${selectedGroupId}/members`, {
+              personId: assignRolePersonId,
+              groupRole: 'MEMBER',
+            });
+          } catch { /* may already be a member */ }
+        }
+      }
       addToast('success', `Assigned ${DAMA_ROLE_LABELS[assignRoleType] || assignRoleType}`);
       setAssignRolePersonId('');
       setAssignRoleType('');
@@ -961,34 +974,43 @@ export default function GovernanceGroupsPage() {
             );
           })()}
 
-          {/* Add Member Form */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-            <div style={{ flex: 2 }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
-              <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
-                <option value="">-- Select person --</option>
-                {availablePeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Role</label>
-              <select style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-              </select>
-            </div>
-            <button
-              style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, cursor: !memberPersonId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-              disabled={!memberPersonId}
-              onClick={handleAddMember}
-            >
-              Add Member
-            </button>
+          {/* Add Member (collapsed by default) */}
+          <div style={{ marginBottom: 12 }}>
+            {!showAddMember ? (
+              <button onClick={() => setShowAddMember(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                + Add member without governance role
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ flex: 2 }}>
+                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
+                  <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
+                    <option value="">-- Select person --</option>
+                    {availablePeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Group Role</label>
+                  <select style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                    {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                  </select>
+                </div>
+                <button style={btnSecondary} onClick={() => { setShowAddMember(false); setMemberPersonId(''); setMemberRole('MEMBER'); }}>Cancel</button>
+                <button
+                  style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, cursor: !memberPersonId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                  disabled={!memberPersonId}
+                  onClick={() => { handleAddMember(); setShowAddMember(false); }}
+                >
+                  Add
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Members Table */}
           {(!selectedGroupDetail.members || selectedGroupDetail.members.length === 0) ? (
             <p style={{ color: 'var(--color-text-muted)', fontSize: 12, textAlign: 'center', padding: '1.5rem' }}>
-              No members yet. Use the form above to add people to this group.
+              No members yet. Assign governance roles above to add people to this group.
             </p>
           ) : (
             <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
@@ -1049,54 +1071,6 @@ export default function GovernanceGroupsPage() {
             </div>
           )}
 
-          {/* Assign DAMA Role */}
-          {selectedGroupDetail.members?.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                Assign Governance Role
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Member</label>
-                  <select style={selectStyle} value={assignRolePersonId} onChange={(e) => setAssignRolePersonId(e.target.value)}>
-                    <option value="">-- Select member --</option>
-                    {(selectedGroupDetail.members || []).map((m: GroupMember) => (
-                      <option key={m.personId} value={m.personId}>{m.personName}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>DAMA Role</label>
-                  <select style={selectStyle} value={assignRoleType} onChange={(e) => setAssignRoleType(e.target.value)}>
-                    <option value="">-- Select role --</option>
-                    <optgroup label="Executive / Strategic">
-                      <option value="CDO">Chief Data Officer</option>
-                      <option value="DATA_GOVERNANCE_LEAD">Data Governance Lead</option>
-                    </optgroup>
-                    <optgroup label="Business">
-                      <option value="DATA_OWNER">Data Owner</option>
-                      <option value="BUSINESS_DATA_STEWARD">Business Data Steward</option>
-                      <option value="DATA_QUALITY_ANALYST">Data Quality Analyst</option>
-                    </optgroup>
-                    <optgroup label="Technical">
-                      <option value="TECHNICAL_DATA_STEWARD">Technical Data Steward</option>
-                      <option value="DATA_CUSTODIAN">Data Custodian</option>
-                      <option value="DATA_ARCHITECT">Data Architect</option>
-                      <option value="DATA_ENGINEER">Data Engineer</option>
-                      <option value="DATABASE_ADMINISTRATOR">Database Administrator</option>
-                    </optgroup>
-                  </select>
-                </div>
-                <button
-                  style={{ ...btnPrimary, opacity: (!assignRolePersonId || !assignRoleType) ? 0.6 : 1, cursor: (!assignRolePersonId || !assignRoleType) ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-                  disabled={!assignRolePersonId || !assignRoleType}
-                  onClick={handleAssignDamaRole}
-                >
-                  Assign Role
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Recommended Child Groups */}
           {recommendations.length > 0 && !showRecommendations && (
