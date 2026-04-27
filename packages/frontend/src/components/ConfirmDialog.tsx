@@ -25,6 +25,7 @@ interface ConfirmDialogProps {
   requireTypedConfirmation?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
+  children?: React.ReactNode;
 }
 
 export default function ConfirmDialog({
@@ -36,6 +37,7 @@ export default function ConfirmDialog({
   requireTypedConfirmation = null,
   onConfirm,
   onCancel,
+  children,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelBtnRef = useRef<HTMLButtonElement>(null);
@@ -138,6 +140,7 @@ export default function ConfirmDialog({
         >
           {message}
         </p>
+        {children}
         {requireTypedConfirmation && (
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'block', fontSize: '0.8125rem', color: '#374151', marginBottom: 6 }}>

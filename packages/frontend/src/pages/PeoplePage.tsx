@@ -287,6 +287,8 @@ export default function PeoplePage() {
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
   const [bulkAssignMode, setBulkAssignMode] = useState<'add' | 'move'>('move');
+  const [bulkRoleOpen, setBulkRoleOpen] = useState(false);
+  const [bulkRoleValue, setBulkRoleValue] = useState('');
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
   const [filterAppRole, setFilterAppRole] = useState('');
   const [filterGovRole, setFilterGovRole] = useState('');
@@ -587,6 +589,20 @@ export default function PeoplePage() {
       fetchData();
     } catch (err) {
       errorToast(err, 'Bulk assignment failed');
+    }
+  };
+  const handleBulkRoleAssign = async () => {
+    if (selectedPersonIds.size === 0 || !bulkRoleValue) return;
+    const targetIds = Array.from(selectedPersonIds);
+    try {
+      await Promise.all(targetIds.map((pid) => apiClient.put(`/people/${pid}`, { role: bulkRoleValue })));
+      addToast('success', `Set ${targetIds.length} ${targetIds.length === 1 ? 'person' : 'people'} to ${ROLE_LABELS[bulkRoleValue] || bulkRoleValue}`);
+      setBulkRoleOpen(false);
+      setBulkRoleValue('');
+      setSelectedPersonIds(new Set());
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Bulk role assignment failed');
     }
   };
   // NOTE: The Person 360 modal used to be the entry point here.
@@ -976,6 +992,12 @@ export default function PeoplePage() {
                     Add to org…
                   </button>
                   <button
+                    onClick={() => setBulkRoleOpen(true)}
+                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+                  >
+                    Set app role…
+                  </button>
+                  <button
                     onClick={() => setConfirmBulkDeletePeople(true)}
                     style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                   >
@@ -1005,6 +1027,38 @@ export default function PeoplePage() {
                 onConfirm={handleBulkAssign}
                 onCancel={() => { setBulkAssignOpen(false); setBulkAssignOrgIds(new Set()); }}
               />
+
+              {/* Bulk Role Assignment Dialog */}
+              <ConfirmDialog
+                open={bulkRoleOpen}
+                title={`Set app role for ${selectedPersonIds.size} ${selectedPersonIds.size === 1 ? 'person' : 'people'}`}
+                message=""
+                confirmLabel={bulkRoleValue ? `Set to ${ROLE_LABELS[bulkRoleValue] || bulkRoleValue}` : 'Select a role'}
+                variant="primary"
+                onConfirm={handleBulkRoleAssign}
+                onCancel={() => { setBulkRoleOpen(false); setBulkRoleValue(''); }}
+              >
+                <div style={{ marginTop: 8 }}>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+                    This will change the application role for all selected people. It does not affect governance (DAMA) roles.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                      <label key={key} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                        background: bulkRoleValue === key ? '#eff6ff' : 'var(--color-bg)',
+                        border: `1px solid ${bulkRoleValue === key ? '#93c5fd' : 'var(--color-border)'}`,
+                        borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                      }}>
+                        <input type="radio" name="bulkRole" checked={bulkRoleValue === key} onChange={() => setBulkRoleValue(key)} />
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{label}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </ConfirmDialog>
 
               {/* Add/Edit Person Form */}
               {showPersonForm && (
