@@ -388,6 +388,7 @@ export default function GovernanceProgramPage() {
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [rolesLoaded, setRolesLoaded] = useState(false);
+  const [expandedRoleGroups, setExpandedRoleGroups] = useState<Set<string>>(new Set());
 
   const hydrateFromProgram = (p: Program) => {
     setInScope(p.scope?.inScope || '');
@@ -761,26 +762,50 @@ export default function GovernanceProgramPage() {
                           const filledRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
                           const filledCount = ROLE_GUIDE.filter((r) => filledRoleTypes.has(r.roleType)).length;
                           const leadershipFilled = leadershipTypes.filter((rt) => filledRoleTypes.has(rt)).length;
+                          const allGroupTypes = ROLE_GROUPS.map((g) => g.groupType);
+                          const allExpanded = allGroupTypes.every((gt) => expandedRoleGroups.has(gt));
                           return (
                             <>
-                              <div style={{ marginBottom: 20 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                  <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                   <span style={{ fontSize: 12, color: leadershipFilled === leadershipTypes.length ? '#16a34a' : '#dc2626' }}>{leadershipFilled} of {leadershipTypes.length} leadership roles filled</span>
+                                  <button
+                                    onClick={() => setExpandedRoleGroups(allExpanded ? new Set() : new Set(allGroupTypes))}
+                                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}
+                                  >
+                                    {allExpanded ? 'Collapse All' : 'Expand All'}
+                                  </button>
                                 </div>
+                              </div>
+                              <div style={{ marginBottom: 16 }}>
                                 <ProgressBar value={(filledCount / totalRoles) * 100} />
                               </div>
                               {ROLE_GROUPS.map((group) => {
                                 const groupRoles = ROLE_GUIDE.filter((r) => group.roleTypes.includes(r.roleType));
                                 const groupFilled = groupRoles.filter((r) => filledRoleTypes.has(r.roleType)).length;
+                                const isGroupExpanded = expandedRoleGroups.has(group.groupType);
                                 return (
-                                  <div key={group.groupType} style={{ marginBottom: 20 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                                      <div style={{
-                                        width: 4, height: 28, borderRadius: 2,
-                                        background: group.color,
-                                        flexShrink: 0,
-                                      }} />
+                                  <div key={group.groupType} style={{ marginBottom: 8 }}>
+                                    <div
+                                      onClick={() => setExpandedRoleGroups((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(group.groupType)) next.delete(group.groupType);
+                                        else next.add(group.groupType);
+                                        return next;
+                                      })}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                                        cursor: 'pointer', borderRadius: 'var(--radius-md)',
+                                        border: `1px solid ${isGroupExpanded ? group.color + '40' : 'var(--color-border)'}`,
+                                        background: isGroupExpanded ? group.color + '08' : 'var(--color-surface)',
+                                        transition: 'background-color 0.12s, border-color 0.12s',
+                                      }}
+                                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = group.color + '0d'; }}
+                                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = isGroupExpanded ? group.color + '08' : 'var(--color-surface)'; }}
+                                    >
+                                      <div style={{ width: 4, height: 24, borderRadius: 2, background: group.color, flexShrink: 0 }} />
+                                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)', width: 12 }}>{isGroupExpanded ? '▼' : '▶'}</span>
                                       <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)' }}>{group.label}</span>
@@ -788,46 +813,50 @@ export default function GovernanceProgramPage() {
                                             {groupFilled}/{groupRoles.length} filled
                                           </span>
                                         </div>
-                                        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 1 }}>{group.description}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{group.description}</div>
                                       </div>
-                                      <Link to={group.link} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', flexShrink: 0 }}>
+                                      <Link to={group.link} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', flexShrink: 0 }}>
                                         View Group &rarr;
                                       </Link>
                                     </div>
-                                    {groupRoles.map((role) => {
-                                      const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
-                                      const pc = PRIORITY_COLORS[role.priority];
-                                      return (
-                                        <div key={role.roleType} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginLeft: 14, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `3px solid ${group.color}`, borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
-                                          <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                              <span style={{ fontSize: 13, fontWeight: 600 }}>{role.label}</span>
-                                              <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: pc.bg, color: pc.text, textTransform: 'uppercase' }}>{role.priority}</span>
-                                            </div>
-                                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{role.purpose}</div>
-                                            {assignees.length > 0 ? (
-                                              <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                                {assignees.map((a) => (
-                                                  <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                    {a.personName}
-                                                    <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
-                                                  </span>
-                                                ))}
+                                    {isGroupExpanded && (
+                                      <div style={{ marginTop: 6 }}>
+                                        {groupRoles.map((role) => {
+                                          const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
+                                          const pc = PRIORITY_COLORS[role.priority];
+                                          return (
+                                            <div key={role.roleType} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginLeft: 14, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `3px solid ${group.color}`, borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
+                                              <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                  <span style={{ fontSize: 13, fontWeight: 600 }}>{role.label}</span>
+                                                  <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: pc.bg, color: pc.text, textTransform: 'uppercase' }}>{role.priority}</span>
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{role.purpose}</div>
+                                                {assignees.length > 0 ? (
+                                                  <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                                    {assignees.map((a) => (
+                                                      <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                        {a.personName}
+                                                        <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                ) : (
+                                                  <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>
+                                                )}
                                               </div>
-                                            ) : (
-                                              <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>
-                                            )}
-                                          </div>
-                                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                                            <select style={{ ...selectStyle, width: 'auto', minWidth: 150, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}>
-                                              <option value="">Select person...</option>
-                                              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                            </select>
-                                            <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1 }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
+                                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                                <select style={{ ...selectStyle, width: 'auto', minWidth: 150, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}>
+                                                  <option value="">Select person...</option>
+                                                  {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                </select>
+                                                <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1 }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
