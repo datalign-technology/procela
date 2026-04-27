@@ -279,6 +279,7 @@ function PhaseCard({
 export default function GovernanceProgramPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
+  const navigate = useNavigate();
 
   const [program, setProgram] = useState<Program | null>(null);
   const [status, setStatus] = useState<PhaseStatus | null>(null);
@@ -923,6 +924,14 @@ export default function GovernanceProgramPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {recs.map((r, idx) => {
                   const pc = priorityColor(r.priority);
+                  const isSamePage = r.link === '/governance-program';
+                  const handleGoClick = () => {
+                    if (isSamePage) {
+                      expandAndScroll(r.phase);
+                    } else {
+                      navigate(r.link);
+                    }
+                  };
                   return (
                     <div key={idx} style={{
                       display: 'flex', alignItems: 'center', gap: 12,
@@ -935,7 +944,7 @@ export default function GovernanceProgramPage() {
                       <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: PHASE_COLORS[r.phase] + '20', color: PHASE_COLORS[r.phase], flexShrink: 0 }}>Phase {r.phase}</span>
                       <span style={{ flex: 1, fontSize: 13, color: 'var(--color-text)' }}>{r.action}</span>
                       {r.link && (
-                        <Link to={r.link} style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', textDecoration: 'none', flexShrink: 0 }}>Go &rarr;</Link>
+                        <button onClick={handleGoClick} style={{ background: 'none', border: 'none', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0, padding: 0 }}>Go &rarr;</button>
                       )}
                     </div>
                   );
