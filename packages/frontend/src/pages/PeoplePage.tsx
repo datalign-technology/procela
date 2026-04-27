@@ -285,6 +285,7 @@ export default function PeoplePage() {
   const [deletePersonImpact, setDeletePersonImpact] = useState<{ ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number } | null>(null);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
+  const [bulkAssignMode, setBulkAssignMode] = useState<'add' | 'move'>('move');
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
   const [filterAppRole, setFilterAppRole] = useState('');
   const [filterGovRole, setFilterGovRole] = useState('');
@@ -567,17 +568,21 @@ export default function PeoplePage() {
   const handleBulkAssign = async () => {
     if (selectedPersonIds.size === 0 || bulkAssignOrgIds.size === 0) return;
     const targetIds = Array.from(selectedPersonIds);
-    const addIds = Array.from(bulkAssignOrgIds);
+    const newOrgIds = Array.from(bulkAssignOrgIds);
     try {
       await Promise.all(targetIds.map(async (pid) => {
         const p = people.find((x) => x.id === pid);
         if (!p) return;
-        const merged = Array.from(new Set([...(p.orgIds || []), ...addIds]));
-        await apiClient.put(`/people/${pid}`, { orgIds: merged });
+        const orgIds = bulkAssignMode === 'move'
+          ? newOrgIds
+          : Array.from(new Set([...(p.orgIds || []), ...newOrgIds]));
+        await apiClient.put(`/people/${pid}`, { orgIds });
       }));
-      addToast('success', `Assigned ${targetIds.length} ${targetIds.length === 1 ? 'person' : 'people'} to ${addIds.length} org${addIds.length === 1 ? '' : 's'}`);
+      const verb = bulkAssignMode === 'move' ? 'Moved' : 'Assigned';
+      addToast('success', `${verb} ${targetIds.length} ${targetIds.length === 1 ? 'person' : 'people'} to ${newOrgIds.length} org${newOrgIds.length === 1 ? '' : 's'}`);
       setBulkAssignOpen(false);
       setBulkAssignOrgIds(new Set());
+      setSelectedPersonIds(new Set());
       fetchData();
     } catch (err) {
       errorToast(err, 'Bulk assignment failed');
@@ -954,10 +959,16 @@ export default function PeoplePage() {
                 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedPersonIds.size} selected</span>
                   <button
-                    onClick={openBulkAssign}
+                    onClick={() => { setBulkAssignMode('move'); openBulkAssign(); }}
                     style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                   >
-                    Assign to org…
+                    Move to org…
+                  </button>
+                  <button
+                    onClick={() => { setBulkAssignMode('add'); openBulkAssign(); }}
+                    style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+                  >
+                    Add to org…
                   </button>
                   <button
                     onClick={() => setConfirmBulkDeletePeople(true)}
@@ -977,15 +988,17 @@ export default function PeoplePage() {
               {/* Bulk assign picker modal — shared OrgPicker in a dialog. */}
               <OrgPickerModal
                 open={bulkAssignOpen}
-                title={`Assign ${selectedPersonIds.size} ${selectedPersonIds.size === 1 ? 'person' : 'people'} to organizations`}
-                description="Selected orgs are added to every selected person. Existing assignments are preserved."
-                confirmLabel={`Assign to ${bulkAssignOrgIds.size} org${bulkAssignOrgIds.size === 1 ? '' : 's'}`}
+                title={`${bulkAssignMode === 'move' ? 'Move' : 'Assign'} ${selectedPersonIds.size} ${selectedPersonIds.size === 1 ? 'person' : 'people'} to organizations`}
+                description={bulkAssignMode === 'move'
+                  ? 'Selected people will be removed from their current org(s) and moved to the selected org(s).'
+                  : 'Selected org(s) will be added. Existing assignments are preserved.'}
+                confirmLabel={`${bulkAssignMode === 'move' ? 'Move' : 'Assign'} to ${bulkAssignOrgIds.size} org${bulkAssignOrgIds.size === 1 ? '' : 's'}`}
                 orgs={flatOrgs}
                 selectedIds={bulkAssignOrgIds}
                 onToggle={toggleBulkAssignOrg}
                 scopeOrgId={activeOrgId || null}
                 onConfirm={handleBulkAssign}
-                onCancel={() => setBulkAssignOpen(false)}
+                onCancel={() => { setBulkAssignOpen(false); setBulkAssignOrgIds(new Set()); }}
               />
 
               {/* Add/Edit Person Form */}
