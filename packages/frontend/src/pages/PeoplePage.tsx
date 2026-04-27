@@ -751,18 +751,22 @@ export default function PeoplePage() {
     finally { setSaving360(false); }
   };
   const handlePeopleImport = async () => {
-    const orgId = peopleImportOrgId || selectedOrgId;
+    const orgId = peopleImportOrgId || selectedOrgId || activeOrgId;
     if (!peopleImportText.trim() || !orgId) return;
     try {
       const body: any = { orgId };
       if (peopleImportFormat === 'csv') body.csv = peopleImportText; else body.people = JSON.parse(peopleImportText);
-      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number }>('/people/import', body);
-      if (result.skipped && result.skipped > 0 && result.message) {
-        alert(result.message);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; data?: any[] }>('/people/import', body);
+      const count = result.data?.length || 0;
+      if (result.skipped && result.skipped > 0) {
+        addToast('info', result.message || `${result.skipped} duplicates skipped`);
       }
+      addToast('success', `Imported ${count} ${count === 1 ? 'person' : 'people'}`);
       setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId('');
       fetchData();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+    } catch (e) {
+      errorToast(e, 'Import failed');
+    }
   };
 
   if (loading) return (
@@ -867,7 +871,7 @@ export default function PeoplePage() {
                       ]))} />
                   )}
                   <IconButton icon="upload" label="Import people"
-                    onClick={() => { setPeopleImportOrgId(selectedOrgId); setShowPeopleImport(true); }} />
+                    onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />
                   <IconButton icon="link" label="Connect to source" onClick={() => setShowPeopleSync(true)} />
                   <IconButton icon="plus" label="Add person" variant="primary"
                     onClick={openAddPerson} />
