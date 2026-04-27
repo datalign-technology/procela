@@ -612,11 +612,6 @@ export default function GovernanceGroupsPage() {
 
   // ── Computed values ──
 
-  const typeCounts = flatGroups.reduce<Record<string, number>>((acc, g) => {
-    acc[g.type] = (acc[g.type] || 0) + 1;
-    return acc;
-  }, {});
-
   const existingMemberIds = new Set(selectedGroupDetail?.members?.map((m: GroupMember) => m.personId) || []);
   const availablePeople = people.filter((p) => !existingMemberIds.has(p.id));
 
@@ -756,24 +751,6 @@ export default function GovernanceGroupsPage() {
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         <strong>Recommended structure:</strong> Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
       </div>
-
-      {/* Stats Bar */}
-      {flatGroups.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-          <div style={{ flex: '0 0 auto', minWidth: 100, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{flatGroups.length}</div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Total Groups</div>
-          </div>
-          {groupTypes.filter((t) => typeCounts[t]).map((type) => (
-            <div key={type} style={{ flex: '0 0 auto', minWidth: 100, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{typeCounts[type]}</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                <span style={makeBadge(typeBadgeColors[type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>{GROUP_TYPE_SHORT[type] || type}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Add/Edit Form */}
       {showForm && (
