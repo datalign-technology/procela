@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { useToastStore } from '../stores/toastStore';
+import { useOrgContext } from '../stores/orgContext';
 
 interface SyncConnectionWizardProps {
   open: boolean;
@@ -72,14 +73,27 @@ const btnSecondary: React.CSSProperties = {
 
 const STEPS = ['Source', 'Connect', 'Map Fields', 'Schedule', 'Review'];
 
+interface OrgOption { id: string; name: string; type: string }
+
 export default function SyncConnectionWizard({ open, onClose, targetEntity, orgId, onCreated }: SyncConnectionWizardProps) {
   const { addToast } = useToastStore();
+  const { orgs: contextOrgs } = useOrgContext();
   const [step, setStep] = useState(0);
   const [creating, setCreating] = useState(false);
 
   // Step 1
   const [name, setName] = useState('');
   const [sourceType, setSourceType] = useState<SourceType>('DATABASE');
+  const [targetOrgId, setTargetOrgId] = useState(orgId);
+  const [orgList, setOrgList] = useState<OrgOption[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    setTargetOrgId(orgId);
+    apiClient.get<{ success: boolean; data: OrgOption[] }>('/organizations')
+      .then((res) => setOrgList(res.data || []))
+      .catch(() => setOrgList(contextOrgs.map((o) => ({ id: o.id, name: o.name, type: o.type || 'company' }))));
+  }, [open, orgId, contextOrgs]);
 
   // Step 2
   const [dbType, setDbType] = useState<DbType>('POSTGRESQL');
@@ -106,7 +120,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const fields = TARGET_FIELDS[targetEntity] || [];
 
   const canAdvance = (): boolean => {
-    if (step === 0) return name.trim().length > 0;
+    if (step === 0) return name.trim().length > 0 && targetOrgId.length > 0;
     if (step === 1) {
       if (sourceType === 'DATABASE') return host.trim().length > 0 && database.trim().length > 0 && table.trim().length > 0;
       return url.trim().length > 0;
@@ -136,7 +150,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
       }
 
       const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/sync-connections', {
-        orgId,
+        orgId: targetOrgId,
         name: name.trim(),
         targetEntity,
         sourceType,
@@ -211,6 +225,19 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection Name *</label>
               <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder={`e.g. HR Database → ${ENTITY_LABELS[targetEntity]}`} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Organization *</label>
+              <select style={selectStyle} value={targetOrgId} onChange={(e) => setTargetOrgId(e.target.value)}>
+                <option value="">-- Select organization --</option>
+                {orgList.map((o) => {
+                  const typeLabel = o.type.charAt(0).toUpperCase() + o.type.slice(1);
+                  return <option key={o.id} value={o.id}>{o.name} ({typeLabel})</option>;
+                })}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                Synced records will be assigned to this organization level.
+              </div>
             </div>
             <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 8 }}>Source Type</label>
             {([
@@ -366,6 +393,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Target</div>
               <div style={{ fontSize: 13 }}>{ENTITY_LABELS[targetEntity]} — match on <strong>{matchKey}</strong></div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>Organization: {orgList.find((o) => o.id === targetOrgId)?.name || targetOrgId}</div>
             </div>
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Field Mapping</div>
