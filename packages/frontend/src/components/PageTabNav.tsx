@@ -54,6 +54,7 @@ export const CATALOG_TABS: PageTab[] = [
   { to: '/data-assets', label: 'Data Assets' },
   { to: '/systems', label: 'Systems' },
   { to: '/mappings', label: 'Mappings' },
+  { to: '/data-lineage', label: 'Data Lineage' },
   { to: '/business-glossary', label: 'Glossary' },
   { to: '/data-dictionary', label: 'Data Dictionary' },
 ];
@@ -79,7 +80,6 @@ export const ANALYZE_TABS: PageTab[] = [
   { to: '/enterprise-view', label: 'Enterprise View' },
   { to: '/gap-detection', label: 'Gap Detection' },
   { to: '/data-quality', label: 'Data Quality' },
-  { to: '/data-lineage', label: 'Data Lineage' },
   { to: '/reports', label: 'Reports' },
 ];
 

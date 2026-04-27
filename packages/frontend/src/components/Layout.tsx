@@ -45,10 +45,10 @@ const bottomNavItems: NavItem[] = [
 ];
 
 const ROUTE_GROUPS: Record<string, string[]> = {
-  '/processes': ['/processes', '/data-assets', '/systems', '/mappings', '/business-glossary', '/data-dictionary'],
+  '/processes': ['/processes', '/data-assets', '/systems', '/mappings', '/data-lineage', '/business-glossary', '/data-dictionary'],
   '/governance-program': ['/governance-program', '/governance', '/governance-groups', '/data-domains', '/raci', '/decision-rights', '/governance-policies'],
   '/operations-manual': ['/operations-manual', '/sops', '/governance-calendar', '/governance-work'],
-  '/control-tower': ['/control-tower', '/enterprise-view', '/data-quality', '/data-lineage', '/gap-detection', '/reports'],
+  '/control-tower': ['/control-tower', '/enterprise-view', '/data-quality', '/gap-detection', '/reports'],
   '/organizations': ['/organizations', '/people', '/connections', '/agents', '/settings'],
 };
 
