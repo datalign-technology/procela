@@ -1155,6 +1155,7 @@ export default function PeoplePage() {
                     placeholder={'Name,Email,Role,Title\nJane Smith,jane@co.com,EDITOR,Director of Operations'} />
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Email, Role, Title</span>
+                    <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }}>Cancel</button>
                     <button
                       style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1, cursor: (!peopleImportText.trim() || !peopleImportOrgId) ? 'not-allowed' : 'pointer' }}
                       disabled={!peopleImportText.trim() || !peopleImportOrgId}
