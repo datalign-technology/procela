@@ -129,9 +129,9 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
 }
 
 const PHASE_CHECK_LINKS: Record<string, string> = {
-  'Scope defined': '#1',
-  'Guiding principles established': '#1',
-  'Operating model selected': '#1',
+  'Scope defined': '#1:scope',
+  'Guiding principles established': '#1:principles',
+  'Operating model selected': '#1:principles',
   'Data domains defined': '/data-domains',
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
@@ -159,7 +159,7 @@ function PhaseCard({
   isCurrent: boolean;
   expanded: boolean;
   onToggle: () => void;
-  onExpandPhase: (n: number) => void;
+  onExpandPhase: (n: number, tab?: string) => void;
   children?: React.ReactNode;
 }) {
   const navigate = useNavigate();
@@ -224,13 +224,15 @@ function PhaseCard({
         {phase.checks.map((check, idx) => {
           const link = PHASE_CHECK_LINKS[check.label];
           const isHash = link?.startsWith('#');
-          const targetPhase = isHash ? parseInt(link.slice(1)) : 0;
+          const hashParts = isHash ? link.slice(1).split(':') : [];
+          const targetPhase = isHash ? parseInt(hashParts[0]) : 0;
+          const targetTab = hashParts[1] || undefined;
           return (
             <div
               key={idx}
               onClick={link ? () => {
                 if (isHash) {
-                  onExpandPhase(targetPhase);
+                  onExpandPhase(targetPhase, targetTab);
                 } else {
                   navigate(link);
                 }
@@ -295,8 +297,11 @@ export default function GovernanceProgramPage() {
     setExpandedPhase((prev) => (prev === n ? null : n));
   };
 
-  const expandAndScroll = (n: number) => {
+  const expandAndScroll = (n: number, tab?: string) => {
     setExpandedPhase(n);
+    if (tab && (tab === 'scope' || tab === 'principles')) {
+      setActiveTab(tab);
+    }
     setTimeout(() => {
       cardRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
@@ -925,9 +930,10 @@ export default function GovernanceProgramPage() {
                 {recs.map((r, idx) => {
                   const pc = priorityColor(r.priority);
                   const isSamePage = r.link === '/governance-program';
+                  const actionTab = /principle|operating model/i.test(r.action) ? 'principles' : /scope/i.test(r.action) ? 'scope' : undefined;
                   const handleGoClick = () => {
                     if (isSamePage) {
-                      expandAndScroll(r.phase);
+                      expandAndScroll(r.phase, actionTab);
                     } else {
                       navigate(r.link);
                     }
