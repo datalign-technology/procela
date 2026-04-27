@@ -513,7 +513,7 @@ export default function SystemsPage() {
             <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
           </div>
           <textarea
-            style={{ ...inputStyle, width: '100%', minHeight: 70, fontFamily: 'var(--font-mono)', fontSize: 11 }}
+            style={{ ...inputStyle, width: '100%', minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }}
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             placeholder={'Name,Description,Type\nSAP ERP,Enterprise resource planning,ERP\nSalesforce,Customer relationship management,CRM'}

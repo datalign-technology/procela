@@ -458,7 +458,7 @@ export default function BusinessGlossaryPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Definition *</label>
-              <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={form.definition} onChange={(e) => setForm({ ...form, definition: e.target.value })} placeholder="Plain-language definition..." />
+              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.definition} onChange={(e) => setForm({ ...form, definition: e.target.value })} placeholder="Plain-language definition..." />
             </div>
             <div>
               <label style={labelStyle}>Category</label>
@@ -474,7 +474,7 @@ export default function BusinessGlossaryPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Context</label>
-              <textarea style={{ ...inputStyle, minHeight: 40, resize: 'vertical' }} value={form.context} onChange={(e) => setForm({ ...form, context: e.target.value })} placeholder="Business context or usage notes..." />
+              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.context} onChange={(e) => setForm({ ...form, context: e.target.value })} placeholder="Business context or usage notes..." />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Synonyms (comma-separated)</label>
@@ -490,7 +490,7 @@ export default function BusinessGlossaryPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Business Rules</label>
-              <textarea style={{ ...inputStyle, minHeight: 40, resize: 'vertical' }} value={form.businessRules} onChange={(e) => setForm({ ...form, businessRules: e.target.value })} placeholder="Rules or constraints governing this term..." />
+              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.businessRules} onChange={(e) => setForm({ ...form, businessRules: e.target.value })} placeholder="Rules or constraints governing this term..." />
             </div>
             <div>
               <label style={labelStyle}>Domain</label>

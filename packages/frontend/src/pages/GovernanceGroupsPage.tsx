@@ -787,7 +787,7 @@ export default function GovernanceGroupsPage() {
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() || !form.type ? 0.6 : 1 }} disabled={!form.name.trim() || !form.type} onClick={handleSave}>
+            <button style={{ ...btnPrimary, opacity: !form.name.trim() || !form.type ? 0.6 : 1, cursor: !form.name.trim() || !form.type ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim() || !form.type} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Add Group'}
             </button>
           </div>
@@ -944,7 +944,7 @@ export default function GovernanceGroupsPage() {
                                 ))}
                               </select>
                               <button
-                                style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1 }}
+                                style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
                                 disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
                                 onClick={handleAssignDamaRole}
                               >
@@ -977,7 +977,7 @@ export default function GovernanceGroupsPage() {
               </select>
             </div>
             <button
-              style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, whiteSpace: 'nowrap' }}
+              style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, cursor: !memberPersonId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
               disabled={!memberPersonId}
               onClick={handleAddMember}
             >
@@ -1088,7 +1088,7 @@ export default function GovernanceGroupsPage() {
                   </select>
                 </div>
                 <button
-                  style={{ ...btnPrimary, opacity: (!assignRolePersonId || !assignRoleType) ? 0.6 : 1, whiteSpace: 'nowrap' }}
+                  style={{ ...btnPrimary, opacity: (!assignRolePersonId || !assignRoleType) ? 0.6 : 1, cursor: (!assignRolePersonId || !assignRoleType) ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
                   disabled={!assignRolePersonId || !assignRoleType}
                   onClick={handleAssignDamaRole}
                 >
@@ -1160,7 +1160,7 @@ export default function GovernanceGroupsPage() {
                         padding: '5px 14px', fontSize: 11, fontWeight: 500,
                         background: '#fff', color: '#1e40af',
                         border: '1px solid #93c5fd', borderRadius: 4,
-                        cursor: creatingRec ? 'default' : 'pointer',
+                        cursor: creatingRec ? 'not-allowed' : 'pointer',
                         opacity: creatingRec ? 0.6 : 1,
                         whiteSpace: 'nowrap', flexShrink: 0,
                       }}

@@ -282,7 +282,7 @@ export default function GovernancePoliciesPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
-              <textarea style={{ ...inputStyle, minHeight: 50, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
             <div>
               <label style={labelStyle}>Category</label>
@@ -429,7 +429,7 @@ export default function GovernancePoliciesPage() {
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={labelStyle}>Description</label>
-                  <textarea style={{ ...inputStyle, minHeight: 40, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
+                  <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={controlForm.description} onChange={(e) => setControlForm({ ...controlForm, description: e.target.value })} />
                 </div>
                 <div>
                   <label style={labelStyle}>Control Type</label>

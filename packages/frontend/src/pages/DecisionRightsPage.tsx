@@ -463,7 +463,7 @@ export default function DecisionRightsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
               <textarea
-                style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
+                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="What this decision entails..."
@@ -509,7 +509,7 @@ export default function DecisionRightsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Escalation Path</label>
               <textarea
-                style={{ ...inputStyle, minHeight: 50, resize: 'vertical' }}
+                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.escalationPath}
                 onChange={(e) => setForm({ ...form, escalationPath: e.target.value })}
                 placeholder="Describe how this decision escalates if not resolved..."

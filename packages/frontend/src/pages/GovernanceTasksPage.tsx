@@ -436,7 +436,7 @@ export default function GovernanceTasksPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <textarea
-                style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
+                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="Describe the task in detail..."

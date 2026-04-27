@@ -252,7 +252,7 @@ export default function OperationsManualPage() {
                 {editingHeader ? (
                   <div style={{ marginTop: 8 }}>
                     <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
-                    <textarea style={{ ...inputStyle, minHeight: 60 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
+                    <textarea style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                       <button style={btnPrimary} onClick={saveHeader}>Save</button>
                       <button style={btnSecondary} onClick={() => setEditingHeader(false)}>Cancel</button>

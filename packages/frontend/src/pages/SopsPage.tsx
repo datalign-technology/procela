@@ -340,7 +340,7 @@ export default function SopsPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Purpose</label>
-              <textarea style={{ ...inputStyle, minHeight: 60, fontFamily: 'inherit' }} value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} placeholder="What this SOP achieves..." />
+              <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit' }} value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} placeholder="What this SOP achieves..." />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Trigger Event</label>
@@ -388,7 +388,7 @@ export default function SopsPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <input style={{ ...inputStyle, marginBottom: 4 }} value={step.title} onChange={(e) => updateStep(idx, { title: e.target.value })} placeholder="Step title" />
-                    <textarea style={{ ...inputStyle, minHeight: 40, fontFamily: 'inherit', marginBottom: 4 }} value={step.description} onChange={(e) => updateStep(idx, { description: e.target.value })} placeholder="What to do in this step" />
+                    <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', marginBottom: 4 }} value={step.description} onChange={(e) => updateStep(idx, { description: e.target.value })} placeholder="What to do in this step" />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     </div>
                   </div>

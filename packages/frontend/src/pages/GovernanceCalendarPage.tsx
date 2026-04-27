@@ -427,7 +427,7 @@ export default function GovernanceCalendarPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
               <textarea
-                style={{ ...inputStyle, minHeight: 50, resize: 'vertical' }}
+                style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
