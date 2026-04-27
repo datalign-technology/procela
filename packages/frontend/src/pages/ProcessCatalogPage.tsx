@@ -1249,7 +1249,9 @@ export default function ProcessCatalogPage() {
                 onClick={() => navigate('/processes/compare')} />
             )}
             {canWrite && (
-              <IconButton icon="settings" label="Generate business processes"
+              <IconButton icon="settings"
+                label={totalNodes > 0 ? `Generate disabled — ${totalNodes} process node${totalNodes === 1 ? '' : 's'} already exist` : 'Generate business processes'}
+                disabled={totalNodes > 0}
                 onClick={() => navigate('/processes/wizard')} />
             )}
             {canWrite && (

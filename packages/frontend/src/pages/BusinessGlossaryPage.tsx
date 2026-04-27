@@ -394,7 +394,12 @@ export default function BusinessGlossaryPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
-          {canWrite && <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />}
+          {canWrite && (
+            <IconButton icon="settings"
+              label={generating ? 'Generating...' : terms.length > 0 ? `Generate disabled — ${terms.length} term${terms.length === 1 ? '' : 's'} already exist` : 'Generate Industry Terms'}
+              disabled={generating || terms.length > 0}
+              onClick={handleGenerate} />
+          )}
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>
       </div>
