@@ -9,6 +9,7 @@ import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
+import { exportCsv } from '../lib/exportCsv';
 import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import { SkeletonRows } from '../components/Skeleton';
 
@@ -1215,6 +1216,28 @@ export default function ProcessCatalogPage() {
     return { total, withOwners, active };
   })();
 
+  const handleExportExcel = () => {
+    const rows: string[][] = [];
+    const walk = (nodes: ProcessNode[], ancestors: string[]) => {
+      for (const node of nodes) {
+        const path = [...ancestors, node.name];
+        const cols: string[] = [];
+        const levelIdx = ['VALUE_STREAM', 'PROCESS', 'SUBPROCESS', 'ACTIVITY', 'TASK'].indexOf(node.level);
+        for (let i = 0; i < 5; i++) cols.push(i === levelIdx ? node.name : (i < levelIdx ? (path[i] || '') : ''));
+        cols.push(node.level, node.status, node.description || '', node.responsibleRole || '', node.frequency || '');
+        rows.push(cols);
+        if (node.children?.length) walk(node.children, path);
+      }
+    };
+    walk(tree, []);
+    exportCsv(
+      'process-hierarchy.csv',
+      ['Value Stream', 'Process', 'Sub-Process', 'Activity', 'Task', 'Level', 'Status', 'Description', 'Responsible Role', 'Frequency'],
+      rows,
+    );
+    addToast('success', `Exported ${rows.length} process nodes`);
+  };
+
   return (
     <div>
       <PageTabNav tabs={CATALOG_TABS} />
@@ -1236,6 +1259,10 @@ export default function ProcessCatalogPage() {
         </div>
         {canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 6 }}>
+            {totalNodes > 0 && (
+              <IconButton icon="download" label="Export to Excel (CSV)"
+                onClick={handleExportExcel} />
+            )}
             {totalNodes > 0 && canWrite && (
               <IconButton icon="trash" label="Delete all processes" variant="danger"
                 onClick={() => setShowDeleteAll(true)} />
