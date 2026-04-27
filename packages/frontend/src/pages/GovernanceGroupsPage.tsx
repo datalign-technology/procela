@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -109,25 +110,12 @@ const GROUP_TYPE_SHORT: Record<string, string> = {
   COMMUNITY_OF_PRACTICE: 'CoP',
 };
 
-const EXPECTED_ROLES_BY_GROUP: Record<string, { roleType: string; label: string; purpose: string; required: boolean; multiAssign: boolean }[]> = {
-  COUNCIL: [
-    { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, and represents governance at the executive level.', required: true, multiAssign: false },
-    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.', required: true, multiAssign: false },
-  ],
-  COMMITTEE: [
-    { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.', required: true, multiAssign: true },
-    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.', required: false, multiAssign: true },
-  ],
-  STEWARDSHIP_TEAM: [
-    { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution.', required: true, multiAssign: true },
-    { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation — lineage, infrastructure, and system-level quality.', required: false, multiAssign: true },
-    { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality.', required: false, multiAssign: true },
-  ],
-  OFFICE: [
-    { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution and measures progress.', required: true, multiAssign: false },
-    { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and scalability.', required: false, multiAssign: true },
-  ],
-};
+const EXPECTED_ROLES_BY_GROUP: Record<string, typeof GOVERNANCE_ROLES> = Object.fromEntries(
+  GOVERNANCE_GROUP_ROLES.map((g) => [
+    g.groupType,
+    GOVERNANCE_ROLES.filter((r) => g.roleTypes.includes(r.roleType)),
+  ]),
+);
 
 const ROLE_LABELS: Record<string, string> = {
   CHAIR: 'Chair',

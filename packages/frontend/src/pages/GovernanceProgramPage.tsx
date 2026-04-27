@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
 
 interface Program {
   id: string;
@@ -66,77 +67,8 @@ interface Person {
   name: string;
 }
 
-type RolePriority = 'ESSENTIAL' | 'RECOMMENDED' | 'OPTIONAL';
-
-interface RoleGuideEntry {
-  roleType: string;
-  label: string;
-  purpose: string;
-  priority: RolePriority;
-}
-
-const ROLE_GUIDE: RoleGuideEntry[] = [
-  { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, secures resources, and represents data governance at the executive level.', priority: 'ESSENTIAL' },
-  { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution, measures progress, coaches stewards.', priority: 'ESSENTIAL' },
-  { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.', priority: 'ESSENTIAL' },
-  { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution within a domain.', priority: 'ESSENTIAL' },
-  { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation of governance — lineage, infrastructure, automation, and system-level quality.', priority: 'RECOMMENDED' },
-  { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality across domains.', priority: 'RECOMMENDED' },
-  { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and supports long-term scalability.', priority: 'RECOMMENDED' },
-  { roleType: 'DATA_CUSTODIAN', label: 'Data Custodian', purpose: 'Manages the physical storage, security, and access controls for data systems.', priority: 'OPTIONAL' },
-  { roleType: 'DATA_ENGINEER', label: 'Data Engineer', purpose: 'Builds and maintains data pipelines, transformations, and integration infrastructure.', priority: 'OPTIONAL' },
-  { roleType: 'DATABASE_ADMINISTRATOR', label: 'Database Administrator', purpose: 'Manages database performance, backups, security, and availability.', priority: 'OPTIONAL' },
-];
-
-interface RoleGroupDef {
-  groupType: string;
-  label: string;
-  description: string;
-  color: string;
-  link: string;
-  roleTypes: string[];
-}
-
-const ROLE_GROUPS: RoleGroupDef[] = [
-  {
-    groupType: 'COUNCIL',
-    label: 'Data Governance Council',
-    description: 'Strategic oversight — sets direction, resolves escalations, and sponsors the program.',
-    color: '#7c3aed',
-    link: '/governance',
-    roleTypes: ['CDO', 'DATA_GOVERNANCE_LEAD'],
-  },
-  {
-    groupType: 'COMMITTEE',
-    label: 'Data Governance Committee',
-    description: 'Tactical coordination — prioritizes initiatives, reviews policies, and aligns domains.',
-    color: '#2563eb',
-    link: '/governance',
-    roleTypes: ['DATA_OWNER', 'DATA_ARCHITECT'],
-  },
-  {
-    groupType: 'STEWARDSHIP_TEAM',
-    label: 'Domain Stewardship Teams',
-    description: 'Operational execution — manages data quality, definitions, and day-to-day governance within each domain.',
-    color: '#059669',
-    link: '/governance',
-    roleTypes: ['BUSINESS_DATA_STEWARD', 'TECHNICAL_DATA_STEWARD', 'DATA_QUALITY_ANALYST'],
-  },
-  {
-    groupType: 'OPERATIONS',
-    label: 'Technical Operations',
-    description: 'Infrastructure support — storage, pipelines, security, and system administration.',
-    color: '#64748b',
-    link: '/governance',
-    roleTypes: ['DATA_CUSTODIAN', 'DATA_ENGINEER', 'DATABASE_ADMINISTRATOR'],
-  },
-];
-
-const PRIORITY_COLORS: Record<RolePriority, { border: string; bg: string; text: string }> = {
-  ESSENTIAL: { border: '#22c55e', bg: '#d1fae5', text: '#065f46' },
-  RECOMMENDED: { border: '#3b82f6', bg: '#dbeafe', text: '#1e40af' },
-  OPTIONAL: { border: '#64748b', bg: '#f1f5f9', text: '#64748b' },
-};
+const ROLE_GUIDE = GOVERNANCE_ROLES;
+const ROLE_GROUPS = GOVERNANCE_GROUP_ROLES.filter((g) => g.groupType !== 'OFFICE');
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
