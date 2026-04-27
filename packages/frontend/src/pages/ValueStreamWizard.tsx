@@ -204,7 +204,7 @@ export default function ValueStreamWizard() {
 
           {!orgIndustry && (
             <button
-              style={{ ...btnPrimary, opacity: !industry || loading ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !industry || loading ? 0.6 : 1, cursor: !industry || loading ? 'not-allowed' : 'pointer' }}
               disabled={!industry || loading}
               onClick={() => setConfirmIndustry(industry)}
             >
@@ -326,7 +326,7 @@ export default function ValueStreamWizard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button style={btnSecondary} onClick={() => navigate('/processes')}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: selectedCount === 0 || applying ? 0.6 : 1, padding: '12px 32px', fontSize: 15 }}
+              style={{ ...btnPrimary, opacity: selectedCount === 0 || applying ? 0.6 : 1, cursor: selectedCount === 0 || applying ? 'not-allowed' : 'pointer', padding: '12px 32px', fontSize: 15 }}
               disabled={selectedCount === 0 || applying}
               onClick={handleApply}
             >

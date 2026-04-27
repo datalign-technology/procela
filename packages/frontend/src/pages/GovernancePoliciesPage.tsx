@@ -316,7 +316,7 @@ export default function GovernancePoliciesPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={handleSave}>
+            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim()} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Add Policy'}
             </button>
           </div>
@@ -351,7 +351,7 @@ export default function GovernancePoliciesPage() {
       )}
 
       {/* Policies Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {loading ? (
           <SkeletonRows rows={5} columns={8} />
         ) : policies.length === 0 && !showForm ? (
@@ -450,7 +450,7 @@ export default function GovernancePoliciesPage() {
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
                 <button style={{ ...btnSecondary, padding: '6px 12px', fontSize: 12 }} onClick={closeControlForm}>Cancel</button>
-                <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12, opacity: !controlForm.name.trim() ? 0.6 : 1 }}
+                <button style={{ ...btnPrimary, padding: '6px 12px', fontSize: 12, opacity: !controlForm.name.trim() ? 0.6 : 1, cursor: !controlForm.name.trim() ? 'not-allowed' : 'pointer' }}
                   disabled={!controlForm.name.trim()} onClick={handleSaveControl}>
                   {editingControlId ? 'Save' : 'Add'}
                 </button>

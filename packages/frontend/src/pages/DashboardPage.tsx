@@ -642,10 +642,10 @@ function RecentActivity() {
   const DEFAULT_ROWS = 5;
 
   useEffect(() => {
+    if (!activeOrgId) { setEntries([]); setLoading(false); return; }
     (async () => {
       try {
-        const query = activeOrgId ? `?orgId=${activeOrgId}&limit=30` : '?limit=30';
-        const res = await apiClient.get<{ success: boolean; data: any[] }>(`/audit${query}`);
+        const res = await apiClient.get<{ success: boolean; data: any[] }>(`/audit?orgId=${activeOrgId}&limit=30`);
         setEntries(res.data || []);
       } catch { /* */ }
       finally { setLoading(false); }
@@ -719,9 +719,10 @@ function ProgramMaturity() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
 
   useEffect(() => {
+    if (!activeOrgId) { setStatus(null); setRecommendations([]); return; }
     (async () => {
       try {
-        const progRes = await apiClient.get<any>(`/governance-program?orgId=${activeOrgId || ''}`);
+        const progRes = await apiClient.get<any>(`/governance-program?orgId=${activeOrgId}`);
         const prog = progRes.data;
         if (!prog?.id) return;
         const [statusRes, recRes] = await Promise.all([
@@ -785,10 +786,10 @@ function StewardOnboarding() {
   const [data, setData] = useState<{ total: number; completed: number; overdue: number } | null>(null);
 
   useEffect(() => {
+    if (!activeOrgId) { setData(null); return; }
     (async () => {
       try {
-        const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-        const tasksRes = await apiClient.get<{ success: boolean; data: any[] }>(`/governance-tasks${query}&taskType=STEWARDSHIP`);
+        const tasksRes = await apiClient.get<{ success: boolean; data: any[] }>(`/governance-tasks?orgId=${activeOrgId}&taskType=STEWARDSHIP`);
         const tasks = tasksRes.data || [];
         const onboarding = tasks.filter((t: any) => t.linkedObjectType === 'DamaRole');
         const completed = onboarding.filter((t: any) => t.status === 'COMPLETED').length;
@@ -832,9 +833,9 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!activeOrgId) { setStats(null); return; }
     try {
-      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats${query}`);
+      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats?orgId=${activeOrgId}`);
       setStats(res.data);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard');

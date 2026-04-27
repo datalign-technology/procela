@@ -337,7 +337,7 @@ export default function AgentsPage() {
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); setImportOrgId(''); }}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: !importText.trim() || !(importOrgId || selectedOrgId) ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !importText.trim() || !(importOrgId || selectedOrgId) ? 0.6 : 1, cursor: !importText.trim() || !(importOrgId || selectedOrgId) ? 'not-allowed' : 'pointer' }}
               disabled={!importText.trim() || !(importOrgId || selectedOrgId)}
               onClick={handleImport}
             >Import</button>
@@ -412,7 +412,7 @@ export default function AgentsPage() {
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: (!form.name.trim() || form.orgIds.length === 0) ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: (!form.name.trim() || form.orgIds.length === 0) ? 0.6 : 1, cursor: (!form.name.trim() || form.orgIds.length === 0) ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim() || form.orgIds.length === 0}
               onClick={handleSave}
             >
@@ -472,7 +472,7 @@ export default function AgentsPage() {
       />
 
       {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {filtered.length === 0 ? (
           <EmptyState
             icon={'\u2734'}

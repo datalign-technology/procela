@@ -982,7 +982,7 @@ export default function DataAssetsPage() {
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             {!editingId && (
               <button
-                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1 }}
+                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
                 disabled={!form.name.trim()}
                 onClick={() => handleSave(true)}
                 title="Save this asset and keep the form open to add another"
@@ -991,7 +991,7 @@ export default function DataAssetsPage() {
               </button>
             )}
             <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim()}
               onClick={() => handleSave(false)}
             >
@@ -1095,7 +1095,7 @@ export default function DataAssetsPage() {
       />
 
       {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
         ) : assets.length === 0 && !showForm ? (
@@ -1247,7 +1247,7 @@ export default function DataAssetsPage() {
                                   style={{
                                     padding: '4px 10px', fontSize: 11, fontWeight: 500,
                                     background: 'var(--color-primary)', color: '#fff',
-                                    border: 'none', borderRadius: 4, cursor: discovering === asset.id ? 'default' : 'pointer',
+                                    border: 'none', borderRadius: 4, cursor: discovering === asset.id ? 'not-allowed' : 'pointer',
                                     opacity: discovering === asset.id ? 0.6 : 1,
                                   }}
                                 >
@@ -1513,6 +1513,7 @@ export default function DataAssetsPage() {
                         style={{
                           ...btnPrimary,
                           opacity: !newComment.trim() ? 0.5 : 1,
+                          cursor: !newComment.trim() ? 'not-allowed' : 'pointer',
                         }}
                       >
                         Add Comment

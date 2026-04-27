@@ -400,7 +400,7 @@ export default function SopsPage() {
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !form.title.trim() ? 0.6 : 1 }} disabled={!form.title.trim()} onClick={handleSave}>
+            <button style={{ ...btnPrimary, opacity: !form.title.trim() ? 0.6 : 1, cursor: !form.title.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.title.trim()} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Create SOP'}
             </button>
           </div>
@@ -448,7 +448,7 @@ export default function SopsPage() {
           secondaryAction={canWrite ? { label: '+ Create SOP', onClick: openAdd } : undefined}
         />
       ) : (
-        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>

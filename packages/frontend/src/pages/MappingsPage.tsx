@@ -454,7 +454,7 @@ export default function MappingsPage() {
               Cancel
             </button>
             <button
-              style={{ ...btnPrimary, opacity: canSave ? 1 : 0.6 }}
+              style={{ ...btnPrimary, opacity: canSave ? 1 : 0.6, cursor: !canSave ? 'not-allowed' : 'pointer' }}
               disabled={!canSave}
               onClick={handleSave}
             >
@@ -577,7 +577,7 @@ export default function MappingsPage() {
           background: 'var(--color-surface)',
           borderRadius: 'var(--radius-md)',
           border: '1px solid var(--color-border)',
-          overflow: 'hidden',
+          overflow: 'auto',
         }}
       >
         {loading ? (

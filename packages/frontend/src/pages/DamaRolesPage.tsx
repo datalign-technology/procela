@@ -356,7 +356,7 @@ export default function DamaRolesPage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: !form.personId || !form.scopeId ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !form.personId || !form.scopeId ? 0.6 : 1, cursor: !form.personId || !form.scopeId ? 'not-allowed' : 'pointer' }}
               disabled={!form.personId || !form.scopeId}
               onClick={handleSave}
             >

@@ -445,7 +445,7 @@ export default function OrganizationsPage() {
             placeholder={'Name,Parent,Type,Industry,Description\nAcme Corp,,company,Manufacturing,Parent company'} />
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name, Parent, Type, Industry, Description</span>
-            <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1 }} disabled={!importText.trim()} onClick={handleImport}>Import</button>
+            <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1, cursor: !importText.trim() ? 'not-allowed' : 'pointer' }} disabled={!importText.trim()} onClick={handleImport}>Import</button>
           </div>
         </div>
       )}
@@ -488,7 +488,7 @@ export default function OrganizationsPage() {
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1 }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
+            <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
               {editingOrgId ? 'Save' : 'Add'}
             </button>
           </div>

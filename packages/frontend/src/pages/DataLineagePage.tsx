@@ -441,7 +441,7 @@ export default function DataLineagePage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: (!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId) ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: (!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId) ? 0.6 : 1, cursor: (!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId) ? 'not-allowed' : 'pointer' }}
               disabled={!form.sourceSystemId || !form.targetSystemId || form.sourceSystemId === form.targetSystemId}
               onClick={handleSave}
             >
@@ -526,7 +526,7 @@ export default function DataLineagePage() {
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-md)',
-              overflow: 'hidden',
+              overflow: 'auto',
               boxShadow: 'var(--shadow-sm)',
             }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>

@@ -156,7 +156,7 @@ export default function OperationsManualPage() {
           <input style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <button style={btnSecondary} onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !newManualLabel.trim() ? 0.6 : 1 }} onClick={handleAddManual} disabled={!newManualLabel.trim()}>Create</button>
+            <button style={{ ...btnPrimary, opacity: !newManualLabel.trim() ? 0.6 : 1, cursor: !newManualLabel.trim() ? 'not-allowed' : 'pointer' }} onClick={handleAddManual} disabled={!newManualLabel.trim()}>Create</button>
           </div>
         </div>
       </div>
@@ -295,7 +295,7 @@ export default function OperationsManualPage() {
                         <div style={{ display: 'flex', gap: 6, marginLeft: 32 }}>
                           <input style={{ ...inputStyle, flex: 1 }} value={addInputs[s.key] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [s.key]: e.target.value }))}
                             placeholder="Add item..." onKeyDown={(e) => e.key === 'Enter' && addItem(s.key)} />
-                          <button style={{ ...btnPrimary, opacity: !(addInputs[s.key] || '').trim() ? 0.6 : 1 }} onClick={() => addItem(s.key)}
+                          <button style={{ ...btnPrimary, opacity: !(addInputs[s.key] || '').trim() ? 0.6 : 1, cursor: !(addInputs[s.key] || '').trim() ? 'not-allowed' : 'pointer' }} onClick={() => addItem(s.key)}
                             disabled={!(addInputs[s.key] || '').trim()}>Add</button>
                         </div>
                       )}

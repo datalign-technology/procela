@@ -702,7 +702,7 @@ export default function DataDomainsPage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim()}
               onClick={handleSave}
             >
@@ -812,7 +812,7 @@ export default function DataDomainsPage() {
       )}
 
       {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
         ) : domains.length === 0 && !showForm ? (

@@ -467,7 +467,7 @@ export default function GovernanceIssuesPage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: !form.title.trim() ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !form.title.trim() ? 0.6 : 1, cursor: !form.title.trim() ? 'not-allowed' : 'pointer' }}
               disabled={!form.title.trim()}
               onClick={handleSave}
             >
@@ -478,7 +478,7 @@ export default function GovernanceIssuesPage() {
       )}
 
       {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {loading ? (
           <SkeletonRows rows={5} columns={9} />
         ) : issues.length === 0 && !showForm ? (

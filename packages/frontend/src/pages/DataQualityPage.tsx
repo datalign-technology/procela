@@ -760,7 +760,7 @@ export default function DataQualityPage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             <button
-              style={{ ...btnPrimary, opacity: (!form.name.trim() || !form.dataAssetId) ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: (!form.name.trim() || !form.dataAssetId) ? 0.6 : 1, cursor: (!form.name.trim() || !form.dataAssetId) ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim() || !form.dataAssetId}
               onClick={handleSave}
             >
@@ -850,7 +850,7 @@ export default function DataQualityPage() {
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)',
-          overflow: 'hidden',
+          overflow: 'auto',
           boxShadow: 'var(--shadow-sm)',
         }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

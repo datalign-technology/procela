@@ -509,7 +509,7 @@ export default function BusinessGlossaryPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim()) ? 0.6 : 1 }}
+            <button style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim()) ? 0.6 : 1, cursor: (!form.term.trim() || !form.definition.trim()) ? 'not-allowed' : 'pointer' }}
               disabled={!form.term.trim() || !form.definition.trim()} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Add Term'}
             </button>
@@ -559,7 +559,7 @@ export default function BusinessGlossaryPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button style={btnSecondary} onClick={() => { setShowGeneratePreview(false); setGeneratedTerms([]); }}>Cancel</button>
               <button
-                style={{ ...btnPrimary, opacity: generatedTerms.filter((t) => t.selected).length === 0 ? 0.6 : 1 }}
+                style={{ ...btnPrimary, opacity: generatedTerms.filter((t) => t.selected).length === 0 ? 0.6 : 1, cursor: generatedTerms.filter((t) => t.selected).length === 0 ? 'not-allowed' : 'pointer' }}
                 disabled={generatedTerms.filter((t) => t.selected).length === 0}
                 onClick={handleApplyGenerated}
               >

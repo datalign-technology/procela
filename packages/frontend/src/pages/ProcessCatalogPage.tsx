@@ -480,7 +480,7 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
             {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
           <button onClick={() => handleAdd(linkType)} disabled={!pickedAsset}
-            style={{ fontSize: 10, padding: '2px 8px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, cursor: pickedAsset ? 'pointer' : 'default', opacity: pickedAsset ? 1 : 0.5 }}>
+            style={{ fontSize: 10, padding: '2px 8px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, cursor: pickedAsset ? 'pointer' : 'not-allowed', opacity: pickedAsset ? 1 : 0.5 }}>
             Save
           </button>
           <button onClick={() => { setShowAdd(null); setPickedAsset(''); }}

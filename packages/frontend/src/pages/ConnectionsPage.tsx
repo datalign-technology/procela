@@ -841,14 +841,14 @@ export default function ConnectionsPage() {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel} disabled={uploading || formTesting}>Cancel</button>
             <button
-              style={{ ...btnSecondary, opacity: !form.name.trim() || uploading || formTesting ? 0.6 : 1 }}
+              style={{ ...btnSecondary, opacity: !form.name.trim() || uploading || formTesting ? 0.6 : 1, cursor: !form.name.trim() || uploading || formTesting ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim() || uploading || formTesting}
               onClick={handleSaveAndTest}
             >
               {formTesting ? 'Testing\u2026' : 'Save & Test'}
             </button>
             <button
-              style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1 }}
+              style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1, cursor: !form.name.trim() || uploading ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim() || uploading}
               onClick={handleSave}
             >
@@ -910,7 +910,7 @@ export default function ConnectionsPage() {
       )}
 
       {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
         ) : visibleConnections.length === 0 && !showForm ? (

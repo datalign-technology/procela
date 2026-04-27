@@ -1048,7 +1048,7 @@ export default function PeoplePage() {
                       // are managed separately).
                       const invalid = !personForm.name.trim() || (!editingPersonId && personForm.orgIds.length === 0) || personFormSave === 'saving';
                       return (
-                        <button style={{ ...btnPrimary, opacity: invalid ? 0.6 : 1 }} disabled={invalid} onClick={handleSavePerson}>
+                        <button style={{ ...btnPrimary, opacity: invalid ? 0.6 : 1, cursor: invalid ? 'not-allowed' : 'pointer' }} disabled={invalid} onClick={handleSavePerson}>
                           {editingPersonId ? 'Save' : 'Add'}
                         </button>
                       );
@@ -1084,7 +1084,7 @@ export default function PeoplePage() {
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Email, Role, Title</span>
                     <button
-                      style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1 }}
+                      style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1, cursor: (!peopleImportText.trim() || !peopleImportOrgId) ? 'not-allowed' : 'pointer' }}
                       disabled={!peopleImportText.trim() || !peopleImportOrgId}
                       onClick={handlePeopleImport}
                     >Import</button>
@@ -1093,7 +1093,7 @@ export default function PeoplePage() {
               )}
 
               {/* People Table */}
-              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
                 {filteredPeople.length === 0 && !selectedOrgId ? (
                   <div style={{ textAlign: 'center', padding: '2rem' }}>
                     <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Select an organization on the left to see and add people.</p>
@@ -1389,7 +1389,7 @@ export default function PeoplePage() {
                         </select>
                       </div>
                       <button
-                        style={{ ...btnPrimary, padding: '4px 12px', fontSize: 11, opacity: !newDamaRole.scopeId ? 0.5 : 1 }}
+                        style={{ ...btnPrimary, padding: '4px 12px', fontSize: 11, opacity: !newDamaRole.scopeId ? 0.5 : 1, cursor: !newDamaRole.scopeId || saving360 ? 'not-allowed' : 'pointer' }}
                         disabled={!newDamaRole.scopeId || saving360}
                         onClick={addDamaRole}
                       >

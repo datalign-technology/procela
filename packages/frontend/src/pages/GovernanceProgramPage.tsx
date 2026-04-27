@@ -782,7 +782,7 @@ export default function GovernanceProgramPage() {
                                                   <option value="">Select person...</option>
                                                   {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                                                 </select>
-                                                <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1 }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
+                                                <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
                                               </div>
                                             </div>
                                           );

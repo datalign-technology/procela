@@ -520,7 +520,7 @@ export default function SystemsPage() {
           />
           <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Description, Type</span>
-            <button style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1 }} disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</button>
+            <button style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1, cursor: !importText.trim() || !activeOrgId ? 'not-allowed' : 'pointer' }} disabled={!importText.trim() || !activeOrgId} onClick={handleImport}>Import</button>
           </div>
         </div>
       )}
@@ -570,7 +570,7 @@ export default function SystemsPage() {
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
             {!editingId && (
               <button
-                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1 }}
+                style={{ ...btnSecondary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }}
                 disabled={!form.name.trim()}
                 onClick={() => handleSave(true)}
                 title="Save this system and keep the form open to add another"
@@ -578,7 +578,7 @@ export default function SystemsPage() {
                 Save & Add Another
               </button>
             )}
-            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={() => handleSave(false)}>
+            <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim()} onClick={() => handleSave(false)}>
               {editingId ? 'Save Changes' : 'Add System'}
             </button>
           </div>
