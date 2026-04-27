@@ -123,6 +123,11 @@ export default function DataDomainsPage() {
   const [filterAsset, setFilterAsset] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
+  // Bulk assign
+  const [bulkAssignType, setBulkAssignType] = useState<'owner' | 'steward' | ''>('');
+  const [bulkAssignPersonId, setBulkAssignPersonId] = useState('');
+  const [bulkStewardRole, setBulkStewardRole] = useState<'business' | 'technical'>('business');
+
   // Stewardship team option on create
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
 
@@ -301,6 +306,35 @@ export default function DataDomainsPage() {
   };
 
   const handleCancel = () => { confirmIfDirty(closeForm); };
+
+  const handleBulkAssign = async () => {
+    if (selectedIds.size === 0 || !bulkAssignPersonId) return;
+    const targetIds = Array.from(selectedIds);
+    try {
+      if (bulkAssignType === 'owner') {
+        await Promise.all(targetIds.map((id) => apiClient.put(`/data-domains/${id}`, { ownerId: bulkAssignPersonId })));
+        const personName = people.find((p) => p.id === bulkAssignPersonId)?.name || '';
+        addToast('success', `Set ${personName} as owner of ${targetIds.length} domain${targetIds.length === 1 ? '' : 's'}`);
+      } else {
+        await Promise.all(targetIds.map(async (id) => {
+          const domain = domains.find((d) => d.id === id);
+          if (!domain) return;
+          const existing = domain.stewardIds || [];
+          if (!existing.includes(bulkAssignPersonId)) {
+            await apiClient.put(`/data-domains/${id}`, { stewardIds: [...existing, bulkAssignPersonId] });
+          }
+        }));
+        const personName = people.find((p) => p.id === bulkAssignPersonId)?.name || '';
+        addToast('success', `Added ${personName} as ${bulkStewardRole} steward to ${targetIds.length} domain${targetIds.length === 1 ? '' : 's'}`);
+      }
+      setBulkAssignType('');
+      setBulkAssignPersonId('');
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Bulk assignment failed');
+    }
+  };
 
   const handleDetailSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
@@ -597,6 +631,18 @@ export default function DataDomainsPage() {
         }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
           <button
+            onClick={() => setBulkAssignType('owner')}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Set Owner…
+          </button>
+          <button
+            onClick={() => setBulkAssignType('steward')}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Add Steward…
+          </button>
+          <button
             onClick={() => setConfirmBulkDelete(true)}
             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
@@ -610,6 +656,49 @@ export default function DataDomainsPage() {
           </button>
         </div>
       )}
+
+      {/* Bulk Assign Dialog */}
+      <ConfirmDialog
+        open={bulkAssignType !== ''}
+        title={bulkAssignType === 'owner'
+          ? `Set owner for ${selectedIds.size} domain${selectedIds.size === 1 ? '' : 's'}`
+          : `Add steward to ${selectedIds.size} domain${selectedIds.size === 1 ? '' : 's'}`}
+        message=""
+        confirmLabel={bulkAssignPersonId ? (bulkAssignType === 'owner' ? 'Set Owner' : 'Add Steward') : 'Select a person'}
+        variant="primary"
+        onConfirm={handleBulkAssign}
+        onCancel={() => { setBulkAssignType(''); setBulkAssignPersonId(''); }}
+      >
+        <div style={{ marginTop: 8 }}>
+          {bulkAssignType === 'steward' && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Steward Type</label>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['business', 'technical'] as const).map((t) => (
+                  <button key={t} onClick={() => setBulkStewardRole(t)} style={{
+                    padding: '5px 14px', fontSize: 12, fontWeight: bulkStewardRole === t ? 600 : 500,
+                    background: bulkStewardRole === t ? 'var(--color-primary)' : 'var(--color-surface)',
+                    color: bulkStewardRole === t ? '#fff' : 'var(--color-text-secondary)',
+                    border: bulkStewardRole === t ? 'none' : '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)', cursor: 'pointer', textTransform: 'capitalize',
+                  }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
+          <select
+            style={{ ...selectStyle, appearance: 'auto' as any }}
+            value={bulkAssignPersonId}
+            onChange={(e) => setBulkAssignPersonId(e.target.value)}
+          >
+            <option value="">-- Select person --</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirmDelete !== null}
