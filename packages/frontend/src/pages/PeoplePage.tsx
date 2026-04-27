@@ -28,6 +28,7 @@ interface OrgFlat {
 }
 interface Person {
   id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
+  syncConnectionId?: string | null; syncStatus?: string | null;
 }
 interface Person360Data {
   person: Person;
@@ -1194,7 +1195,12 @@ export default function PeoplePage() {
                           <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                             <input type="checkbox" checked={isSelected} onChange={() => togglePersonSelect(person.id)} />
                           </td>
-                          <td style={{ ...tdStyle, fontWeight: 500 }}>{person.name}</td>
+                          <td style={{ ...tdStyle, fontWeight: 500 }}>
+                            {person.name}
+                            {person.syncStatus === 'MISSING_FROM_SOURCE' && (
+                              <span title="No longer found in the connected data source" style={{ display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: '#fef3c7', color: '#92400e', verticalAlign: 'middle' }}>NOT IN SOURCE</span>
+                            )}
+                          </td>
                           <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>{person.email || '--'}</td>
                           <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
                           <td style={tdStyle}>

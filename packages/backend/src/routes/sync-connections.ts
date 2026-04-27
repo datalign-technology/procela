@@ -160,6 +160,8 @@ function applyRow(
   matchKey: string,
   sourceRow: Record<string, string>,
   orgId: string,
+  syncConnectionId?: string,
+  syncedRecordIds?: Set<string>,
 ): 'created' | 'updated' | 'skipped' {
   // Resolve the source column for the match key
   const matchSourceColumn = fieldMapping[matchKey];
@@ -175,6 +177,7 @@ function applyRow(
   });
 
   if (existing) {
+    syncedRecordIds?.add(existing.id);
     // Update fields that differ
     let changed = false;
     for (const [targetField, sourceColumn] of Object.entries(fieldMapping)) {
@@ -184,6 +187,14 @@ function applyRow(
         existing[targetField] = newValue;
         changed = true;
       }
+    }
+    if (syncConnectionId && existing.syncConnectionId !== syncConnectionId) {
+      existing.syncConnectionId = syncConnectionId;
+      changed = true;
+    }
+    if (existing.syncStatus === 'MISSING_FROM_SOURCE') {
+      existing.syncStatus = 'ACTIVE';
+      changed = true;
     }
     if (changed) {
       existing.updatedAt = new Date().toISOString();
@@ -198,7 +209,10 @@ function applyRow(
     id: uuid(),
     createdAt: now,
     updatedAt: now,
+    syncConnectionId: syncConnectionId || null,
+    syncStatus: 'ACTIVE',
   };
+  syncedRecordIds?.add(newRecord.id);
 
   // Set org scoping based on entity type
   if (targetEntity === 'people') {
@@ -404,9 +418,11 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     created: 0,
     updated: 0,
     skipped: 0,
+    missingFromSource: 0,
     errors: 0,
     errorMessages: [] as string[],
   };
+  const syncedRecordIds = new Set<string>();
 
   let rows: Record<string, string>[] = [];
   let simulated = false;
@@ -436,7 +452,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
   // Apply each row
   for (const row of rows) {
     try {
-      const action = applyRow(store, sc.targetEntity, sc.fieldMapping, sc.matchKey, row, sc.orgId);
+      const action = applyRow(store, sc.targetEntity, sc.fieldMapping, sc.matchKey, row, sc.orgId, sc.id, syncedRecordIds);
       if (action === 'created') result.created++;
       else if (action === 'updated') result.updated++;
       else result.skipped++;
@@ -444,6 +460,17 @@ router.post('/:id/run', async (req: Request, res: Response) => {
       result.errors++;
       const msg = err instanceof Error ? err.message : 'Unknown error';
       result.errorMessages.push(msg);
+    }
+  }
+
+  // Mark records previously synced by this connection but missing from this batch
+  for (const item of store) {
+    if ((item as any).syncConnectionId === sc.id && !syncedRecordIds.has(item.id)) {
+      if ((item as any).syncStatus !== 'MISSING_FROM_SOURCE') {
+        (item as any).syncStatus = 'MISSING_FROM_SOURCE';
+        (item as any).updatedAt = new Date().toISOString();
+        result.missingFromSource++;
+      }
     }
   }
 
@@ -465,7 +492,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
   saveStore('syncConnections', syncConnections);
 
   logger.info(
-    { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, errors: result.errors, simulated },
+    { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },
     'Sync connection run completed',
   );
   res.json({ success: true, data: result, simulated });

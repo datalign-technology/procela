@@ -167,13 +167,14 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
 
       if (runImmediately && res.data?.id) {
         try {
-          const runRes = await apiClient.post<{ success: boolean; data: { created: number; updated: number; skipped: number; errors: number; simulated?: boolean } }>(`/sync-connections/${res.data.id}/run`);
+          const runRes = await apiClient.post<{ success: boolean; data: { created: number; updated: number; skipped: number; missingFromSource: number; errors: number; simulated?: boolean } }>(`/sync-connections/${res.data.id}/run`);
           const r = runRes.data;
           if (r) {
             const parts = [];
             if (r.created) parts.push(`${r.created} created`);
             if (r.updated) parts.push(`${r.updated} updated`);
-            if (r.skipped) parts.push(`${r.skipped} skipped`);
+            if (r.skipped) parts.push(`${r.skipped} unchanged`);
+            if (r.missingFromSource) parts.push(`${r.missingFromSource} no longer in source`);
             if (r.errors) parts.push(`${r.errors} errors`);
             addToast(r.errors ? 'error' : 'success', `Sync complete${r.simulated ? ' (simulated)' : ''}: ${parts.join(', ') || 'no changes'}`);
           }
