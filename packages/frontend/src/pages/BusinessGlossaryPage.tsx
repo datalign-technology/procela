@@ -96,6 +96,8 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DEPRECATED: { bg: '#fee2e2', color: '#991b1b' },
 };
 
+const CATEGORY_ORDER = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'];
+
 const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
   BUSINESS:   { bg: '#dbeafe', color: '#1e40af' },
   TECHNICAL:  { bg: '#ede9fe', color: '#5b21b6' },
@@ -120,7 +122,7 @@ const pillStyle: React.CSSProperties = {
 // ── Component ──
 
 export default function BusinessGlossaryPage() {
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, activeOrgName } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
@@ -300,6 +302,84 @@ export default function BusinessGlossaryPage() {
     } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to create terms'); }
   };
 
+  const handleExportHtml = () => {
+    const orgName = activeOrgName || 'Organization';
+    const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const grouped: Record<string, GlossaryTerm[]> = {};
+    for (const t of filteredTerms) {
+      const cat = t.category || 'GENERAL';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(t);
+    }
+    const cats = CATEGORY_ORDER.filter((c) => grouped[c]?.length > 0);
+
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const termsHtml = cats.map((cat) => {
+      const catTerms = grouped[cat].sort((a, b) => a.term.localeCompare(b.term));
+      const rows = catTerms.map((t) => `
+        <tr>
+          <td style="padding:10px 14px;border:1px solid #e5e7eb;font-weight:600;vertical-align:top;width:22%">${esc(t.term)}</td>
+          <td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top">${esc(t.definition)}${t.context ? `<br><span style="color:#6b7280;font-size:12px">Context: ${esc(t.context)}</span>` : ''}${t.synonyms?.length ? `<br><span style="color:#6b7280;font-size:12px">Synonyms: ${t.synonyms.map(esc).join(', ')}</span>` : ''}</td>
+          <td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top;width:14%;color:#6b7280">${esc(t.ownerName || '')}</td>
+          <td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top;width:10%;text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${t.status === 'APPROVED' ? '#d1fae5' : t.status === 'DRAFT' ? '#f1f5f9' : '#fef3c7'};color:${t.status === 'APPROVED' ? '#065f46' : t.status === 'DRAFT' ? '#64748b' : '#92400e'}">${esc(t.status)}</span></td>
+        </tr>`).join('');
+      return `
+      <h2 style="margin:28px 0 12px;font-size:18px;color:#1e40af;border-bottom:2px solid #dbeafe;padding-bottom:6px">${esc(cat.charAt(0) + cat.slice(1).toLowerCase())} Terms</h2>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:14px">
+        <thead>
+          <tr style="background:#f8fafc">
+            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Term</th>
+            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Definition</th>
+            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Owner</th>
+            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}
+        </tbody>
+      </table>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Glossary — ${esc(orgName)}</title>
+<style>
+  body { font-family: Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; color: #1e293b; background: #fff; }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+  a { color: #2563eb; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1e40af;padding-bottom:12px;margin-bottom:8px">
+    <div>
+      <h1 style="margin:0;font-size:26px;color:#0f172a">Business Glossary</h1>
+      <p style="margin:4px 0 0;font-size:14px;color:#64748b">${esc(orgName)}</p>
+    </div>
+    <div style="font-size:12px;color:#94a3b8">Published ${esc(now)} &middot; ${filteredTerms.length} terms</div>
+  </div>
+  <div style="font-size:13px;color:#94a3b8;margin-bottom:24px">Generated by Procela Data Governance Platform</div>
+  ${termsHtml}
+  <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#94a3b8;text-align:center">
+    ${esc(orgName)} Business Glossary &middot; ${esc(now)} &middot; Procela
+  </div>
+</div>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `business-glossary-${orgName.toLowerCase().replace(/\s+/g, '-')}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addToast('success', 'Business Glossary exported as HTML');
+  };
+
   return (
     <div>
       <PageTabNav tabs={CATALOG_TABS} />
@@ -313,6 +393,7 @@ export default function BusinessGlossaryPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
           {canWrite && <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />}
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>
@@ -586,7 +667,6 @@ export default function BusinessGlossaryPage() {
             </div>
           ) : groupByCategory ? (
             (() => {
-              const CATEGORY_ORDER = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'];
               const CATEGORY_DESCRIPTIONS: Record<string, string> = {
                 BUSINESS: 'Core business concepts and entities used across the organization.',
                 TECHNICAL: 'Technical terms, systems, and infrastructure concepts.',
