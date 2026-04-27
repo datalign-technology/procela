@@ -117,6 +117,12 @@ export default function DataDomainsPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
 
+  // Filters
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterSteward, setFilterSteward] = useState('');
+  const [filterAsset, setFilterAsset] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+
   // Stewardship team option on create
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
 
@@ -441,6 +447,26 @@ export default function DataDomainsPage() {
     'name',
   );
 
+  const hasFilters = !!(filterOwner || filterSteward || filterAsset || filterStatus);
+  const filteredDomains = sortedDomains.filter((d) => {
+    if (filterOwner === '__none__' && d.ownerId) return false;
+    if (filterOwner === '__none__' && !d.ownerId) { /* pass */ }
+    else if (filterOwner && filterOwner !== '__none__' && d.ownerId !== filterOwner) return false;
+    if (filterSteward === '__none__' && d.stewardIds?.length > 0) return false;
+    if (filterSteward === '__none__' && (!d.stewardIds || d.stewardIds.length === 0)) { /* pass */ }
+    else if (filterSteward && filterSteward !== '__none__' && !d.stewardIds?.includes(filterSteward)) return false;
+    if (filterAsset === '__none__' && d.dataAssetIds?.length > 0) return false;
+    if (filterAsset === '__none__' && (!d.dataAssetIds || d.dataAssetIds.length === 0)) { /* pass */ }
+    else if (filterAsset && filterAsset !== '__none__' && !d.dataAssetIds?.includes(filterAsset)) return false;
+    if (filterStatus && d.status !== filterStatus) return false;
+    return true;
+  });
+
+  const ownerOptions = [...new Map(domains.filter((d) => d.ownerId && d.ownerName).map((d) => [d.ownerId, d.ownerName!])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const stewardOptions = [...new Map(domains.flatMap((d) => d.stewards || []).map((s) => [s.id, s.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const assetOptions = [...new Map(domains.flatMap((d) => d.assets || []).map((a) => [a.id, a.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const statusOptions = [...new Set(domains.map((d) => d.status))].sort();
+
   return (
     <div>
       <PageTabNav tabs={GOVERNANCE_TABS} />
@@ -750,6 +776,41 @@ export default function DataDomainsPage() {
         </div>
       )}
 
+      {/* Filters */}
+      {domains.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+            <option value="">All Owners</option>
+            <option value="__none__">No Owner</option>
+            {ownerOptions.map(([id, name]) => <option key={id} value={id!}>{name}</option>)}
+          </select>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterSteward} onChange={(e) => setFilterSteward(e.target.value)}>
+            <option value="">All Stewards</option>
+            <option value="__none__">No Stewards</option>
+            {stewardOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterAsset} onChange={(e) => setFilterAsset(e.target.value)}>
+            <option value="">All Assets</option>
+            <option value="__none__">No Assets</option>
+            {assetOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '5px 8px' }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <option value="">All Statuses</option>
+            {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {hasFilters && (
+            <button onClick={() => { setFilterOwner(''); setFilterSteward(''); setFilterAsset(''); setFilterStatus(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>
+              Clear
+            </button>
+          )}
+          {hasFilters && (
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+              Showing {filteredDomains.length} of {domains.length}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
@@ -780,7 +841,7 @@ export default function DataDomainsPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedDomains.map((domain) => {
+              {filteredDomains.map((domain) => {
                 const isSelected = selectedIds.has(domain.id);
                 return (
                 <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : '' }}
