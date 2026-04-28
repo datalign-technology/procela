@@ -182,6 +182,9 @@ export default function GovernanceCalendarPage() {
   const [filterType, setFilterType] = useState('');
   const [filterCadence, setFilterCadence] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
 
   const fetchData = useCallback(async () => {
     try {
@@ -385,6 +388,54 @@ export default function GovernanceCalendarPage() {
 
   const hasActiveFilters = !!(filterType || filterCadence || filterStatus);
 
+  // Calendar grid: compute which events fall on which days of the displayed month
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(calYear, calMonth, 1);
+    const startOffset = firstDay.getDay(); // 0=Sun
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+
+    const cells: { date: number | null; events: CalendarEvent[] }[] = [];
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startOffset + 1;
+      if (dayNum < 1 || dayNum > daysInMonth) {
+        cells.push({ date: null, events: [] });
+      } else {
+        const dayDate = new Date(calYear, calMonth, dayNum);
+        const dayOfWeek = dayDate.getDay();
+        const matching = filteredEvents.filter((ev) => {
+          if (ev.status === 'PAUSED') return false;
+          // Check nextOccurrence date match
+          if (ev.nextOccurrence) {
+            const next = new Date(ev.nextOccurrence);
+            if (next.getFullYear() === calYear && next.getMonth() === calMonth && next.getDate() === dayNum) return true;
+          }
+          // Cadence-based matching
+          if (ev.cadence === 'WEEKLY' && ev.dayOfWeek != null && ev.dayOfWeek === dayOfWeek) return true;
+          if (ev.cadence === 'BIWEEKLY' && ev.dayOfWeek != null && ev.dayOfWeek === dayOfWeek) {
+            // Approximate: show on 1st and 3rd matching weekday
+            const weekInMonth = Math.ceil(dayNum / 7);
+            return weekInMonth === 1 || weekInMonth === 3;
+          }
+          if ((ev.cadence === 'MONTHLY' || ev.cadence === 'QUARTERLY' || ev.cadence === 'SEMI_ANNUAL' || ev.cadence === 'ANNUAL') && ev.dayOfMonth != null && ev.dayOfMonth === dayNum) {
+            if (ev.cadence === 'MONTHLY') return true;
+            if (ev.cadence === 'QUARTERLY') return calMonth % 3 === 0;
+            if (ev.cadence === 'SEMI_ANNUAL') return calMonth % 6 === 0;
+            if (ev.cadence === 'ANNUAL') return calMonth === 0;
+          }
+          return false;
+        });
+        cells.push({ date: dayNum, events: matching });
+      }
+    }
+    return cells;
+  }, [calYear, calMonth, filteredEvents]);
+
+  const calMonthLabel = new Date(calYear, calMonth).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+  const prevMonth = () => { if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); } else setCalMonth(calMonth - 1); };
+  const nextMonth = () => { if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); } else setCalMonth(calMonth + 1); };
+  const goToday = () => { const now = new Date(); setCalYear(now.getFullYear()); setCalMonth(now.getMonth()); };
+
   return (
     <div>
       <PageTabNav tabs={OPERATE_TABS} />
@@ -401,6 +452,21 @@ export default function GovernanceCalendarPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {events.length > 0 && (
+            <div style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+              <button onClick={() => setViewMode('list')} style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                background: viewMode === 'list' ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: viewMode === 'list' ? '#fff' : 'var(--color-text)',
+              }}>List</button>
+              <button onClick={() => setViewMode('calendar')} style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                borderLeft: '1px solid var(--color-border)',
+                background: viewMode === 'calendar' ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: viewMode === 'calendar' ? '#fff' : 'var(--color-text)',
+              }}>Calendar</button>
+            </div>
+          )}
           {canWrite && events.length === 0 && (
             <button style={btnSecondary} onClick={handleSeed}>Seed Standard Events</button>
           )}
@@ -653,155 +719,228 @@ export default function GovernanceCalendarPage() {
         </div>
       )}
 
-      {/* Two-column layout: Upcoming + All */}
-      <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Upcoming panel */}
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', padding: 16,
-        }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
-            letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 12 }}>
-            Upcoming (next 30 days)
-          </h3>
-          {loading ? (
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading...</p>
-          ) : upcoming.length === 0 ? (
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-              Nothing scheduled in the next 30 days.
-            </p>
-          ) : (
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {upcoming.map((o, i) => (
-                <li
-                  key={`${o.eventId}-${i}`}
-                  style={{
-                    padding: 10, border: '1px solid var(--color-border)',
-                    borderRadius: 4, background: 'var(--color-bg)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{o.name}</div>
-                    <span style={badgeStyle(EVENT_TYPE_COLORS[o.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
-                      {formatTypeLabel(o.eventType)}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                    {formatOccurrence(o.occursAt)} &middot; {o.timeOfDay} &middot; {formatTypeLabel(o.cadence)}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2, fontWeight: 500 }}>
-                    {formatDaysAway(o.daysAway)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* All events table */}
-        <div style={{
-          background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--color-border)', overflow: 'auto',
-        }}>
-          {loading ? (
-            <SkeletonRows rows={5} columns={6} />
-          ) : events.length === 0 && !showForm ? (
-            <EmptyState
-              icon={'📅'}
-              title="No governance events yet"
-              description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
-              action={canWrite ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}
-            />
-          ) : filteredEvents.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
-              No events match the current filters.
+      {viewMode === 'calendar' ? (
+        /* ── Calendar Grid View ── */
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+          {/* Month navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+            <button onClick={prevMonth} style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12 }}>&larr;</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 700 }}>{calMonthLabel}</span>
+              <button onClick={goToday} style={{ ...btnSecondary, padding: '3px 10px', fontSize: 11 }}>Today</button>
             </div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--color-bg)' }}>
-                  <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                    <input type="checkbox" checked={filteredEvents.length > 0 && selectedIds.size === filteredEvents.length} onChange={toggleSelectAll} />
-                  </th>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Cadence</th>
-                  <th style={thStyle}>Next</th>
-                  <th style={thStyle}>Status</th>
-                  <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEvents.map((ev) => (
-                  <tr key={ev.id} style={{ transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                      <input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => toggleSelect(ev.id)} />
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
-                      {ev.name}
-                      {ev.attendeeNames.length > 0 && (
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}>
-                          {ev.attendeeNames.slice(0, 3).join(', ')}
-                          {ev.attendeeNames.length > 3 && ` +${ev.attendeeNames.length - 3}`}
-                        </div>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badgeStyle(EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
-                        {formatTypeLabel(ev.eventType)}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>{formatTypeLabel(ev.cadence)}</td>
-                    <td style={tdStyle}>{formatOccurrence(ev.nextOccurrence)}</td>
-                    <td style={tdStyle}>
-                      <span style={badgeStyle(STATUS_COLORS[ev.status] || STATUS_COLORS.ACTIVE)}>
-                        {ev.status}
-                      </span>
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4 }}>
-                        {canWrite && (
-                          <IconButton
-                            size="sm"
-                            icon="check"
-                            label="Mark occurrence done"
-                            onClick={() => handleRun(ev.id)}
-                          />
-                        )}
-                        <IconButton
-                          size="sm"
-                          icon="download"
-                          label="Add to calendar (.ics)"
-                          onClick={() => downloadIcs(ev)}
-                        />
-                        {canWrite && (
-                          <IconButton
-                            size="sm"
-                            icon="edit"
-                            label="Edit"
-                            onClick={() => openEdit(ev)}
-                          />
-                        )}
-                        {canWrite && (
-                          <IconButton
-                            size="sm"
-                            icon="trash"
-                            label="Delete"
-                            variant="danger"
-                            onClick={() => setConfirmDelete(ev.id)}
-                          />
+            <button onClick={nextMonth} style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12 }}>&rarr;</button>
+          </div>
+          {/* Day headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+              <div key={d} style={{ textAlign: 'center', padding: '8px 4px', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--color-border)' }}>
+                {d}
+              </div>
+            ))}
+          </div>
+          {/* Day cells */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            {calendarDays.map((cell, idx) => {
+              const isToday = cell.date != null && calYear === new Date().getFullYear() && calMonth === new Date().getMonth() && cell.date === new Date().getDate();
+              return (
+                <div key={idx} style={{
+                  minHeight: 90, padding: '4px 6px',
+                  borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid var(--color-border)',
+                  borderBottom: '1px solid var(--color-border)',
+                  background: cell.date == null ? 'var(--color-bg)' : isToday ? '#eff6ff' : 'var(--color-surface)',
+                  opacity: cell.date == null ? 0.4 : 1,
+                }}>
+                  {cell.date != null && (
+                    <>
+                      <div style={{
+                        fontSize: 12, fontWeight: isToday ? 700 : 500, marginBottom: 4,
+                        color: isToday ? 'var(--color-primary)' : 'var(--color-text)',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: isToday ? 22 : 'auto', height: isToday ? 22 : 'auto',
+                        borderRadius: isToday ? '50%' : 0,
+                        background: isToday ? 'var(--color-primary)' : 'transparent',
+                        ...(isToday ? { color: '#fff' } : {}),
+                      }}>
+                        {cell.date}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {cell.events.slice(0, 3).map((ev) => {
+                          const colors = EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM;
+                          return (
+                            <div key={ev.id} title={`${ev.name} (${formatTypeLabel(ev.eventType)}) — ${ev.timeOfDay}`}
+                              onClick={() => openEdit(ev)}
+                              style={{
+                                fontSize: 10, fontWeight: 500, padding: '1px 4px', borderRadius: 3, cursor: 'pointer',
+                                background: colors.bg, color: colors.color,
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>
+                              {ev.name}
+                            </div>
+                          );
+                        })}
+                        {cell.events.length > 3 && (
+                          <div style={{ fontSize: 9, color: 'var(--color-text-muted)', fontWeight: 500 }}>+{cell.events.length - 3} more</div>
                         )}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        /* ── List View (original two-column layout) ── */
+        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
+          {/* Upcoming panel */}
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', padding: 16,
+          }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              Upcoming (next 30 days)
+            </h3>
+            {loading ? (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading...</p>
+            ) : upcoming.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                Nothing scheduled in the next 30 days.
+              </p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {upcoming.map((o, i) => (
+                  <li
+                    key={`${o.eventId}-${i}`}
+                    style={{
+                      padding: 10, border: '1px solid var(--color-border)',
+                      borderRadius: 4, background: 'var(--color-bg)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{o.name}</div>
+                      <span style={badgeStyle(EVENT_TYPE_COLORS[o.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
+                        {formatTypeLabel(o.eventType)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                      {formatOccurrence(o.occursAt)} &middot; {o.timeOfDay} &middot; {formatTypeLabel(o.cadence)}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2, fontWeight: 500 }}>
+                      {formatDaysAway(o.daysAway)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* All events table */}
+          <div style={{
+            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)', overflow: 'auto',
+          }}>
+            {loading ? (
+              <SkeletonRows rows={5} columns={6} />
+            ) : events.length === 0 && !showForm ? (
+              <EmptyState
+                icon={'📅'}
+                title="No governance events yet"
+                description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
+                action={canWrite ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}
+              />
+            ) : filteredEvents.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                No events match the current filters.
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                      <input type="checkbox" checked={filteredEvents.length > 0 && selectedIds.size === filteredEvents.length} onChange={toggleSelectAll} />
+                    </th>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Cadence</th>
+                    <th style={thStyle}>Next</th>
+                    <th style={thStyle}>Status</th>
+                    <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEvents.map((ev) => (
+                    <tr key={ev.id} style={{ transition: 'background 0.1s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+                      <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                        <input type="checkbox" checked={selectedIds.has(ev.id)} onChange={() => toggleSelect(ev.id)} />
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
+                        {ev.name}
+                        {ev.attendeeNames.length > 0 && (
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}>
+                            {ev.attendeeNames.slice(0, 3).join(', ')}
+                            {ev.attendeeNames.length > 3 && ` +${ev.attendeeNames.length - 3}`}
+                          </div>
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={badgeStyle(EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM)}>
+                          {formatTypeLabel(ev.eventType)}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>{formatTypeLabel(ev.cadence)}</td>
+                      <td style={tdStyle}>{formatOccurrence(ev.nextOccurrence)}</td>
+                      <td style={tdStyle}>
+                        <span style={badgeStyle(STATUS_COLORS[ev.status] || STATUS_COLORS.ACTIVE)}>
+                          {ev.status}
+                        </span>
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', gap: 4 }}>
+                          {canWrite && (
+                            <IconButton
+                              size="sm"
+                              icon="check"
+                              label="Mark occurrence done"
+                              onClick={() => handleRun(ev.id)}
+                            />
+                          )}
+                          <IconButton
+                            size="sm"
+                            icon="download"
+                            label="Add to calendar (.ics)"
+                            onClick={() => downloadIcs(ev)}
+                          />
+                          {canWrite && (
+                            <IconButton
+                              size="sm"
+                              icon="edit"
+                              label="Edit"
+                              onClick={() => openEdit(ev)}
+                            />
+                          )}
+                          {canWrite && (
+                            <IconButton
+                              size="sm"
+                              icon="trash"
+                              label="Delete"
+                              variant="danger"
+                              onClick={() => setConfirmDelete(ev.id)}
+                            />
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

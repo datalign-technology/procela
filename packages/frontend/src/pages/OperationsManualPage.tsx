@@ -52,18 +52,18 @@ export default function OperationsManualPage() {
   const { canWrite } = usePermissions();
   const [manuals, setManuals] = useState<OperationsManual[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [addInputs, setAddInputs] = useState<Record<string, string>>({});
-  const [editingHeader, setEditingHeader] = useState(false);
+  const [editingHeader, setEditingHeader] = useState<string | null>(null);
   const [headerForm, setHeaderForm] = useState({ label: '', purpose: '' });
   const [showAddManual, setShowAddManual] = useState(false);
   const [newManualLabel, setNewManualLabel] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<Set<SectionKey>>(new Set(['daily']));
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const fetchManuals = useCallback(async () => {
     if (!activeOrgId) { setManuals([]); setLoading(false); return; }
@@ -74,12 +74,6 @@ export default function OperationsManualPage() {
   }, [activeOrgId]);
 
   useEffect(() => { setLoading(true); fetchManuals(); }, [fetchManuals]);
-  useEffect(() => {
-    if (manuals.length > 0 && (!selectedId || !manuals.find((m) => m.id === selectedId))) setSelectedId(manuals[0].id);
-    else if (manuals.length === 0) setSelectedId(null);
-  }, [manuals, selectedId]);
-
-  const manual = manuals.find((m) => m.id === selectedId) || null;
 
   const handleSeed = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
@@ -95,24 +89,27 @@ export default function OperationsManualPage() {
     } catch { addToast('error', 'Failed to save changes'); }
   };
 
-  const addItem = (section: SectionKey) => {
-    const text = (addInputs[section] || '').trim();
+  const addItem = (manualId: string, section: SectionKey) => {
+    const inputKey = `${manualId}-${section}`;
+    const text = (addInputs[inputKey] || '').trim();
+    const manual = manuals.find((m) => m.id === manualId);
     if (!text || !manual) return;
     updateManual(manual.id, { [section]: [...manual[section], text] });
-    setAddInputs((p) => ({ ...p, [section]: '' }));
+    setAddInputs((p) => ({ ...p, [inputKey]: '' }));
   };
-  const removeItem = (section: SectionKey, idx: number) => {
+  const removeItem = (manualId: string, section: SectionKey, idx: number) => {
+    const manual = manuals.find((m) => m.id === manualId);
     if (!manual) return;
     updateManual(manual.id, { [section]: manual[section].filter((_, i) => i !== idx) });
   };
 
-  const startEditHeader = () => { if (!manual) return; setHeaderForm({ label: manual.label, purpose: manual.purpose }); setEditingHeader(true); };
-  const saveHeader = async () => {
-    if (!manual || !headerForm.label.trim()) return;
-    await updateManual(manual.id, { label: headerForm.label, purpose: headerForm.purpose });
-    setEditingHeader(false); addToast('success', 'Manual updated');
+  const startEditHeader = (m: OperationsManual) => { setHeaderForm({ label: m.label, purpose: m.purpose }); setEditingHeader(m.id); };
+  const saveHeader = async (id: string) => {
+    if (!headerForm.label.trim()) return;
+    await updateManual(id, { label: headerForm.label, purpose: headerForm.purpose });
+    setEditingHeader(null); addToast('success', 'Manual updated');
   };
-  const saveCustomContent = (value: string) => { if (manual) updateManual(manual.id, { customContent: value }); };
+  const saveCustomContent = (id: string, value: string) => { updateManual(id, { customContent: value }); };
 
   const handleDelete = async (id: string) => {
     try {
@@ -136,8 +133,12 @@ export default function OperationsManualPage() {
   const toggleSelectAll = () => {
     setSelectedIds(selectedIds.size === manuals.length ? new Set() : new Set(manuals.map((m) => m.id)));
   };
-  const toggleSection = (key: SectionKey) => {
-    setExpandedSections((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const toggleCard = (id: string) => {
+    setExpandedCards((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+  const toggleSection = (manualId: string, key: SectionKey) => {
+    const compositeKey = `${manualId}-${key}`;
+    setExpandedSections((prev) => { const n = new Set(prev); if (n.has(compositeKey)) n.delete(compositeKey); else n.add(compositeKey); return n; });
   };
 
   const handleAddManual = async () => {
@@ -163,6 +164,9 @@ export default function OperationsManualPage() {
     );
   }
 
+  // Total items across all sections for a manual
+  const totalItems = (m: OperationsManual) => SECTIONS.reduce((sum, s) => sum + m[s.key].length, 0);
+
   // ── Render ──
   if (loading) return <div><PageTabNav tabs={OPERATE_TABS} /><SkeletonRows rows={5} /></div>;
   if (!activeOrgId) return (
@@ -176,11 +180,16 @@ export default function OperationsManualPage() {
   return (
     <div>
       <PageTabNav tabs={OPERATE_TABS} />
-      {/* Header — always visible */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Operations Manual</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>Role-specific guidance for running your governance program.</p>
+          {manuals.length > 0 && (
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+              {manuals.length} manual{manuals.length === 1 ? '' : 's'} &middot; Click a card to expand
+            </p>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {manuals.length > 0 && canWrite && <IconButton icon="trash" label="Delete all manuals" variant="danger" onClick={() => setShowDeleteAll(true)} />}
@@ -198,33 +207,17 @@ export default function OperationsManualPage() {
         </>
       ) : (
         <>
-          {/* Select all + role selector tabs */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20, alignItems: 'center' }}>
+          {/* Bulk controls */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
             {canWrite && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)', cursor: 'pointer', marginRight: 4 }}>
-                <input type="checkbox" checked={selectedIds.size === manuals.length && manuals.length > 0} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} /> All
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={selectedIds.size === manuals.length && manuals.length > 0} onChange={toggleSelectAll} style={{ cursor: 'pointer' }} /> Select all
               </label>
             )}
-            {manuals.map((m) => {
-              const active = m.id === selectedId;
-              return (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {canWrite && <input type="checkbox" checked={selectedIds.has(m.id)} onChange={() => {
-                    const n = new Set(selectedIds); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); setSelectedIds(n);
-                  }} style={{ cursor: 'pointer' }} />}
-                  <button onClick={() => { setSelectedId(m.id); setEditingHeader(false); }} style={{
-                    padding: '8px 14px', fontSize: 13, fontWeight: active ? 600 : 500,
-                    background: active ? 'var(--color-primary)' : 'var(--color-surface)',
-                    color: active ? '#fff' : 'var(--color-text)',
-                    border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'all 0.15s ease',
-                  }}>{m.label}</button>
-                </div>
-              );
-            })}
+            <button style={{ ...btnSecondary, padding: '4px 12px', fontSize: 11 }} onClick={() => setExpandedCards(new Set(manuals.map((m) => m.id)))}>Expand All</button>
+            <button style={{ ...btnSecondary, padding: '4px 12px', fontSize: 11 }} onClick={() => setExpandedCards(new Set())}>Collapse All</button>
           </div>
 
-          {/* Bulk action bar */}
           {selectedIds.size > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
@@ -233,87 +226,139 @@ export default function OperationsManualPage() {
             </div>
           )}
 
-          {/* Selected role manual */}
-          {manual && (
-            <div>
-              {/* Header card */}
-              <div style={{ ...card, padding: 20, marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                    Role Manual{manual.isCustom ? ' (Custom)' : ''}
+          {/* 2-column card grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            {manuals.map((m) => {
+              const isExpanded = expandedCards.has(m.id);
+              const isSelected = selectedIds.has(m.id);
+              return (
+                <div key={m.id} style={{
+                  ...card,
+                  gridColumn: isExpanded ? '1 / -1' : undefined,
+                  border: isSelected ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                }}>
+                  {/* Card header */}
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
+                      cursor: 'pointer', userSelect: 'none',
+                      borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
+                    }}
+                    onClick={() => toggleCard(m.id)}
+                  >
+                    {canWrite && (
+                      <input type="checkbox" checked={isSelected}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => { const n = new Set(selectedIds); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); setSelectedIds(n); }}
+                        style={{ cursor: 'pointer', flexShrink: 0 }} />
+                    )}
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)', flexShrink: 0 }}>{isExpanded ? '▼' : '▶'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</span>
+                        {m.isCustom && <span style={{ fontSize: 9, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase' }}>Custom</span>}
+                      </div>
+                      {!isExpanded && m.purpose && (
+                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {m.purpose}
+                        </div>
+                      )}
+                    </div>
+                    {/* Section dot indicators */}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                      {SECTIONS.map((s) => (
+                        <div key={s.key} title={`${s.name}: ${m[s.key].length} items`} style={{
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: m[s.key].length > 0 ? s.accentColor : 'var(--color-border)',
+                          opacity: m[s.key].length > 0 ? 1 : 0.4,
+                        }} />
+                      ))}
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 4 }}>
+                        {totalItems(m)} items
+                      </span>
+                    </div>
+                    {canWrite && (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                        <IconButton size="sm" icon="edit" label="Edit header" onClick={() => startEditHeader(m)} />
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDeleteId(m.id)} />
+                      </div>
+                    )}
                   </div>
-                  {canWrite && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button style={btnSecondary} onClick={startEditHeader}>Edit</button>
-                      <button style={btnDanger} onClick={() => setConfirmDeleteId(manual.id)}>Delete</button>
+
+                  {/* Expanded card body */}
+                  {isExpanded && (
+                    <div style={{ padding: 16 }}>
+                      {/* Header editing */}
+                      {editingHeader === m.id ? (
+                        <div style={{ marginBottom: 16 }}>
+                          <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
+                          <textarea style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
+                          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            <button style={btnPrimary} onClick={() => saveHeader(m.id)}>Save</button>
+                            <button style={btnSecondary} onClick={() => setEditingHeader(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : m.purpose ? (
+                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, fontStyle: 'italic', lineHeight: 1.5 }}>{m.purpose}</p>
+                      ) : null}
+
+                      {/* Sections in 2-column grid when card is expanded */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        {SECTIONS.map((s) => {
+                          const items = m[s.key];
+                          const sectionKey = `${m.id}-${s.key}`;
+                          const expanded = expandedSections.has(sectionKey);
+                          return (
+                            <div key={s.key} style={{ borderLeft: `3px solid ${s.accentColor}`, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                              <div onClick={() => toggleSection(m.id, s.key)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
+                                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+                                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: s.accentColor, flexShrink: 0 }} />
+                                <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{s.name}</span>
+                                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flexShrink: 0 }}>{items.length}</span>
+                              </div>
+                              {expanded && (
+                                <div style={{ marginTop: 8 }}>
+                                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>{s.description}</div>
+                                  {items.length === 0
+                                    ? <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', marginBottom: 6 }}>No activities defined.</div>
+                                    : <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 6 }}>
+                                        {items.map((item, idx) => (
+                                          <li key={idx} style={{ fontSize: 12, color: 'var(--color-text)', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                                            <span style={{ flex: 1 }}>{item}</span>
+                                            {canWrite && <button onClick={() => removeItem(m.id, s.key, idx)} title="Remove"
+                                              style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 13, fontWeight: 700, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>x</button>}
+                                          </li>
+                                        ))}
+                                      </ul>}
+                                  {canWrite && (
+                                    <div style={{ display: 'flex', gap: 4 }}>
+                                      <input style={{ ...inputStyle, flex: 1, fontSize: 12, padding: '4px 8px' }} value={addInputs[sectionKey] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [sectionKey]: e.target.value }))}
+                                        placeholder="Add item..." onKeyDown={(e) => e.key === 'Enter' && addItem(m.id, s.key)} />
+                                      <button style={{ ...btnPrimary, padding: '4px 10px', fontSize: 11, opacity: !(addInputs[sectionKey] || '').trim() ? 0.6 : 1, cursor: !(addInputs[sectionKey] || '').trim() ? 'not-allowed' : 'pointer' }}
+                                        onClick={() => addItem(m.id, s.key)} disabled={!(addInputs[sectionKey] || '').trim()}>Add</button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Custom Content */}
+                      <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                        <h4 style={{ fontSize: 12, fontWeight: 600, margin: '0 0 6px' }}>Custom Content</h4>
+                        <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'inherit', lineHeight: 1.6, fontSize: 12 }} value={m.customContent}
+                          onChange={(e) => { const v = e.target.value; setManuals((prev) => prev.map((x) => x.id === m.id ? { ...x, customContent: v } : x)); }}
+                          onBlur={(e) => saveCustomContent(m.id, e.target.value)} placeholder="Paste or type additional content here..." readOnly={!canWrite} />
+                      </div>
                     </div>
                   )}
                 </div>
-                {editingHeader ? (
-                  <div style={{ marginTop: 8 }}>
-                    <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600, fontSize: 16 }} value={headerForm.label} onChange={(e) => setHeaderForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label" />
-                    <textarea style={{ ...inputStyle, minHeight: 80 }} value={headerForm.purpose} onChange={(e) => setHeaderForm((f) => ({ ...f, purpose: e.target.value }))} placeholder="Purpose" />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button style={btnPrimary} onClick={saveHeader}>Save</button>
-                      <button style={btnSecondary} onClick={() => setEditingHeader(false)}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>{manual.label}</h2>
-                    <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 8, fontStyle: 'italic', lineHeight: 1.5 }}>{manual.purpose || 'No purpose defined.'}</p>
-                  </>
-                )}
-              </div>
-
-              {/* Sections — collapsible */}
-              {SECTIONS.map((s) => {
-                const items = manual[s.key];
-                const expanded = expandedSections.has(s.key);
-                return (
-                  <div key={s.key} style={{ ...card, borderLeft: `4px solid ${s.accentColor}`, padding: 16, marginBottom: 12 }}>
-                    <div onClick={() => toggleSection(s.key)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, userSelect: 'none' }}>
-                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)', flexShrink: 0, width: 14, textAlign: 'center' }}>{expanded ? '▼' : '▶'}</span>
-                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: s.accentColor, flexShrink: 0 }} />
-                      <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0, flex: 1 }}>{s.name}</h3>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', flexShrink: 0 }}>{items.length} item{items.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    {expanded && (<>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10, marginLeft: 32, marginTop: 4 }}>{s.description}</div>
-                      {items.length === 0
-                        ? <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', marginLeft: 32, marginBottom: 8 }}>No activities defined.</div>
-                        : <ul style={{ margin: 0, paddingLeft: 48, display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-                            {items.map((item, idx) => (
-                              <li key={idx} style={{ fontSize: 13, color: 'var(--color-text)', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                                <span style={{ flex: 1 }}>{item}</span>
-                                {canWrite && <button onClick={() => removeItem(s.key, idx)} title="Remove item"
-                                  style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 14, fontWeight: 700, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>x</button>}
-                              </li>
-                            ))}
-                          </ul>}
-                      {canWrite && (
-                        <div style={{ display: 'flex', gap: 6, marginLeft: 32 }}>
-                          <input style={{ ...inputStyle, flex: 1 }} value={addInputs[s.key] || ''} onChange={(e) => setAddInputs((p) => ({ ...p, [s.key]: e.target.value }))}
-                            placeholder="Add item..." onKeyDown={(e) => e.key === 'Enter' && addItem(s.key)} />
-                          <button style={{ ...btnPrimary, opacity: !(addInputs[s.key] || '').trim() ? 0.6 : 1, cursor: !(addInputs[s.key] || '').trim() ? 'not-allowed' : 'pointer' }} onClick={() => addItem(s.key)}
-                            disabled={!(addInputs[s.key] || '').trim()}>Add</button>
-                        </div>
-                      )}
-                    </>)}
-                  </div>
-                );
-              })}
-
-              {/* Custom Content */}
-              <div style={{ ...card, padding: 16, marginBottom: 12 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 8px' }}>Custom Content</h3>
-                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>Free-form notes, pasted manual text, or any additional content for this role.</p>
-                <textarea style={{ ...inputStyle, minHeight: 120, fontFamily: 'inherit', lineHeight: 1.6 }} value={manual.customContent}
-                  onChange={(e) => { const v = e.target.value; setManuals((prev) => prev.map((m) => m.id === manual.id ? { ...m, customContent: v } : m)); }}
-                  onBlur={(e) => saveCustomContent(e.target.value)} placeholder="Paste or type additional content here..." readOnly={!canWrite} />
-              </div>
-            </div>
-          )}
+              );
+            })}
+          </div>
 
           <ConfirmDialog open={!!confirmDeleteId} title="Delete Manual" message="Are you sure you want to delete this operations manual? This cannot be undone."
             confirmLabel="Delete" variant="danger" onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)} onCancel={() => setConfirmDeleteId(null)} />

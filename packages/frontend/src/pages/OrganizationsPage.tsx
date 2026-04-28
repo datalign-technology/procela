@@ -108,7 +108,7 @@ function isDescendantOfAccessible(node: OrgNode, accessibleIds: Set<string>, all
 // Root org is system-protected — never selectable for bulk delete.
 
 
-function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect }: {
+function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, toggleExpand, peopleCounts, accessibleOrgIds, allOrgs, selectedIds, toggleSelect, onSelect, activeDetailId }: {
   node: OrgNode; depth: number;
   onEdit: (org: OrgFlat) => void; onDelete: (id: string) => void; onAddChild: (parentId: string) => void;
   expanded: Set<string>; toggleExpand: (id: string) => void; peopleCounts: Record<string, number>;
@@ -116,6 +116,8 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
   allOrgs: OrgFlat[];
   selectedIds: Set<string>;
   toggleSelect: (id: string) => void;
+  onSelect: (id: string) => void;
+  activeDetailId: string | null;
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = node.children.length > 0;
@@ -123,6 +125,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
   const canEdit = accessibleOrgIds.size === 0 || accessibleOrgIds.has(node.id) || isDescendantOfAccessible(node, accessibleOrgIds, allOrgs);
   const isSelected = selectedIds.has(node.id);
   const isRoot = false;
+  const isActive = activeDetailId === node.id;
 
   return (
     <div>
@@ -131,7 +134,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px', paddingLeft: 12 + depth * 22,
           borderBottom: '1px solid var(--color-border)',
-          background: isSelected ? '#f0f9ff' : undefined,
+          background: isActive ? '#dbeafe' : isSelected ? '#f0f9ff' : undefined,
           transition: 'background 0.1s',
           minWidth: 0,
         }}
@@ -153,7 +156,7 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 500, fontSize: 13 }}>{node.name}</span>
+            <span onClick={(e) => { e.stopPropagation(); onSelect(node.id); }} style={{ fontWeight: 500, fontSize: 13, cursor: 'pointer', color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
             {node.industry && (
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f8fafc', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
@@ -197,7 +200,8 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
           onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
           expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
           accessibleOrgIds={accessibleOrgIds} allOrgs={allOrgs}
-          selectedIds={selectedIds} toggleSelect={toggleSelect} />
+          selectedIds={selectedIds} toggleSelect={toggleSelect}
+          onSelect={onSelect} activeDetailId={activeDetailId} />
       ))}
     </div>
   );
@@ -231,6 +235,8 @@ export default function OrganizationsPage() {
   // Per-org people counts for the tree badges. Fetch headcounts from the
   // People API in a single call — no full person records kept here.
   const [peopleCounts, setPeopleCounts] = useState<Record<string, number>>({});
+
+  const [detailOrgId, setDetailOrgId] = useState<string | null>(null);
 
   // Bulk select state for the tree.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -267,6 +273,7 @@ export default function OrganizationsPage() {
 
   const orgOptions = flattenTreeForSelect(tree);
   const accessibleOrgIds = new Set(accessibleOrgs.map((o) => o.id));
+  const detailOrg = detailOrgId ? flatOrgs.find((o) => o.id === detailOrgId) || null : null;
 
   // ── Org handlers ──
   const toggleExpand = (id: string) => setExpanded((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -451,8 +458,8 @@ export default function OrganizationsPage() {
         </div>
       )}
 
-      {/* Add/Edit Org Form */}
-      {showOrgForm && (
+      {/* Add/Edit Org Form — shown in detail panel when master-detail is active, or full-width when tree is empty */}
+      {showOrgForm && tree.length === 0 && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -592,8 +599,10 @@ export default function OrganizationsPage() {
         onCancel={() => { setConfirmDeleteOrg(null); setDeleteOrgImpact(null); }}
       />
 
-      {/* ══ MAIN BODY — full-width tree ══ */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+      {/* ══ MAIN BODY — master-detail: tree (left) + detail panel (right) ══ */}
+      <div style={{ display: 'grid', gridTemplateColumns: tree.length > 0 ? '1fr 360px' : '1fr', gap: 16, alignItems: 'start' }}>
+        {/* Left: Org Tree */}
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar — select-all, expand/collapse */}
         <div style={{ display: 'flex', gap: 12, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
@@ -612,18 +621,13 @@ export default function OrganizationsPage() {
         {/* Status Mode toggle — org-level setting */}
         {activeOrgId && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px',
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)', marginBottom: 12, fontSize: 12,
+            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', flexWrap: 'wrap',
+            background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)',
+            fontSize: 11,
           }}>
-            <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>Status Lifecycle:</span>
-            <span style={{ fontWeight: 600 }}>
-              {orgStatusMode === 'advanced' ? 'Advanced (6 statuses)' : 'Simple (3 statuses)'}
-            </span>
-            <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
-              {orgStatusMode === 'advanced'
-                ? 'Draft → Proposed → Under Review → Approved → Active → Deprecated'
-                : 'Draft ↔ Active → Deprecated'}
+            <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>Lifecycle:</span>
+            <span style={{ fontWeight: 600, fontSize: 11 }}>
+              {orgStatusMode === 'advanced' ? 'Advanced' : 'Simple'}
             </span>
             <button
               onClick={async () => {
@@ -641,7 +645,7 @@ export default function OrganizationsPage() {
                 } catch { /* */ }
               }}
               style={{
-                marginLeft: 'auto', padding: '4px 12px', fontSize: 11, fontWeight: 500,
+                marginLeft: 'auto', padding: '2px 10px', fontSize: 10, fontWeight: 500,
                 background: 'transparent', border: '1px solid var(--color-border)',
                 borderRadius: 4, cursor: 'pointer', color: 'var(--color-primary)',
               }}
@@ -671,10 +675,104 @@ export default function OrganizationsPage() {
                 onEdit={openEditOrg} onDelete={promptDeleteOrg} onAddChild={(pid) => openAddOrg(pid)}
                 expanded={expanded} toggleExpand={toggleExpand} peopleCounts={peopleCounts}
                 accessibleOrgIds={accessibleOrgIds} allOrgs={flatOrgs}
-                selectedIds={selectedIds} toggleSelect={toggleOrgSelect} />
+                selectedIds={selectedIds} toggleSelect={toggleOrgSelect}
+                onSelect={setDetailOrgId} activeDetailId={detailOrgId} />
             ))
           )}
         </div>
+        </div>
+
+        {/* Right: Detail Panel */}
+        {tree.length > 0 && (
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', position: 'sticky', top: 16 }}>
+            {showOrgForm ? (
+              <div style={{ padding: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
+                    <input autoFocus style={inputStyle} value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} placeholder="Organization name" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
+                    <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value, industry: (e.target.value === 'company' || e.target.value === 'division') ? orgForm.industry : '' })}>
+                      {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Parent</label>
+                    <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.parentId || ''} onChange={(e) => setOrgForm({ ...orgForm, parentId: e.target.value || null })}>
+                      <option value="">-- No parent (top-level) --</option>
+                      {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                    </select>
+                  </div>
+                  {(orgForm.type === 'company' || orgForm.type === 'division') && (
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
+                      <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.industry} onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}>
+                        <option value="">-- Select --</option>
+                        {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
+                    <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
+                  <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); }}>Cancel</button>
+                  <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
+                    {editingOrgId ? 'Save' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            ) : detailOrg ? (
+              <div style={{ padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={typeBadge(detailOrg.type)}>{detailOrg.type}</span>
+                      {detailOrg.industry && <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f8fafc', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>{detailOrg.industry}</span>}
+                    </div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{detailOrg.name}</h3>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <IconButton size="sm" icon="plus" label="Add child" variant="primary" onClick={() => openAddOrg(detailOrg.id)} />
+                    <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditOrg(detailOrg)} />
+                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => promptDeleteOrg(detailOrg.id)} />
+                  </div>
+                </div>
+                {detailOrg.description && (
+                  <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>{detailOrg.description}</p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {detailOrg.parentId && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--color-text-muted)' }}>Parent</span>
+                      <span style={{ fontWeight: 500, cursor: 'pointer', color: 'var(--color-primary)' }}
+                        onClick={() => setDetailOrgId(detailOrg.parentId)}>
+                        {flatOrgs.find((o) => o.id === detailOrg.parentId)?.name || '--'}
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>People</span>
+                    <span style={{ fontWeight: 600, color: '#5b21b6' }}>{peopleCounts[detailOrg.id] || 0}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Children</span>
+                    <span style={{ fontWeight: 500 }}>{flatOrgs.filter((o) => o.parentId === detailOrg.id).length}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Click an organization name to see its details here.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="organizations" orgId={activeOrgId || ''} onCreated={() => { fetchData(); triggerRefresh(); }} />
