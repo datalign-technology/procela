@@ -179,6 +179,9 @@ export default function GovernanceCalendarPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [filterType, setFilterType] = useState('');
+  const [filterCadence, setFilterCadence] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -338,8 +341,8 @@ export default function GovernanceCalendarPage() {
     return next;
   });
   const toggleSelectAll = () => {
-    if (selectedIds.size === events.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(events.map((i) => i.id)));
+    if (selectedIds.size === filteredEvents.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredEvents.map((i) => i.id)));
   };
 
   const handleBulkDelete = async () => {
@@ -371,6 +374,16 @@ export default function GovernanceCalendarPage() {
       return d >= now && d <= in30;
     }).length;
   }, [upcoming]);
+
+  const filteredEvents = useMemo(() => {
+    let result = events;
+    if (filterType) result = result.filter((e) => e.eventType === filterType);
+    if (filterCadence) result = result.filter((e) => e.cadence === filterCadence);
+    if (filterStatus) result = result.filter((e) => e.status === filterStatus);
+    return result;
+  }, [events, filterType, filterCadence, filterStatus]);
+
+  const hasActiveFilters = !!(filterType || filterCadence || filterStatus);
 
   return (
     <div>
@@ -597,6 +610,49 @@ export default function GovernanceCalendarPage() {
         </div>
       )}
 
+      {/* Filters */}
+      {events.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            style={{ ...selectStyle, width: 'auto', minWidth: 150 }}
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+          >
+            <option value="">All Types</option>
+            {EVENT_TYPES.map((t) => <option key={t} value={t}>{formatTypeLabel(t)}</option>)}
+          </select>
+          <select
+            style={{ ...selectStyle, width: 'auto', minWidth: 130 }}
+            value={filterCadence}
+            onChange={(e) => setFilterCadence(e.target.value)}
+          >
+            <option value="">All Cadences</option>
+            {CADENCES.map((c) => <option key={c} value={c}>{formatTypeLabel(c)}</option>)}
+          </select>
+          <select
+            style={{ ...selectStyle, width: 'auto', minWidth: 120 }}
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">All Statuses</option>
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setFilterType(''); setFilterCadence(''); setFilterStatus(''); }}
+              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+            >
+              Clear Filters
+            </button>
+          )}
+          {hasActiveFilters && (
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              Showing {filteredEvents.length} of {events.length}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Two-column layout: Upcoming + All */}
       <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Upcoming panel */}
@@ -656,12 +712,16 @@ export default function GovernanceCalendarPage() {
               description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
               action={canWrite ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}
             />
+          ) : filteredEvents.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
+              No events match the current filters.
+            </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)' }}>
                   <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                    <input type="checkbox" checked={events.length > 0 && selectedIds.size === events.length} onChange={toggleSelectAll} />
+                    <input type="checkbox" checked={filteredEvents.length > 0 && selectedIds.size === filteredEvents.length} onChange={toggleSelectAll} />
                   </th>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Type</th>
@@ -672,7 +732,7 @@ export default function GovernanceCalendarPage() {
                 </tr>
               </thead>
               <tbody>
-                {events.map((ev) => (
+                {filteredEvents.map((ev) => (
                   <tr key={ev.id} style={{ transition: 'background 0.1s' }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>

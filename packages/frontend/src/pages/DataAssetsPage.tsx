@@ -262,6 +262,9 @@ export default function DataAssetsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterTier, setFilterTier] = useState('');
+  const [filterSystemId, setFilterSystemId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
@@ -376,7 +379,18 @@ export default function DataAssetsPage() {
     return sys ? sys.name : '';
   };
 
-  const filteredAssets = filterCategory ? assets.filter((a) => (a.category || '') === filterCategory) : assets;
+  const filteredAssets = assets.filter((a) => {
+    if (filterCategory && (a.category || '') !== filterCategory) return false;
+    if (filterTier && (a.governanceTier || 'BRONZE') !== filterTier) return false;
+    if (filterSystemId && a.systemId !== filterSystemId) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!a.name.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || searchQuery);
 
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -771,24 +785,43 @@ export default function DataAssetsPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Category:</label>
-          <select style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-            <option value="">All ({assets.length})</option>
-            <option value="OPERATIONAL">Operational ({assets.filter((a) => a.category === 'OPERATIONAL').length})</option>
-            <option value="GOVERNANCE">Governance ({assets.filter((a) => a.category === 'GOVERNANCE').length})</option>
-            <option value="REFERENCE">Reference ({assets.filter((a) => a.category === 'REFERENCE').length})</option>
-            <option value="ANALYTICAL">Analytical ({assets.filter((a) => a.category === 'ANALYTICAL').length})</option>
-            <option value="MASTER">Master ({assets.filter((a) => a.category === 'MASTER').length})</option>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Search assets..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+        />
+        <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+          <option value="">All Categories</option>
+          <option value="OPERATIONAL">Operational ({assets.filter((a) => a.category === 'OPERATIONAL').length})</option>
+          <option value="GOVERNANCE">Governance ({assets.filter((a) => a.category === 'GOVERNANCE').length})</option>
+          <option value="REFERENCE">Reference ({assets.filter((a) => a.category === 'REFERENCE').length})</option>
+          <option value="ANALYTICAL">Analytical ({assets.filter((a) => a.category === 'ANALYTICAL').length})</option>
+          <option value="MASTER">Master ({assets.filter((a) => a.category === 'MASTER').length})</option>
+        </select>
+        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
+          <option value="">All Tiers</option>
+          <option value="GOLD">Gold ({assets.filter((a) => a.governanceTier === 'GOLD').length})</option>
+          <option value="SILVER">Silver ({assets.filter((a) => a.governanceTier === 'SILVER').length})</option>
+          <option value="BRONZE">Bronze ({assets.filter((a) => !a.governanceTier || a.governanceTier === 'BRONZE').length})</option>
+        </select>
+        {systems.length > 0 && (
+          <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterSystemId} onChange={(e) => setFilterSystemId(e.target.value)}>
+            <option value="">All Systems</option>
+            {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-        </div>
-        {filterCategory && (
-          <button onClick={() => setFilterCategory('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-            Clear filters
+        )}
+        {hasActiveFilters && (
+          <button
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setSearchQuery(''); }}
+            style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+          >
+            Clear Filters
           </button>
         )}
-        {filterCategory && (
+        {hasActiveFilters && (
           <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
             Showing {filteredAssets.length} of {assets.length}
           </span>

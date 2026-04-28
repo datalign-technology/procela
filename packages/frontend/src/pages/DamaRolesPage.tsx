@@ -6,6 +6,7 @@ import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
+import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 
@@ -430,11 +431,12 @@ export default function DamaRolesPage() {
         {loading ? (
           <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
         ) : roles.length === 0 && !showForm ? (
-          <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-            <p style={{ color: 'var(--color-text-muted)' }}>
-              No governance roles defined yet. Use the + Assign Role button above to get started.
-            </p>
-          </div>
+          <EmptyState
+            icon="👤"
+            title="No governance roles yet"
+            description="Assign data management roles like CDO, Data Owner, and Data Steward to people across your organization."
+            action={{ label: 'Assign Role', onClick: openAdd }}
+          />
         ) : filteredRoles.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
             No assignments for {ROLE_TYPE_LABELS[filterRoleType || ''] || filterRoleType}.
