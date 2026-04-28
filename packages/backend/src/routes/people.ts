@@ -26,6 +26,7 @@ export interface StoredPerson {
   role: string;
   title: string;
   jobRole?: string;
+  skillIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -185,6 +186,19 @@ if (migrated > 0) {
   logger.info({ migrated }, 'Migrated legacy PROCESS_OWNER/DATA_STEWARD roles to EDITOR');
 }
 
+// Backfill skillIds on legacy records that lack the field
+let skillBackfilled = 0;
+for (const p of people) {
+  if (!Array.isArray(p.skillIds)) {
+    (p as any).skillIds = [];
+    skillBackfilled++;
+  }
+}
+if (skillBackfilled > 0) {
+  saveStore('people', people);
+  logger.info({ skillBackfilled }, 'Backfilled skillIds on existing people');
+}
+
 const router = Router();
 
 /** DELETE /api/v1/people/all — delete all people */
@@ -295,7 +309,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/people */
 router.post('/', (req: Request, res: Response) => {
-  const { orgIds, orgId, name, email, role, title, jobRole, accessibleOrgIds } = req.body;
+  const { orgIds, orgId, name, email, role, title, jobRole, accessibleOrgIds, skillIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   // Support both orgIds (array) and orgId (single, backward compat)
   const assignedOrgIds: string[] = orgIds || (orgId ? [orgId] : []);
@@ -316,6 +330,7 @@ router.post('/', (req: Request, res: Response) => {
     title: title || '',
     ...(jobRole ? { jobRole } : {}),
     accessibleOrgIds: accessibleOrgIds || [],
+    skillIds: Array.isArray(skillIds) ? skillIds : [],
     createdAt: now, updatedAt: now,
   };
   people.push(person);
@@ -327,13 +342,14 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const { name, email, role, title, jobRole, orgIds, orgId, accessibleOrgIds } = req.body;
+  const { name, email, role, title, jobRole, orgIds, orgId, accessibleOrgIds, skillIds } = req.body;
   if (name !== undefined) person.name = name;
   if (email !== undefined) person.email = email;
   if (role !== undefined) person.role = role;
   if (title !== undefined) person.title = title;
   if (jobRole !== undefined) person.jobRole = jobRole || undefined;
   if (accessibleOrgIds !== undefined) person.accessibleOrgIds = accessibleOrgIds;
+  if (skillIds !== undefined) person.skillIds = Array.isArray(skillIds) ? skillIds : [];
   // Support both orgIds (array) and orgId (single, backward compat)
   const newOrgIds = orgIds || (orgId ? [orgId] : undefined);
   if (newOrgIds !== undefined) {
@@ -454,6 +470,7 @@ router.post('/import', (req: Request, res: Response) => {
         email: row.email || '', role,
         title: row.title || '',
         accessibleOrgIds: [],
+        skillIds: [],
         createdAt: now, updatedAt: now,
       };
       people.push(person);

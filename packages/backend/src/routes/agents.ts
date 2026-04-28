@@ -24,11 +24,27 @@ export interface StoredAgent {
   provider: string;               // e.g. "Anthropic", "Airflow", "Custom"
   status: typeof AGENT_STATUSES[number];
   ownerPersonId: string;          // person responsible (blank = unowned)
+  skillIds: string[];             // skills this agent possesses
   createdAt: string;
   updatedAt: string;
 }
 
 export const agents: StoredAgent[] = loadStore<StoredAgent>('agents');
+
+// Backfill skillIds on legacy records that lack the field
+{
+  let backfilled = 0;
+  for (const a of agents) {
+    if (!Array.isArray(a.skillIds)) {
+      (a as any).skillIds = [];
+      backfilled++;
+    }
+  }
+  if (backfilled > 0) {
+    saveStore('agents', agents);
+    logger.info({ backfilled }, 'Backfilled skillIds on existing agents');
+  }
+}
 
 const router = Router();
 
@@ -62,7 +78,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/agents */
 router.post('/', (req: Request, res: Response) => {
-  const { orgIds, name, agentType, description, provider, status, ownerPersonId } = req.body;
+  const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const assignedOrgIds: string[] = Array.isArray(orgIds) ? orgIds : [];
   if (assignedOrgIds.length === 0) {

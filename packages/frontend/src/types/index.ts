@@ -205,19 +205,20 @@ export interface GovernanceRoleDef {
   priority: RolePriority;
   required: boolean;
   multiAssign: boolean;
+  requiredSkillIds: string[];
 }
 
 export const GOVERNANCE_ROLES: GovernanceRoleDef[] = [
-  { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, secures resources, and represents data governance at the executive level.', priority: 'ESSENTIAL', required: true, multiAssign: false },
-  { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution, measures progress, and coaches stewards.', priority: 'ESSENTIAL', required: true, multiAssign: false },
-  { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.', priority: 'ESSENTIAL', required: true, multiAssign: true },
-  { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution within a domain.', priority: 'ESSENTIAL', required: true, multiAssign: true },
-  { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation of governance — lineage, infrastructure, automation, and system-level quality.', priority: 'RECOMMENDED', required: false, multiAssign: true },
-  { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality across domains.', priority: 'RECOMMENDED', required: false, multiAssign: true },
-  { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and supports long-term scalability.', priority: 'RECOMMENDED', required: false, multiAssign: true },
-  { roleType: 'DATA_CUSTODIAN', label: 'Data Custodian', purpose: 'Manages the physical storage, security, and access controls for data systems.', priority: 'OPTIONAL', required: false, multiAssign: true },
-  { roleType: 'DATA_ENGINEER', label: 'Data Engineer', purpose: 'Builds and maintains data pipelines, transformations, and integration infrastructure.', priority: 'OPTIONAL', required: false, multiAssign: true },
-  { roleType: 'DATABASE_ADMINISTRATOR', label: 'Database Administrator', purpose: 'Manages database performance, backups, security, and availability.', priority: 'OPTIONAL', required: false, multiAssign: true },
+  { roleType: 'CDO', label: 'Chief Data Officer', purpose: 'Sets strategy, owns outcomes, secures resources, and represents data governance at the executive level.', priority: 'ESSENTIAL', required: true, multiAssign: false, requiredSkillIds: [] },
+  { roleType: 'DATA_GOVERNANCE_LEAD', label: 'Data Governance Lead', purpose: 'Runs the governance program day to day — drives execution, measures progress, and coaches stewards.', priority: 'ESSENTIAL', required: true, multiAssign: false, requiredSkillIds: [] },
+  { roleType: 'DATA_OWNER', label: 'Data Owner', purpose: 'Accountable for a data domain — sets direction, approves changes, and owns outcomes.', priority: 'ESSENTIAL', required: true, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'BUSINESS_DATA_STEWARD', label: 'Business Data Steward', purpose: 'Day-to-day management of data quality, definitions, and issue resolution within a domain.', priority: 'ESSENTIAL', required: true, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'TECHNICAL_DATA_STEWARD', label: 'Technical Data Steward', purpose: 'Technical implementation of governance — lineage, infrastructure, automation, and system-level quality.', priority: 'RECOMMENDED', required: false, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'DATA_QUALITY_ANALYST', label: 'Data Quality Analyst', purpose: 'Measures, reports, and drives improvements in data quality across domains.', priority: 'RECOMMENDED', required: false, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'DATA_ARCHITECT', label: 'Data Architect', purpose: 'Ensures data architecture aligns with governance principles and supports long-term scalability.', priority: 'RECOMMENDED', required: false, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'DATA_CUSTODIAN', label: 'Data Custodian', purpose: 'Manages the physical storage, security, and access controls for data systems.', priority: 'OPTIONAL', required: false, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'DATA_ENGINEER', label: 'Data Engineer', purpose: 'Builds and maintains data pipelines, transformations, and integration infrastructure.', priority: 'OPTIONAL', required: false, multiAssign: true, requiredSkillIds: [] },
+  { roleType: 'DATABASE_ADMINISTRATOR', label: 'Database Administrator', purpose: 'Manages database performance, backups, security, and availability.', priority: 'OPTIONAL', required: false, multiAssign: true, requiredSkillIds: [] },
 ];
 
 export interface GovernanceGroupDef {
