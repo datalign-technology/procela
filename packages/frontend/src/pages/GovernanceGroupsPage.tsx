@@ -863,329 +863,341 @@ export default function GovernanceGroupsPage() {
         </div>
       )}
 
-      {/* Tree View */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-        {/* Tree toolbar */}
-        <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
-          <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
-          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
-          <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
+      {/* Master-Detail Layout: Tree (left) + Detail (right) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+        {/* Left Panel — Tree View */}
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', alignSelf: 'start' }}>
+          {/* Tree toolbar */}
+          <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
+            <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
+            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
+            <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={collapseAll}>Collapse All</button>
+          </div>
+
+          {/* Tree body */}
+          <div>
+            {tree.length === 0 && !showForm ? (
+              <EmptyState
+                icon={'☷'}
+                title="No governance groups defined yet"
+                description="Use the + Add Group button above to get started."
+                action={{ label: '+ Add Group', onClick: openAdd }}
+              />
+            ) : (
+              tree.map((node) => (
+                <GroupTreeNode key={node.id} node={node} depth={0}
+                  onEdit={openEdit} onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
+                  onSelect={handleSelect} selectedId={selectedGroupId}
+                  expanded={expanded} toggleExpand={toggleExpand}
+                  checkedIds={checkedIds} onToggleCheck={toggleCheck} />
+              ))
+            )}
+          </div>
         </div>
 
-        {/* Tree body — no inner scroll container. The page itself
-            scrolls when needed; `overflowY: auto` on the wrapper
-            implicitly coerces overflow-x to auto too, which was
-            adding a spurious horizontal scrollbar on any pixel
-            overshoot. */}
-        <div>
-          {tree.length === 0 && !showForm ? (
-            <EmptyState
-              icon={'☷'}
-              title="No governance groups defined yet"
-              description="Use the + Add Group button above to get started."
-              action={{ label: '+ Add Group', onClick: openAdd }}
-            />
+        {/* Right Panel — Detail */}
+        <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+          {selectedGroupId && selectedGroupDetail ? (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 600 }}>Members of "{selectedGroupDetail.name}"</h3>
+                    <span style={makeBadge(typeBadgeColors[selectedGroupDetail.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>{GROUP_TYPE_SHORT[selectedGroupDetail.type] || selectedGroupDetail.type}</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{selectedGroupDetail.members?.length || 0} {(selectedGroupDetail.members?.length || 0) === 1 ? 'member' : 'members'}</span>
+                  </div>
+                  {selectedGroupDetail.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedGroupDetail.description}</p>}
+                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>Tip: You can also manage group memberships from Organizations {'→'} click "Manage" on any person.</p>
+                </div>
+                <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
+              </div>
+
+              {/* Expected Governance Roles */}
+              {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (() => {
+                const expectedRoles = EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type];
+                const requiredCount = expectedRoles.filter((r) => r.required).length;
+                const requiredFilled = expectedRoles.filter((r) => r.required && memberDamaRoles.some((d) => d.roleType === r.roleType)).length;
+                return (
+                  <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Governance Roles
+                      </div>
+                      <span style={{ fontSize: 11, color: requiredFilled === requiredCount ? '#16a34a' : '#dc2626' }}>
+                        {requiredFilled} of {requiredCount} required roles filled
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {expectedRoles.map((expected) => {
+                        const assigned = memberDamaRoles.filter((r) => r.roleType === expected.roleType);
+                        const isFilled = assigned.length > 0;
+                        const canAddMore = expected.multiAssign || assigned.length === 0;
+                        return (
+                          <div key={expected.roleType} style={{
+                            padding: '10px 14px',
+                            background: 'var(--color-surface)',
+                            border: `1px solid ${isFilled ? '#bbf7d0' : expected.required ? '#fecaca' : 'var(--color-border)'}`,
+                            borderLeft: `3px solid ${isFilled ? '#22c55e' : expected.required ? '#ef4444' : '#d1d5db'}`,
+                            borderRadius: 'var(--radius-md)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                              <span style={{
+                                width: 18, height: 18, borderRadius: '50%', marginTop: 1,
+                                background: isFilled ? '#22c55e' : 'transparent',
+                                border: isFilled ? 'none' : '1.5px solid #d1d5db',
+                                color: '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 10, fontWeight: 700, flexShrink: 0,
+                              }}>
+                                {isFilled ? '✓' : ''}
+                              </span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                    {expected.label}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                    background: expected.required ? '#fef2f2' : '#f0f9ff',
+                                    color: expected.required ? '#b91c1c' : '#0369a1',
+                                  }}>
+                                    {expected.required ? 'Required' : 'Optional'}
+                                  </span>
+                                  {expected.multiAssign && (
+                                    <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      Multiple
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
+                                {assigned.length > 0 && (
+                                  <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                    {assigned.map((a) => (
+                                      <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        {a.personName}
+                                        <button onClick={() => handleRemoveDamaRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {canAddMore && (
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                                  <select
+                                    style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 11, padding: '4px 8px' }}
+                                    value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
+                                    onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); }}
+                                  >
+                                    <option value="">Select person...</option>
+                                    {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
+                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
+                                    disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
+                                    onClick={handleAssignDamaRole}
+                                  >
+                                    Assign
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Add Member (collapsed by default) */}
+              <div style={{ marginBottom: 12 }}>
+                {!showAddMember ? (
+                  <button onClick={() => setShowAddMember(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: 0 }}>
+                    + Add member without governance role
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                    <div style={{ flex: 2 }}>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
+                      <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
+                        <option value="">-- Select person --</option>
+                        {availablePeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Group Role</label>
+                      <select style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
+                        {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+                      </select>
+                    </div>
+                    <button style={btnSecondary} onClick={() => { setShowAddMember(false); setMemberPersonId(''); setMemberRole('MEMBER'); }}>Cancel</button>
+                    <button
+                      style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, cursor: !memberPersonId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+                      disabled={!memberPersonId}
+                      onClick={() => { handleAddMember(); setShowAddMember(false); }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Members Table */}
+              {(!selectedGroupDetail.members || selectedGroupDetail.members.length === 0) ? (
+                <p style={{ color: 'var(--color-text-muted)', fontSize: 12, textAlign: 'center', padding: '1.5rem' }}>
+                  No members yet. Assign governance roles above to add people to this group.
+                </p>
+              ) : (
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-bg)' }}>
+                        <th style={thStyle}>Person Name</th>
+                        <th style={thStyle}>Group Role</th>
+                        <th style={thStyle}>DAMA Roles</th>
+                        <th style={thStyle}>Since</th>
+                        <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedGroupDetail.members.map((member: GroupMember) => {
+                        const personRoles = memberDamaRoles.filter((r) => r.personId === member.personId);
+                        return (
+                          <tr key={member.personId}
+                            style={{ transition: 'background 0.1s' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                          >
+                            <td style={{ ...tdStyle, fontWeight: 500 }}>{member.personName}</td>
+                            <td style={tdStyle}>
+                              <span style={makeBadge(roleBadgeColors[member.groupRole] || roleBadgeColors.MEMBER)}>
+                                {ROLE_LABELS[member.groupRole] || member.groupRole}
+                              </span>
+                            </td>
+                            <td style={tdStyle}>
+                              {personRoles.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                                  {personRoles.map((r) => (
+                                    <span key={r.id} style={{ ...makeBadge(DAMA_ROLE_COLORS[r.roleType] || { bg: '#f1f5f9', color: '#64748b' }), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                      {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
+                                      <button
+                                        onClick={() => handleRemoveDamaRole(r.id)}
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: 'inherit', padding: 0, lineHeight: 1, opacity: 0.7 }}
+                                        title="Remove role"
+                                      >&times;</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>None assigned</span>
+                              )}
+                            </td>
+                            <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
+                              {new Date(member.since).toLocaleDateString()}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: 'center' }}>
+                              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }} onClick={() => handleRemoveMember(member.personId)}>Remove</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+
+              {/* Recommended Child Groups */}
+              {recommendations.length > 0 && !showRecommendations && (
+                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => setShowRecommendations(true)}
+                    style={{
+                      padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                      background: 'var(--color-surface)', color: '#1e40af',
+                      border: '1px solid #93c5fd', borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>{'ℹ'}</span>
+                    Explore Recommendations ({recommendations.length})
+                  </button>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                    DAMA best practices suggest additional groups under this one
+                  </span>
+                </div>
+              )}
+              {showRecommendations && recommendations.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 14, color: '#2563eb' }}>{'ℹ'}</span>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Recommended Groups</div>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        Based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setShowRecommendations(false)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-text-muted)' }}
+                    >
+                      Hide
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {recommendations.map((rec) => (
+                      <div key={rec.name} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 14px',
+                        background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 'var(--radius-md)',
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{rec.name}</span>
+                            <span style={makeBadge(typeBadgeColors[rec.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>
+                              {GROUP_TYPE_SHORT[rec.type] || rec.typeLabel}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{rec.reason}</div>
+                        </div>
+                        <button
+                          onClick={() => handleCreateRecommended(rec)}
+                          disabled={creatingRec !== null}
+                          style={{
+                            padding: '5px 14px', fontSize: 11, fontWeight: 500,
+                            background: '#fff', color: '#1e40af',
+                            border: '1px solid #93c5fd', borderRadius: 4,
+                            cursor: creatingRec ? 'not-allowed' : 'pointer',
+                            opacity: creatingRec ? 0.6 : 1,
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                        >
+                          {creatingRec === rec.name ? 'Creating...' : 'Create'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            tree.map((node) => (
-              <GroupTreeNode key={node.id} node={node} depth={0}
-                onEdit={openEdit} onDelete={(id) => setConfirmDelete(id)} onAddChild={openAddChild}
-                onSelect={handleSelect} selectedId={selectedGroupId}
-                expanded={expanded} toggleExpand={toggleExpand}
-                checkedIds={checkedIds} onToggleCheck={toggleCheck} />
-            ))
+            <div style={{
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)', padding: 32,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              minHeight: 200, color: 'var(--color-text-muted)', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.4 }}>{'←'}</div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Select a group</div>
+              <div style={{ fontSize: 12 }}>Click on a governance group in the tree to view its members, roles, and recommendations.</div>
+            </div>
           )}
         </div>
       </div>
-
-      {/* Members Panel */}
-      {selectedGroupId && selectedGroupDetail && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginTop: 16, boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Members of "{selectedGroupDetail.name}"</h3>
-                <span style={makeBadge(typeBadgeColors[selectedGroupDetail.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>{GROUP_TYPE_SHORT[selectedGroupDetail.type] || selectedGroupDetail.type}</span>
-                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{selectedGroupDetail.members?.length || 0} {(selectedGroupDetail.members?.length || 0) === 1 ? 'member' : 'members'}</span>
-              </div>
-              {selectedGroupDetail.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedGroupDetail.description}</p>}
-              <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>Tip: You can also manage group memberships from Organizations → click "Manage" on any person.</p>
-            </div>
-            <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
-          </div>
-
-          {/* Expected Governance Roles */}
-          {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (() => {
-            const expectedRoles = EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type];
-            const requiredCount = expectedRoles.filter((r) => r.required).length;
-            const requiredFilled = expectedRoles.filter((r) => r.required && memberDamaRoles.some((d) => d.roleType === r.roleType)).length;
-            return (
-              <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Governance Roles
-                  </div>
-                  <span style={{ fontSize: 11, color: requiredFilled === requiredCount ? '#16a34a' : '#dc2626' }}>
-                    {requiredFilled} of {requiredCount} required roles filled
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {expectedRoles.map((expected) => {
-                    const assigned = memberDamaRoles.filter((r) => r.roleType === expected.roleType);
-                    const isFilled = assigned.length > 0;
-                    const canAddMore = expected.multiAssign || assigned.length === 0;
-                    return (
-                      <div key={expected.roleType} style={{
-                        padding: '10px 14px',
-                        background: 'var(--color-surface)',
-                        border: `1px solid ${isFilled ? '#bbf7d0' : expected.required ? '#fecaca' : 'var(--color-border)'}`,
-                        borderLeft: `3px solid ${isFilled ? '#22c55e' : expected.required ? '#ef4444' : '#d1d5db'}`,
-                        borderRadius: 'var(--radius-md)',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                          <span style={{
-                            width: 18, height: 18, borderRadius: '50%', marginTop: 1,
-                            background: isFilled ? '#22c55e' : 'transparent',
-                            border: isFilled ? 'none' : '1.5px solid #d1d5db',
-                            color: '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 10, fontWeight: 700, flexShrink: 0,
-                          }}>
-                            {isFilled ? '✓' : ''}
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                                {expected.label}
-                              </span>
-                              <span style={{
-                                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                background: expected.required ? '#fef2f2' : '#f0f9ff',
-                                color: expected.required ? '#b91c1c' : '#0369a1',
-                              }}>
-                                {expected.required ? 'Required' : 'Optional'}
-                              </span>
-                              {expected.multiAssign && (
-                                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                  Multiple
-                                </span>
-                              )}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
-                            {assigned.length > 0 && (
-                              <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                {assigned.map((a) => (
-                                  <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                    {a.personName}
-                                    <button onClick={() => handleRemoveDamaRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {canAddMore && (
-                            <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                              <select
-                                style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 11, padding: '4px 8px' }}
-                                value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
-                                onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); }}
-                              >
-                                <option value="">Select person...</option>
-                                {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
-                                  <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                              </select>
-                              <button
-                                style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
-                                disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
-                                onClick={handleAssignDamaRole}
-                              >
-                                Assign
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Add Member (collapsed by default) */}
-          <div style={{ marginBottom: 12 }}>
-            {!showAddMember ? (
-              <button onClick={() => setShowAddMember(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: 0 }}>
-                + Add member without governance role
-              </button>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: 10, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                <div style={{ flex: 2 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
-                  <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
-                    <option value="">-- Select person --</option>
-                    {availablePeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Group Role</label>
-                  <select style={selectStyle} value={memberRole} onChange={(e) => setMemberRole(e.target.value)}>
-                    {groupRoles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                  </select>
-                </div>
-                <button style={btnSecondary} onClick={() => { setShowAddMember(false); setMemberPersonId(''); setMemberRole('MEMBER'); }}>Cancel</button>
-                <button
-                  style={{ ...btnPrimary, opacity: !memberPersonId ? 0.6 : 1, cursor: !memberPersonId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-                  disabled={!memberPersonId}
-                  onClick={() => { handleAddMember(); setShowAddMember(false); }}
-                >
-                  Add
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Members Table */}
-          {(!selectedGroupDetail.members || selectedGroupDetail.members.length === 0) ? (
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 12, textAlign: 'center', padding: '1.5rem' }}>
-              No members yet. Assign governance roles above to add people to this group.
-            </p>
-          ) : (
-            <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={thStyle}>Person Name</th>
-                    <th style={thStyle}>Group Role</th>
-                    <th style={thStyle}>DAMA Roles</th>
-                    <th style={thStyle}>Since</th>
-                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedGroupDetail.members.map((member: GroupMember) => {
-                    const personRoles = memberDamaRoles.filter((r) => r.personId === member.personId);
-                    return (
-                      <tr key={member.personId}
-                        style={{ transition: 'background 0.1s' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                      >
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>{member.personName}</td>
-                        <td style={tdStyle}>
-                          <span style={makeBadge(roleBadgeColors[member.groupRole] || roleBadgeColors.MEMBER)}>
-                            {ROLE_LABELS[member.groupRole] || member.groupRole}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          {personRoles.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                              {personRoles.map((r) => (
-                                <span key={r.id} style={{ ...makeBadge(DAMA_ROLE_COLORS[r.roleType] || { bg: '#f1f5f9', color: '#64748b' }), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                                  {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
-                                  <button
-                                    onClick={() => handleRemoveDamaRole(r.id)}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 9, color: 'inherit', padding: 0, lineHeight: 1, opacity: 0.7 }}
-                                    title="Remove role"
-                                  >&times;</button>
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>None assigned</span>
-                          )}
-                        </td>
-                        <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
-                          {new Date(member.since).toLocaleDateString()}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }} onClick={() => handleRemoveMember(member.personId)}>Remove</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-
-          {/* Recommended Child Groups */}
-          {recommendations.length > 0 && !showRecommendations && (
-            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                onClick={() => setShowRecommendations(true)}
-                style={{
-                  padding: '6px 14px', fontSize: 12, fontWeight: 500,
-                  background: 'var(--color-surface)', color: '#1e40af',
-                  border: '1px solid #93c5fd', borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{'ℹ'}</span>
-                Explore Recommendations ({recommendations.length})
-              </button>
-              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                DAMA best practices suggest additional groups under this one
-              </span>
-            </div>
-          )}
-          {showRecommendations && recommendations.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 14, color: '#2563eb' }}>{'ℹ'}</span>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Recommended Groups</div>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    Based on DAMA best practices{selectedGroupDetail.type === 'COMMITTEE' || selectedGroupDetail.type === 'OFFICE' ? ' and your data domains' : ''}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowRecommendations(false)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-text-muted)' }}
-                >
-                  Hide
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {recommendations.map((rec) => (
-                  <div key={rec.name} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 14px',
-                    background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 'var(--radius-md)',
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600 }}>{rec.name}</span>
-                        <span style={makeBadge(typeBadgeColors[rec.type] || typeBadgeColors.COMMUNITY_OF_PRACTICE)}>
-                          {GROUP_TYPE_SHORT[rec.type] || rec.typeLabel}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{rec.reason}</div>
-                    </div>
-                    <button
-                      onClick={() => handleCreateRecommended(rec)}
-                      disabled={creatingRec !== null}
-                      style={{
-                        padding: '5px 14px', fontSize: 11, fontWeight: 500,
-                        background: '#fff', color: '#1e40af',
-                        border: '1px solid #93c5fd', borderRadius: 4,
-                        cursor: creatingRec ? 'not-allowed' : 'pointer',
-                        opacity: creatingRec ? 0.6 : 1,
-                        whiteSpace: 'nowrap', flexShrink: 0,
-                      }}
-                    >
-                      {creatingRec === rec.name ? 'Creating...' : 'Create'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
