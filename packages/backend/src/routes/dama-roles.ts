@@ -4,6 +4,8 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
+import { agents } from './agents';
+import { skills } from './skills';
 import { governanceTasks } from './governance-tasks';
 
 export const DAMA_ROLE_TYPES = [
@@ -24,7 +26,9 @@ export const DAMA_ROLE_TYPES = [
 
 export interface StoredDamaRole {
   id: string;
-  personId: string;
+  personId: string | null;
+  agentId: string | null;
+  agentName: string | null;
   roleType: string;    // one of DAMA_ROLE_TYPES
   scopeType: 'ORG';    // always org-scoped; domain ownership lives on the domain itself
   scopeId: string;     // orgId
@@ -45,6 +49,21 @@ if (damaRoles.length < preMigrationCount) {
   logger.info({ removed: preMigrationCount - damaRoles.length }, 'Removed DOMAIN-scoped DAMA roles (ownership lives on the domain now)');
 }
 
+// Migration: backfill agentId/agentName on legacy records
+{
+  let backfilled = 0;
+  for (const r of damaRoles) {
+    if (r.agentId === undefined) { (r as any).agentId = null; backfilled++; }
+    if (r.agentName === undefined) { (r as any).agentName = null; backfilled++; }
+    // Ensure personId is null (not undefined) when absent
+    if (r.personId === undefined) { (r as any).personId = null; }
+  }
+  if (backfilled > 0) {
+    saveStore('damaRoles', damaRoles);
+    logger.info({ backfilled }, 'Backfilled agentId/agentName on existing DAMA role assignments');
+  }
+}
+
 const router = Router();
 
 /** DELETE /api/v1/dama-roles/all — delete all DAMA role assignments */
@@ -57,9 +76,9 @@ router.delete('/all', (_req: Request, res: Response) => {
   res.json({ success: true, deleted: count });
 });
 
-/** GET /api/v1/dama-roles — list all (support ?orgId= and ?personId= filters). Enrich with person name. */
+/** GET /api/v1/dama-roles — list all (support ?orgId=, ?personId=, ?agentId= filters). Enrich with person/agent name. */
 router.get('/', (req: Request, res: Response) => {
-  const { orgId, personId } = req.query;
+  const { orgId, personId, agentId } = req.query;
   let filtered = [...damaRoles];
 
   if (orgId) {
@@ -68,20 +87,29 @@ router.get('/', (req: Request, res: Response) => {
   if (personId) {
     filtered = filtered.filter((r) => r.personId === personId);
   }
+  if (agentId) {
+    filtered = filtered.filter((r) => r.agentId === agentId);
+  }
 
   const enriched = filtered.map((r) => {
-    const person = people.find((p) => p.id === r.personId);
-    return { ...r, personName: person?.name || 'Unknown' };
+    const person = r.personId ? people.find((p) => p.id === r.personId) : null;
+    const agent = r.agentId ? agents.find((a) => a.id === r.agentId) : null;
+    return {
+      ...r,
+      personName: person?.name || (r.personId ? 'Unknown' : null),
+      agentName: agent?.name || r.agentName || null,
+    };
   });
 
   res.json({ success: true, data: enriched, roleTypes: DAMA_ROLE_TYPES });
 });
 
-/** POST /api/v1/dama-roles — assign a DAMA role */
+/** POST /api/v1/dama-roles — assign a DAMA role (accepts personId OR agentId, not both) */
 router.post('/', (req: Request, res: Response) => {
-  const { personId, roleType, scopeType, scopeId } = req.body;
+  const { personId, agentId, roleType, scopeType, scopeId } = req.body;
 
-  if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
+  if (!personId && !agentId) { res.status(400).json({ success: false, error: 'Either personId or agentId is required' }); return; }
+  if (personId && agentId) { res.status(400).json({ success: false, error: 'Provide either personId or agentId, not both' }); return; }
   if (!roleType || !(DAMA_ROLE_TYPES as readonly string[]).includes(roleType)) {
     res.status(400).json({ success: false, error: `Invalid roleType. Must be one of: ${DAMA_ROLE_TYPES.join(', ')}` });
     return;
@@ -92,22 +120,36 @@ router.post('/', (req: Request, res: Response) => {
   }
   if (!scopeId) { res.status(400).json({ success: false, error: 'scopeId is required' }); return; }
 
-  const person = people.find((p) => p.id === personId);
-  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  let person: typeof people[number] | undefined;
+  let agent: typeof agents[number] | undefined;
 
-  // Prevent duplicate (same person + roleType + scopeId)
-  const duplicate = damaRoles.find(
-    (r) => r.personId === personId && r.roleType === roleType && r.scopeId === scopeId,
-  );
+  if (personId) {
+    person = people.find((p) => p.id === personId);
+    if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  }
+  if (agentId) {
+    agent = agents.find((a) => a.id === agentId);
+    if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
+  }
+
+  // Prevent duplicate (same person/agent + roleType + scopeId)
+  const duplicate = damaRoles.find((r) => {
+    if (personId) return r.personId === personId && r.roleType === roleType && r.scopeId === scopeId;
+    if (agentId) return r.agentId === agentId && r.roleType === roleType && r.scopeId === scopeId;
+    return false;
+  });
   if (duplicate) {
-    res.status(409).json({ success: false, error: 'This person already has this role for the given scope.' });
+    const entityLabel = personId ? 'person' : 'agent';
+    res.status(409).json({ success: false, error: `This ${entityLabel} already has this role for the given scope.` });
     return;
   }
 
   const now = new Date().toISOString();
   const role: StoredDamaRole = {
     id: uuid(),
-    personId,
+    personId: personId || null,
+    agentId: agentId || null,
+    agentName: agent?.name || null,
     roleType,
     scopeType,
     scopeId,
@@ -117,9 +159,9 @@ router.post('/', (req: Request, res: Response) => {
   damaRoles.push(role);
   saveStore('damaRoles', damaRoles);
 
-  // Auto-generate onboarding tasks for steward roles
+  // Auto-generate onboarding tasks for steward roles (people only)
   let onboardingTaskCount = 0;
-  if (roleType === 'BUSINESS_DATA_STEWARD' || roleType === 'TECHNICAL_DATA_STEWARD') {
+  if (personId && (roleType === 'BUSINESS_DATA_STEWARD' || roleType === 'TECHNICAL_DATA_STEWARD')) {
     const STEWARD_ONBOARDING_TASKS = [
       { title: 'Review governance policies and standards', description: 'Read and acknowledge the organization\'s data governance policies, data standards, and quality guidelines.', taskType: 'STEWARDSHIP', dueOffset: 7 },
       { title: 'Complete data steward training', description: 'Complete the steward training module covering responsibilities, tools, escalation procedures, and reporting requirements.', taskType: 'STEWARDSHIP', dueOffset: 14 },
@@ -155,7 +197,12 @@ router.post('/', (req: Request, res: Response) => {
     logger.info({ roleId: role.id, personId, roleType, tasksCreated: onboardingTaskCount }, 'Created steward onboarding tasks');
   }
 
-  res.status(201).json({ success: true, data: { ...role, personName: person.name }, onboardingTasks: onboardingTaskCount });
+  const displayName = person?.name || agent?.name || 'Unknown';
+  res.status(201).json({
+    success: true,
+    data: { ...role, personName: person?.name || null, agentName: agent?.name || null },
+    onboardingTasks: onboardingTaskCount,
+  });
 });
 
 /** DELETE /api/v1/dama-roles/:id — remove assignment */
@@ -178,6 +225,94 @@ router.get('/by-person/:personId', (req: Request, res: Response) => {
     .map((r) => ({ ...r, personName: person.name }));
 
   res.json({ success: true, data: roles });
+});
+
+/** GET /api/v1/dama-roles/by-agent/:agentId — all DAMA roles for an agent */
+router.get('/by-agent/:agentId', (req: Request, res: Response) => {
+  const agentId = req.params.agentId;
+  const agent = agents.find((a) => a.id === agentId);
+  if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
+
+  const roles = damaRoles
+    .filter((r) => r.agentId === agentId)
+    .map((r) => ({ ...r, agentName: agent.name }));
+
+  res.json({ success: true, data: roles });
+});
+
+/** GET /api/v1/dama-roles/skill-match — analyze skill coverage for a candidate (person or agent) against a role's expected skills */
+router.get('/skill-match', (req: Request, res: Response) => {
+  const { roleType, candidateType, candidateId, orgId } = req.query;
+
+  if (!roleType || !candidateType || !candidateId) {
+    res.status(400).json({ success: false, error: 'roleType, candidateType, and candidateId are required' });
+    return;
+  }
+
+  // Get candidate's skills
+  let candidateSkillIds: string[] = [];
+  let candidateName = '';
+  if (candidateType === 'person') {
+    const person = people.find((p) => p.id === candidateId);
+    if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+    candidateName = person.name;
+    candidateSkillIds = (person as any).skillIds || [];
+  } else if (candidateType === 'agent') {
+    const agent = agents.find((a) => a.id === candidateId);
+    if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
+    candidateName = agent.name;
+    candidateSkillIds = agent.skillIds || [];
+  } else {
+    res.status(400).json({ success: false, error: 'candidateType must be "person" or "agent"' });
+    return;
+  }
+
+  // Define expected skill categories for each role type
+  const ROLE_SKILL_CATEGORIES: Record<string, string[]> = {
+    CDO: ['GOVERNANCE', 'COMMUNICATION', 'ANALYTICS'],
+    DATA_GOVERNANCE_LEAD: ['GOVERNANCE', 'COMMUNICATION'],
+    DATA_OWNER: ['GOVERNANCE', 'COMMUNICATION'],
+    BUSINESS_DATA_STEWARD: ['DATA_QUALITY', 'GOVERNANCE', 'METADATA'],
+    TECHNICAL_DATA_STEWARD: ['DATA_QUALITY', 'METADATA', 'INTEGRATION'],
+    DATA_QUALITY_ANALYST: ['DATA_QUALITY', 'ANALYTICS'],
+    DATA_ARCHITECT: ['ARCHITECTURE', 'METADATA', 'INTEGRATION'],
+    DATA_CUSTODIAN: ['SECURITY', 'ARCHITECTURE'],
+    DATA_ENGINEER: ['INTEGRATION', 'ARCHITECTURE', 'DATA_QUALITY'],
+    DATABASE_ADMINISTRATOR: ['ARCHITECTURE', 'SECURITY'],
+  };
+
+  const expectedCategories = ROLE_SKILL_CATEGORIES[roleType as string] || ['GOVERNANCE'];
+
+  // Get all skills for the org that match the expected categories
+  const orgSkills = orgId ? skills.filter((s) => s.orgId === orgId) : skills;
+  const expectedSkillIds = orgSkills
+    .filter((s) => expectedCategories.includes(s.category))
+    .map((s) => s.id);
+
+  const candidateSet = new Set(candidateSkillIds);
+  const matched = expectedSkillIds.filter((id) => candidateSet.has(id));
+  const missing = expectedSkillIds.filter((id) => !candidateSet.has(id));
+  const coverage = expectedSkillIds.length > 0
+    ? Math.round((matched.length / expectedSkillIds.length) * 100)
+    : 100;
+
+  // Enrich with skill names
+  const skillNameById: Record<string, string> = {};
+  for (const s of orgSkills) skillNameById[s.id] = s.name;
+
+  res.json({
+    success: true,
+    data: {
+      roleType,
+      candidateType,
+      candidateId,
+      candidateName,
+      matched: matched.map((id) => ({ id, name: skillNameById[id] || id })),
+      missing: missing.map((id) => ({ id, name: skillNameById[id] || id })),
+      coverage,
+      totalExpected: expectedSkillIds.length,
+    },
+  });
 });
 
 /** GET /api/v1/dama-roles/summary — counts by role type. Accepts
