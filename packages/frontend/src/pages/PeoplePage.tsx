@@ -773,12 +773,19 @@ export default function PeoplePage() {
     try {
       const body: any = { orgId };
       if (peopleImportFormat === 'csv') body.csv = peopleImportText; else body.people = JSON.parse(peopleImportText);
-      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; data?: any[] }>('/people/import', body);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; skippedEmails?: string[]; data?: any[] }>('/people/import', body);
       const count = result.data?.length || 0;
-      if (result.skipped && result.skipped > 0) {
-        addToast('info', result.message || `${result.skipped} duplicates skipped`);
+      const skipped = result.skipped || 0;
+      const skippedEmails = result.skippedEmails || [];
+
+      if (skipped > 0 && count === 0) {
+        addToast('info', `All ${skipped} ${skipped === 1 ? 'person already exists' : 'people already exist'} in Procela: ${skippedEmails.join(', ')}`);
+      } else if (skipped > 0) {
+        addToast('info', `${skipped} ${skipped === 1 ? 'person' : 'people'} already existed and ${skipped === 1 ? 'was' : 'were'} skipped: ${skippedEmails.join(', ')}`);
+        addToast('success', `Imported ${count} new ${count === 1 ? 'person' : 'people'}`);
+      } else {
+        addToast('success', `Imported ${count} ${count === 1 ? 'person' : 'people'}`);
       }
-      addToast('success', `Imported ${count} ${count === 1 ? 'person' : 'people'}`);
       setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId('');
       fetchData();
     } catch (e) {
