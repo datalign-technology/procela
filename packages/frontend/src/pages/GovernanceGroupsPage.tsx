@@ -57,12 +57,22 @@ interface Person {
 
 interface DamaRoleAssignment {
   id: string;
-  personId: string;
-  personName: string;
+  personId: string | null;
+  agentId: string | null;
+  personName: string | null;
+  agentName: string | null;
   roleType: string;
   scopeType: string;
   scopeId: string;
   since: string;
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  agentType: string;
+  status: string;
+  skillIds: string[];
 }
 
 // ── Constants ──
@@ -332,7 +342,9 @@ export default function GovernanceGroupsPage() {
 
   // DAMA roles for the members of the selected group
   const [memberDamaRoles, setMemberDamaRoles] = useState<DamaRoleAssignment[]>([]);
+  const [agentsList, setAgentsList] = useState<Agent[]>([]);
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
+  const [assignRoleAgentId, setAssignRoleAgentId] = useState('');
   const [assignRoleType, setAssignRoleType] = useState('');
 
   // Recommendations for selected group
@@ -402,15 +414,22 @@ export default function GovernanceGroupsPage() {
       const detail = res.data || null;
       setSelectedGroupDetail(detail);
 
-      // Fetch DAMA roles for all members of this group
+      // Fetch DAMA roles and agents
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const [rolesRes, agentsRes] = await Promise.all([
+        apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
+        apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`),
+      ]);
+      const allRoles = rolesRes.data || [];
+      setAgentsList(Array.isArray(agentsRes.data) ? agentsRes.data.filter((a) => a.status === 'ACTIVE') : []);
+
       if (detail?.members?.length > 0) {
-        const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-        const rolesRes = await apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`);
-        const allRoles = rolesRes.data || [];
         const memberIds = new Set(detail.members.map((m: GroupMember) => m.personId));
-        setMemberDamaRoles(allRoles.filter((r) => memberIds.has(r.personId)));
+        // Include both person-based and agent-based roles relevant to this group's members or agents
+        setMemberDamaRoles(allRoles.filter((r) => (r.personId && memberIds.has(r.personId)) || r.agentId));
       } else {
-        setMemberDamaRoles([]);
+        // Still show agent-based roles even when there are no person members
+        setMemberDamaRoles(allRoles.filter((r) => r.agentId));
       }
 
       // Fetch recommendations for this group
@@ -548,29 +567,34 @@ export default function GovernanceGroupsPage() {
     fetchGroups();
   };
 
-  const handleAssignDamaRole = async () => {
-    if (!assignRolePersonId || !assignRoleType || !activeOrgId) return;
+  const handleAssignDamaRole = async (assignType: 'person' | 'agent' = 'person') => {
+    const candidateId = assignType === 'person' ? assignRolePersonId : assignRoleAgentId;
+    if (!candidateId || !assignRoleType || !activeOrgId) return;
     try {
-      await apiClient.post('/dama-roles', {
-        personId: assignRolePersonId,
+      const payload: Record<string, string> = {
         roleType: assignRoleType,
         scopeType: 'ORG',
         scopeId: activeOrgId,
-      });
-      // Auto-add as group member if not already a member
-      if (selectedGroupId && selectedGroupDetail) {
-        const isMember = (selectedGroupDetail.members || []).some((m: GroupMember) => m.personId === assignRolePersonId);
+      };
+      if (assignType === 'person') payload.personId = candidateId;
+      else payload.agentId = candidateId;
+
+      await apiClient.post('/dama-roles', payload);
+      // Auto-add as group member if person and not already a member
+      if (assignType === 'person' && selectedGroupId && selectedGroupDetail) {
+        const isMember = (selectedGroupDetail.members || []).some((m: GroupMember) => m.personId === candidateId);
         if (!isMember) {
           try {
             await apiClient.post(`/governance-groups/${selectedGroupId}/members`, {
-              personId: assignRolePersonId,
+              personId: candidateId,
               groupRole: 'MEMBER',
             });
           } catch { /* may already be a member */ }
         }
       }
-      addToast('success', `Assigned ${DAMA_ROLE_LABELS[assignRoleType] || assignRoleType}`);
+      addToast('success', `Assigned ${DAMA_ROLE_LABELS[assignRoleType] || assignRoleType} to ${assignType}`);
       setAssignRolePersonId('');
+      setAssignRoleAgentId('');
       setAssignRoleType('');
       if (selectedGroupId) fetchGroupDetail(selectedGroupId);
     } catch (e: any) {
@@ -970,23 +994,28 @@ export default function GovernanceGroupsPage() {
                                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
                                 {assigned.length > 0 && (
                                   <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                    {assigned.map((a) => (
-                                      <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                        {a.personName}
-                                        <button onClick={() => handleRemoveDamaRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
-                                      </span>
-                                    ))}
+                                    {assigned.map((a) => {
+                                      const isAgent = !!a.agentId;
+                                      const displayName = isAgent ? (a.agentName || 'Agent') : (a.personName || 'Unknown');
+                                      return (
+                                        <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : '#d1f0eb', color: isAgent ? '#5b21b6' : '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                          {isAgent && <span title="AI Agent" style={{ fontSize: 10 }}>{'⚙'}</span>}
+                                          {displayName}
+                                          <button onClick={() => handleRemoveDamaRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>
                               {canAddMore ? (
-                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
                                   <select
-                                    style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 11, padding: '4px 8px' }}
+                                    style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
                                     value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
-                                    onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); }}
+                                    onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
                                   >
-                                    <option value="">Select person...</option>
+                                    <option value="">Person...</option>
                                     {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
                                       <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
@@ -994,7 +1023,25 @@ export default function GovernanceGroupsPage() {
                                   <button
                                     style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
                                     disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
-                                    onClick={handleAssignDamaRole}
+                                    onClick={() => handleAssignDamaRole('person')}
+                                  >
+                                    Assign
+                                  </button>
+                                  <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
+                                  <select
+                                    style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
+                                    value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
+                                    onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
+                                  >
+                                    <option value="">{'⚙'} Agent...</option>
+                                    {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
+                                      <option key={a.id} value={a.id}>{a.name}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
+                                    disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
+                                    onClick={() => handleAssignDamaRole('agent')}
                                   >
                                     Assign
                                   </button>

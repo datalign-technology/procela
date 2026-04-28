@@ -53,8 +53,10 @@ interface Recommendation {
 
 interface DamaRoleAssignment {
   id: string;
-  personId: string;
-  personName: string;
+  personId: string | null;
+  agentId: string | null;
+  personName: string | null;
+  agentName: string | null;
   roleType: string;
   scopeType: string;
   scopeId: string;
@@ -65,6 +67,14 @@ interface DamaRoleAssignment {
 interface Person {
   id: string;
   name: string;
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  agentType: string;
+  status: string;
+  skillIds: string[];
 }
 
 const ROLE_GUIDE = GOVERNANCE_ROLES;
@@ -333,7 +343,9 @@ export default function GovernanceProgramPage() {
   // ── Roles tab state ──
   const [roleAssignments, setRoleAssignments] = useState<DamaRoleAssignment[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [agentsList, setAgentsList] = useState<Agent[]>([]);
   const [roleSelections, setRoleSelections] = useState<Record<string, string>>({});
+  const [roleAgentSelections, setRoleAgentSelections] = useState<Record<string, string>>({});
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [rolesLoaded, setRolesLoaded] = useState(false);
   const [expandedRoleGroups, setExpandedRoleGroups] = useState<Set<string>>(new Set());
@@ -448,12 +460,14 @@ export default function GovernanceProgramPage() {
   const fetchRolesData = useCallback(async () => {
     if (!activeOrgId) return;
     try {
-      const [rolesRes, peopleRes] = await Promise.all([
+      const [rolesRes, peopleRes, agentsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[] }>(`/dama-roles?orgId=${activeOrgId}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
+        apiClient.get<{ success: boolean; data: Agent[] }>(`/agents?orgId=${activeOrgId}`),
       ]);
       setRoleAssignments(Array.isArray(rolesRes.data) ? rolesRes.data : []);
       setPeople(Array.isArray(peopleRes.data) ? peopleRes.data : []);
+      setAgentsList(Array.isArray(agentsRes.data) ? agentsRes.data.filter((a) => a.status === 'ACTIVE') : []);
     } catch {
       // API may not be available
     } finally {
@@ -472,19 +486,23 @@ export default function GovernanceProgramPage() {
     setRolesLoaded(false);
   }, [activeOrgId]);
 
-  const handleAssignRole = async (roleType: string) => {
-    const personId = roleSelections[roleType];
-    if (!personId || !activeOrgId) return;
+  const handleAssignRole = async (roleType: string, assignType: 'person' | 'agent' = 'person') => {
+    const candidateId = assignType === 'person' ? roleSelections[roleType] : roleAgentSelections[roleType];
+    if (!candidateId || !activeOrgId) return;
     setAssigningRole(roleType);
     try {
-      await apiClient.post('/dama-roles', {
-        personId,
+      const payload: Record<string, string> = {
         roleType,
         scopeType: 'ORG',
         scopeId: activeOrgId,
-      });
-      addToast('success', 'Role assigned');
-      setRoleSelections((prev) => ({ ...prev, [roleType]: '' }));
+      };
+      if (assignType === 'person') payload.personId = candidateId;
+      else payload.agentId = candidateId;
+
+      await apiClient.post('/dama-roles', payload);
+      addToast('success', `Role assigned to ${assignType}`);
+      if (assignType === 'person') setRoleSelections((prev) => ({ ...prev, [roleType]: '' }));
+      else setRoleAgentSelections((prev) => ({ ...prev, [roleType]: '' }));
       // Refresh assignments
       const rolesRes = await apiClient.get<{ success: boolean; data: DamaRoleAssignment[] }>(`/dama-roles?orgId=${activeOrgId}`);
       setRoleAssignments(Array.isArray(rolesRes.data) ? rolesRes.data : []);
@@ -848,19 +866,27 @@ export default function GovernanceProgramPage() {
                                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{role.purpose}</div>
                                       {assignees.length > 0 ? (
                                         <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                          {assignees.map((a) => (
-                                            <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                              {a.personName}
-                                              <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
-                                            </span>
-                                          ))}
+                                          {assignees.map((a) => {
+                                            const isAgent = !!a.agentId;
+                                            const displayName = isAgent ? (a.agentName || 'Agent') : (a.personName || 'Unknown');
+                                            return (
+                                              <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : '#d1f0eb', color: isAgent ? '#5b21b6' : '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                {isAgent && <span title="AI Agent" style={{ fontSize: 10 }}>{'⚙'}</span>}
+                                                {displayName}
+                                                <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                              </span>
+                                            );
+                                          })}
                                         </div>
                                       ) : (<div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>)}
                                     </div>
                                     {!isFilled ? (
-                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 150, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}><option value="">Select person...</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                                        <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
+                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</button>
+                                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
+                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12, borderColor: '#c4b5fd' }} value={roleAgentSelections[role.roleType] || ''} onChange={(e) => { setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">{'⚙'} Agent...</option>{agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                                        <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, background: '#7c3aed', opacity: !roleAgentSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleAgentSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleAgentSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'agent')}>Assign</button>
                                       </div>
                                     ) : (
                                       <span style={{ fontSize: 11, color: '#16a34a', flexShrink: 0 }}>✓ Filled</span>

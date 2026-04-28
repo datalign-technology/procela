@@ -981,6 +981,13 @@ export default function ProcessCatalogPage() {
   const [viewingVersion, setViewingVersion] = useState<ProcessVersion | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
 
+  // Agent execution state
+  interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; completedAt: string | null; durationMs: number | null; createdAt: string; }
+  interface DamaRoleInfo { agentId: string; agentName: string | null; roleType: string; }
+  const [agentExecByActivity, setAgentExecByActivity] = useState<Record<string, AgentExecutionInfo>>({});
+  const [damaAgentRoles, setDamaAgentRoles] = useState<DamaRoleInfo[]>([]);
+  const [runningActivity, setRunningActivity] = useState<string | null>(null);
+
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';

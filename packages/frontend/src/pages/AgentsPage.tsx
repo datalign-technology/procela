@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
+import { DAMA_ROLE_LABELS } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -85,6 +86,23 @@ const tdStyle: React.CSSProperties = {
   padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
+interface DamaRoleAssignment {
+  id: string;
+  agentId: string | null;
+  agentName: string | null;
+  roleType: string;
+  scopeType: string;
+  scopeId: string;
+}
+
+interface AgentExecution {
+  id: string;
+  agentId: string;
+  status: string;
+  completedAt: string | null;
+  createdAt: string;
+}
+
 const TYPE_BADGES: Record<string, { bg: string; color: string }> = {
   AI:              { bg: '#ede9fe', color: '#5b21b6' },
   SERVICE_ACCOUNT: { bg: '#dbeafe', color: '#1e40af' },
@@ -120,6 +138,9 @@ export default function AgentsPage() {
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [importOrgId, setImportOrgId] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [agentRoles, setAgentRoles] = useState<DamaRoleAssignment[]>([]);
+  const [agentExecutions, setAgentExecutions] = useState<AgentExecution[]>([]);
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
 
   const selectedOrgId = searchParams.get('orgId') || '';
   const applyOrgFilter = (id: string) => {
@@ -130,19 +151,24 @@ export default function AgentsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [agentRes, orgRes, peopleRes] = await Promise.all([
+      const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
+      const [agentRes, orgRes, peopleRes, rolesRes, execsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Agent[]; agentTypes: string[]; agentStatuses: string[] }>('/agents'),
         apiClient.get<{ success: boolean; data: OrganizationRef[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
+        apiClient.get<{ success: boolean; data: DamaRoleAssignment[] }>(`/dama-roles${query}`),
+        apiClient.get<{ success: boolean; data: AgentExecution[] }>(`/agent-executions${query}`),
       ]);
       setAgents(agentRes.data || []);
       if (agentRes.agentTypes) setAgentTypes(agentRes.agentTypes);
       if (agentRes.agentStatuses) setAgentStatuses(agentRes.agentStatuses);
       setOrgs(orgRes.data || []);
       setPeople(peopleRes.data || []);
+      setAgentRoles((rolesRes.data || []).filter((r) => r.agentId));
+      setAgentExecutions(execsRes.data || []);
     } catch { /* */ }
     finally { setLoading(false); }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -517,41 +543,119 @@ export default function AgentsPage() {
                 const tb = TYPE_BADGES[a.agentType] || TYPE_BADGES.OTHER;
                 const sb = STATUS_BADGES[a.status] || STATUS_BADGES.ACTIVE;
                 const isSelected = selectedIds.has(a.id);
+                const roles = agentRoles.filter((r) => r.agentId === a.id);
+                const execs = agentExecutions.filter((e) => e.agentId === a.id);
+                const isExpanded = expandedAgentId === a.id;
                 return (
-                  <tr key={a.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(a.id)} />
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      {a.name}
-                      {a.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.description}</div>}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: tb.bg, color: tb.color }}>
-                        {a.agentType.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}</td>
-                    <td style={tdStyle}>
-                      <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
-                        {a.status}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                    </td>
-                    <td style={tdStyle}>
-                      {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(a.id)} />
-                      </div>
-                    </td>
-                  </tr>
+                  <React.Fragment key={a.id}>
+                    <tr style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                      onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                      onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                      <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(a.id)} />
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>
+                        <span
+                          onClick={() => setExpandedAgentId(isExpanded ? null : a.id)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {a.name}
+                        </span>
+                        {a.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.description}</div>}
+                        {(roles.length > 0 || execs.length > 0) && (
+                          <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                            {roles.length > 0 && (
+                              <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', fontWeight: 600 }}>
+                                {roles.length} role{roles.length !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                            {execs.length > 0 && (
+                              <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#d1fae5', color: '#065f46', fontWeight: 600 }}>
+                                {execs.length} execution{execs.length !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: tb.bg, color: tb.color }}>
+                          {a.agentType.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}</td>
+                      <td style={tdStyle}>
+                        <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
+                          {a.status}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
+                      </td>
+                      <td style={tdStyle}>
+                        {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />
+                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(a.id)} />
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={8} style={{ padding: 0, borderTop: 'none' }}>
+                          <div style={{ padding: '12px 16px 12px 48px', background: '#fafbfc', borderTop: '1px solid var(--color-border)', borderBottom: '1px solid var(--color-border)' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                              {/* DAMA Roles */}
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                                  Assigned DAMA Roles
+                                </div>
+                                {roles.length === 0 ? (
+                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No roles assigned</div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                    {roles.map((r) => (
+                                      <span key={r.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#ede9fe', color: '#5b21b6', fontWeight: 500 }}>
+                                        {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Execution History */}
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                                  Execution History ({execs.length})
+                                </div>
+                                {execs.length === 0 ? (
+                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No executions yet</div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                    {execs.slice(0, 5).map((ex) => (
+                                      <div key={ex.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }}>
+                                        <span style={{
+                                          padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+                                          background: ex.status === 'SUCCESS' ? '#d1fae5' : ex.status === 'FAILED' ? '#fef2f2' : '#fef3c7',
+                                          color: ex.status === 'SUCCESS' ? '#065f46' : ex.status === 'FAILED' ? '#b91c1c' : '#92400e',
+                                        }}>
+                                          {ex.status}
+                                        </span>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>
+                                          {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : 'Pending'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {execs.length > 5 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>...and {execs.length - 5} more</div>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
