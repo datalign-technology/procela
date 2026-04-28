@@ -671,46 +671,6 @@ export default function DataDomainsPage() {
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setBulkAssignType('owner')}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Set Owner…
-          </button>
-          <button
-            onClick={() => setBulkAssignType('steward')}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Add Steward…
-          </button>
-          <button
-            onClick={() => setBulkStatusOpen(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Set Status…
-          </button>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
-
       {/* Bulk Assign Dialog */}
       <ConfirmDialog
         open={bulkAssignType !== ''}
@@ -891,207 +851,266 @@ export default function DataDomainsPage() {
         </div>
       )}
 
-      {/* Domain Detail Panel */}
-      {selectedDomain && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600 }}>
-              {selectedDomain.name} — Governance Details
-            </h3>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)' }} onClick={() => setSelectedDomain(null)} title="Close">
-              x
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            {/* Owner */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Owner (Data Owner)</label>
-              <select style={selectStyle} value={detailOwnerId} onChange={(e) => setDetailOwnerId(e.target.value)}>
-                <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      {/* Master-detail grid layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+        {/* Left column: filters + table + bulk action bar */}
+        <div>
+          {/* Filters */}
+          {domains.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+                <option value="">All Owners</option>
+                <option value="__none__">No Owner</option>
+                {ownerOptions.map(([id, name]) => <option key={id} value={id!}>{name}</option>)}
               </select>
-            </div>
-
-            {/* Stewards */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>
-                Stewards ({detailStewardIds.length} selected)
-              </label>
-              <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 8, background: 'var(--color-bg)' }}>
-                {people.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 4 }}>No people available</div>
-                ) : people.map((p) => (
-                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={detailStewardIds.includes(p.id)} onChange={() => toggleSteward(p.id)} />
-                    {p.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Data Assets */}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>
-                Data Assets ({detailAssetIds.length} assigned)
-              </label>
-              <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 8, background: 'var(--color-bg)' }}>
-                {allAssets.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 4 }}>No data assets available. Create data assets first.</div>
-                ) : allAssets.map((a) => (
-                  <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={detailAssetIds.includes(a.id)} onChange={() => toggleAsset(a.id)} />
-                    {a.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => setSelectedDomain(null)}>Close</button>
-            <button style={btnPrimary} onClick={handleDetailSave}>Save Governance Details</button>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      {domains.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
-            <option value="">All Owners</option>
-            <option value="__none__">No Owner</option>
-            {ownerOptions.map(([id, name]) => <option key={id} value={id!}>{name}</option>)}
-          </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterSteward} onChange={(e) => setFilterSteward(e.target.value)}>
-            <option value="">All Stewards</option>
-            <option value="__none__">No Stewards</option>
-            {stewardOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterAsset} onChange={(e) => setFilterAsset(e.target.value)}>
-            <option value="">All Assets</option>
-            <option value="__none__">No Assets</option>
-            {assetOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '5px 8px' }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">All Statuses</option>
-            {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          {hasFilters && (
-            <button onClick={() => { setFilterOwner(''); setFilterSteward(''); setFilterAsset(''); setFilterStatus(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>
-              Clear
-            </button>
-          )}
-          {hasFilters && (
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-              Showing {filteredDomains.length} of {domains.length}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
-          <SkeletonRows rows={5} columns={4} />
-        ) : domains.length === 0 && !showForm ? (
-          <EmptyState
-            icon={'\u2637'}
-            title="No data domains defined yet"
-            description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies. Start with the big buckets (Customer, Finance, Product) and refine later."
-            action={{ label: '+ Add Domain', onClick: openAdd }}
-          />
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={domains.length > 0 && selectedIds.size === domains.length}
-                    onChange={toggleSelectAll} />
-                </th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                <th style={thStyle}>Description</th>
-                <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
-                <th style={thStyle}>Stewards</th>
-                <th style={thStyle}>Assets</th>
-                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hasFilters && filteredDomains.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
-                    No domains match your filters. <button onClick={() => { setFilterOwner(''); setFilterSteward(''); setFilterAsset(''); setFilterStatus(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13 }}>Clear filters</button>
-                  </td>
-                </tr>
-              ) : (
-                filteredDomains.map((domain) => {
-                  const isSelected = selectedIds.has(domain.id);
-                  return (
-                  <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : '' }}
-                    onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 32 }} onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(domain.id)} />
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>
-                      <span style={{ color: 'var(--color-primary)' }}>{domain.name}</span>
-                    </td>
-                    <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => openDetail(domain)}>
-                      {domain.description || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
-                    </td>
-                    <td style={tdStyle} onClick={() => openDetail(domain)}>
-                      {domain.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                    </td>
-                    <td style={tdStyle} onClick={() => openDetail(domain)}>
-                      {domain.stewards.length > 0
-                        ? <span style={{ fontSize: 12 }}>{domain.stewards.length} steward{domain.stewards.length !== 1 ? 's' : ''}</span>
-                        : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
-                      }
-                    </td>
-                    <td style={tdStyle} onClick={() => openDetail(domain)}>
-                      {domain.assets.length > 0
-                        ? <span style={{ fontSize: 12 }}>{domain.assets.length} asset{domain.assets.length !== 1 ? 's' : ''}</span>
-                        : <span style={{ color: 'var(--color-text-muted)' }}>0</span>
-                      }
-                    </td>
-                    <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={domain.status}
-                        onChange={(e) => { if (e.target.value !== domain.status) handleStatusChange(domain.id, e.target.value); }}
-                        style={{ ...statusBadgeStyle(domain.status), border: 'none', cursor: 'pointer', appearance: 'auto' as any, paddingRight: 16 }}
-                      >
-                        <option value={domain.status}>{domain.status.replace('_', ' ')}</option>
-                        {((statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS)[domain.status] || []).map((s) => (
-                          <option key={s} value={s}>{s.replace('_', ' ')}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
-                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
-                        )}
-                        {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
-                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
-                            try {
-                              const res = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number } }>(`/data-domains/${domain.id}/impact`);
-                              setDeleteImpact(res.data || null);
-                            } catch { setDeleteImpact(null); }
-                            setConfirmDelete(domain.id);
-                          }} />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  );
-                })
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterSteward} onChange={(e) => setFilterSteward(e.target.value)}>
+                <option value="">All Stewards</option>
+                <option value="__none__">No Stewards</option>
+                {stewardOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '5px 8px' }} value={filterAsset} onChange={(e) => setFilterAsset(e.target.value)}>
+                <option value="">All Assets</option>
+                <option value="__none__">No Assets</option>
+                {assetOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '5px 8px' }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                <option value="">All Statuses</option>
+                {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              {hasFilters && (
+                <button onClick={() => { setFilterOwner(''); setFilterSteward(''); setFilterAsset(''); setFilterStatus(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>
+                  Clear
+                </button>
               )}
-            </tbody>
-          </table>
-        )}
+              {hasFilters && (
+                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                  Showing {filteredDomains.length} of {domains.length}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Table */}
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+            {loading ? (
+              <SkeletonRows rows={5} columns={4} />
+            ) : domains.length === 0 && !showForm ? (
+              <EmptyState
+                icon={'\u2637'}
+                title="No data domains defined yet"
+                description="Data domains group related data assets under a single governance umbrella \u2014 owner, stewards, policies. Start with the big buckets (Customer, Finance, Product) and refine later."
+                action={{ label: '+ Add Domain', onClick: openAdd }}
+              />
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={domains.length > 0 && selectedIds.size === domains.length}
+                        onChange={toggleSelectAll} />
+                    </th>
+                    <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
+                    <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
+                    <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hasFilters && filteredDomains.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                        No domains match your filters. <button onClick={() => { setFilterOwner(''); setFilterSteward(''); setFilterAsset(''); setFilterStatus(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13 }}>Clear filters</button>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDomains.map((domain) => {
+                      const isSelected = selectedIds.has(domain.id);
+                      const hasOwner = !!domain.ownerId;
+                      const hasStewards = domain.stewards.length > 0;
+                      const hasAssets = domain.assets.length > 0;
+                      return (
+                      <tr key={domain.id} style={{ transition: 'background 0.1s', cursor: 'pointer', background: isSelected ? '#f0f9ff' : selectedDomain?.id === domain.id ? '#f5f3ff' : '' }}
+                        onMouseEnter={(e) => { if (!isSelected && selectedDomain?.id !== domain.id) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                        onMouseLeave={(e) => { if (!isSelected && selectedDomain?.id !== domain.id) e.currentTarget.style.background = ''; }}>
+                        <td style={{ ...tdStyle, textAlign: 'center', width: 32 }} onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(domain.id)} />
+                        </td>
+                        <td style={{ ...tdStyle, fontWeight: 500 }} onClick={() => openDetail(domain)}>
+                          <span style={{ color: 'var(--color-primary)' }}>{domain.name}</span>
+                          <span style={{ display: 'inline-flex', gap: 3, marginLeft: 8, verticalAlign: 'middle' }}>
+                            <span
+                              style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasOwner ? '#22c55e' : '#d1d5db' }}
+                              title={hasOwner ? 'Owner assigned' : 'No owner'}
+                            />
+                            <span
+                              style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasStewards ? '#22c55e' : '#d1d5db' }}
+                              title={hasStewards ? 'Stewards assigned' : 'No stewards'}
+                            />
+                            <span
+                              style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: hasAssets ? '#22c55e' : '#d1d5db' }}
+                              title={hasAssets ? 'Assets linked' : 'No assets'}
+                            />
+                          </span>
+                        </td>
+                        <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={domain.status}
+                            onChange={(e) => { if (e.target.value !== domain.status) handleStatusChange(domain.id, e.target.value); }}
+                            style={{ ...statusBadgeStyle(domain.status), border: 'none', cursor: 'pointer', appearance: 'auto' as any, paddingRight: 16 }}
+                          >
+                            <option value={domain.status}>{domain.status.replace('_', ' ')}</option>
+                            {((statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS)[domain.status] || []).map((s) => (
+                              <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                            {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
+                              <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(domain)} />
+                            )}
+                            {!(statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED).has(domain.status) && (
+                              <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                                try {
+                                  const res = await apiClient.get<{ success: boolean; data: { assets: number; stewards: number } }>(`/data-domains/${domain.id}/impact`);
+                                  setDeleteImpact(res.data || null);
+                                } catch { setDeleteImpact(null); }
+                                setConfirmDelete(domain.id);
+                              }} />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Bulk Action Bar */}
+          {selectedIds.size > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginTop: 12,
+              background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+              <button
+                onClick={() => setBulkAssignType('owner')}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Set Owner\u2026
+              </button>
+              <button
+                onClick={() => setBulkAssignType('steward')}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Add Steward\u2026
+              </button>
+              <button
+                onClick={() => setBulkStatusOpen(true)}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Set Status\u2026
+              </button>
+              <button
+                onClick={() => setConfirmBulkDelete(true)}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Delete Selected
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Clear Selection
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right column: detail panel */}
+        <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
+          {selectedDomain ? (
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600 }}>
+                  {selectedDomain.name} \u2014 Governance Details
+                </h3>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)' }} onClick={() => setSelectedDomain(null)} title="Close">
+                  x
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                {/* Owner */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Owner (Data Owner)</label>
+                  <select style={selectStyle} value={detailOwnerId} onChange={(e) => setDetailOwnerId(e.target.value)}>
+                    <option value="">-- Unassigned --</option>
+                    {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Stewards */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>
+                    Stewards ({detailStewardIds.length} selected)
+                  </label>
+                  <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 8, background: 'var(--color-bg)' }}>
+                    {people.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 4 }}>No people available</div>
+                    ) : people.map((p) => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={detailStewardIds.includes(p.id)} onChange={() => toggleSteward(p.id)} />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Data Assets */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>
+                    Data Assets ({detailAssetIds.length} assigned)
+                  </label>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 8, background: 'var(--color-bg)' }}>
+                    {allAssets.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: 4 }}>No data assets available. Create data assets first.</div>
+                    ) : allAssets.map((a) => (
+                      <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={detailAssetIds.includes(a.id)} onChange={() => toggleAsset(a.id)} />
+                        {a.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Scope */}
+                {(selectedDomain as any).scopeDefinition && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Scope Definition</label>
+                    <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: 0 }}>{(selectedDomain as any).scopeDefinition}</p>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+                <button style={btnSecondary} onClick={() => setSelectedDomain(null)}>Close</button>
+                <button style={btnPrimary} onClick={handleDetailSave}>Save Governance Details</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{
+              background: 'var(--color-surface)', border: '1px dashed var(--color-border)',
+              borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center',
+              color: 'var(--color-text-muted)', fontSize: 13,
+            }}>
+              Select a domain to view and edit governance details
+            </div>
+          )}
+        </div>
       </div>
 
       {/* AI Generate Preview Modal */}
