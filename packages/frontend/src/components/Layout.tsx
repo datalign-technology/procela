@@ -49,7 +49,7 @@ const ROUTE_GROUPS: Record<string, string[]> = {
   '/governance-program': ['/governance-program', '/governance', '/governance-groups', '/data-domains', '/raci', '/decision-rights', '/governance-policies'],
   '/operations-manual': ['/operations-manual', '/sops', '/governance-calendar', '/governance-work'],
   '/control-tower': ['/control-tower', '/enterprise-view', '/data-quality', '/gap-detection', '/reports'],
-  '/organizations': ['/organizations', '/people', '/connections', '/agents', '/settings'],
+  '/organizations': ['/organizations', '/people', '/connections', '/agents', '/skills', '/settings'],
 };
 
 interface SearchResult {

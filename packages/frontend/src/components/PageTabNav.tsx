@@ -93,5 +93,6 @@ export const ADMIN_TABS: PageTab[] = [
   { to: '/people', label: 'People' },
   { to: '/connections', label: 'Connections' },
   { to: '/agents', label: 'Agents' },
+  { to: '/skills', label: 'Skills' },
   { to: '/settings', label: 'Settings' },
 ];

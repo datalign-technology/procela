@@ -42,6 +42,7 @@ import DecisionRightsPage from '@/pages/DecisionRightsPage';
 import SopsPage from '@/pages/SopsPage';
 import BusinessGlossaryPage from '@/pages/BusinessGlossaryPage';
 import DataDictionaryPage from '@/pages/DataDictionaryPage';
+import SkillsPage from '@/pages/SkillsPage';
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/people/:id" element={<PersonDetailPage />} />
         <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/skills" element={<SkillsPage />} />
         <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
         <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
         <Route path="/data-domains" element={<DataDomainsPage />} />
