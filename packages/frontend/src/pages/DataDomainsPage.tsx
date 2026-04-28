@@ -127,6 +127,8 @@ export default function DataDomainsPage() {
   const [bulkAssignType, setBulkAssignType] = useState<'owner' | 'steward' | ''>('');
   const [bulkAssignPersonId, setBulkAssignPersonId] = useState('');
   const [bulkStewardRole, setBulkStewardRole] = useState<'business' | 'technical'>('business');
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkStatusValue, setBulkStatusValue] = useState('');
 
   // Stewardship team option on create
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
@@ -333,6 +335,21 @@ export default function DataDomainsPage() {
       fetchData();
     } catch (err: any) {
       addToast('error', err?.response?.data?.error || 'Bulk assignment failed');
+    }
+  };
+
+  const handleBulkStatus = async () => {
+    if (selectedIds.size === 0 || !bulkStatusValue) return;
+    const targetIds = Array.from(selectedIds);
+    try {
+      await Promise.all(targetIds.map((id) => apiClient.put(`/data-domains/${id}`, { status: bulkStatusValue })));
+      addToast('success', `Set ${targetIds.length} domain${targetIds.length === 1 ? '' : 's'} to ${bulkStatusValue}`);
+      setBulkStatusOpen(false);
+      setBulkStatusValue('');
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Bulk status change failed');
     }
   };
 
@@ -643,6 +660,12 @@ export default function DataDomainsPage() {
             Add Steward…
           </button>
           <button
+            onClick={() => setBulkStatusOpen(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Set Status…
+          </button>
+          <button
             onClick={() => setConfirmBulkDelete(true)}
             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
@@ -697,6 +720,42 @@ export default function DataDomainsPage() {
             <option value="">-- Select person --</option>
             {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+        </div>
+      </ConfirmDialog>
+
+      {/* Bulk Status Dialog */}
+      <ConfirmDialog
+        open={bulkStatusOpen}
+        title={`Set status for ${selectedIds.size} domain${selectedIds.size === 1 ? '' : 's'}`}
+        message=""
+        confirmLabel={bulkStatusValue ? `Set to ${bulkStatusValue}` : 'Select a status'}
+        variant="primary"
+        onConfirm={handleBulkStatus}
+        onCancel={() => { setBulkStatusOpen(false); setBulkStatusValue(''); }}
+      >
+        <div style={{ marginTop: 8 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+            This will change the status for all selected domains. Status lifecycle rules are bypassed for bulk operations.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {['DRAFT', 'ACTIVE', 'DEPRECATED'].map((s) => (
+              <label key={s} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                background: bulkStatusValue === s ? '#eff6ff' : 'var(--color-bg)',
+                border: `1px solid ${bulkStatusValue === s ? '#93c5fd' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              }}>
+                <input type="radio" name="bulkStatus" checked={bulkStatusValue === s} onChange={() => setBulkStatusValue(s)} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                    background: s === 'ACTIVE' ? '#22c55e' : s === 'DEPRECATED' ? '#ef4444' : '#9ca3af',
+                  }} />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{s.charAt(0) + s.slice(1).toLowerCase()}</span>
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
       </ConfirmDialog>
 
