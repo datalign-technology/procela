@@ -6,6 +6,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
+import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
@@ -180,23 +181,20 @@ export default function OperationsManualPage() {
   return (
     <div>
       <PageTabNav tabs={OPERATE_TABS} />
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Operations Manual</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>Role-specific guidance for running your governance program.</p>
-          {manuals.length > 0 && (
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
-              {manuals.length} manual{manuals.length === 1 ? '' : 's'} &middot; Click a card to expand
-            </p>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <PageHeader
+        title="Operations Manual"
+        subtitle="Role-specific guidance for running your governance program."
+        meta={manuals.length > 0 ? (
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+            {manuals.length} manual{manuals.length === 1 ? '' : 's'} &middot; Click a card to expand
+          </p>
+        ) : undefined}
+        actions={<>
           {manuals.length > 0 && canWrite && <IconButton icon="trash" label="Delete all manuals" variant="danger" onClick={() => setShowDeleteAll(true)} />}
           <button style={btnSecondary} onClick={handleSeed} disabled={seeding}>{seedLabel}</button>
           {canWrite && <button style={btnPrimary} onClick={() => setShowAddManual(true)}>+ Add Manual</button>}
-        </div>
-      </div>
+        </>}
+      />
 
       {manuals.length === 0 ? (
         <>

@@ -274,6 +274,9 @@ export default function PeoplePage() {
   // to any org they have access to in the dropdown.
   const [peopleImportOrgId, setPeopleImportOrgId] = useState('');
   const [viewing360, setViewing360] = useState<Person360Data | null>(null);
+  const [previewPersonId, setPreviewPersonId] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<Person360Data | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   // loading360 is only read by the legacy modal (now unreachable); setter
   // is dead. `_setLoading360` retains the tuple shape without the unused
   // warning.
@@ -455,6 +458,17 @@ export default function PeoplePage() {
     clearParam();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addToOrgParam, flatOrgs]);
+
+  useEffect(() => {
+    if (!previewPersonId) { setPreviewData(null); return; }
+    let cancelled = false;
+    setPreviewLoading(true);
+    apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${previewPersonId}/360`)
+      .then((res) => { if (!cancelled) setPreviewData(res.data || null); })
+      .catch(() => { if (!cancelled) setPreviewData(null); })
+      .finally(() => { if (!cancelled) setPreviewLoading(false); });
+    return () => { cancelled = true; };
+  }, [previewPersonId]);
 
   const applyOrgFilter = (id: string) => {
     setSelectedOrgId(id);
@@ -818,8 +832,8 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      {/* Side-by-side: Org tree (left) + People list (right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
+      {/* Side-by-side: Org tree (left) + People list (center) + Preview (right) */}
+      <div style={{ display: 'grid', gridTemplateColumns: previewPersonId ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Org tree sidebar */}
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 10, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Organizations</div>
@@ -1258,7 +1272,12 @@ export default function PeoplePage() {
                             <input type="checkbox" checked={isSelected} onChange={() => togglePersonSelect(person.id)} />
                           </td>
                           <td style={{ ...tdStyle, fontWeight: 500 }}>
-                            {person.name}
+                            <span
+                              onClick={() => setPreviewPersonId(previewPersonId === person.id ? null : person.id)}
+                              style={{ cursor: 'pointer', color: previewPersonId === person.id ? 'var(--color-primary)' : undefined }}
+                            >
+                              {person.name}
+                            </span>
                             {person.syncStatus === 'MISSING_FROM_SOURCE' && (
                               <span title="No longer found in the connected data source" style={{ display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: '#fef3c7', color: '#92400e', verticalAlign: 'middle' }}>NOT IN SOURCE</span>
                             )}
@@ -1295,6 +1314,122 @@ export default function PeoplePage() {
               </div>
           </>
         </div>
+
+        {/* Person Preview Sidebar */}
+        {previewPersonId && (
+          <div style={{
+            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)', position: 'sticky', top: 12,
+            maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
+          }}>
+            {previewLoading ? (
+              <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Loading...</div>
+            ) : previewData ? (
+              <div style={{ padding: 16 }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{previewData.person.name}</h3>
+                    {previewData.person.title && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>{previewData.person.title}</div>}
+                    {previewData.person.email && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{previewData.person.email}</div>}
+                  </div>
+                  <button onClick={() => setPreviewPersonId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)', padding: '0 4px' }}>&times;</button>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <span style={roleBadge(previewData.person.role)}>{ROLE_LABELS[previewData.person.role] || previewData.person.role}</span>
+                </div>
+
+                {/* Organizations */}
+                {previewData.orgAssignments.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Organizations</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {previewData.orgAssignments.map((o) => (
+                        <span key={o.id} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>{o.name}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Governance Roles */}
+                {previewData.damaRoles.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Governance Roles</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {previewData.damaRoles.map((r) => (
+                        <div key={r.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 500 }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType}</span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{r.scopeName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Governance Groups */}
+                {previewData.governanceGroups.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Groups</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {previewData.governanceGroups.map((g) => (
+                        <div key={g.groupId} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 500 }}>{g.groupName}</span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{g.groupRole.replace(/_/g, ' ')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Owned Processes */}
+                {previewData.ownedProcessNodes.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Owned Processes</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {previewData.ownedProcessNodes.slice(0, 8).map((p) => (
+                        <div key={p.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{p.name}</span>
+                          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{p.level}</span>
+                        </div>
+                      ))}
+                      {previewData.ownedProcessNodes.length > 8 && (
+                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>+{previewData.ownedProcessNodes.length - 8} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Data Assets */}
+                {previewData.dataAssets.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Data Assets</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {previewData.dataAssets.slice(0, 6).map((a) => (
+                        <div key={a.id} style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{a.name}</span>
+                          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>{a.relation}</span>
+                        </div>
+                      ))}
+                      {previewData.dataAssets.length > 6 && (
+                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>+{previewData.dataAssets.length - 6} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Full detail link */}
+                <button
+                  onClick={() => navigate(`/people/${previewPersonId}`)}
+                  style={{ ...btnPrimary, width: '100%', textAlign: 'center', fontSize: 12, padding: '8px 12px' }}
+                >
+                  Open Full Detail
+                </button>
+              </div>
+            ) : (
+              <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Person not found.</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Person 360 View Modal */}

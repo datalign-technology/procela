@@ -13,6 +13,7 @@ import { exportCsv } from '../lib/exportCsv';
 import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import { SkeletonRows } from '../components/Skeleton';
 import SkillPicker from '../components/SkillPicker';
+import VersionHistoryModal from '../components/VersionHistoryModal';
 
 // ── Types ──
 
@@ -50,17 +51,6 @@ interface FlowRelationship {
   fromNodeId: string;
   toNodeId: string;
   type: string;
-}
-
-interface ProcessVersion {
-  id: string;
-  nodeId: string;
-  version: number;
-  snapshot: ProcessNode;
-  changedBy: string | null;
-  changedAt: string;
-  status: string;
-  note: string;
 }
 
 interface TagEntry {
@@ -1015,9 +1005,6 @@ export default function ProcessCatalogPage() {
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
-  const [historyVersions, setHistoryVersions] = useState<ProcessVersion[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [viewingVersion, setViewingVersion] = useState<ProcessVersion | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
 
   // Agent execution state
@@ -1297,16 +1284,7 @@ export default function ProcessCatalogPage() {
     }
   };
 
-  const showHistory = async (nodeId: string) => {
-    setHistoryNodeId(nodeId);
-    setHistoryLoading(true);
-    setViewingVersion(null);
-    try {
-      const res = await apiClient.get<{ success: boolean; data: ProcessVersion[] }>(`/process-catalog/nodes/${nodeId}/history`);
-      setHistoryVersions(res.data || []);
-    } catch { setHistoryVersions([]); }
-    finally { setHistoryLoading(false); }
-  };
+  const showHistory = (nodeId: string) => { setHistoryNodeId(nodeId); };
 
   const addTag = async (nodeId: string, tag: string) => {
     try {
@@ -1761,91 +1739,8 @@ export default function ProcessCatalogPage() {
         );
       })()}
 
-      {/* Version History Modal */}
       {historyNodeId && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => { setHistoryNodeId(null); setViewingVersion(null); }}>
-          <div style={{
-            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-            padding: 24, maxWidth: 600, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          }} onClick={(e) => e.stopPropagation()}>
-            {viewingVersion ? (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 700 }}>Version {viewingVersion.version} Snapshot</h2>
-                  <button onClick={() => setViewingVersion(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--color-primary)', padding: '4px 8px' }}>Back</button>
-                </div>
-                <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</div>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{viewingVersion.snapshot.name}</div>
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</div>
-                    <div style={{ fontSize: 13 }}>{viewingVersion.snapshot.description || '(none)'}</div>
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status at this version</div>
-                    <span style={{
-                      display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                      background: statusColors[viewingVersion.status]?.bg || '#f1f5f9',
-                      color: statusColors[viewingVersion.status]?.color || '#64748b',
-                    }}>{viewingVersion.status}</span>
-                  </div>
-                  <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Level</div>
-                    <div style={{ fontSize: 13 }}>{viewingVersion.snapshot.level}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Note</div>
-                    <div style={{ fontSize: 13 }}>{viewingVersion.note}</div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 700 }}>Version History</h2>
-                  <button onClick={() => setHistoryNodeId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
-                </div>
-                {historyLoading ? (
-                  <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
-                ) : historyVersions.length === 0 ? (
-                  <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No version history yet. History is recorded when a node's status changes.</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {historyVersions.map((v) => (
-                      <div key={v.id} style={{
-                        background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>Version {v.version}</div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                            <span style={{
-                              display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, marginRight: 6,
-                              background: statusColors[v.status]?.bg || '#f1f5f9',
-                              color: statusColors[v.status]?.color || '#64748b',
-                            }}>{v.status}</span>
-                            {new Date(v.changedAt).toLocaleString()}
-                          </div>
-                        </div>
-                        <button onClick={() => setViewingVersion(v)}
-                          style={{ padding: '4px 10px', fontSize: 11, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                          View
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+        <VersionHistoryModal nodeId={historyNodeId} onClose={() => setHistoryNodeId(null)} />
       )}
     </div>
   );

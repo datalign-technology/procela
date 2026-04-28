@@ -6,6 +6,8 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
+import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
@@ -440,18 +442,15 @@ export default function GovernanceCalendarPage() {
     <div>
       <PageTabNav tabs={OPERATE_TABS} />
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Calendar</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Recurring events and activities that keep your program running.
-          </p>
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+      <PageHeader
+        title="Governance Calendar"
+        subtitle="Recurring events and activities that keep your program running."
+        meta={
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
             {activeCount} active event{activeCount === 1 ? '' : 's'} &middot; {upcomingThisMonth} upcoming this month
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        }
+        actions={<>
           {events.length > 0 && (
             <div style={{ display: 'inline-flex', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
               <button onClick={() => setViewMode('list')} style={{
@@ -471,8 +470,8 @@ export default function GovernanceCalendarPage() {
             <button style={btnSecondary} onClick={handleSeed}>Seed Standard Events</button>
           )}
           {canWrite && <IconButton icon="plus" label="Add event" variant="primary" onClick={openAdd} />}
-        </div>
-      </div>
+        </>}
+      />
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -485,13 +484,7 @@ export default function GovernanceCalendarPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)',
-        }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Event' : 'Add New Event'}
-          </h3>
+        <SectionCard title={editingId ? 'Edit Event' : 'Add New Event'}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Name *</label>
@@ -646,7 +639,7 @@ export default function GovernanceCalendarPage() {
               {editingId ? 'Save Changes' : 'Add Event'}
             </button>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <ConfirmDialog

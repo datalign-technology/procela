@@ -7,6 +7,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
 import EmptyState from '../components/EmptyState';
+import PageHeader from '../components/PageHeader';
+import SectionCard from '../components/SectionCard';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 
@@ -230,18 +232,10 @@ export default function DamaRolesPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Roles</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Assign data management governance roles to people across organizations and data domains.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+      <PageHeader
+        title="Governance Roles"
+        subtitle="Assign data management governance roles to people across organizations and data domains."
+        actions={<>
           {roles.length > 0 && (
             <IconButton icon="trash" label="Delete all roles" variant="danger"
               onClick={() => setShowDeleteAll(true)} />
@@ -256,8 +250,10 @@ export default function DamaRolesPage() {
               ]))} />
           )}
           <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
-        </div>
-      </div>
+        </>}
+      >
+        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+      </PageHeader>
 
       {/* Summary cards — click to filter the table to that role type.
           Click again (or click the active card) to clear the filter. */}
@@ -308,8 +304,7 @@ export default function DamaRolesPage() {
 
       {/* Assign Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Assign Governance Role</h3>
+        <SectionCard title="Assign Governance Role">
           {error && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
               {error}
@@ -364,7 +359,7 @@ export default function DamaRolesPage() {
               Assign Role
             </button>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <ConfirmDialog

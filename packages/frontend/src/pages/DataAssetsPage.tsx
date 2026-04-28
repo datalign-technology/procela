@@ -19,6 +19,7 @@ import LinkConnectionModal from '../components/LinkConnectionModal';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
+import SectionCard from '../components/SectionCard';
 
 interface DataAssetEntity {
   id: string;
@@ -830,17 +831,7 @@ export default function DataAssetsPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 20,
-          marginBottom: 20,
-          boxShadow: 'var(--shadow-sm)',
-        }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            {editingId ? 'Edit Data Asset' : 'Add New Data Asset'}
-          </h3>
+        <SectionCard title={editingId ? 'Edit Data Asset' : 'Add New Data Asset'}>
           <UnsavedBanner visible={isDirty()} onSave={() => handleSave(false)} onDiscard={closeForm} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -1031,7 +1022,7 @@ export default function DataAssetsPage() {
               {editingId ? 'Save Changes' : 'Add Data Asset'}
             </button>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       {/* Stats */}
