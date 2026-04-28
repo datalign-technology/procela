@@ -864,7 +864,7 @@ export default function GovernanceGroupsPage() {
       )}
 
       {/* Master-Detail Layout: Tree (left) + Detail (right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 16 }}>
         {/* Left Panel — Tree View */}
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', alignSelf: 'start' }}>
           {/* Tree toolbar */}
