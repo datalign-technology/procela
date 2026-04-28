@@ -263,6 +263,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '6px 10px', paddingLeft: 10 + depth * 18,
           borderBottom: '1px solid var(--color-border)',
+          borderLeft: `3px solid ${typeColor.color}`,
           background: isSelected ? 'var(--color-primary-light, #f0f7ff)' : undefined,
           cursor: 'pointer', transition: 'background 0.1s',
           minWidth: 0,
@@ -750,9 +751,46 @@ export default function GovernanceGroupsPage() {
       />
 
       {/* Governance Hierarchy Guidance */}
-      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-        <strong>Recommended structure:</strong> Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
-      </div>
+      {flatGroups.length === 0 ? (
+        <div style={{ marginBottom: 12, padding: '14px 16px', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', borderRadius: 'var(--radius-md)', border: '1px solid #93c5fd', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#1e40af', marginBottom: 2 }}>
+              Recommended structure: Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Get started quickly by creating the core governance groups in one click.</div>
+          </div>
+          <button
+            style={{ ...btnPrimary, whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={async () => {
+              if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+              try {
+                const councilRes = await apiClient.post<{ success: boolean; data: { id: string } }>('/governance-groups', {
+                  name: 'Data Governance Council', type: 'COUNCIL', parentId: null, orgId: activeOrgId, description: 'Top-level governance body providing strategic direction and oversight for data governance.', status: 'ACTIVE',
+                });
+                const councilId = councilRes.data?.id;
+                if (councilId) {
+                  await apiClient.post('/governance-groups', {
+                    name: 'Data Governance Office', type: 'OFFICE', parentId: councilId, orgId: activeOrgId, description: 'Operational arm responsible for day-to-day data governance execution.', status: 'ACTIVE',
+                  });
+                  await apiClient.post('/governance-groups', {
+                    name: 'Data Governance Committee', type: 'COMMITTEE', parentId: councilId, orgId: activeOrgId, description: 'Cross-functional committee coordinating data governance initiatives.', status: 'ACTIVE',
+                  });
+                }
+                addToast('success', 'Created recommended governance structure');
+                fetchGroups();
+              } catch {
+                addToast('error', 'Failed to create recommended structure');
+              }
+            }}
+          >
+            Create Recommended Structure
+          </button>
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 12, padding: '6px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+          <span style={{ opacity: 0.8 }}>Recommended structure:</span> Council {'\u2192'} Office {'\u2192'} Committee {'\u2192'} Stewardship Teams {'\u2192'} Working Groups {'\u2192'} Communities of Practice
+        </div>
+      )}
 
       {/* Add/Edit Form */}
       {showForm && (
