@@ -565,27 +565,30 @@ export default function GovernanceProgramPage() {
 
       {!loading && (
         <>
-          {/* Next actions — shown first so users see what to do */}
+          {/* Next actions — above phase cards */}
           {recs.length > 0 && (
             <div style={{
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: '14px 20px', marginBottom: 16,
+              borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20,
               boxShadow: 'var(--shadow-sm)',
             }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Next Actions</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Next Actions</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {recs.map((r, idx) => {
                   const pc = priorityColor(r.priority);
                   const isSamePage = r.link === '/governance-program';
                   const actionTab = /principle|operating model/i.test(r.action) ? 'principles' : /scope/i.test(r.action) ? 'scope' : undefined;
                   const handleGoClick = () => {
-                    if (isSamePage) expandAndScroll(r.phase, actionTab);
-                    else navigate(r.link);
+                    if (isSamePage) {
+                      expandAndScroll(r.phase, actionTab);
+                    } else {
+                      navigate(r.link);
+                    }
                   };
                   return (
                     <div key={idx} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '8px 10px',
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 12px',
                       border: '1px solid var(--color-border)',
                       borderRadius: 'var(--radius-md)',
                       background: 'var(--color-bg)',
@@ -603,380 +606,98 @@ export default function GovernanceProgramPage() {
             </div>
           )}
 
-          {/* Phase cards — fixed 4-column row with step connectors */}
+          {/* Phase cards — fixed 4-column grid with arrow connectors */}
           {status && (
-            <div style={{
-              display: 'flex',
-              gap: 0,
-              marginBottom: 16,
-              alignItems: 'stretch',
-            }}>
-              {([1, 2, 3, 4] as const).map((n, i) => {
-                const key = `phase${n}` as 'phase1' | 'phase2' | 'phase3' | 'phase4';
-                const isExpanded = expandedPhase === n;
-                // @ts-ignore dead code pending cleanup
-                const _unused = (false) && (
-                  <>
-                    {/* Phase 1: Foundation — Scope, Principles & Dates */}
-                    {n === 1 && program && (
-                      <div ref={(el) => { cardRefs.current[1] = el; }}>
-                        <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--color-border)' }}>
-                          {(['scope', 'principles'] as const).map((t) => (
-                            <button
-                              key={t}
-                              onClick={(e) => { e.stopPropagation(); setActiveTab(t); }}
-                              style={{
-                                padding: '8px 16px', fontSize: 13,
-                                fontWeight: activeTab === t ? 600 : 500,
-                                background: 'transparent', border: 'none',
-                                borderBottom: activeTab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                color: activeTab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                marginBottom: -1, cursor: 'pointer', textTransform: 'capitalize',
-                              }}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-
-                        {activeTab === 'scope' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label>
-                              <textarea style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label>
-                              <textarea style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries</label>
-                              <textarea style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational, geographic, or functional boundaries for this program" />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Constraints</label>
-                              <textarea style={textareaStyle} value={constraints} onChange={(e) => setConstraints(e.target.value)} placeholder="Budget, timeline, regulatory, or resource constraints to respect" />
-                            </div>
-                          </div>
-                        )}
-
-                        {activeTab === 'principles' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vision</label>
-                              <textarea style={textareaStyle} value={vision} onChange={(e) => setVision(e.target.value)} placeholder="What does success look like for your data governance program?" />
-                            </div>
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Guiding Principles</label>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-                                {principles.length === 0 && (
-                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No principles defined yet. Add your first principle below.</div>
-                                )}
-                                {principles.map((p, idx) => (
-                                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', minWidth: 20 }}>{idx + 1}.</span>
-                                    <span style={{ flex: 1, fontSize: 13 }}>{p}</span>
-                                    <button type="button" onClick={() => removePrinciple(idx)} aria-label="Remove principle" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: 2 }}>&times;</button>
-                                  </div>
-                                ))}
-                              </div>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <input style={inputStyle} value={newPrinciple} onChange={(e) => setNewPrinciple(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPrinciple(); } }} placeholder="e.g. Data is a shared asset; treat it like one" />
-                                <button type="button" style={btnSecondary} onClick={addPrinciple}>Add</button>
-                              </div>
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Decision Rights</label>
-                              <textarea style={textareaStyle} value={decisionRights} onChange={(e) => setDecisionRights(e.target.value)} placeholder="Who decides what? Strategic, tactical, and operational decision authority" />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Operating Model</label>
-                              <select style={selectStyle} value={operatingModel} onChange={(e) => setOperatingModel(e.target.value as Program['principles']['operatingModel'])}>
-                                <option value="">-- Select --</option>
-                                <option value="CENTRALIZED">Centralized</option>
-                                <option value="FEDERATED">Federated</option>
-                                <option value="HYBRID">Hybrid</option>
-                              </select>
-                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, lineHeight: 1.4 }}>Centralized = one central team governs. Federated = domains govern themselves within enterprise guardrails. Hybrid = shared responsibility.</div>
-                            </div>
-                          </div>
-                        )}
-
-                        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-                          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--color-text-secondary)' }}>Program Dates</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Start Date</label>
-                              <input type="date" style={inputStyle} value={targetStartDate} onChange={(e) => setTargetStartDate(e.target.value)} />
-                            </div>
-                            <div>
-                              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Target Launch Date</label>
-                              <input type="date" style={inputStyle} value={targetLaunchDate} onChange={(e) => setTargetLaunchDate(e.target.value)} />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-                          <button style={{ ...btnPrimary, opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }} disabled={saving} onClick={handleSave}>
-                            {saving ? 'Saving...' : 'Save Changes'}
-                          </button>
+            <>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 0,
+                marginBottom: 0,
+                alignItems: 'stretch',
+              }}>
+                {([1, 2, 3, 4] as const).map((n, idx) => {
+                  const key = `phase${n}` as 'phase1' | 'phase2' | 'phase3' | 'phase4';
+                  const isExpanded = expandedPhase === n;
+                  return (
+                    <div key={n} style={{ display: 'flex', alignItems: 'stretch' }}>
+                      <div style={{ flex: 1, display: 'flex' }}>
+                        <div style={{ flex: 1 }}>
+                          <PhaseCard
+                            phaseNum={n}
+                            phase={status.phases[key]}
+                            isCurrent={status.currentPhase === n}
+                            expanded={isExpanded}
+                            onToggle={() => togglePhase(n)}
+                            onExpandPhase={expandAndScroll}
+                          />
                         </div>
                       </div>
-                    )}
-
-                    {/* Phase 2: Assign Governance Roles */}
-                    {n === 2 && (
-                      <div ref={(el) => { cardRefs.current[2] = el; }}>
-                        {(() => {
-                          const totalRoles = ROLE_GUIDE.length;
-                          const leadershipTypes = ['CDO', 'DATA_GOVERNANCE_LEAD'];
-                          const filledRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
-                          const filledCount = ROLE_GUIDE.filter((r) => filledRoleTypes.has(r.roleType)).length;
-                          const leadershipFilled = leadershipTypes.filter((rt) => filledRoleTypes.has(rt)).length;
-                          const allGroupTypes = ROLE_GROUPS.map((g) => g.groupType);
-                          const allExpanded = allGroupTypes.every((gt) => expandedRoleGroups.has(gt));
-                          return (
-                            <>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                  <span style={{ fontSize: 12, color: leadershipFilled === leadershipTypes.length ? '#16a34a' : '#dc2626' }}>{leadershipFilled} of {leadershipTypes.length} leadership roles filled</span>
-                                  <button
-                                    onClick={() => setExpandedRoleGroups(allExpanded ? new Set() : new Set(allGroupTypes))}
-                                    style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}
-                                  >
-                                    {allExpanded ? 'Collapse All' : 'Expand All'}
-                                  </button>
-                                </div>
-                              </div>
-                              <div style={{ marginBottom: 16 }}>
-                                <ProgressBar value={(filledCount / totalRoles) * 100} />
-                              </div>
-                              {ROLE_GROUPS.map((group) => {
-                                const groupRoles = ROLE_GUIDE.filter((r) => group.roleTypes.includes(r.roleType));
-                                const groupFilled = groupRoles.filter((r) => filledRoleTypes.has(r.roleType)).length;
-                                const isGroupExpanded = expandedRoleGroups.has(group.groupType);
-                                return (
-                                  <div key={group.groupType} style={{ marginBottom: 8 }}>
-                                    <div
-                                      onClick={() => setExpandedRoleGroups((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(group.groupType)) next.delete(group.groupType);
-                                        else next.add(group.groupType);
-                                        return next;
-                                      })}
-                                      style={{
-                                        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                                        cursor: 'pointer', borderRadius: 'var(--radius-md)',
-                                        border: `1px solid ${isGroupExpanded ? group.color + '40' : 'var(--color-border)'}`,
-                                        background: isGroupExpanded ? group.color + '08' : 'var(--color-surface)',
-                                        transition: 'background-color 0.12s, border-color 0.12s',
-                                      }}
-                                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = group.color + '0d'; }}
-                                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = isGroupExpanded ? group.color + '08' : 'var(--color-surface)'; }}
-                                    >
-                                      <div style={{ width: 4, height: 24, borderRadius: 2, background: group.color, flexShrink: 0 }} />
-                                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)', width: 12 }}>{isGroupExpanded ? '▼' : '▶'}</span>
-                                      <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)' }}>{group.label}</span>
-                                          <span style={{ fontSize: 11, color: groupFilled === groupRoles.length ? '#16a34a' : 'var(--color-text-muted)' }}>
-                                            {groupFilled}/{groupRoles.length} filled
-                                          </span>
-                                        </div>
-                                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{group.description}</div>
-                                      </div>
-                                      <Link to={group.link} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', flexShrink: 0 }}>
-                                        View Group &rarr;
-                                      </Link>
-                                    </div>
-                                    {isGroupExpanded && (
-                                      <div style={{ marginTop: 6 }}>
-                                        {groupRoles.map((role) => {
-                                          const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
-                                          const pc = PRIORITY_COLORS[role.priority];
-                                          return (
-                                            <div key={role.roleType} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginLeft: 14, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `3px solid ${group.color}`, borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
-                                              <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                                  <span style={{ fontSize: 13, fontWeight: 600 }}>{role.label}</span>
-                                                  <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: pc.bg, color: pc.text, textTransform: 'uppercase' }}>{role.priority}</span>
-                                                </div>
-                                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{role.purpose}</div>
-                                                {assignees.length > 0 ? (
-                                                  <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                                    {assignees.map((a) => (
-                                                      <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: '#d1f0eb', color: '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                        {a.personName}
-                                                        <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                ) : (
-                                                  <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>
-                                                )}
-                                              </div>
-                                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                                                <select style={{ ...selectStyle, width: 'auto', minWidth: 150, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}>
-                                                  <option value="">Select person...</option>
-                                                  {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                                </select>
-                                                <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* Phase 3: People & Processes */}
-                    {n === 3 && (
-                      <div ref={(el) => { cardRefs.current[3] = el; }}>
-                        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                          With the governance structure in place, assign Data Owners to each domain, identify stewards
-                          for day-to-day governance, and form stewardship teams to manage data quality and definitions.
+                      {idx < 3 && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 32,
+                          flexShrink: 0,
+                          color: 'var(--color-text-muted)',
+                          fontSize: 18,
+                          fontWeight: 700,
+                          opacity: 0.5,
+                        }}>
+                          &rarr;
                         </div>
-                        {status && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {status.phases.phase3.checks.map((check, idx) => {
-                              const actionMap: Record<string, { route: string; label: string }> = {
-                                'Data owners assigned': { route: '/governance-program', label: 'Assign Roles' },
-                                'Data stewards identified': { route: '/governance-program', label: 'Assign Roles' },
-                                'Stewardship teams formed': { route: '/governance', label: 'Governance Groups' },
-                                'Domain ownership assigned': { route: '/data-domains', label: 'Data Domains' },
-                              };
-                              const target = actionMap[check.label];
-                              return (
-                                <Link
-                                  key={idx}
-                                  to={target?.route || '#'}
-                                  onClick={target?.route === '/governance-program' ? (e) => { e.preventDefault(); expandAndScroll(2); } : undefined}
-                                  style={{ textDecoration: 'none' }}
-                                >
-                                  <div style={{
-                                    display: 'flex', alignItems: 'center', gap: 12,
-                                    padding: '12px 16px',
-                                    background: 'var(--color-bg)',
-                                    border: '1px solid var(--color-border)',
-                                    borderLeft: `4px solid ${check.done ? '#22c55e' : '#d1d5db'}`,
-                                    borderRadius: 'var(--radius-md)',
-                                    cursor: 'pointer',
-                                    transition: 'background-color 0.12s',
-                                  }}
-                                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface)'; }}
-                                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-bg)'; }}
-                                  >
-                                    <span style={{
-                                      width: 20, height: 20, borderRadius: '50%',
-                                      background: check.done ? '#22c55e' : 'transparent',
-                                      border: check.done ? 'none' : '2px solid #d1d5db',
-                                      color: '#fff',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      fontSize: 11, fontWeight: 700, flexShrink: 0,
-                                    }}>
-                                      {check.done ? '✓' : ''}
-                                    </span>
-                                    <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                                      {check.label}
-                                    </span>
-                                    {target && !check.done && (
-                                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', flexShrink: 0 }}>
-                                        {target.label} &rarr;
-                                      </span>
-                                    )}
-                                    {check.done && (
-                                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Done</span>
-                                    )}
-                                  </div>
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Phase 4: Program Launch */}
-                    {n === 4 && program && (
-                      <div ref={(el) => { cardRefs.current[4] = el; }}>
-                        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                          When all foundation, structural, and people requirements are in place, launch the program to move it into active operations.
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <span style={{ fontSize: 13 }}>
-                            Current status: <strong>{program.status === 'ACTIVE' ? 'Active' : program.status === 'PAUSED' ? 'Paused' : program.status === 'COMPLETED' ? 'Completed' : 'Planning'}</strong>
-                          </span>
-                          {program.status !== 'ACTIVE' && (
-                            <button style={{ ...btnPrimary, fontSize: 13 }} onClick={async () => {
-                              if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
-                              try {
-                                const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, { status: 'ACTIVE' });
-                                if (res.data) { setProgram(res.data); hydrateFromProgram(res.data); }
-                                addToast('success', 'Program launched!');
-                                fetchAll();
-                              } catch { addToast('error', 'Failed to launch program'); }
-                            }}>Launch Program</button>
-                          )}
-                          {program.status === 'ACTIVE' && (
-                            <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Program is live</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-
-                return (
-                  <React.Fragment key={n}>
-                    {i > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px', color: '#d1d5db', fontSize: 16, flexShrink: 0 }}>&rarr;</div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <PhaseCard
-                        phaseNum={n}
-                        phase={status.phases[key]}
-                        isCurrent={status.currentPhase === n}
-                        expanded={isExpanded}
-                        onToggle={() => togglePhase(n)}
-                        onExpandPhase={expandAndScroll}
-                      />
+                      )}
                     </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
-          {/* Detail panel — shows below cards when a phase is selected */}
+          {/* Expanded phase detail panel — below all cards */}
           {expandedPhase !== null && status && (
-            <div ref={(el) => { cardRefs.current[expandedPhase] = el; }} style={{
-              background: 'var(--color-surface)',
-              border: `2px solid ${PHASE_COLORS[expandedPhase]}`,
-              borderTop: `4px solid ${PHASE_COLORS[expandedPhase]}`,
-              borderRadius: 'var(--radius-md)',
-              padding: 20,
-              marginBottom: 20,
-              boxShadow: 'var(--shadow-sm)',
-            }}>
+            <div
+              ref={(el) => { cardRefs.current[expandedPhase] = el; }}
+              style={{
+                marginTop: 16,
+                marginBottom: 20,
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderTop: `3px solid ${PHASE_COLORS[expandedPhase]}`,
+                borderRadius: 'var(--radius-md)',
+                padding: 24,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{
                     width: 28, height: 28, borderRadius: '50%',
-                    background: PHASE_COLORS[expandedPhase], color: '#fff',
+                    background: PHASE_COLORS[expandedPhase],
+                    color: '#fff',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 13, fontWeight: 700, flexShrink: 0,
-                  }}>{expandedPhase}</div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{PHASE_TITLES[expandedPhase]}</h3>
+                    fontSize: 13, fontWeight: 700,
+                  }}>
+                    {expandedPhase}
+                  </div>
+                  <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+                    Phase {expandedPhase}: {PHASE_TITLES[expandedPhase]}
+                  </h3>
                 </div>
-                <button onClick={() => setExpandedPhase(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px 8px' }}>&times;</button>
+                <button
+                  onClick={() => setExpandedPhase(null)}
+                  style={{
+                    background: 'none', border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    fontSize: 16, color: 'var(--color-text-muted)',
+                    width: 32, height: 32,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  aria-label="Close panel"
+                >
+                  &times;
+                </button>
               </div>
               {/* Phase 1 content */}
               {expandedPhase === 1 && program && (
