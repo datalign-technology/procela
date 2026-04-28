@@ -72,15 +72,15 @@ interface TagEntry {
 
 // ── Level Configuration ──
 
-const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string; required: boolean; icon: string; hint: string }> = {
-  VALUE_STREAM: { color: '#0f4f46', bg: '#d1f0eb', label: 'Value Stream', required: true, icon: '\u2B95', hint: 'End-to-end flow delivering value to a customer or stakeholder' },
-  DOMAIN:       { color: '#5b21b6', bg: '#ede9fe', label: 'Domain', required: false, icon: '\u25CE', hint: 'A business domain grouping related capabilities' },
-  CAPABILITY:   { color: '#1e40af', bg: '#dbeafe', label: 'Capability', required: false, icon: '\u2B50', hint: 'A business capability that the organization performs' },
-  PROCESS:      { color: '#92400e', bg: '#fef3c7', label: 'Process', required: true, icon: '\u2699', hint: 'A defined set of activities achieving a specific outcome' },
-  SUBPROCESS:   { color: '#9d174d', bg: '#fce7f3', label: 'Sub-Process', required: false, icon: '\u21B3', hint: 'A grouping of related activities within a process' },
-  ACTIVITY:     { color: '#065f46', bg: '#d1fae5', label: 'Activity', required: true, icon: '\u25B6', hint: 'A specific unit of work with inputs and outputs' },
-  TASK:         { color: '#64748b', bg: '#f1f5f9', label: 'Task', required: false, icon: '\u2022', hint: 'A detailed task within an activity' },
-  EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', required: false, icon: '\u2318', hint: 'System or automation that executes a task' },
+const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string; plural: string; required: boolean; icon: string; hint: string }> = {
+  VALUE_STREAM: { color: '#0f4f46', bg: '#d1f0eb', label: 'Value Stream', plural: 'Value Streams', required: true, icon: '\u2B95', hint: 'End-to-end flow delivering value to a customer or stakeholder' },
+  DOMAIN:       { color: '#5b21b6', bg: '#ede9fe', label: 'Domain', plural: 'Domains', required: false, icon: '\u25CE', hint: 'A business domain grouping related capabilities' },
+  CAPABILITY:   { color: '#1e40af', bg: '#dbeafe', label: 'Capability', plural: 'Capabilities', required: false, icon: '\u2B50', hint: 'A business capability that the organization performs' },
+  PROCESS:      { color: '#92400e', bg: '#fef3c7', label: 'Process', plural: 'Processes', required: true, icon: '\u2699', hint: 'A defined set of activities achieving a specific outcome' },
+  SUBPROCESS:   { color: '#9d174d', bg: '#fce7f3', label: 'Sub-Process', plural: 'Sub-Processes', required: false, icon: '\u21B3', hint: 'A grouping of related activities within a process' },
+  ACTIVITY:     { color: '#065f46', bg: '#d1fae5', label: 'Activity', plural: 'Activities', required: true, icon: '\u25B6', hint: 'A specific unit of work with inputs and outputs' },
+  TASK:         { color: '#64748b', bg: '#f1f5f9', label: 'Task', plural: 'Tasks', required: false, icon: '\u2022', hint: 'A detailed task within an activity' },
+  EXECUTION:    { color: '#475569', bg: '#e2e8f0', label: 'System/Execution', plural: 'Systems/Executions', required: false, icon: '\u2318', hint: 'System or automation that executes a task' },
 };
 
 import { getStatusColor } from '@/lib/statusBadge';
@@ -1409,7 +1409,7 @@ export default function ProcessCatalogPage() {
                 borderRadius: 4, padding: '3px 8px', fontSize: 11, fontWeight: 500,
                 border: config.required ? `1px solid ${count > 0 ? config.color : '#94a3b8'}33` : '1px solid transparent',
               }} title={config.hint}>
-                {config.icon} {count} {config.label}{count !== 1 ? 's' : ''}
+                {config.icon} {count} {count === 1 ? config.label : config.plural}
                 {config.required && <span style={{ fontSize: 8 }}>*</span>}
               </div>
             );
