@@ -58,6 +58,7 @@ import decisionRightsRouter from './routes/decision-rights';
 import sopsRouter from './routes/sops';
 import businessGlossaryRouter from './routes/business-glossary';
 import operationsManualsRouter from './routes/operations-manuals';
+import skillsRouter from './routes/skills';
 
 const app = express();
 
@@ -125,6 +126,7 @@ app.use('/api/v1/decision-rights', authenticateToken, decisionRightsRouter);
 app.use('/api/v1/sops', authenticateToken, sopsRouter);
 app.use('/api/v1/business-glossary', authenticateToken, businessGlossaryRouter);
 app.use('/api/v1/operations-manuals', authenticateToken, operationsManualsRouter);
+app.use('/api/v1/skills', authenticateToken, skillsRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
@@ -165,6 +167,7 @@ import { decisionRights } from './routes/decision-rights';
 import { sops } from './routes/sops';
 import { glossaryTerms } from './routes/business-glossary';
 import { operationsManuals } from './routes/operations-manuals';
+import { skills } from './routes/skills';
 
 const stores = {
   processNodes: () => processNodes,
@@ -202,6 +205,7 @@ const stores = {
   sops: () => sops,
   glossaryTerms: () => glossaryTerms,
   operationsManuals: () => operationsManuals,
+  skills: () => skills,
 };
 const autoSaveHandle = startAutoSave(stores);
 
