@@ -29,10 +29,10 @@ const FIXTURE_ORGS: StoredOrg[] = [
 ];
 
 const FIXTURE_PEOPLE: StoredPerson[] = [
-  { id: 'p-nns-admin', orgIds: [TEST_IDS.NNS], accessibleOrgIds: [], name: 'NNS Admin', email: 'nns-admin@test.com', role: 'ORG_ADMIN', title: '', createdAt: '', updatedAt: '' },
-  { id: 'p-nns-viewer', orgIds: [TEST_IDS.NNS], accessibleOrgIds: [], name: 'NNS Viewer', email: 'nns-viewer@test.com', role: 'VIEWER', title: '', createdAt: '', updatedAt: '' },
-  { id: 'p-hii-admin', orgIds: [TEST_IDS.HII], accessibleOrgIds: [], name: 'HII Admin', email: 'hii-admin@test.com', role: 'ORG_ADMIN', title: '', createdAt: '', updatedAt: '' },
-  { id: 'p-super', orgIds: [], accessibleOrgIds: [], name: 'Super', email: 'super@test.com', role: 'SUPER_ADMIN', title: '', createdAt: '', updatedAt: '' },
+  { id: 'p-nns-admin', orgIds: [TEST_IDS.NNS], accessibleOrgIds: [], name: 'NNS Admin', email: 'nns-admin@test.com', role: 'ORG_ADMIN', title: '', skillIds: [], createdAt: '', updatedAt: '' },
+  { id: 'p-nns-viewer', orgIds: [TEST_IDS.NNS], accessibleOrgIds: [], name: 'NNS Viewer', email: 'nns-viewer@test.com', role: 'VIEWER', title: '', skillIds: [], createdAt: '', updatedAt: '' },
+  { id: 'p-hii-admin', orgIds: [TEST_IDS.HII], accessibleOrgIds: [], name: 'HII Admin', email: 'hii-admin@test.com', role: 'ORG_ADMIN', title: '', skillIds: [], createdAt: '', updatedAt: '' },
+  { id: 'p-super', orgIds: [], accessibleOrgIds: [], name: 'Super', email: 'super@test.com', role: 'SUPER_ADMIN', title: '', skillIds: [], createdAt: '', updatedAt: '' },
 ];
 
 describe('org access scoping', () => {

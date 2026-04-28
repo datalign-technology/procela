@@ -12,6 +12,7 @@ import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
 import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import { SkeletonRows } from '../components/Skeleton';
+import SkillPicker from '../components/SkillPicker';
 
 // ── Types ──
 
@@ -40,6 +41,7 @@ interface ProcessNode {
   riskLevel?: string;
   automationLevel?: string;
   estimatedDuration?: string;
+  requiredSkillIds?: string[];
   children?: ProcessNode[];
 }
 
@@ -747,7 +749,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
                   <DocField label="Est. Duration" value={node.estimatedDuration || ''} onSave={(v) => onUpdate(node.id, { estimatedDuration: v })} disabled={isLocked} placeholder="e.g. 2 hours, 1 day" />
                   <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
+                  <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
                 </>
+              )}
+              {/* Task fields — required skills */}
+              {node.level === 'TASK' && (
+                <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
               )}
             </div>
           )}

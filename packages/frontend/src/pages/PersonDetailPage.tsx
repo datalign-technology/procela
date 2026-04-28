@@ -6,6 +6,7 @@ import { errorToast, successToast } from '../lib/errorToast';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
+import SkillPicker from '../components/SkillPicker';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -18,7 +19,7 @@ import OrgPicker from '../components/OrgPicker';
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Person360Data {
-  person: { id: string; orgIds: string[]; accessibleOrgIds: string[]; name: string; email: string; role: string; title: string };
+  person: { id: string; orgIds: string[]; accessibleOrgIds: string[]; name: string; email: string; role: string; title: string; skillIds?: string[] };
   orgAssignments: { id: string; name: string; type: string }[];
   damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
   governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
@@ -372,6 +373,32 @@ export default function PersonDetailPage() {
           }}
           maxHeight={260}
           placeholder="Search organizations (press / to focus)"
+        />
+      </div>
+
+      {/* Skills */}
+      <div style={cardStyle}>
+        <SkillPicker
+          orgId={activeOrgId || undefined}
+          selectedSkillIds={p.skillIds || []}
+          onChange={async (skillIds) => {
+            if (!data) return;
+            const snapshot = data;
+            setData({ ...data, person: { ...data.person, skillIds } });
+            setBusy(true);
+            try {
+              await apiClient.put(`/people/${p.id}`, { skillIds });
+              successToast('Skills updated');
+            } catch (err) {
+              setData(snapshot);
+              errorToast(err, 'Failed to update skills');
+            } finally {
+              setBusy(false);
+            }
+          }}
+          disabled={busy}
+          maxHeight={220}
+          label="Skills"
         />
       </div>
 

@@ -11,6 +11,7 @@ import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import PageTabNav, { ADMIN_TABS } from '../components/PageTabNav';
+import SkillPicker from '../components/SkillPicker';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -39,6 +40,7 @@ interface Agent {
   provider: string;
   status: 'ACTIVE' | 'PAUSED' | 'RETIRED';
   ownerPersonId: string;
+  skillIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -51,12 +53,13 @@ interface FormData {
   provider: string;
   status: 'ACTIVE' | 'PAUSED' | 'RETIRED';
   ownerPersonId: string;
+  skillIds: string[];
 }
 
 const emptyForm: FormData = {
   name: '', orgIds: [], agentType: 'AI',
   description: '', provider: '',
-  status: 'ACTIVE', ownerPersonId: '',
+  status: 'ACTIVE', ownerPersonId: '', skillIds: [],
 };
 
 // ── Inline styles (matching the rest of the app) ──
@@ -163,6 +166,7 @@ export default function AgentsPage() {
       name: a.name, orgIds: a.orgIds, agentType: a.agentType,
       description: a.description, provider: a.provider,
       status: a.status, ownerPersonId: a.ownerPersonId,
+      skillIds: a.skillIds || [],
     });
     setEditingId(a.id);
     setShowForm(true);
@@ -407,6 +411,15 @@ export default function AgentsPage() {
                 ))}
               </div>
               {form.orgIds.length === 0 && <p style={{ fontSize: 10, color: 'var(--color-error)', marginTop: 4 }}>Assign to at least one organization.</p>}
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SkillPicker
+                orgId={activeOrgId || undefined}
+                selectedSkillIds={form.skillIds}
+                onChange={(skillIds) => setForm({ ...form, skillIds })}
+                maxHeight={180}
+                label="Skills"
+              />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>

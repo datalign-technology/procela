@@ -103,6 +103,7 @@ router.post('/', (req: Request, res: Response) => {
     provider: provider || '',
     status: resolvedStatus,
     ownerPersonId: ownerPersonId || '',
+    skillIds: Array.isArray(skillIds) ? skillIds : [],
     createdAt: now, updatedAt: now,
   };
   agents.push(agent);
@@ -114,11 +115,12 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const agent = agents.find((a) => a.id === req.params.id);
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
-  const { orgIds, name, agentType, description, provider, status, ownerPersonId } = req.body;
+  const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds } = req.body;
   if (name !== undefined) agent.name = name;
   if (description !== undefined) agent.description = description;
   if (provider !== undefined) agent.provider = provider;
   if (ownerPersonId !== undefined) agent.ownerPersonId = ownerPersonId;
+  if (skillIds !== undefined) agent.skillIds = Array.isArray(skillIds) ? skillIds : [];
   if (agentType !== undefined && AGENT_TYPES.includes(agentType)) agent.agentType = agentType;
   if (status !== undefined && AGENT_STATUSES.includes(status)) agent.status = status;
   if (orgIds !== undefined) {
@@ -205,6 +207,7 @@ router.post('/import', (req: Request, res: Response) => {
         provider: row.provider || '',
         status: 'ACTIVE',
         ownerPersonId: '',
+        skillIds: [],
         createdAt: now, updatedAt: now,
       };
       agents.push(agent);
