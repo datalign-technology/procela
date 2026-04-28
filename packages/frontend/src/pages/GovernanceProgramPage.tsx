@@ -834,12 +834,16 @@ export default function GovernanceProgramPage() {
                               {groupRoles.map((role) => {
                                 const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
                                 const pc = PRIORITY_COLORS[role.priority];
+                                const isFilled = !role.multiAssign && assignees.length > 0;
                                 return (
                                   <div key={role.roleType} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginLeft: 14, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `3px solid ${group.color}`, borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                         <span style={{ fontSize: 13, fontWeight: 600 }}>{role.label}</span>
                                         <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: pc.bg, color: pc.text, textTransform: 'uppercase' }}>{role.priority}</span>
+                                        <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: role.multiAssign ? '#f5f3ff' : '#f0f9ff', color: role.multiAssign ? '#6d28d9' : '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                          {role.multiAssign ? 'Multiple' : 'Single'}
+                                        </span>
                                       </div>
                                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{role.purpose}</div>
                                       {assignees.length > 0 ? (
@@ -853,10 +857,14 @@ export default function GovernanceProgramPage() {
                                         </div>
                                       ) : (<div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>)}
                                     </div>
-                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                                      <select style={{ ...selectStyle, width: 'auto', minWidth: 150, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}><option value="">Select person...</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                                      <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
-                                    </div>
+                                    {!isFilled ? (
+                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 150, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value }))}><option value="">Select person...</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType)}>Assign</button>
+                                      </div>
+                                    ) : (
+                                      <span style={{ fontSize: 11, color: '#16a34a', flexShrink: 0 }}>✓ Filled</span>
+                                    )}
                                   </div>
                                 );
                               })}

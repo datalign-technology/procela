@@ -963,11 +963,9 @@ export default function GovernanceGroupsPage() {
                                   }}>
                                     {expected.required ? 'Required' : 'Optional'}
                                   </span>
-                                  {expected.multiAssign && (
-                                    <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                      Multiple
-                                    </span>
-                                  )}
+                                  <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: expected.multiAssign ? '#f5f3ff' : '#f0f9ff', color: expected.multiAssign ? '#6d28d9' : '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    {expected.multiAssign ? 'Multiple' : 'Single'}
+                                  </span>
                                 </div>
                                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
                                 {assigned.length > 0 && (
@@ -981,7 +979,7 @@ export default function GovernanceGroupsPage() {
                                   </div>
                                 )}
                               </div>
-                              {canAddMore && (
+                              {canAddMore ? (
                                 <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                                   <select
                                     style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 11, padding: '4px 8px' }}
@@ -1001,7 +999,9 @@ export default function GovernanceGroupsPage() {
                                     Assign
                                   </button>
                                 </div>
-                              )}
+                              ) : !expected.multiAssign && assigned.length > 0 ? (
+                                <span style={{ fontSize: 11, color: '#16a34a', flexShrink: 0 }}>✓ Filled</span>
+                              ) : null}
                             </div>
                           </div>
                         );
