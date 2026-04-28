@@ -128,6 +128,12 @@ function ProgressBar({ value, color }: { value: number; color?: string }) {
   );
 }
 
+const PHASE_CHECK_HINTS: Record<string, string> = {
+  'Governance leadership roles established': 'CDO, Data Governance Lead',
+  'Data owners assigned': 'Assign Data Owners to each domain',
+  'Data stewards identified': 'Business or Technical Data Steward',
+};
+
 const PHASE_CHECK_LINKS: Record<string, string> = {
   'Scope defined': '#1:scope',
   'Guiding principles established': '#1:principles',
@@ -135,7 +141,7 @@ const PHASE_CHECK_LINKS: Record<string, string> = {
   'Data domains defined': '/data-domains',
   'Governance Council established': '/governance',
   'Governance Committee established': '/governance',
-  'Governance leadership roles established': '#2',
+  'Governance leadership roles established': '#2:leadership',
   'Data owners assigned': '#2',
   'Data stewards identified': '#2',
   'Stewardship teams formed': '/governance',
@@ -256,8 +262,11 @@ function PhaseCard({
               }}>
                 {check.done ? '✓' : ''}
               </span>
-              <span style={{ flex: 1, color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                {check.label}
+              <span style={{ flex: 1 }}>
+                <span style={{ color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{check.label}</span>
+                {PHASE_CHECK_HINTS[check.label] && (
+                  <span style={{ display: 'block', fontSize: 9, color: 'var(--color-text-muted)', marginTop: 1 }}>{PHASE_CHECK_HINTS[check.label]}</span>
+                )}
               </span>
               {link && (
                 <span style={{ fontSize: 11, color: 'var(--color-primary)', flexShrink: 0, opacity: 0.7 }}>
@@ -289,12 +298,19 @@ export default function GovernanceProgramPage() {
 
   const togglePhase = (n: number) => {
     setExpandedPhase((prev) => (prev === n ? null : n));
+    setRoleGroupFilter(null);
   };
 
   const expandAndScroll = (n: number, tab?: string) => {
     setExpandedPhase(n);
     if (tab && (tab === 'scope' || tab === 'principles')) {
       setActiveTab(tab);
+    }
+    if (tab === 'leadership') {
+      setRoleGroupFilter('COUNCIL');
+      setExpandedRoleGroups(new Set(['COUNCIL']));
+    } else if (n === 2 && !tab) {
+      setRoleGroupFilter(null);
     }
     setTimeout(() => {
       cardRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -321,6 +337,7 @@ export default function GovernanceProgramPage() {
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [rolesLoaded, setRolesLoaded] = useState(false);
   const [expandedRoleGroups, setExpandedRoleGroups] = useState<Set<string>>(new Set());
+  const [roleGroupFilter, setRoleGroupFilter] = useState<string | null>(null);
 
   const hydrateFromProgram = (p: Program) => {
     setInScope(p.scope?.inScope || '');
@@ -771,19 +788,27 @@ export default function GovernanceProgramPage() {
                 const filledRoleTypes = new Set(roleAssignments.map((a) => a.roleType));
                 const filledCount = ROLE_GUIDE.filter((r) => filledRoleTypes.has(r.roleType)).length;
                 const leadershipFilled = leadershipTypes.filter((rt) => filledRoleTypes.has(rt)).length;
-                const allGroupTypes = ROLE_GROUPS.map((g) => g.groupType);
+                const visibleGroups = roleGroupFilter ? ROLE_GROUPS.filter((g) => g.groupType === roleGroupFilter) : ROLE_GROUPS;
+                const allGroupTypes = visibleGroups.map((g) => g.groupType);
                 const allExpanded = allGroupTypes.every((gt) => expandedRoleGroups.has(gt));
                 return (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{filledCount} of {totalRoles} roles assigned</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>
+                        {roleGroupFilter ? `Leadership roles: CDO, Data Governance Lead` : `${filledCount} of ${totalRoles} roles assigned`}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <span style={{ fontSize: 12, color: leadershipFilled === leadershipTypes.length ? '#16a34a' : '#dc2626' }}>{leadershipFilled} of {leadershipTypes.length} leadership roles filled</span>
-                        <button onClick={() => setExpandedRoleGroups(allExpanded ? new Set() : new Set(allGroupTypes))} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}>{allExpanded ? 'Collapse All' : 'Expand All'}</button>
+                        {!roleGroupFilter && (
+                          <button onClick={() => setExpandedRoleGroups(allExpanded ? new Set() : new Set(allGroupTypes))} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}>{allExpanded ? 'Collapse All' : 'Expand All'}</button>
+                        )}
+                        {roleGroupFilter && (
+                          <button onClick={() => { setRoleGroupFilter(null); setExpandedRoleGroups(new Set()); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}>Show all groups</button>
+                        )}
                       </div>
                     </div>
-                    <div style={{ marginBottom: 16 }}><ProgressBar value={(filledCount / totalRoles) * 100} /></div>
-                    {ROLE_GROUPS.map((group) => {
+                    {!roleGroupFilter && <div style={{ marginBottom: 16 }}><ProgressBar value={(filledCount / totalRoles) * 100} /></div>}
+                    {visibleGroups.map((group) => {
                       const groupRoles = ROLE_GUIDE.filter((r) => group.roleTypes.includes(r.roleType));
                       const groupFilled = groupRoles.filter((r) => filledRoleTypes.has(r.roleType)).length;
                       const isGroupExpanded = expandedRoleGroups.has(group.groupType);
