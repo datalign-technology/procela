@@ -586,7 +586,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -610,6 +610,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   onRemoveTag: (tagId: string) => void;
   selectedIds: Set<string>;
   toggleSelect: (id: string) => void;
+  agentExecByActivity?: Record<string, { status: string; completedAt: string | null; agentName: string; durationMs: number | null }>;
+  onRunAgent?: (activityId: string, activityName: string) => void;
+  runningActivity?: string | null;
+  hasAgentRoles?: boolean;
 }) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -750,6 +754,37 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   <DocField label="Est. Duration" value={node.estimatedDuration || ''} onSave={(v) => onUpdate(node.id, { estimatedDuration: v })} disabled={isLocked} placeholder="e.g. 2 hours, 1 day" />
                   <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
+                  {/* Agent execution — Run button + last status */}
+                  {hasAgentRoles && onRunAgent && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginTop: 2 }}>
+                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Agent Run:</span>
+                      <button
+                        onClick={() => onRunAgent(node.id, node.name)}
+                        disabled={runningActivity === node.id}
+                        style={{
+                          padding: '2px 10px', fontSize: 10, fontWeight: 600,
+                          background: runningActivity === node.id ? '#e5e7eb' : '#7c3aed',
+                          color: runningActivity === node.id ? '#6b7280' : '#fff',
+                          border: 'none', borderRadius: 4, cursor: runningActivity === node.id ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {runningActivity === node.id ? 'Running...' : 'Run'}
+                      </button>
+                      {agentExecByActivity?.[node.id] && (() => {
+                        const ex = agentExecByActivity[node.id];
+                        const statusColor = ex.status === 'SUCCESS' ? '#065f46' : ex.status === 'FAILED' ? '#b91c1c' : '#92400e';
+                        const statusBg = ex.status === 'SUCCESS' ? '#d1fae5' : ex.status === 'FAILED' ? '#fef2f2' : '#fef3c7';
+                        return (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: statusBg, color: statusColor }}>{ex.status}</span>
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
+                              {ex.agentName} {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : ''} {ex.durationMs != null ? `(${ex.durationMs}ms)` : ''}
+                            </span>
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </>
               )}
               {/* Task fields — required skills */}
@@ -943,7 +978,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           mappingsByStep={mappingsByStep}
           onAddMapping={onAddMapping}
           onRemoveMapping={onRemoveMapping}
-          statusMode={statusMode} />
+          statusMode={statusMode}
+          agentExecByActivity={agentExecByActivity}
+          onRunAgent={onRunAgent}
+          runningActivity={runningActivity}
+          hasAgentRoles={hasAgentRoles} />
       ))}
     </div>
   );
@@ -1012,6 +1051,22 @@ export default function ProcessCatalogPage() {
       setAllTags(tagsRes.data || []);
       setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
       setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name })));
+      // Fetch agent executions and DAMA roles for agent-assigned activities
+      try {
+        const [execsRes, rolesRes] = await Promise.all([
+          apiClient.get<{ success: boolean; data: AgentExecutionInfo[] }>(`/agent-executions${qp}`),
+          apiClient.get<{ success: boolean; data: DamaRoleInfo[] }>(`/dama-roles${qp}`),
+        ]);
+        // Build lookup: activityId -> latest execution
+        const byActivity: Record<string, AgentExecutionInfo> = {};
+        for (const ex of (execsRes.data || [])) {
+          if (!byActivity[ex.activityId] || new Date(ex.createdAt) > new Date(byActivity[ex.activityId].createdAt)) {
+            byActivity[ex.activityId] = ex;
+          }
+        }
+        setAgentExecByActivity(byActivity);
+        setDamaAgentRoles((rolesRes.data || []).filter((r: any) => r.agentId).map((r: any) => ({ agentId: r.agentId, agentName: r.agentName, roleType: r.roleType })));
+      } catch { /* agent execution data is optional */ }
       // Resolve org's statusMode
       if (activeOrgId) {
         try {
@@ -1104,6 +1159,31 @@ export default function ProcessCatalogPage() {
       await apiClient.delete(`/mappings/${mappingId}`);
       fetchData();
     } catch { /* */ }
+  };
+
+  // ── Agent execution handler ──
+  const handleRunAgent = async (activityId: string, activityName: string) => {
+    // Find an agent assigned to any DAMA role
+    if (damaAgentRoles.length === 0) { addToast('error', 'No agents assigned to DAMA roles'); return; }
+    const agentRole = damaAgentRoles[0]; // Use first available agent
+    setRunningActivity(activityId);
+    try {
+      await apiClient.post('/agent-executions', {
+        orgId: activeOrgId,
+        agentId: agentRole.agentId,
+        agentName: agentRole.agentName,
+        activityId,
+        activityName,
+        roleType: agentRole.roleType,
+      });
+      addToast('success', `Agent "${agentRole.agentName}" executed activity`);
+      fetchData();
+    } catch (err: any) {
+      const msg = err?.message || 'Execution failed';
+      addToast('error', msg);
+    } finally {
+      setRunningActivity(null);
+    }
   };
 
   // ── Bulk select handlers ──
@@ -1654,7 +1734,11 @@ export default function ProcessCatalogPage() {
               mappingsByStep={mappingsByStep}
               onAddMapping={addMapping}
               onRemoveMapping={removeMapping}
-              statusMode={statusMode} />
+              statusMode={statusMode}
+              agentExecByActivity={agentExecByActivity}
+              onRunAgent={handleRunAgent}
+              runningActivity={runningActivity}
+              hasAgentRoles={damaAgentRoles.length > 0} />
           ))
         )}
       </div>
