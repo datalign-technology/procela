@@ -959,6 +959,10 @@ export default function ProcessCatalogPage() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkStatusValue, setBulkStatusValue] = useState('');
+  const [bulkOwnerOpen, setBulkOwnerOpen] = useState(false);
+  const [bulkOwnerValue, setBulkOwnerValue] = useState('');
   const [confirmGovTemplate, setConfirmGovTemplate] = useState(false);
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
   const [peopleList, setPeopleList] = useState<PersonRef[]>([]);
@@ -1125,6 +1129,35 @@ export default function ProcessCatalogPage() {
       // eslint-disable-next-line no-console
       console.info(`${failures} delete(s) skipped — likely already removed by cascade.`);
     }
+  };
+
+  const handleBulkStatus = async () => {
+    if (selectedIds.size === 0 || !bulkStatusValue) return;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) =>
+        apiClient.put(`/process-catalog/nodes/${id}`, { status: bulkStatusValue }).catch(() => {})
+      ));
+      addToast('success', `Set ${selectedIds.size} node${selectedIds.size === 1 ? '' : 's'} to ${bulkStatusValue}`);
+      setBulkStatusOpen(false);
+      setBulkStatusValue('');
+      setSelectedIds(new Set());
+      fetchData();
+    } catch { addToast('error', 'Bulk status change failed'); }
+  };
+
+  const handleBulkOwner = async () => {
+    if (selectedIds.size === 0 || !bulkOwnerValue) return;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) =>
+        apiClient.put(`/process-catalog/nodes/${id}`, { ownerId: bulkOwnerValue }).catch(() => {})
+      ));
+      const name = peopleList.find((p) => p.id === bulkOwnerValue)?.name || '';
+      addToast('success', `Set ${name} as owner of ${selectedIds.size} node${selectedIds.size === 1 ? '' : 's'}`);
+      setBulkOwnerOpen(false);
+      setBulkOwnerValue('');
+      setSelectedIds(new Set());
+      fetchData();
+    } catch { addToast('error', 'Bulk owner assignment failed'); }
   };
 
   const reorderNode = async (nodeId: string, direction: 'up' | 'down') => {
@@ -1412,6 +1445,18 @@ export default function ProcessCatalogPage() {
         }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
           <button
+            onClick={() => setBulkStatusOpen(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Set Status…
+          </button>
+          <button
+            onClick={() => setBulkOwnerOpen(true)}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+          >
+            Set Owner…
+          </button>
+          <button
             onClick={() => setConfirmBulkDelete(true)}
             style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
@@ -1437,6 +1482,59 @@ export default function ProcessCatalogPage() {
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteNodes(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
+
+      {/* Bulk Status Dialog */}
+      <ConfirmDialog
+        open={bulkStatusOpen}
+        title={`Set status for ${selectedIds.size} process node${selectedIds.size === 1 ? '' : 's'}`}
+        message=""
+        confirmLabel={bulkStatusValue ? `Set to ${bulkStatusValue}` : 'Select a status'}
+        variant="primary"
+        onConfirm={handleBulkStatus}
+        onCancel={() => { setBulkStatusOpen(false); setBulkStatusValue(''); }}
+      >
+        <div style={{ marginTop: 8 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+            This will change the status for all selected nodes. Status lifecycle rules are bypassed for bulk operations.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {['DRAFT', 'ACTIVE', 'DEPRECATED'].map((s) => (
+              <label key={s} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                background: bulkStatusValue === s ? '#eff6ff' : 'var(--color-bg)',
+                border: `1px solid ${bulkStatusValue === s ? '#93c5fd' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              }}>
+                <input type="radio" name="bulkProcStatus" checked={bulkStatusValue === s} onChange={() => setBulkStatusValue(s)} />
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: s === 'ACTIVE' ? '#22c55e' : s === 'DEPRECATED' ? '#ef4444' : '#9ca3af' }} />
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{s.charAt(0) + s.slice(1).toLowerCase()}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </ConfirmDialog>
+
+      {/* Bulk Owner Dialog */}
+      <ConfirmDialog
+        open={bulkOwnerOpen}
+        title={`Set owner for ${selectedIds.size} process node${selectedIds.size === 1 ? '' : 's'}`}
+        message=""
+        confirmLabel={bulkOwnerValue ? 'Set Owner' : 'Select a person'}
+        variant="primary"
+        onConfirm={handleBulkOwner}
+        onCancel={() => { setBulkOwnerOpen(false); setBulkOwnerValue(''); }}
+      >
+        <div style={{ marginTop: 8 }}>
+          <select
+            style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', appearance: 'auto' as any }}
+            value={bulkOwnerValue}
+            onChange={(e) => setBulkOwnerValue(e.target.value)}
+          >
+            <option value="">-- Select person --</option>
+            {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </ConfirmDialog>
 
       {/* Validation summary */}
       {issues.length > 0 && (
