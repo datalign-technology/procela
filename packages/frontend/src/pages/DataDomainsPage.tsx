@@ -130,6 +130,9 @@ export default function DataDomainsPage() {
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [bulkStatusValue, setBulkStatusValue] = useState('');
 
+  // Collapsible prerequisites banner
+  const [showPrereqs, setShowPrereqs] = useState(true);
+
   // Stewardship team option on create
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
 
@@ -521,10 +524,38 @@ export default function DataDomainsPage() {
   return (
     <div>
       <PageTabNav tabs={GOVERNANCE_TABS} />
-      <DependencyBanner phase="Domains depend on scope and principles being defined first." checks={[
-        { label: 'Define governance scope', met: deps.hasScope, link: '/governance-program' },
-        { label: 'Establish guiding principles', met: deps.hasPrinciples, link: '/governance-program' },
-      ]} />
+      {showPrereqs ? (
+        <div style={{ position: 'relative' }}>
+          <DependencyBanner phase="Domains depend on scope and principles being defined first." checks={[
+            { label: 'Define governance scope', met: deps.hasScope, link: '/governance-program' },
+            { label: 'Establish guiding principles', met: deps.hasPrinciples, link: '/governance-program' },
+          ]} />
+          <button
+            onClick={() => setShowPrereqs(false)}
+            title="Dismiss prerequisites"
+            style={{
+              position: 'absolute', top: 6, right: 8,
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 14, lineHeight: 1, color: 'var(--color-text-muted)',
+              padding: '2px 6px', borderRadius: 4,
+            }}
+          >
+            {'×'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 8 }}>
+          <button
+            onClick={() => setShowPrereqs(true)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 11, color: 'var(--color-primary)', padding: 0,
+            }}
+          >
+            Show prerequisites
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
