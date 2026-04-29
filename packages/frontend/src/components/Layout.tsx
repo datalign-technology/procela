@@ -41,7 +41,6 @@ const navSections: NavSection[] = [
     items: [
       { to: '/mappings', label: 'Mappings', icon: '\u21C4' },
       { to: '/data-lineage', label: 'Lineage', icon: '\u2192' },
-      { to: '/data-quality', label: 'Data Quality', icon: '\u2714' },
     ],
   },
   {
@@ -50,6 +49,7 @@ const navSections: NavSection[] = [
       { to: '/governance-program', label: 'Program', icon: '\u2637' },
       { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
       { to: '/data-domains', label: 'Domains', icon: '\u229E' },
+      { to: '/data-quality', label: 'Data Quality', icon: '\u2714' },
     ],
   },
   {

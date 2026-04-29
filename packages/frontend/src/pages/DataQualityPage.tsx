@@ -14,7 +14,7 @@ import ActiveFiltersBar from '../components/ActiveFiltersBar';
 import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
-import PageTabNav, { ANALYZE_TABS } from '../components/PageTabNav';
+import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 
 // Assets tab: we need more than just {id,name} to display source provenance
 // and per-asset stewardship / health — the backend already returns these on
@@ -411,7 +411,7 @@ export default function DataQualityPage() {
   if (loading) {
     return (
       <div>
-        <PageTabNav tabs={ANALYZE_TABS} />
+        <PageTabNav tabs={GOVERNANCE_TABS} />
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
           <SkeletonRows rows={5} columns={4} />
         </div>
@@ -452,7 +452,7 @@ export default function DataQualityPage() {
 
   return (
     <div>
-      <PageTabNav tabs={ANALYZE_TABS} />
+      <PageTabNav tabs={GOVERNANCE_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
