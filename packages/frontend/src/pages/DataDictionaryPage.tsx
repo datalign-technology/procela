@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 
 /* ── Interfaces ─────────────────────────────────────────────────── */
 
@@ -268,7 +267,6 @@ export default function DataDictionaryPage() {
     return (
       <div>
         <div className="no-print">
-          <PageTabNav tabs={CATALOG_TABS} />
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Data Dictionary</h1>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading data dictionary...</div>
@@ -280,7 +278,6 @@ export default function DataDictionaryPage() {
     return (
       <div>
         <div className="no-print">
-          <PageTabNav tabs={CATALOG_TABS} />
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Data Dictionary</h1>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
@@ -306,7 +303,6 @@ export default function DataDictionaryPage() {
 
       {/* Screen header (hidden when printing) */}
       <div className="no-print">
-        <PageTabNav tabs={CATALOG_TABS} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Data Dictionary</h1>

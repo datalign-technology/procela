@@ -10,7 +10,6 @@ import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
-import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -444,7 +443,6 @@ export default function GovernanceCalendarPage() {
 
   return (
     <div>
-      <PageTabNav tabs={OPERATE_TABS} />
 
       <PageHeader
         title="Governance Calendar"

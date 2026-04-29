@@ -16,7 +16,6 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 interface DataDomain {
@@ -523,7 +522,6 @@ export default function DataDomainsPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERNANCE_TABS} />
       {showPrereqs ? (
         <div style={{ position: 'relative' }}>
           <DependencyBanner phase="Domains depend on scope and principles being defined first." checks={[

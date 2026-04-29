@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { ANALYZE_TABS } from '../components/PageTabNav';
 
 const ExecutiveReportPage = lazy(() => import('./ExecutiveReportPage'));
 const ScorecardPage       = lazy(() => import('./ScorecardPage'));
@@ -35,7 +34,6 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <PageTabNav tabs={ANALYZE_TABS} />
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Reports</h1>
         <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>

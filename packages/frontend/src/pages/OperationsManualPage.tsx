@@ -8,7 +8,6 @@ import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 interface OperationsManual {
@@ -169,18 +168,15 @@ export default function OperationsManualPage() {
   const totalItems = (m: OperationsManual) => SECTIONS.reduce((sum, s) => sum + m[s.key].length, 0);
 
   // ── Render ──
-  if (loading) return <div><PageTabNav tabs={OPERATE_TABS} /><SkeletonRows rows={5} /></div>;
+  if (loading) return <SkeletonRows rows={5} />;
   if (!activeOrgId) return (
-    <div><PageTabNav tabs={OPERATE_TABS} />
-      <EmptyState title="No organization selected" description="Select an organization from the header to view operations manuals." />
-    </div>
+    <EmptyState title="No organization selected" description="Select an organization from the header to view operations manuals." />
   );
 
   const seedLabel = seeding ? 'Generating...' : 'Generate Standard Manuals';
 
   return (
     <div>
-      <PageTabNav tabs={OPERATE_TABS} />
       <PageHeader
         title="Operations Manual"
         subtitle="Role-specific guidance for running your governance program."

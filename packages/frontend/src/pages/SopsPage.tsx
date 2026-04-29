@@ -7,7 +7,6 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -275,7 +274,6 @@ export default function SopsPage() {
 
   return (
     <div>
-      <PageTabNav tabs={OPERATE_TABS} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Standard Operating Procedures</h1>

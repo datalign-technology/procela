@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import PageTabNav, { ANALYZE_TABS } from '../components/PageTabNav';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -270,7 +269,6 @@ export default function ControlTowerPage() {
 
   return (
     <div>
-      <PageTabNav tabs={ANALYZE_TABS} />
       {header}
 
       {/* ── KPI Row ──────────────────────────────────────────────────── */}

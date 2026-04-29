@@ -1,7 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import GovernanceTasksPage from './GovernanceTasksPage';
 import GovernanceIssuesPage from './GovernanceIssuesPage';
-import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -27,7 +26,6 @@ export default function GovernanceWorkPage() {
 
   return (
     <div>
-      <PageTabNav tabs={OPERATE_TABS} />
       <DependencyBanner phase="Governance work flows from established policies and structure." checks={[
         { label: 'Create governance policies', met: deps.hasPolicies, link: '/governance-policies' },
         { label: 'Assign data stewards', met: deps.hasStewards, link: '/people' },

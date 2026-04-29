@@ -7,7 +7,6 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 // ── Types ──
@@ -245,7 +244,6 @@ export default function GovernancePoliciesPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERNANCE_TABS} />
       <DependencyBanner phase="Policies should follow governance structure and domain definition." checks={[
         { label: 'Create data domains', met: deps.hasDomains, link: '/data-domains' },
         { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },

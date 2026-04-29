@@ -5,7 +5,6 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
-import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
 
 interface Program {
@@ -561,7 +560,6 @@ export default function GovernanceProgramPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERNANCE_TABS} />
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>

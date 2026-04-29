@@ -12,7 +12,6 @@ import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import BatchMappingWizard from '../components/BatchMappingWizard';
 
 // ── Types ──
@@ -288,7 +287,6 @@ export default function MappingsPage() {
 
   return (
     <div>
-      <PageTabNav tabs={CATALOG_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>

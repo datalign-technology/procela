@@ -10,7 +10,6 @@ import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
 import { exportCsv } from '../lib/exportCsv';
-import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import { SkeletonRows } from '../components/Skeleton';
 import SkillPicker from '../components/SkillPicker';
 import VersionHistoryModal from '../components/VersionHistoryModal';
@@ -1346,7 +1345,6 @@ export default function ProcessCatalogPage() {
 
   return (
     <div>
-      <PageTabNav tabs={CATALOG_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>

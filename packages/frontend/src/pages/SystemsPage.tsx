@@ -15,7 +15,6 @@ import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
-import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 
 interface SystemEntity {
   id: string;
@@ -355,7 +354,6 @@ export default function SystemsPage() {
   return (
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
-      <PageTabNav tabs={CATALOG_TABS} />
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>

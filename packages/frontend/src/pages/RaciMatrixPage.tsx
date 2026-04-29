@@ -5,7 +5,6 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
-import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 
 interface RaciRow {
@@ -226,7 +225,6 @@ export default function RaciMatrixPage() {
 
   return (
     <div>
-      <PageTabNav tabs={GOVERNANCE_TABS} />
       <DependencyBanner phase="RACI depends on domains and governance structure being defined first." checks={[
         { label: 'Create at least one data domain', met: deps.hasDomains, link: '/data-domains' },
         { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },

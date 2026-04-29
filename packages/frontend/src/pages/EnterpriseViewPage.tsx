@@ -4,7 +4,6 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import HelpPopover from '../components/HelpPopover';
-import PageTabNav, { ANALYZE_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -193,7 +192,6 @@ export default function EnterpriseViewPage() {
   if (loading) {
     return (
       <div>
-        <PageTabNav tabs={ANALYZE_TABS} />
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
           <SkeletonRows rows={5} columns={4} />
         </div>
@@ -213,7 +211,6 @@ export default function EnterpriseViewPage() {
 
   return (
     <div>
-      <PageTabNav tabs={ANALYZE_TABS} />
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 180px)' }}>
       <div style={{ display: 'flex', gap: 0, flex: 1, minHeight: 0 }}>
       {/* Main content */}

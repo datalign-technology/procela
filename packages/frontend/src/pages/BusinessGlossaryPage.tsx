@@ -7,7 +7,6 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
-import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 
 // ── Types ──
 
@@ -382,7 +381,6 @@ export default function BusinessGlossaryPage() {
 
   return (
     <div>
-      <PageTabNav tabs={CATALOG_TABS} />
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
