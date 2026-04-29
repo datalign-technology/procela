@@ -635,6 +635,17 @@ export default function DataDomainsPage() {
         </div>
       )}
 
+      {/* Ownership gap warning */}
+      {domains.length > 0 && (() => {
+        const unownedCount = domains.filter((d) => !d.ownerId).length;
+        if (unownedCount === 0) return null;
+        return (
+          <div style={{ padding: '8px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', background: '#fffbeb', border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#92400e' }}>
+            <span style={{ fontWeight: 700 }}>{unownedCount}</span> domain{unownedCount !== 1 ? 's have' : ' has'} no owner assigned
+          </div>
+        );
+      })()}
+
       <ConfirmDialog
         open={confirmGenerate}
         title="Generate Data Domains with AI?"

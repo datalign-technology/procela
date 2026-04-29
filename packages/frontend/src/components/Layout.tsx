@@ -43,7 +43,6 @@ const navSections: NavSection[] = [
     items: [
       { to: '/mappings', label: 'Mappings', icon: '\u21C4' },
       { to: '/data-lineage', label: 'Lineage', icon: '\u2192' },
-      { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
     ],
   },
   {
@@ -95,7 +94,6 @@ const ROUTE_GROUPS: Record<string, string[]> = {
   '/data-dictionary': ['/data-dictionary'],
   '/mappings': ['/mappings'],
   '/data-lineage': ['/data-lineage'],
-  '/gap-detection': ['/gap-detection'],
   '/governance-program': ['/governance-program', '/governance'],
   '/governance-groups': ['/governance-groups'],
   '/data-domains': ['/data-domains'],

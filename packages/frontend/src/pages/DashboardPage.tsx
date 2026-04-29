@@ -264,14 +264,15 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'alerts', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'alerts', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
   overview: 'Overview',
   programMaturity: 'Program Maturity',
+  gaps: 'Governance Gaps',
   alerts: 'Alerts',
   whatsNext: "What's Next",
   stewardOnboarding: 'Steward Onboarding',
@@ -827,6 +828,42 @@ function StewardOnboarding() {
   );
 }
 
+function GapsOverview({ stats }: { stats: DashboardStats }) {
+  const gaps = stats.gaps;
+  if (!gaps) return null;
+  const items = [
+    { label: 'Unmapped activities', count: gaps.unmappedActivities || gaps.unmappedSteps || 0, severity: 'critical' as const, link: '/mappings' },
+    { label: 'Ownerless processes', count: gaps.ownerlessItems || 0, severity: 'critical' as const, link: '/processes' },
+    { label: 'Ungoverned assets (Bronze)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
+    { label: 'Unowned domains', count: gaps.ungovernedDomains || 0, severity: 'warning' as const, link: '/data-domains' },
+  ];
+  const total = items.reduce((s, i) => s + i.count, 0);
+  const sevColors = { critical: '#dc2626', warning: '#d97706', info: '#2563eb' };
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Governance Gaps</h2>
+      {total === 0 ? (
+        <div style={{ padding: '16px 0', textAlign: 'center', color: '#16a34a', fontSize: 13, fontWeight: 500 }}>
+          No gaps detected — all processes are mapped and ownership is assigned.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {items.filter((i) => i.count > 0).map((item) => (
+            <Link key={item.label} to={item.link} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit', transition: 'background 0.1s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: sevColors[item.severity], minWidth: 28 }}>{item.count}</span>
+              <span style={{ fontSize: 13, flex: 1 }}>{item.label}</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Fix →</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -906,6 +943,7 @@ export default function DashboardPage() {
     myDashboard: <MyDashboard />,
     overview: <StatsOverview stats={stats} />,
     programMaturity: <ProgramMaturity />,
+    gaps: <GapsOverview stats={stats} />,
     alerts: <DashboardAlerts stats={stats} />,
     whatsNext: <WhatsNext stats={stats} />,
     stewardOnboarding: <StewardOnboarding />,

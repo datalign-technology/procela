@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -193,6 +193,13 @@ export default function MappingsPage() {
       ? allNodes.filter((n) => n.level === 'ACTIVITY' && n.parentId === selectedProcId)
       : [];
 
+  // Gap indicators computed from existing data
+  const mappedStepIds = useMemo(() => new Set(mappings.map((m) => m.processStepId)), [mappings]);
+  const mappedAssetIds = useMemo(() => new Set(mappings.map((m) => m.dataAssetId)), [mappings]);
+  const MAPPABLE_LEVELS = new Set(['ACTIVITY', 'TASK', 'EXECUTION']);
+  const unmappedCount = useMemo(() => allNodes.filter((n) => MAPPABLE_LEVELS.has(n.level) && !mappedStepIds.has(n.id)).length, [allNodes, mappedStepIds]);
+  const unlinkedCount = useMemo(() => dataAssets.filter((a) => !mappedAssetIds.has(a.id)).length, [dataAssets, mappedAssetIds]);
+
   const resetForm = () => {
     setSelectedVsId('');
     setSelectedProcId('');
@@ -322,6 +329,26 @@ export default function MappingsPage() {
           )}
         </div>
       </div>
+
+      {/* Coverage gaps */}
+      {!loading && (unmappedCount > 0 || unlinkedCount > 0) && (
+        <div style={{
+          display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap',
+        }}>
+          {unmappedCount > 0 && (
+            <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#dc2626' }}>{unmappedCount}</span>
+              <span style={{ fontSize: 12, color: '#991b1b' }}>activities have no data asset linked</span>
+            </div>
+          )}
+          {unlinkedCount > 0 && (
+            <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fffbeb', border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#d97706' }}>{unlinkedCount}</span>
+              <span style={{ fontSize: 12, color: '#92400e' }}>data assets are not mapped to any process</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Form */}
       {showForm && (

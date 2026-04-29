@@ -1654,6 +1654,19 @@ export default function ProcessCatalogPage() {
         </div>
       )}
 
+      {/* Ownership gap warning */}
+      {tree.length > 0 && (() => {
+        const countAll = (nodes: any[]): number => nodes.reduce((s: number, n: any) => s + 1 + countAll(n.children || []), 0);
+        const countOwnerless = (nodes: any[]): number => nodes.reduce((s: number, n: any) => s + (!n.ownerId && ['VALUE_STREAM', 'PROCESS'].includes(n.level) ? 1 : 0) + countOwnerless(n.children || []), 0);
+        const ownerless = countOwnerless(tree);
+        if (ownerless === 0) return null;
+        return (
+          <div style={{ padding: '8px 14px', marginBottom: 12, borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#991b1b' }}>
+            <span style={{ fontWeight: 700 }}>{ownerless}</span> value stream{ownerless !== 1 ? 's' : ''} or process{ownerless !== 1 ? 'es have' : ' has'} no owner assigned
+          </div>
+        );
+      })()}
+
       {/* Add root form */}
       {addingTo === '__root__' && (
         <div style={{ marginBottom: 12 }}>
