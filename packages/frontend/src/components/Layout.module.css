@@ -142,9 +142,7 @@
 /* ── Flyout panel (collapsed sidebar) ── */
 
 .navFlyout {
-  position: absolute;
-  left: 60px;
-  top: 0;
+  position: fixed;
   min-width: 200px;
   background: var(--color-sidebar);
   border: 1px solid rgba(255, 255, 255, 0.12);

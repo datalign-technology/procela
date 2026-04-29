@@ -169,27 +169,35 @@ export default function Layout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Accordion nav: which section is expanded (one at a time)
-  const [expandedNavSection, setExpandedNavSection] = useState<string | null>(null);
-  // Flyout for collapsed sidebar
-  const [flyoutSection, setFlyoutSection] = useState<string | null>(null);
-  const flyoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Auto-expand the section that contains the current route
-  useEffect(() => {
-    for (const section of visibleSections) {
+  const activeSectionLabel = (() => {
+    for (const section of navSections) {
       if (!section.label) continue;
-      const hasActiveChild = section.items.some((item) => {
+      const match = section.items.some((item) => {
         const groupRoutes = ROUTE_GROUPS[item.to];
         return groupRoutes
           ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
           : location.pathname === item.to;
       });
-      if (hasActiveChild) {
-        setExpandedNavSection(section.label);
-        return;
-      }
+      if (match) return section.label;
     }
-  }, [location.pathname, visibleSections]);
+    return null;
+  })();
+  const [expandedNavSection, setExpandedNavSection] = useState<string | null>(activeSectionLabel);
+  const prevPathnameRef = useRef(location.pathname);
+
+  // Auto-expand section only when navigating to a different section
+  useEffect(() => {
+    if (location.pathname === prevPathnameRef.current) return;
+    prevPathnameRef.current = location.pathname;
+    if (activeSectionLabel && activeSectionLabel !== expandedNavSection) {
+      setExpandedNavSection(activeSectionLabel);
+    }
+  }, [location.pathname, activeSectionLabel, expandedNavSection]);
+
+  // Flyout for collapsed sidebar
+  const [flyoutSection, setFlyoutSection] = useState<string | null>(null);
+  const [flyoutTop, setFlyoutTop] = useState(0);
+  const flyoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Notification state
   const [notifCount, setNotifCount] = useState(0);
@@ -473,9 +481,11 @@ export default function Layout() {
               key={sIdx}
               className={styles.navGroup}
               style={{ position: 'relative' }}
-              onMouseEnter={() => {
+              onMouseEnter={(e) => {
                 if (sidebarCollapsed && section.label) {
                   if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setFlyoutTop(rect.top);
                   setFlyoutSection(section.label);
                 }
               }}
@@ -530,7 +540,12 @@ export default function Layout() {
 
                   {/* Flyout panel (collapsed sidebar hover) */}
                   {sidebarCollapsed && isFlyoutOpen && (
-                    <div className={styles.navFlyout}>
+                    <div
+                      className={styles.navFlyout}
+                      style={{ left: 60, top: flyoutTop }}
+                      onMouseEnter={() => { if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current); }}
+                      onMouseLeave={() => { flyoutTimeoutRef.current = setTimeout(() => setFlyoutSection(null), 150); }}
+                    >
                       <div className={styles.navFlyoutLabel}>{section.label}</div>
                       {section.items.map((item) => {
                         const groupRoutes = ROUTE_GROUPS[item.to];
