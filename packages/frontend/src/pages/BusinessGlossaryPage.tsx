@@ -55,7 +55,6 @@ const emptyForm: TermForm = {
 
 const CATEGORIES = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'] as const;
 const STATUSES = ['DRAFT', 'PROPOSED', 'APPROVED', 'DEPRECATED'] as const;
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 // ── Styles ──
 
@@ -73,14 +72,6 @@ const btnSecondary: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
-
-const termCardStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: '16px 20px',
-  marginBottom: 8,
-};
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DRAFT:      { bg: '#f3f4f6', color: '#6b7280' },
@@ -106,11 +97,10 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
   };
 }
 
-const pillStyle: React.CSSProperties = {
-  display: 'inline-block', padding: '1px 8px', borderRadius: 12,
-  fontSize: 11, fontWeight: 500, background: '#f1f5f9', color: '#475569',
-  marginRight: 4, marginBottom: 2,
-};
+function statusDot(status: string): React.CSSProperties {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.DRAFT;
+  return { display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: c.color, flexShrink: 0 };
+}
 
 // ── Component ──
 
@@ -128,17 +118,18 @@ export default function BusinessGlossaryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<TermForm>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [selectedTermId, setSelectedTermId] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
-  const [filterDomain, setFilterDomain] = useState('');
-  const [activeLetter, setActiveLetter] = useState('');
-  const [groupByCategory, setGroupByCategory] = useState(true);
+
+  // Generate
+  const [generatedTerms, setGeneratedTerms] = useState<Array<{ term: string; definition: string; category: string; selected: boolean }>>([]);
+  const [showGeneratePreview, setShowGeneratePreview] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [detectedIndustry, setDetectedIndustry] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -157,17 +148,7 @@ export default function BusinessGlossaryPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Letters with terms ──
-  const lettersWithTerms = useMemo(() => {
-    const set = new Set<string>();
-    terms.forEach((t) => {
-      const first = t.term.charAt(0).toUpperCase();
-      if (/[A-Z]/.test(first)) set.add(first);
-    });
-    return set;
-  }, [terms]);
-
-  // ── Filtered terms ──
+  // ── Filtered & grouped terms ──
   const filteredTerms = useMemo(() => {
     let result = terms;
     if (searchQuery.trim()) {
@@ -175,39 +156,40 @@ export default function BusinessGlossaryPage() {
       result = result.filter((t) =>
         t.term.toLowerCase().includes(q) ||
         t.definition.toLowerCase().includes(q) ||
-        (t.synonyms || []).some((s) => s.toLowerCase().includes(q)) ||
-        (t.context || '').toLowerCase().includes(q)
+        (t.synonyms || []).some((s) => s.toLowerCase().includes(q))
       );
     }
     if (filterStatus) result = result.filter((t) => t.status === filterStatus);
     if (filterCategory) result = result.filter((t) => t.category === filterCategory);
-    if (filterDomain) result = result.filter((t) => t.domainId === filterDomain);
-    if (activeLetter) result = result.filter((t) => t.term.charAt(0).toUpperCase() === activeLetter);
     return result.sort((a, b) => a.term.localeCompare(b.term));
-  }, [terms, searchQuery, filterStatus, filterCategory, filterDomain, activeLetter]);
+  }, [terms, searchQuery, filterStatus, filterCategory]);
 
-  const toggleSelect = (id: string) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-  const toggleSelectAll = () => {
-    if (selectedIds.size === terms.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(terms.map((i) => i.id)));
-  };
+  const groupedTerms = useMemo(() => {
+    const grouped: Record<string, GlossaryTerm[]> = {};
+    for (const t of filteredTerms) {
+      const cat = t.category || 'GENERAL';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(t);
+    }
+    return grouped;
+  }, [filteredTerms]);
 
-  const handleBulkDelete = async () => {
-    const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => apiClient.delete(`/business-glossary/${id}`)));
-    addToast('success', `Deleted ${ids.length} term${ids.length === 1 ? '' : 's'}`);
-    setSelectedIds(new Set());
-    fetchData();
-  };
+  const selectedTerm = selectedTermId ? terms.find((t) => t.id === selectedTermId) || null : null;
+
+  // Auto-select first term when list changes and nothing is selected
+  useEffect(() => {
+    if (!selectedTermId && filteredTerms.length > 0) {
+      setSelectedTermId(filteredTerms[0].id);
+    } else if (selectedTermId && !filteredTerms.find((t) => t.id === selectedTermId) && filteredTerms.length > 0) {
+      setSelectedTermId(filteredTerms[0].id);
+    }
+  }, [filteredTerms, selectedTermId]);
 
   // ── CRUD ──
-
   const openAdd = () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    setForm(emptyForm); setEditingId(null); setShowForm(true);
+  };
   const openEdit = (t: GlossaryTerm) => {
     setForm({
       term: t.term, definition: t.definition, category: t.category, status: t.status,
@@ -224,10 +206,7 @@ export default function BusinessGlossaryPage() {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!form.term.trim() || !form.definition.trim()) return;
     try {
-      const synonymsArray = form.synonyms
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const synonymsArray = form.synonyms.split(',').map((s) => s.trim()).filter(Boolean);
       const payload = {
         term: form.term, definition: form.definition, category: form.category,
         status: form.status, context: form.context || null,
@@ -241,7 +220,7 @@ export default function BusinessGlossaryPage() {
         addToast('success', 'Term updated');
       } else {
         await apiClient.post('/business-glossary', payload);
-        addToast('success', 'Term created');
+        addToast('success', 'Term added');
       }
       closeForm(); fetchData();
     } catch (err: any) {
@@ -253,27 +232,19 @@ export default function BusinessGlossaryPage() {
     try {
       await apiClient.delete(`/business-glossary/${id}`);
       addToast('success', 'Term deleted');
-      if (expandedId === id) setExpandedId(null);
+      if (selectedTermId === id) setSelectedTermId(null);
       fetchData();
     } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete term'); }
   };
-
-  const [generatedTerms, setGeneratedTerms] = useState<Array<{ term: string; definition: string; category: string; selected: boolean }>>([]);
-  const [showGeneratePreview, setShowGeneratePreview] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [detectedIndustry, setDetectedIndustry] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     setGenerating(true);
     try {
       const res = await apiClient.post<{ success: boolean; terms: Array<{ term: string; definition: string; category: string }>; industry: string | null }>('/business-glossary/seed', { orgId: activeOrgId, preview: true });
-      const terms = (res.terms || []).map((t) => ({ ...t, selected: true }));
-      if (terms.length === 0) {
-        addToast('info', 'All standard terms already exist. Nothing to add.');
-        return;
-      }
-      setGeneratedTerms(terms);
+      const t = (res.terms || []).map((x) => ({ ...x, selected: true }));
+      if (t.length === 0) { addToast('info', 'All standard terms already exist.'); return; }
+      setGeneratedTerms(t);
       setDetectedIndustry(res.industry || null);
       setShowGeneratePreview(true);
     } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to generate terms'); }
@@ -285,94 +256,33 @@ export default function BusinessGlossaryPage() {
     if (selected.length === 0) { setShowGeneratePreview(false); return; }
     try {
       await apiClient.post('/business-glossary/seed', { orgId: activeOrgId, selectedTerms: selected });
-      addToast('success', `Created ${selected.length} glossary term${selected.length !== 1 ? 's' : ''}`);
-      setShowGeneratePreview(false);
-      setGeneratedTerms([]);
-      fetchData();
+      addToast('success', `Added ${selected.length} glossary term${selected.length !== 1 ? 's' : ''}`);
+      setShowGeneratePreview(false); setGeneratedTerms([]); fetchData();
     } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to create terms'); }
   };
 
   const handleExportHtml = () => {
     const orgName = activeOrgName || 'Organization';
     const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    const grouped: Record<string, GlossaryTerm[]> = {};
-    for (const t of filteredTerms) {
-      const cat = t.category || 'GENERAL';
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(t);
-    }
-    const cats = CATEGORY_ORDER.filter((c) => grouped[c]?.length > 0);
-
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const cats = CATEGORY_ORDER.filter((c) => groupedTerms[c]?.length > 0);
     const termsHtml = cats.map((cat) => {
-      const catTerms = grouped[cat].sort((a, b) => a.term.localeCompare(b.term));
-      const rows = catTerms.map((t) => `
-        <tr>
-          <td style="padding:10px 14px;border:1px solid #e5e7eb;font-weight:600;vertical-align:top;width:22%">${esc(t.term)}</td>
-          <td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top">${esc(t.definition)}${t.context ? `<br><span style="color:#6b7280;font-size:12px">Context: ${esc(t.context)}</span>` : ''}${t.synonyms?.length ? `<br><span style="color:#6b7280;font-size:12px">Synonyms: ${t.synonyms.map(esc).join(', ')}</span>` : ''}</td>
-          <td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top;width:14%;color:#6b7280">${esc(t.ownerName || '')}</td>
-          <td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top;width:10%;text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${t.status === 'APPROVED' ? '#d1fae5' : t.status === 'DRAFT' ? '#f1f5f9' : '#fef3c7'};color:${t.status === 'APPROVED' ? '#065f46' : t.status === 'DRAFT' ? '#64748b' : '#92400e'}">${esc(t.status)}</span></td>
-        </tr>`).join('');
-      return `
-      <h2 style="margin:28px 0 12px;font-size:18px;color:#1e40af;border-bottom:2px solid #dbeafe;padding-bottom:6px">${esc(cat.charAt(0) + cat.slice(1).toLowerCase())} Terms</h2>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:14px">
-        <thead>
-          <tr style="background:#f8fafc">
-            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Term</th>
-            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Definition</th>
-            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Owner</th>
-            <th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b">Status</th>
-          </tr>
-        </thead>
-        <tbody>${rows}
-        </tbody>
-      </table>`;
+      const catTerms = groupedTerms[cat].sort((a, b) => a.term.localeCompare(b.term));
+      const rows = catTerms.map((t) => `<tr><td style="padding:10px 14px;border:1px solid #e5e7eb;font-weight:600;vertical-align:top;width:22%">${esc(t.term)}</td><td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top">${esc(t.definition)}${t.synonyms?.length ? `<br><span style="color:#6b7280;font-size:12px">Synonyms: ${t.synonyms.map(esc).join(', ')}</span>` : ''}</td><td style="padding:10px 14px;border:1px solid #e5e7eb;vertical-align:top;width:10%;text-align:center"><span style="display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;background:${STATUS_COLORS[t.status]?.bg || '#f1f5f9'};color:${STATUS_COLORS[t.status]?.color || '#64748b'}">${esc(t.status)}</span></td></tr>`).join('');
+      return `<h2 style="margin:28px 0 12px;font-size:18px;color:#1e40af;border-bottom:2px solid #dbeafe;padding-bottom:6px">${esc(cat.charAt(0) + cat.slice(1).toLowerCase())} Terms</h2><table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-size:12px;text-transform:uppercase;color:#64748b">Term</th><th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:left;font-size:12px;text-transform:uppercase;color:#64748b">Definition</th><th style="padding:10px 14px;border:1px solid #e5e7eb;text-align:center;font-size:12px;text-transform:uppercase;color:#64748b">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
     }).join('');
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Business Glossary — ${esc(orgName)}</title>
-<style>
-  body { font-family: Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; color: #1e293b; background: #fff; }
-  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
-  a { color: #2563eb; }
-</style>
-</head>
-<body>
-<div class="container">
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1e40af;padding-bottom:12px;margin-bottom:8px">
-    <div>
-      <h1 style="margin:0;font-size:26px;color:#0f172a">Business Glossary</h1>
-      <p style="margin:4px 0 0;font-size:14px;color:#64748b">${esc(orgName)}</p>
-    </div>
-    <div style="font-size:12px;color:#94a3b8">Published ${esc(now)} &middot; ${filteredTerms.length} terms</div>
-  </div>
-  <div style="font-size:13px;color:#94a3b8;margin-bottom:24px">Generated by Procela Data Governance Platform</div>
-  ${termsHtml}
-  <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#94a3b8;text-align:center">
-    ${esc(orgName)} Business Glossary &middot; ${esc(now)} &middot; Procela
-  </div>
-</div>
-</body>
-</html>`;
-
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Business Glossary — ${esc(orgName)}</title><style>body{font-family:system-ui,sans-serif;max-width:960px;margin:0 auto;padding:32px 24px;color:#1e293b}</style></head><body><h1 style="border-bottom:3px solid #1e40af;padding-bottom:12px">Business Glossary</h1><p style="color:#64748b">${esc(orgName)} · ${esc(now)} · ${filteredTerms.length} terms</p>${termsHtml}</body></html>`;
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `business-glossary-${orgName.toLowerCase().replace(/\s+/g, '-')}.html`;
-    a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `glossary-${orgName.toLowerCase().replace(/\s+/g, '-')}.html`; a.click();
     URL.revokeObjectURL(url);
-    addToast('success', 'Business Glossary exported as HTML');
+    addToast('success', 'Glossary exported as HTML');
   };
+
+  // ── Render ──
 
   return (
     <div>
-
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
@@ -383,11 +293,8 @@ export default function BusinessGlossaryPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
-          {canWrite && (
-            <IconButton icon="settings"
-              label={generating ? 'Generating...' : terms.length > 0 ? `Generate disabled — ${terms.length} term${terms.length === 1 ? '' : 's'} already exist` : 'Generate Industry Terms'}
-              disabled={generating || terms.length > 0}
-              onClick={handleGenerate} />
+          {canWrite && terms.length === 0 && (
+            <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
           )}
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>
@@ -398,128 +305,9 @@ export default function BusinessGlossaryPage() {
         onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); if (id) await handleDelete(id); }}
         onCancel={() => setConfirmDelete(null)} />
 
-      <ConfirmDialog
-        open={confirmBulkDelete}
-        title={`Delete ${selectedIds.size} term${selectedIds.size === 1 ? '' : 's'}?`}
-        message="This cannot be undone."
-        confirmLabel={`Delete ${selectedIds.size}`}
-        onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
-        onCancel={() => setConfirmBulkDelete(false)}
-      />
-
-      {/* Search bar */}
-      <div style={{ marginBottom: 12 }}>
-        <input
-          style={{ ...inputStyle, fontSize: 15, padding: '10px 14px' }}
-          placeholder="Search terms, definitions, synonyms..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-
-      {/* Filter row */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">All Statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-          <option value="">All Categories</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
-          <option value="">All Domains</option>
-          {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-      </div>
-
-      {/* Select all + Bulk action bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={terms.length > 0 && selectedIds.size === terms.length} onChange={toggleSelectAll} />
-          Select all ({terms.length})
-        </label>
-      </div>
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Delete Selected
-          </button>
-          <button onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-            Clear Selection
-          </button>
-        </div>
-      )}
-
-      {/* Alphabetical index */}
-      <div style={{ display: 'flex', gap: 2, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button
-          style={{
-            padding: '4px 8px', fontSize: 12, fontWeight: activeLetter === '' ? 700 : 500,
-            border: 'none', borderRadius: 4, cursor: 'pointer',
-            background: activeLetter === '' ? 'var(--color-primary)' : 'transparent',
-            color: activeLetter === '' ? '#fff' : 'var(--color-text-muted)',
-          }}
-          onClick={() => setActiveLetter('')}
-        >
-          All
-        </button>
-        {ALPHABET.map((letter) => {
-          const hasTerm = lettersWithTerms.has(letter);
-          const isActive = activeLetter === letter;
-          return (
-            <button
-              key={letter}
-              style={{
-                padding: '4px 8px', fontSize: 12, fontWeight: isActive ? 700 : hasTerm ? 600 : 400,
-                border: 'none', borderRadius: 4, cursor: hasTerm ? 'pointer' : 'default',
-                background: isActive ? 'var(--color-primary)' : 'transparent',
-                color: isActive ? '#fff' : hasTerm ? 'var(--color-text)' : 'var(--color-text-muted)',
-                opacity: hasTerm || isActive ? 1 : 0.4,
-              }}
-              onClick={() => { if (hasTerm) setActiveLetter(isActive ? '' : letter); }}
-            >
-              {letter}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* View toggle */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button
-          onClick={() => setGroupByCategory(true)}
-          style={{
-            padding: '4px 12px', fontSize: 11, fontWeight: groupByCategory ? 600 : 500,
-            background: groupByCategory ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: groupByCategory ? '#fff' : 'var(--color-text-secondary)',
-            border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer',
-          }}
-        >
-          Group by Category
-        </button>
-        <button
-          onClick={() => setGroupByCategory(false)}
-          style={{
-            padding: '4px 12px', fontSize: 11, fontWeight: !groupByCategory ? 600 : 500,
-            background: !groupByCategory ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: !groupByCategory ? '#fff' : 'var(--color-text-secondary)',
-            border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer',
-          }}
-        >
-          Alphabetical
-        </button>
-      </div>
-
-      {/* Add/Edit Form */}
+      {/* Add/Edit Form (overlay) */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Term' : 'Add New Term'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -544,23 +332,15 @@ export default function BusinessGlossaryPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Context</label>
-              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.context} onChange={(e) => setForm({ ...form, context: e.target.value })} placeholder="Business context or usage notes..." />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Synonyms (comma-separated)</label>
-              <input style={inputStyle} value={form.synonyms} onChange={(e) => setForm({ ...form, synonyms: e.target.value })} placeholder="e.g. CLV, LTV, Lifetime Revenue" />
+              <input style={inputStyle} value={form.context} onChange={(e) => setForm({ ...form, context: e.target.value })} placeholder="Business context or usage notes..." />
             </div>
             <div>
-              <label style={labelStyle}>Example Values</label>
-              <input style={inputStyle} value={form.exampleValues} onChange={(e) => setForm({ ...form, exampleValues: e.target.value })} placeholder="e.g. $12,500" />
+              <label style={labelStyle}>Synonyms (comma-separated)</label>
+              <input style={inputStyle} value={form.synonyms} onChange={(e) => setForm({ ...form, synonyms: e.target.value })} placeholder="e.g. CLV, LTV" />
             </div>
             <div>
               <label style={labelStyle}>Source of Truth</label>
               <input style={inputStyle} value={form.sourceOfTruth} onChange={(e) => setForm({ ...form, sourceOfTruth: e.target.value })} placeholder="e.g. Salesforce CRM" />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Business Rules</label>
-              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.businessRules} onChange={(e) => setForm({ ...form, businessRules: e.target.value })} placeholder="Rules or constraints governing this term..." />
             </div>
             <div>
               <label style={labelStyle}>Domain</label>
@@ -576,10 +356,18 @@ export default function BusinessGlossaryPage() {
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Business Rules</label>
+              <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={form.businessRules} onChange={(e) => setForm({ ...form, businessRules: e.target.value })} placeholder="Rules or constraints..." />
+            </div>
+            <div>
+              <label style={labelStyle}>Example Values</label>
+              <input style={inputStyle} value={form.exampleValues} onChange={(e) => setForm({ ...form, exampleValues: e.target.value })} placeholder="e.g. $12,500" />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim()) ? 0.6 : 1, cursor: (!form.term.trim() || !form.definition.trim()) ? 'not-allowed' : 'pointer' }}
+            <button style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim()) ? 0.6 : 1 }}
               disabled={!form.term.trim() || !form.definition.trim()} onClick={handleSave}>
               {editingId ? 'Save Changes' : 'Add Term'}
             </button>
@@ -594,24 +382,18 @@ export default function BusinessGlossaryPage() {
             <div>
               <h3 style={{ fontSize: 15, fontWeight: 600 }}>Generate Industry Terms</h3>
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                {detectedIndustry
-                  ? `${generatedTerms.length} terms available for ${detectedIndustry}. Select which to add.`
-                  : `${generatedTerms.length} standard governance terms available.`}
+                {detectedIndustry ? `${generatedTerms.length} terms for ${detectedIndustry}.` : `${generatedTerms.length} standard terms available.`} Select which to add.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => setGeneratedTerms((prev) => prev.map((t) => ({ ...t, selected: true })))} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>Select All</button>
-              <button onClick={() => setGeneratedTerms((prev) => prev.map((t) => ({ ...t, selected: false })))} style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Deselect All</button>
+              <button onClick={() => setGeneratedTerms((p) => p.map((t) => ({ ...t, selected: true })))} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>All</button>
+              <button onClick={() => setGeneratedTerms((p) => p.map((t) => ({ ...t, selected: false })))} style={{ fontSize: 11, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>None</button>
             </div>
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4 }}>
             {generatedTerms.map((t, i) => (
-              <div key={t.term} style={{
-                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
-                borderBottom: i < generatedTerms.length - 1 ? '1px solid var(--color-border)' : 'none',
-                background: t.selected ? '#f0f9ff' : 'transparent',
-              }}>
-                <input type="checkbox" checked={t.selected} onChange={() => setGeneratedTerms((prev) => prev.map((x, j) => j === i ? { ...x, selected: !x.selected } : x))} style={{ marginTop: 3, cursor: 'pointer' }} />
+              <div key={t.term} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderBottom: i < generatedTerms.length - 1 ? '1px solid var(--color-border)' : 'none', background: t.selected ? '#f0f9ff' : 'transparent' }}>
+                <input type="checkbox" checked={t.selected} onChange={() => setGeneratedTerms((p) => p.map((x, j) => j === i ? { ...x, selected: !x.selected } : x))} style={{ marginTop: 3, cursor: 'pointer' }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{t.term}</span>
@@ -622,185 +404,176 @@ export default function BusinessGlossaryPage() {
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-              {generatedTerms.filter((t) => t.selected).length} of {generatedTerms.length} selected
-            </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button style={btnSecondary} onClick={() => { setShowGeneratePreview(false); setGeneratedTerms([]); }}>Cancel</button>
-              <button
-                style={{ ...btnPrimary, opacity: generatedTerms.filter((t) => t.selected).length === 0 ? 0.6 : 1, cursor: generatedTerms.filter((t) => t.selected).length === 0 ? 'not-allowed' : 'pointer' }}
-                disabled={generatedTerms.filter((t) => t.selected).length === 0}
-                onClick={handleApplyGenerated}
-              >
-                Add {generatedTerms.filter((t) => t.selected).length} Term{generatedTerms.filter((t) => t.selected).length !== 1 ? 's' : ''}
-              </button>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <button style={btnSecondary} onClick={() => { setShowGeneratePreview(false); setGeneratedTerms([]); }}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: generatedTerms.filter((t) => t.selected).length === 0 ? 0.6 : 1 }}
+              disabled={generatedTerms.filter((t) => t.selected).length === 0} onClick={handleApplyGenerated}>
+              Add {generatedTerms.filter((t) => t.selected).length} Terms
+            </button>
           </div>
         </div>
       )}
 
-      {/* Terms list */}
+      {/* Main content: dictionary two-column layout */}
       {loading ? (
         <SkeletonRows rows={5} columns={4} />
       ) : terms.length === 0 && !showForm ? (
         <EmptyState icon={'📖'} title="No glossary terms yet"
           description="The business glossary is a shared dictionary of agreed-upon terms. Define terms so everyone speaks the same language."
-          action={canWrite ? { label: '+ Add Term', onClick: openAdd } : undefined}
+          action={canWrite ? { label: 'Add Term', onClick: openAdd } : undefined}
           secondaryAction={canWrite ? { label: 'Generate Industry Terms', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
-        <>
-          {filteredTerms.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
-              No terms match your current filters.
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
+          {/* Left: Term index */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
+            {/* Search + filters */}
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
+              <input
+                style={{ ...inputStyle, fontSize: 12, padding: '6px 10px', marginBottom: 8 }}
+                placeholder="Search terms..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <select style={{ ...selectStyle, fontSize: 11, padding: '3px 6px', flex: 1 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="">All Statuses</option>
+                  {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select style={{ ...selectStyle, fontSize: 11, padding: '3px 6px', flex: 1 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                  <option value="">All Categories</option>
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
             </div>
-          ) : groupByCategory ? (
-            (() => {
-              const CATEGORY_DESCRIPTIONS: Record<string, string> = {
-                BUSINESS: 'Core business concepts and entities used across the organization.',
-                TECHNICAL: 'Technical terms, systems, and infrastructure concepts.',
-                REGULATORY: 'Compliance, privacy, and regulatory terms.',
-                METRIC: 'Key performance indicators and measurements.',
-                GENERAL: 'General governance and data management terms.',
-              };
-              const grouped: Record<string, GlossaryTerm[]> = {};
-              for (const t of filteredTerms) {
-                const cat = t.category || 'GENERAL';
-                if (!grouped[cat]) grouped[cat] = [];
-                grouped[cat].push(t);
-              }
-              return CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => (
-                <div key={cat} style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={badgeStyle(CATEGORY_COLORS[cat] || CATEGORY_COLORS.GENERAL)}>{cat}</span>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                      {CATEGORY_DESCRIPTIONS[cat] || ''} ({grouped[cat].length} term{grouped[cat].length !== 1 ? 's' : ''})
-                    </span>
-                  </div>
-                  {grouped[cat].map((t) => {
-                    const isExpanded = expandedId === t.id;
-                    return (
-                      <div key={t.id} style={{ ...termCardStyle, position: 'relative' }}>
-                        <div style={{ position: 'absolute', top: 12, left: 12 }}>
-                          <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginLeft: 28 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{t.term}</span>
-                              <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
-                            </div>
-                            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55, margin: 0, marginBottom: 8 }}>{t.definition}</p>
-                            {t.synonyms && t.synonyms.length > 0 && (
-                              <div style={{ marginBottom: 6 }}>{t.synonyms.map((syn, i) => <span key={i} style={pillStyle}>{syn}</span>)}</div>
-                            )}
-                            {(t.context || t.businessRules || t.sourceOfTruth) && (
-                              <button style={{ fontSize: 12, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 4 }}
-                                onClick={() => setExpandedId(isExpanded ? null : t.id)}>
-                                {isExpanded ? 'Hide details' : 'Show details'}
-                              </button>
-                            )}
-                            {isExpanded && (
-                              <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
-                                {t.context && <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Context: </span>{t.context}</div>}
-                                {t.businessRules && <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Business Rules: </span>{t.businessRules}</div>}
-                                {t.exampleValues && <div style={{ marginBottom: 6 }}><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Examples: </span>{t.exampleValues}</div>}
-                                {t.sourceOfTruth && <div><span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Source of Truth: </span>{t.sourceOfTruth}</div>}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, marginLeft: 16 }}>
-                            {t.domainName && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.domainName}</span>}
-                            {t.ownerName && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{t.ownerName}</span>}
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}
-                              {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ));
-            })()
-          ) : (
-            filteredTerms.map((t) => {
-              const isExpanded = expandedId === t.id;
-              return (
-                <div key={t.id} style={{ ...termCardStyle, position: 'relative' }}>
-                  <div style={{ position: 'absolute', top: 12, left: 12 }}>
-                    <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginLeft: 28 }}>
-                    {/* Left side */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>{t.term}</span>
-                        <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
-                        <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
-                      </div>
-                      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55, margin: 0, marginBottom: 8 }}>
-                        {t.definition}
-                      </p>
-                      {t.synonyms && t.synonyms.length > 0 && (
-                        <div style={{ marginBottom: 6 }}>
-                          {t.synonyms.map((syn, i) => (
-                            <span key={i} style={pillStyle}>{syn}</span>
-                          ))}
-                        </div>
-                      )}
 
-                      {/* Expandable details */}
-                      {(t.context || t.businessRules || t.sourceOfTruth) && (
-                        <button
-                          style={{ fontSize: 12, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 4 }}
-                          onClick={() => setExpandedId(isExpanded ? null : t.id)}
+            {/* Term list grouped by category */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {filteredTerms.length === 0 ? (
+                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No terms match your filters.</div>
+              ) : (
+                CATEGORY_ORDER.filter((cat) => groupedTerms[cat]?.length > 0).map((cat) => (
+                  <div key={cat}>
+                    <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: CATEGORY_COLORS[cat]?.color || '#64748b', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', position: 'sticky', top: 0, zIndex: 1 }}>
+                      {cat} ({groupedTerms[cat].length})
+                    </div>
+                    {groupedTerms[cat].map((t) => {
+                      const isActive = selectedTermId === t.id;
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => { setSelectedTermId(t.id); setShowForm(false); }}
+                          style={{
+                            padding: '8px 12px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            background: isActive ? '#dbeafe' : 'transparent',
+                            borderBottom: '1px solid var(--color-border)',
+                            borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                          onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                         >
-                          {isExpanded ? 'Hide details' : 'Show details'}
-                        </button>
-                      )}
-                      {isExpanded && (
-                        <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
-                          {t.context && (
-                            <div style={{ marginBottom: 6 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Context: </span>{t.context}
-                            </div>
-                          )}
-                          {t.businessRules && (
-                            <div style={{ marginBottom: 6 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Business Rules: </span>{t.businessRules}
-                            </div>
-                          )}
-                          {t.sourceOfTruth && (
-                            <div style={{ marginBottom: 6 }}>
-                              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Source of Truth: </span>{t.sourceOfTruth}
-                            </div>
-                          )}
+                          <span style={statusDot(t.status)} title={t.status} />
+                          <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.term}</span>
                         </div>
-                      )}
-                    </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
 
-                    {/* Right side */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, marginLeft: 20, flexShrink: 0 }}>
-                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'right' }}>
-                        {t.domainName && <div>{t.domainName}</div>}
-                        {t.ownerName && <div>{t.ownerName}</div>}
-                        {!t.domainName && !t.ownerName && <div style={{ fontStyle: 'italic' }}>Unassigned</div>}
-                      </div>
-                      {canWrite && (
-                        <div style={{ display: 'inline-flex', gap: 4 }}>
-                          <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />
-                          <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(t.id)} />
-                        </div>
-                      )}
+            {/* Footer count */}
+            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--color-border)', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)' }}>
+              {filteredTerms.length} of {terms.length} terms
+            </div>
+          </div>
+
+          {/* Right: Term detail */}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', minHeight: 400 }}>
+            {selectedTerm ? (
+              <div style={{ padding: '24px 28px' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{selectedTerm.term}</h2>
+                      <span style={badgeStyle(STATUS_COLORS[selectedTerm.status] || STATUS_COLORS.DRAFT)}>{selectedTerm.status}</span>
+                      <span style={badgeStyle(CATEGORY_COLORS[selectedTerm.category] || CATEGORY_COLORS.GENERAL)}>{selectedTerm.category}</span>
+                    </div>
+                    {selectedTerm.domainName && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Domain: {selectedTerm.domainName}</div>}
+                    {selectedTerm.ownerName && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Owner: {selectedTerm.ownerName}</div>}
+                  </div>
+                  {canWrite && (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(selectedTerm)} />
+                      <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(selectedTerm.id)} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Definition */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Definition</div>
+                  <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--color-text)', margin: 0 }}>{selectedTerm.definition}</p>
+                </div>
+
+                {/* Synonyms */}
+                {selectedTerm.synonyms && selectedTerm.synonyms.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Synonyms</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {selectedTerm.synonyms.map((syn, i) => (
+                        <span key={i} style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 500, background: '#f1f5f9', color: '#475569' }}>{syn}</span>
+                      ))}
                     </div>
                   </div>
+                )}
+
+                {/* Metadata grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  {selectedTerm.context && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Context</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{selectedTerm.context}</div>
+                    </div>
+                  )}
+                  {selectedTerm.sourceOfTruth && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Source of Truth</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{selectedTerm.sourceOfTruth}</div>
+                    </div>
+                  )}
+                  {selectedTerm.exampleValues && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Example Values</div>
+                      <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{selectedTerm.exampleValues}</div>
+                    </div>
+                  )}
                 </div>
-              );
-            })
-          )}
-        </>
+
+                {/* Business Rules */}
+                {selectedTerm.businessRules && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Business Rules</div>
+                    <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.6, padding: 12, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                      {selectedTerm.businessRules}
+                    </div>
+                  </div>
+                )}
+
+                {/* Timestamps */}
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
+                  Created {new Date(selectedTerm.createdAt).toLocaleDateString()} · Updated {new Date(selectedTerm.updatedAt).toLocaleDateString()}
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Select a term from the list to view its definition and details.</p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
