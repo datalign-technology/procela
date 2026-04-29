@@ -34,6 +34,8 @@ const navSections: NavSection[] = [
       { to: '/processes', label: 'Processes', icon: '\u26C1' },
       { to: '/data-assets', label: 'Data Assets', icon: '\u2B22' },
       { to: '/systems', label: 'Systems', icon: '\u2338' },
+      { to: '/business-glossary', label: 'Glossary', icon: '\u2261' },
+      { to: '/data-dictionary', label: 'Data Dictionary', icon: '\u2263' },
     ],
   },
   {
@@ -41,6 +43,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/mappings', label: 'Mappings', icon: '\u21C4' },
       { to: '/data-lineage', label: 'Lineage', icon: '\u2192' },
+      { to: '/gap-detection', label: 'Gap Detection', icon: '\u26A0' },
     ],
   },
   {
@@ -50,6 +53,7 @@ const navSections: NavSection[] = [
       { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
       { to: '/data-domains', label: 'Domains', icon: '\u229E' },
       { to: '/data-quality', label: 'Data Quality', icon: '\u2714' },
+      { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
       { to: '/decision-rights', label: 'Decision Rights', icon: '\u2696' },
       { to: '/raci', label: 'RACI Matrix', icon: '\u25A6' },
       { to: '/governance-policies', label: 'Policies', icon: '\uD83D\uDCCB' },
@@ -59,15 +63,22 @@ const navSections: NavSection[] = [
     label: 'Operate',
     items: [
       { to: '/operations-manual', label: 'Manuals', icon: '\u2611' },
+      { to: '/sops', label: 'Procedures', icon: '\u2610' },
+      { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },
+      { to: '/governance-work', label: 'Tasks & Issues', icon: '\u2605' },
       { to: '/control-tower', label: 'Control Tower', icon: '\u2713' },
       { to: '/reports', label: 'Reports', icon: '\u2630' },
     ],
   },
   {
-    label: null,
+    label: 'Admin',
     adminOnly: true,
     items: [
-      { to: '/organizations', label: 'Admin', icon: '\u2699' },
+      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+      { to: '/people', label: 'People', icon: '\u263A' },
+      { to: '/connections', label: 'Connections', icon: '\u26A1' },
+      { to: '/agents', label: 'Agents', icon: '\u2699' },
+      { to: '/settings', label: 'Settings', icon: '\u2638' },
     ],
   },
 ];
@@ -77,22 +88,33 @@ const bottomNavItems: NavItem[] = [
 ];
 
 const ROUTE_GROUPS: Record<string, string[]> = {
-  '/processes': ['/processes', '/business-glossary', '/data-dictionary'],
+  '/processes': ['/processes'],
   '/data-assets': ['/data-assets'],
-  '/systems': ['/systems', '/connections'],
+  '/systems': ['/systems'],
+  '/business-glossary': ['/business-glossary'],
+  '/data-dictionary': ['/data-dictionary'],
   '/mappings': ['/mappings'],
   '/data-lineage': ['/data-lineage'],
-  '/data-quality': ['/data-quality'],
+  '/gap-detection': ['/gap-detection'],
   '/governance-program': ['/governance-program', '/governance'],
   '/governance-groups': ['/governance-groups'],
   '/data-domains': ['/data-domains'],
+  '/data-quality': ['/data-quality'],
+  '/dama-roles': ['/dama-roles'],
   '/decision-rights': ['/decision-rights'],
   '/raci': ['/raci'],
   '/governance-policies': ['/governance-policies'],
-  '/operations-manual': ['/operations-manual', '/sops', '/governance-calendar', '/governance-work'],
-  '/control-tower': ['/control-tower', '/enterprise-view', '/gap-detection'],
-  '/reports': ['/reports'],
-  '/organizations': ['/organizations', '/people', '/agents', '/skills', '/settings'],
+  '/operations-manual': ['/operations-manual'],
+  '/sops': ['/sops'],
+  '/governance-calendar': ['/governance-calendar'],
+  '/governance-work': ['/governance-work'],
+  '/control-tower': ['/control-tower', '/enterprise-view'],
+  '/reports': ['/reports', '/report', '/scorecard'],
+  '/organizations': ['/organizations'],
+  '/people': ['/people'],
+  '/connections': ['/connections'],
+  '/agents': ['/agents'],
+  '/settings': ['/settings'],
 };
 
 interface SearchResult {
