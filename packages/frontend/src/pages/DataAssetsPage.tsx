@@ -728,10 +728,6 @@ export default function DataAssetsPage() {
     } catch { /* */ }
   };
 
-  // Stats
-  const totalAssets = assets.length;
-  const linkedCount = assets.filter((a) => !!a.sourceColumn).length;
-
   return (
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
@@ -751,19 +747,6 @@ export default function DataAssetsPage() {
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Data assets described in business terms, linked to the systems that hold them.
           </p>
-          {assets.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-              <span>{assets.length} assets</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{assets.filter((a) => a.governanceTier === 'GOLD').length} Gold</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{assets.filter((a) => a.governanceTier === 'SILVER').length} Silver</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{assets.filter((a) => !a.governanceTier || a.governanceTier === 'BRONZE').length} Bronze</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{assets.filter((a) => a.healthScore != null && a.healthScore < 80).length} below 80% health</span>
-            </div>
-          )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {assets.length > 0 && canWrite && (
@@ -1052,20 +1035,6 @@ export default function DataAssetsPage() {
             </button>
           </div>
         </SectionCard>
-      )}
-
-      {/* Stats */}
-      {assets.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{totalAssets}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Assets</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{linkedCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Linked to a column</div>
-          </div>
-        </div>
       )}
 
       {/* Bulk Action Bar */}

@@ -30,12 +30,6 @@ interface GlossaryTerm {
   updatedAt: string;
 }
 
-interface GlossarySummary {
-  total: number;
-  approved: number;
-  draft: number;
-}
-
 interface Person { id: string; name: string; }
 interface Domain { id: string; name: string; }
 
@@ -126,7 +120,6 @@ export default function BusinessGlossaryPage() {
   const { addToast } = useToastStore();
 
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
-  const [summary, setSummary] = useState<GlossarySummary>({ total: 0, approved: 0, draft: 0 });
   const [people, setPeople] = useState<Person[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,14 +143,12 @@ export default function BusinessGlossaryPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [termsRes, summaryRes, pplRes, domRes] = await Promise.all([
+      const [termsRes, pplRes, domRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GlossaryTerm[] }>(`/business-glossary${query}`),
-        apiClient.get<{ success: boolean; data: GlossarySummary }>(`/business-glossary/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: Domain[] }>(`/data-domains${query}`),
       ]);
       setTerms(termsRes.data || []);
-      setSummary(summaryRes.data || { total: 0, approved: 0, draft: 0 });
       setPeople(pplRes.data || []);
       setDomains(domRes.data || []);
     } catch { /* API may not be running */ }
@@ -400,11 +391,6 @@ export default function BusinessGlossaryPage() {
           )}
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>
-      </div>
-
-      {/* Inline stats */}
-      <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
-        {summary.total} terms &middot; {summary.approved} approved &middot; {summary.draft} draft
       </div>
 
       <ConfirmDialog open={confirmDelete !== null} title="Delete Term?"

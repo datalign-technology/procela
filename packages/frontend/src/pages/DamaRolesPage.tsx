@@ -260,52 +260,36 @@ export default function DamaRolesPage() {
         <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
       </PageHeader>
 
-      {/* Summary cards — click to filter the table to that role type.
-          Click again (or click the active card) to clear the filter. */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+      {/* Role type filter chips */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         {Object.keys(ROLE_TYPE_LABELS).map((rt) => {
           const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
           const count = summary[rt] || 0;
           const isActive = filterRoleType === rt;
           return (
-            <div key={rt}
+            <button key={rt}
               onClick={() => setFilterRoleType(isActive ? null : rt)}
               style={{
-                flex: '1 1 120px', minWidth: 120, background: 'var(--color-surface)',
-                border: `2px solid ${isActive ? c.color : 'var(--color-border)'}`,
-                borderRadius: 'var(--radius-md)',
-                padding: '10px 14px', boxShadow: isActive ? `0 0 0 1px ${c.color}22` : 'var(--shadow-sm)',
-                cursor: 'pointer',
-                opacity: count === 0 && !isActive ? 0.55 : 1,
-                transition: 'border-color 0.12s, box-shadow 0.12s',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+                background: isActive ? c.color : c.bg, color: isActive ? '#fff' : c.color,
+                border: 'none', cursor: 'pointer',
+                opacity: count === 0 && !isActive ? 0.45 : 1,
+                transition: 'background 0.12s, color 0.12s',
               }}
-              title={count > 0 ? `Click to ${isActive ? 'clear filter' : `show ${ROLE_TYPE_LABELS[rt]} assignments`}` : 'No assignments'}
+              title={`${ROLE_TYPE_LABELS[rt]}: ${count} assigned`}
             >
-              <div style={{ fontSize: 22, fontWeight: 700, color: c.color }}>{count}</div>
-              <div style={{ fontSize: 11, color: isActive ? c.color : 'var(--color-text-muted)', fontWeight: isActive ? 600 : 400, marginTop: 2 }}>
-                {ROLE_TYPE_LABELS[rt]}
-              </div>
-            </div>
+              {ROLE_CATEGORIES[rt] === 'Executive' ? ROLE_TYPE_LABELS[rt] : ROLE_TYPE_LABELS[rt].replace('Data ', '').replace('Database ', 'DB ')}
+              {count > 0 && <span style={{ fontWeight: 700 }}>{count}</span>}
+            </button>
           );
         })}
+        {filterRoleType && (
+          <button onClick={() => setFilterRoleType(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-primary)', padding: '3px 6px' }}>
+            Clear
+          </button>
+        )}
       </div>
-
-      {/* Active filter chip */}
-      {filterRoleType && (
-        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '4px 6px 4px 12px', borderRadius: 999,
-            background: '#eff6ff', color: '#1e40af', fontSize: 12, fontWeight: 500,
-          }}>
-            Showing: {ROLE_TYPE_LABELS[filterRoleType] || filterRoleType}
-            <button
-              onClick={() => setFilterRoleType(null)}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#1e40af', fontSize: 14, lineHeight: 1, padding: '0 6px' }}
-            >&times;</button>
-          </span>
-        </div>
-      )}
 
       {/* Assign Form */}
       {showForm && (
