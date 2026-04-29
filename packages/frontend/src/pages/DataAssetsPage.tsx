@@ -20,6 +20,7 @@ import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import PageTabNav, { CATALOG_TABS } from '../components/PageTabNav';
 import SectionCard from '../components/SectionCard';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 interface DataAssetEntity {
   id: string;
@@ -262,6 +263,9 @@ export default function DataAssetsPage() {
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const formValidation = useFormValidation({
+    name: (v: any) => !v?.trim() ? 'Name is required.' : null,
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterCategory, setFilterCategory] = useState('');
   const [filterTier, setFilterTier] = useState('');
@@ -518,7 +522,7 @@ export default function DataAssetsPage() {
   };
 
   const handleSave = async (keepOpen: boolean = false) => {
-    if (!form.name.trim()) return;
+    if (!formValidation.validateAll(form)) return;
     const { domainId, ...assetFields } = form;
     let savedId = editingId;
     if (editingId) {
@@ -842,11 +846,13 @@ export default function DataAssetsPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input
                 autoFocus
-                style={inputStyle}
+                style={{ ...inputStyle, border: formValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => updateField('name', e.target.value)}
+                onBlur={() => { formValidation.touch('name'); formValidation.validateField('name', form.name, form); }}
                 placeholder="e.g. Customer Account Data"
               />
+              {formValidation.fieldError('name') && <div style={fieldErrorStyle}>{formValidation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>

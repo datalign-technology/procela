@@ -1006,6 +1006,7 @@ export default function ProcessCatalogPage() {
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
+  const [showLevelGuide, setShowLevelGuide] = useState(false);
 
   // Agent execution state
   interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; completedAt: string | null; durationMs: number | null; createdAt: string; }
@@ -1487,6 +1488,31 @@ export default function ProcessCatalogPage() {
             );
           })}
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 4 }}>* = required</span>
+          <button
+            onClick={() => setShowLevelGuide(!showLevelGuide)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--color-primary)', marginLeft: 'auto', padding: 0 }}
+          >
+            {showLevelGuide ? 'Hide' : 'What do these levels mean?'}
+          </button>
+        </div>
+      )}
+      {showLevelGuide && totalNodes > 0 && (
+        <div style={{
+          background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+          padding: '12px 16px', marginBottom: 12, fontSize: 12, lineHeight: 1.6,
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 8, color: '#1e40af' }}>Process Hierarchy Guide</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div><strong>Value Stream *</strong> — A major end-to-end business flow, like "Customer Onboarding" or "Order Fulfillment."</div>
+            <div><strong>Process *</strong> — A specific procedure within a value stream, like "Verify Identity" or "Generate Invoice."</div>
+            <div><strong>Activity *</strong> — A concrete unit of work with clear inputs and outputs, like "Run credit check" or "Send welcome email."</div>
+            <div><strong>Sub-Process</strong> — Optional grouping of related activities within a process.</div>
+            <div><strong>Domain / Capability</strong> — Optional higher-level groupings for large organizations.</div>
+            <div><strong>Task / Execution</strong> — Optional granular detail or system-level steps within an activity.</div>
+          </div>
+          <div style={{ fontSize: 11, color: '#1e40af', marginTop: 8 }}>
+            Start by adding a Value Stream, then add Processes inside it, then Activities inside those. The other levels are optional.
+          </div>
         </div>
       )}
 
@@ -1653,19 +1679,25 @@ export default function ProcessCatalogPage() {
             </div>
 
             {/* Visual guide */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
               {(['VALUE_STREAM', 'PROCESS', 'ACTIVITY'] as NodeLevel[]).map((level, i) => {
                 const config = LEVEL_CONFIG[level];
+                const examples: Record<string, string> = {
+                  VALUE_STREAM: 'e.g. "Customer Onboarding," "Order Fulfillment"',
+                  PROCESS: 'e.g. "Verify Identity," "Generate Invoice"',
+                  ACTIVITY: 'e.g. "Check credit score," "Send confirmation email"',
+                };
                 return (
                   <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{
                       background: config.bg, color: config.color, borderRadius: 8,
-                      padding: '12px 16px', textAlign: 'center', minWidth: 120,
+                      padding: '12px 16px', textAlign: 'center', minWidth: 140,
                       border: `2px solid ${config.color}44`,
                     }}>
                       <div style={{ fontSize: 20, marginBottom: 4 }}>{config.icon}</div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{config.label}</div>
                       <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2 }}>{config.hint.split('.')[0]}</div>
+                      <div style={{ fontSize: 10, fontStyle: 'italic', opacity: 0.7, marginTop: 4 }}>{examples[level]}</div>
                     </div>
                     {i < 2 && <span style={{ fontSize: 20, color: 'var(--color-text-muted)' }}>{'\u2192'}</span>}
                   </div>

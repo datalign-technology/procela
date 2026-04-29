@@ -349,7 +349,11 @@ export default function GovernanceProgramPage() {
   const [roleAgentSelections, setRoleAgentSelections] = useState<Record<string, string>>({});
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [rolesLoaded, setRolesLoaded] = useState(false);
-  const [expandedRoleGroups, setExpandedRoleGroups] = useState<Set<string>>(new Set());
+  const [expandedRoleGroups, setExpandedRoleGroups] = useState<Set<string>>(() => {
+    // Default: only expand groups that have incomplete assignments
+    // This is computed lazily on first render, then updated as data loads
+    return new Set<string>();
+  });
   const [confirmRemoveRoleId, setConfirmRemoveRoleId] = useState<string | null>(null);
   const [roleGroupFilter, setRoleGroupFilter] = useState<string | null>(null);
 
@@ -846,6 +850,20 @@ export default function GovernanceProgramPage() {
                                 <span style={{ fontSize: 11, color: groupFilled === groupRoles.length ? '#16a34a' : 'var(--color-text-muted)' }}>{groupFilled}/{groupRoles.length} filled</span>
                               </div>
                               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{group.description}</div>
+                              {!isGroupExpanded && groupRoles.length > 0 && (
+                                <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                                  {groupRoles.map((r) => {
+                                    const isFilled = filledRoleTypes.has(r.roleType);
+                                    return (
+                                      <span key={r.roleType} style={{
+                                        fontSize: 10, padding: '1px 6px', borderRadius: 3,
+                                        background: isFilled ? '#d1fae5' : '#fef2f2',
+                                        color: isFilled ? '#065f46' : '#991b1b',
+                                      }}>{r.label}</span>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                             <Link to={group.link} onClick={(e) => e.stopPropagation()} style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', flexShrink: 0 }}>View Group &rarr;</Link>
                           </div>

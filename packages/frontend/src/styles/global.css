@@ -211,3 +211,56 @@ body[data-density="compact"] table th {
   padding-bottom: 6px !important;
 }
 
+/* ── Responsive breakpoints ──
+ * Forms use inline grid styles (gridTemplateColumns: '1fr 1fr').
+ * These overrides stack them on small screens. */
+@media (max-width: 768px) {
+  /* Stack 2-column form grids to single column */
+  div[style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stack page headers (title left, actions right) */
+  div[style*="justifyContent: 'space-between'"][style*="alignItems"] {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+
+  /* Make tables scrollable horizontally */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Reduce padding on table cells */
+  table td, table th {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* Hide low-priority table columns on small screens */
+  table th:nth-child(n+5),
+  table td:nth-child(n+5) {
+    display: none;
+  }
+  table th:first-child,
+  table td:first-child,
+  table th:last-child,
+  table td:last-child {
+    display: table-cell !important;
+  }
+
+  /* Compact sidebar detail panels */
+  div[style*="gridTemplateColumns: '260px"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="gridTemplateColumns: '340px"] {
+    grid-template-columns: 1fr !important;
+  }
+  div[style*="position: 'sticky'"] {
+    position: static !important;
+  }
+}
+
