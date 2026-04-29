@@ -128,10 +128,61 @@
   font-weight: 500;
 }
 
+.navLinkChild {
+  padding-left: 44px;
+  font-size: 13px;
+}
+
 .navIcon {
   width: 20px;
   text-align: center;
   font-size: 16px;
+}
+
+/* ── Flyout panel (collapsed sidebar) ── */
+
+.navFlyout {
+  position: absolute;
+  left: 60px;
+  top: 0;
+  min-width: 200px;
+  background: var(--color-sidebar);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  padding: 6px 0;
+  z-index: 1000;
+}
+
+.navFlyoutLabel {
+  padding: 8px 16px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.navFlyoutLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--color-sidebar-text);
+  transition: background-color 0.12s;
+  white-space: nowrap;
+}
+
+.navFlyoutLink:hover {
+  background-color: var(--color-sidebar-hover);
+  color: var(--color-sidebar-text-active);
+}
+
+.navFlyoutLinkActive {
+  background-color: var(--color-sidebar-hover);
+  color: var(--color-sidebar-text-active);
+  font-weight: 500;
 }
 
 /* ── Main area ── */

@@ -168,6 +168,29 @@ export default function Layout() {
   // Sidebar collapse state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Accordion nav: which section is expanded (one at a time)
+  const [expandedNavSection, setExpandedNavSection] = useState<string | null>(null);
+  // Flyout for collapsed sidebar
+  const [flyoutSection, setFlyoutSection] = useState<string | null>(null);
+  const flyoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-expand the section that contains the current route
+  useEffect(() => {
+    for (const section of visibleSections) {
+      if (!section.label) continue;
+      const hasActiveChild = section.items.some((item) => {
+        const groupRoutes = ROUTE_GROUPS[item.to];
+        return groupRoutes
+          ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+          : location.pathname === item.to;
+      });
+      if (hasActiveChild) {
+        setExpandedNavSection(section.label);
+        return;
+      }
+    }
+  }, [location.pathname, visibleSections]);
+
   // Notification state
   const [notifCount, setNotifCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -435,31 +458,125 @@ export default function Layout() {
           {!sidebarCollapsed && <span>{branding.companyName || 'Procela'}</span>}
         </div>
         <nav className={styles.sidebarNav}>
-          {visibleSections.map((section, sIdx) => (
-            <div key={sIdx} className={styles.navGroup}>
-              {section.label && !sidebarCollapsed && (
-                <div className={styles.navGroupLabel}>{section.label}</div>
-              )}
-              {section.items.map((item) => {
-                const groupRoutes = ROUTE_GROUPS[item.to];
-                const isGroupActive = groupRoutes
-                  ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                  : location.pathname === item.to;
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
-                    title={sidebarCollapsed ? item.label : undefined}
+          {visibleSections.map((section, sIdx) => {
+            const isExpanded = section.label ? expandedNavSection === section.label : true;
+            const isFlyoutOpen = sidebarCollapsed && flyoutSection === section.label;
+            const sectionHasActive = section.items.some((item) => {
+              const groupRoutes = ROUTE_GROUPS[item.to];
+              return groupRoutes
+                ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                : location.pathname === item.to;
+            });
+
+            return (
+            <div
+              key={sIdx}
+              className={styles.navGroup}
+              style={{ position: 'relative' }}
+              onMouseEnter={() => {
+                if (sidebarCollapsed && section.label) {
+                  if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current);
+                  setFlyoutSection(section.label);
+                }
+              }}
+              onMouseLeave={() => {
+                if (sidebarCollapsed && section.label) {
+                  flyoutTimeoutRef.current = setTimeout(() => setFlyoutSection(null), 150);
+                }
+              }}
+            >
+              {section.label ? (
+                <>
+                  {/* Section header — clickable accordion toggle */}
+                  <div
+                    className={clsx(styles.navLink, sectionHasActive && !isExpanded && styles.navLinkActive)}
+                    onClick={() => {
+                      if (sidebarCollapsed) {
+                        setFlyoutSection(isFlyoutOpen ? null : section.label);
+                      } else {
+                        setExpandedNavSection(isExpanded ? null : section.label!);
+                      }
+                    }}
+                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    title={sidebarCollapsed ? section.label : undefined}
                   >
-                    <span className={styles.navIcon}>{item.icon}</span>
-                    {!sidebarCollapsed && item.label}
-                  </NavLink>
-                );
-              })}
+                    <span className={styles.navIcon}>{section.items[0]?.icon}</span>
+                    {!sidebarCollapsed && (
+                      <>
+                        <span style={{ flex: 1 }}>{section.label}</span>
+                        <span style={{ fontSize: 10, opacity: 0.5, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>{'▶'}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Expanded children (accordion — only when sidebar is open) */}
+                  {!sidebarCollapsed && isExpanded && section.items.map((item) => {
+                    const groupRoutes = ROUTE_GROUPS[item.to];
+                    const isGroupActive = groupRoutes
+                      ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                      : location.pathname === item.to;
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === '/'}
+                        className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
+                      >
+                        <span className={styles.navIcon}>{item.icon}</span>
+                        {item.label}
+                      </NavLink>
+                    );
+                  })}
+
+                  {/* Flyout panel (collapsed sidebar hover) */}
+                  {sidebarCollapsed && isFlyoutOpen && (
+                    <div className={styles.navFlyout}>
+                      <div className={styles.navFlyoutLabel}>{section.label}</div>
+                      {section.items.map((item) => {
+                        const groupRoutes = ROUTE_GROUPS[item.to];
+                        const isGroupActive = groupRoutes
+                          ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                          : location.pathname === item.to;
+                        return (
+                          <NavLink
+                            key={item.to}
+                            to={item.to}
+                            end={item.to === '/'}
+                            className={() => clsx(styles.navFlyoutLink, isGroupActive && styles.navFlyoutLinkActive)}
+                            onClick={() => setFlyoutSection(null)}
+                          >
+                            <span className={styles.navIcon}>{item.icon}</span>
+                            {item.label}
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* No-label sections (Dashboard) — always show items directly */
+                section.items.map((item) => {
+                  const groupRoutes = ROUTE_GROUPS[item.to];
+                  const isGroupActive = groupRoutes
+                    ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                    : location.pathname === item.to;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === '/'}
+                      className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
+                      title={sidebarCollapsed ? item.label : undefined}
+                    >
+                      <span className={styles.navIcon}>{item.icon}</span>
+                      {!sidebarCollapsed && item.label}
+                    </NavLink>
+                  );
+                })
+              )}
             </div>
-          ))}
+            );
+          })}
 
           <div className={styles.navSpacer} />
           <div className={styles.navDivider} />
