@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import PageTabNav, { OPERATE_TABS } from '../components/PageTabNav';
 
 // ── Types ──
@@ -178,6 +179,9 @@ export default function GovernanceCalendarPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<EventForm>(emptyForm);
+  const eventValidation = useFormValidation({
+    name: (v: any) => !v?.trim() ? 'Event name is required.' : null,
+  });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -231,7 +235,7 @@ export default function GovernanceCalendarPage() {
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
+    if (!eventValidation.validateAll(form)) return;
     try {
       const dayOfMonthNum = form.dayOfMonth.trim() === '' ? null : parseInt(form.dayOfMonth, 10);
       const dayOfWeekNum = form.dayOfWeek.trim() === '' ? null : parseInt(form.dayOfWeek, 10);
@@ -490,11 +494,13 @@ export default function GovernanceCalendarPage() {
               <label style={labelStyle}>Name *</label>
               <input
                 autoFocus
-                style={inputStyle}
+                style={{ ...inputStyle, border: eventValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onBlur={() => { eventValidation.touch('name'); eventValidation.validateField('name', form.name, form); }}
                 placeholder="e.g. Data Governance Council Meeting"
               />
+              {eventValidation.fieldError('name') && <div style={fieldErrorStyle}>{eventValidation.fieldError('name')}</div>}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>

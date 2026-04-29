@@ -548,7 +548,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
           </select>
         ) : (
           <span style={{ fontSize: 12, fontWeight: 600, color: config.color }}>
-            {config.icon} New {config.label}
+            {config.icon} Add {config.label}
           </span>
         )}
         <input autoFocus style={{ ...inputStyle, flex: 1 }} placeholder={`${config.label} name...`} value={name}

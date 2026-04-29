@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import SortableTh from '../components/SortableTh';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useSortedList } from '../hooks/useSortedList';
 
 interface DamaRoleAssignment {
@@ -124,6 +125,10 @@ export default function DamaRolesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const roleValidation = useFormValidation({
+    personId: (v: any) => !v ? 'Select a person to assign the role to.' : null,
+    scopeId: (v: any) => !v ? 'Select an organization.' : null,
+  });
   const [error, setError] = useState('');
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -164,7 +169,7 @@ export default function DamaRolesPage() {
   };
 
   const handleSave = async () => {
-    if (!form.personId || !form.roleType || !form.scopeId) return;
+    if (!roleValidation.validateAll(form)) return;
     setError('');
     try {
       await apiClient.post('/dama-roles', form);
@@ -313,10 +318,13 @@ export default function DamaRolesPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person *</label>
-              <select style={selectStyle} value={form.personId} onChange={(e) => setForm({ ...form, personId: e.target.value })}>
+              <select style={{ ...selectStyle, border: roleValidation.fieldError('personId') ? inputErrorBorder : selectStyle.border }} value={form.personId}
+                onChange={(e) => setForm({ ...form, personId: e.target.value })}
+                onBlur={() => { roleValidation.touch('personId'); roleValidation.validateField('personId', form.personId, form); }}>
                 <option value="">-- Select person --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+              {roleValidation.fieldError('personId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('personId')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Governance Role *</label>
@@ -340,10 +348,13 @@ export default function DamaRolesPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
-              <select style={selectStyle} value={form.scopeId} onChange={(e) => setForm({ ...form, scopeId: e.target.value })}>
+              <select style={{ ...selectStyle, border: roleValidation.fieldError('scopeId') ? inputErrorBorder : selectStyle.border }} value={form.scopeId}
+                onChange={(e) => setForm({ ...form, scopeId: e.target.value })}
+                onBlur={() => { roleValidation.touch('scopeId'); roleValidation.validateField('scopeId', form.scopeId, form); }}>
                 <option value="">-- Select organization --</option>
                 {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
+              {roleValidation.fieldError('scopeId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('scopeId')}</div>}
               <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
                 Domain ownership (owner/steward) is managed directly on the Data Domain.
               </div>

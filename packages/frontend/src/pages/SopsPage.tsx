@@ -326,7 +326,7 @@ export default function SopsPage() {
       {/* Add/Edit Form */}
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit SOP' : 'New SOP'}</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit SOP' : 'Add New SOP'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Title *</label>
