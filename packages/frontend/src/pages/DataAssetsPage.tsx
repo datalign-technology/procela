@@ -259,6 +259,7 @@ export default function DataAssetsPage() {
   const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -833,7 +834,10 @@ export default function DataAssetsPage() {
       {showForm && (
         <SectionCard title={editingId ? 'Edit Data Asset' : 'Add New Data Asset'}>
           <UnsavedBanner visible={isDirty()} onSave={() => handleSave(false)} onDiscard={closeForm} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+
+          {/* ── Section 1: Basics (always visible) ── */}
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>What is this data?</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
               <input
@@ -845,10 +849,14 @@ export default function DataAssetsPage() {
               />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System</label>
-              <select style={selectStyle} value={form.systemId} onChange={(e) => updateField('systemId', e.target.value)}>
-                <option value="">-- Select system --</option>
-                {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
+              <select style={selectStyle} value={form.category} onChange={(e) => updateField('category', e.target.value)}>
+                <option value="">-- Select --</option>
+                <option value="OPERATIONAL">Operational</option>
+                <option value="GOVERNANCE">Governance</option>
+                <option value="REFERENCE">Reference</option>
+                <option value="ANALYTICAL">Analytical</option>
+                <option value="MASTER">Master</option>
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -860,6 +868,11 @@ export default function DataAssetsPage() {
                 placeholder="Describe this data asset in business terms"
               />
             </div>
+          </div>
+
+          {/* ── Section 2: Governance & Ownership (always visible) ── */}
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Governance & ownership</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
               <select style={selectStyle} value={form.domainId} onChange={(e) => updateField('domainId', e.target.value)}>
@@ -873,17 +886,6 @@ export default function DataAssetsPage() {
                 <option value="BRONZE">Bronze</option>
                 <option value="SILVER">Silver</option>
                 <option value="GOLD">Gold</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
-              <select style={selectStyle} value={form.category} onChange={(e) => updateField('category', e.target.value)}>
-                <option value="">-- Select --</option>
-                <option value="OPERATIONAL">Operational</option>
-                <option value="GOVERNANCE">Governance</option>
-                <option value="REFERENCE">Reference</option>
-                <option value="ANALYTICAL">Analytical</option>
-                <option value="MASTER">Master</option>
               </select>
             </div>
             <div>
@@ -938,36 +940,57 @@ export default function DataAssetsPage() {
                 </div>
               )}
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Data Classification <HelpPopover id="asset-classification" title="Data Classification">Public = open data. Internal = employee-only. Confidential = limited access, business-sensitive. Restricted = regulated (PII, PHI, financial).</HelpPopover></label>
-              <select style={selectStyle} value={form.dataClassification} onChange={(e) => updateField('dataClassification', e.target.value)}>
-                <option value="">-- Select --</option>
-                <option value="PUBLIC">Public</option>
-                <option value="INTERNAL">Internal</option>
-                <option value="CONFIDENTIAL">Confidential</option>
-                <option value="RESTRICTED">Restricted</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Refresh Frequency <HelpPopover id="asset-refresh" title="Refresh Frequency">How often is this data updated from its source? Affects how stale the data might be when consumed by processes.</HelpPopover></label>
-              <select style={selectStyle} value={form.refreshFrequency} onChange={(e) => updateField('refreshFrequency', e.target.value)}>
-                <option value="">-- Select --</option>
-                <option value="REAL_TIME">Real-time</option>
-                <option value="HOURLY">Hourly</option>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-                <option value="MANUAL">Manual</option>
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Retention Policy <HelpPopover id="asset-retention" title="Retention Policy">How long is this data kept before deletion or archival? Include the regulatory or business reason if applicable.</HelpPopover></label>
-              <input style={inputStyle} value={form.retentionPolicy} onChange={(e) => updateField('retentionPolicy', e.target.value)} placeholder="e.g. 7 years per regulatory requirement, 90 days rolling" />
-            </div>
           </div>
 
-          {/* Source Connection */}
-          <div style={{ marginTop: 16, padding: '14px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+          {/* ── Section 3: Advanced fields (collapsible) ── */}
+          <button
+            onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', padding: 0, marginBottom: showAdvancedFields ? 12 : 0 }}
+          >
+            {showAdvancedFields ? '▼ Hide' : '▶ Show'} advanced fields (classification, frequency, retention, system, source)
+          </button>
+          {showAdvancedFields && (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Technical details</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System</label>
+                  <select style={selectStyle} value={form.systemId} onChange={(e) => updateField('systemId', e.target.value)}>
+                    <option value="">-- Select system --</option>
+                    {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Data Classification <HelpPopover id="asset-classification" title="Data Classification">Public = open data. Internal = employee-only. Confidential = limited access, business-sensitive. Restricted = regulated (PII, PHI, financial).</HelpPopover></label>
+                  <select style={selectStyle} value={form.dataClassification} onChange={(e) => updateField('dataClassification', e.target.value)}>
+                    <option value="">-- Select --</option>
+                    <option value="PUBLIC">Public</option>
+                    <option value="INTERNAL">Internal</option>
+                    <option value="CONFIDENTIAL">Confidential</option>
+                    <option value="RESTRICTED">Restricted</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Refresh Frequency <HelpPopover id="asset-refresh" title="Refresh Frequency">How often is this data updated from its source? Affects how stale the data might be when consumed by processes.</HelpPopover></label>
+                  <select style={selectStyle} value={form.refreshFrequency} onChange={(e) => updateField('refreshFrequency', e.target.value)}>
+                    <option value="">-- Select --</option>
+                    <option value="REAL_TIME">Real-time</option>
+                    <option value="HOURLY">Hourly</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="MANUAL">Manual</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Retention Policy <HelpPopover id="asset-retention" title="Retention Policy">How long is this data kept before deletion or archival? Include the regulatory or business reason if applicable.</HelpPopover></label>
+                  <input style={inputStyle} value={form.retentionPolicy} onChange={(e) => updateField('retentionPolicy', e.target.value)} placeholder="e.g. 7 years per regulatory requirement, 90 days rolling" />
+                </div>
+              </div>
+
+              {/* Source Connection */}
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Source connection</div>
+              <div style={{ padding: '14px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 14 }}>&#x26A1;</span>
               Link to Source
@@ -1001,6 +1024,8 @@ export default function DataAssetsPage() {
               </div>
             )}
           </div>
+            </>
+          )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>

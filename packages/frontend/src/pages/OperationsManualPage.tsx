@@ -158,7 +158,7 @@ export default function OperationsManualPage() {
           <input style={inputStyle} value={newManualLabel} onChange={(e) => setNewManualLabel(e.target.value)} placeholder="Manual name" autoFocus onKeyDown={(e) => e.key === 'Enter' && handleAddManual()} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <button style={btnSecondary} onClick={() => { setShowAddManual(false); setNewManualLabel(''); }}>Cancel</button>
-            <button style={{ ...btnPrimary, opacity: !newManualLabel.trim() ? 0.6 : 1, cursor: !newManualLabel.trim() ? 'not-allowed' : 'pointer' }} onClick={handleAddManual} disabled={!newManualLabel.trim()}>Create</button>
+            <button style={{ ...btnPrimary, opacity: !newManualLabel.trim() ? 0.6 : 1, cursor: !newManualLabel.trim() ? 'not-allowed' : 'pointer' }} onClick={handleAddManual} disabled={!newManualLabel.trim()}>Add</button>
           </div>
         </div>
       </div>

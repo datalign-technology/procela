@@ -8,6 +8,7 @@ import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
 import ShortcutsModal from './ShortcutsModal';
 import ShortcutsHint from './ShortcutsHint';
+import OnboardingWizard from './OnboardingWizard';
 
 import DensityToggle from './DensityToggle';
 import { useAuthStore } from '@/stores/authStore';
@@ -87,7 +88,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
-  const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey } = useOrgContext();
+  const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey, triggerRefresh } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
   const { isAdmin, role } = usePermissions();
 
@@ -750,6 +751,9 @@ export default function Layout() {
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
+        {!activeOrgId && !localStorage.getItem('procela:onboarding-complete') && (
+          <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/'); }} />
+        )}
       </div>
     </div>
   );

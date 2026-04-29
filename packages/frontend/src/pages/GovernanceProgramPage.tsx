@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
+import ConfirmDialog from '../components/ConfirmDialog';
 import PageTabNav, { GOVERNANCE_TABS } from '../components/PageTabNav';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
 
@@ -349,6 +350,7 @@ export default function GovernanceProgramPage() {
   const [assigningRole, setAssigningRole] = useState<string | null>(null);
   const [rolesLoaded, setRolesLoaded] = useState(false);
   const [expandedRoleGroups, setExpandedRoleGroups] = useState<Set<string>>(new Set());
+  const [confirmRemoveRoleId, setConfirmRemoveRoleId] = useState<string | null>(null);
   const [roleGroupFilter, setRoleGroupFilter] = useState<string | null>(null);
 
   const hydrateFromProgram = (p: Program) => {
@@ -873,7 +875,7 @@ export default function GovernanceProgramPage() {
                                               <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : '#d1f0eb', color: isAgent ? '#5b21b6' : '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                 {isAgent && <span title="AI Agent" style={{ fontSize: 10 }}>{'⚙'}</span>}
                                                 {displayName}
-                                                <button onClick={() => handleRemoveRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                                <button onClick={() => setConfirmRemoveRoleId(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
                                               </span>
                                             );
                                           })}
@@ -964,6 +966,19 @@ export default function GovernanceProgramPage() {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmRemoveRoleId !== null}
+        title="Remove Role Assignment?"
+        message="This will remove this person or agent from this governance role. You can reassign it later."
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          const id = confirmRemoveRoleId;
+          setConfirmRemoveRoleId(null);
+          if (id) await handleRemoveRole(id);
+        }}
+        onCancel={() => setConfirmRemoveRoleId(null)}
+      />
     </div>
   );
 }
