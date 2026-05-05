@@ -1,0 +1,7 @@
+id,email,age,status
+1,alice@example.com,30,active
+2,bob@example.com,42,active
+3,,25,inactive
+4,not-an-email,17,active
+5,carol@example.com,200,retired
+1,duplicate@example.com,50,active
