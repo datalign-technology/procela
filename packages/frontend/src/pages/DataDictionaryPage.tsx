@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { exportCsv } from '../lib/exportCsv';
 import EmptyState from '../components/EmptyState';
+import IconButton from '../components/IconButton';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
@@ -64,10 +66,6 @@ interface DataAssetColumn {
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
-};
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
-  border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const thStyle: React.CSSProperties = {
   textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
@@ -244,18 +242,44 @@ export default function DataDictionaryPage() {
     );
   }
 
+  const handleExportCsv = () => {
+    exportCsv(
+      'data-dictionary.csv',
+      ['Asset', 'Description', 'System', 'Domain', 'Tier', 'Health', 'Owner', 'Steward', 'Classification', 'Refresh', 'Retention', 'Source', 'Columns'],
+      sorted.map((a) => {
+        const sys = systemMap.get(a.systemId);
+        const did = assetDomainMap.get(a.id);
+        const dom = did ? domainMap.get(did) : null;
+        const ownerDisplay = a.ownerName || personName(a.owner) || '';
+        const stewardDisplay = a.stewardName
+          || (a.stewardIds?.length ? a.stewardIds.map((sid) => personName(sid)).filter(Boolean).join('; ') : '');
+        const cols = columnsMap[a.id] || [];
+        const source = a.sourceAsset
+          ? `${sys ? sys.name + ' > ' : ''}${a.sourceAsset}${a.sourceColumn ? ' > ' + a.sourceColumn : ''}`
+          : '';
+        return [
+          a.name,
+          a.description || '',
+          sys?.name || '',
+          dom?.name || '',
+          a.governanceTier || '',
+          a.healthScore != null ? `${a.healthScore}%` : '',
+          ownerDisplay,
+          stewardDisplay,
+          a.dataClassification || '',
+          (a.refreshFrequency || '').replace(/_/g, ' '),
+          a.retentionPolicy || '',
+          source,
+          cols.length > 0 ? cols.map((c) => `${c.columnName}${c.dataType ? ':' + c.dataType : ''}`).join('; ') : '',
+        ];
+      }),
+    );
+  };
+
   return (
     <div>
-      <style>{`
-        @media print {
-          nav, header, aside, button, .no-print { display: none !important; }
-          body { background: white !important; font-size: 11pt; }
-          main { padding: 0 !important; }
-        }
-      `}</style>
-
       {/* Header */}
-      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Data Dictionary</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
@@ -276,14 +300,16 @@ export default function DataDictionaryPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button onClick={() => window.print()} style={btnPrimary}>Print / Export PDF</button>
+          {assets.length > 0 && (
+            <IconButton icon="download" label="Export CSV" onClick={handleExportCsv} />
+          )}
         </div>
       </div>
 
       {/* Two-column layout: Domains sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Domains Sidebar */}
-        <div className="no-print" style={{
+        <div style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)',
@@ -355,7 +381,7 @@ export default function DataDictionaryPage() {
         {/* Content area */}
         <div>
           {/* Content header: title, search, tier filter */}
-          <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
               {filterDomain
                 ? (filterDomain === '__unassigned__' ? 'Unassigned Assets' : domainMap.get(filterDomain)?.name || 'Assets')
