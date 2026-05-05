@@ -241,4 +241,88 @@ router.delete('/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+/**
+ * PATCH /api/v1/data-domains/bulk
+ *
+ * Body: { ids: string[], updates: { ownerId?, status? } }
+ *
+ * Applies the same partial update to every domain in `ids`. Unknown ids and
+ * domains where the requested status transition is not allowed are skipped
+ * (per-id reasons returned in the response). Locked-status edits to other
+ * fields are also skipped to mirror the single-update endpoint's rules.
+ */
+router.patch('/bulk', (req: Request, res: Response) => {
+  const { ids, updates } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    return;
+  }
+  if (!updates || typeof updates !== 'object') {
+    res.status(400).json({ success: false, error: 'updates object is required' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  let updated = 0;
+  const skipped: Array<{ id: string; reason: string }> = [];
+
+  for (const id of ids) {
+    const domain = dataDomains.find((d) => d.id === id);
+    if (!domain) { skipped.push({ id, reason: 'not found' }); continue; }
+
+    const domainOrg = organizations.find((o: any) => o.id === domain.orgId);
+    const isAdvanced = domainOrg?.statusMode === 'advanced';
+    const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;
+    const transitionMap = isAdvanced ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
+
+    const wantsFieldEdit = updates.ownerId !== undefined;
+    if (wantsFieldEdit && lockedSet.has(domain.status)) {
+      skipped.push({ id, reason: `locked in ${domain.status}` });
+      continue;
+    }
+
+    if (updates.status !== undefined && updates.status !== domain.status) {
+      const allowed = transitionMap[domain.status] || [];
+      if (!allowed.includes(updates.status)) {
+        skipped.push({ id, reason: `cannot transition ${domain.status} → ${updates.status}` });
+        continue;
+      }
+      domain.status = updates.status;
+    }
+    if (updates.ownerId !== undefined) domain.ownerId = updates.ownerId || null;
+
+    domain.updatedAt = now;
+    auditService.log('system', domain.orgId, 'DataDomain', domain.id, 'BULK_UPDATE', null, domain);
+    updated++;
+  }
+
+  if (updated > 0) saveStore('dataDomains', dataDomains);
+  logger.info({ updated, skipped: skipped.length }, 'Bulk-updated data domains');
+  res.json({ success: true, updated, skipped });
+});
+
+/**
+ * POST /api/v1/data-domains/bulk-delete
+ *
+ * Body: { ids: string[] }
+ */
+router.post('/bulk-delete', (req: Request, res: Response) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    return;
+  }
+  const idSet = new Set(ids);
+  const removed = dataDomains.filter((d) => idSet.has(d.id));
+  for (const r of removed) {
+    auditService.log('system', r.orgId, 'DataDomain', r.id, 'DELETE', r, null);
+  }
+  for (let i = dataDomains.length - 1; i >= 0; i--) {
+    if (idSet.has(dataDomains[i].id)) dataDomains.splice(i, 1);
+  }
+  if (removed.length > 0) saveStore('dataDomains', dataDomains);
+  logger.info({ count: removed.length }, 'Bulk-deleted data domains');
+  res.json({ success: true, deleted: removed.length });
+});
+
 export default router;

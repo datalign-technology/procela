@@ -72,6 +72,23 @@ export default function DataDomainsPage() {
   const [createStewardshipTeam, setCreateStewardshipTeam] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Bulk selection
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkUpdates, setBulkUpdates] = useState<{ ownerId: string; status: string }>({ ownerId: '', status: '' });
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [applyingBulk, setApplyingBulk] = useState(false);
+  const toggleBulkSelect = (id: string) => {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearBulkSelection = () => {
+    setBulkSelectedIds(new Set());
+    setBulkUpdates({ ownerId: '', status: '' });
+  };
+
   // Detail editing
   const [detailOwnerId, setDetailOwnerId] = useState('');
   const [detailStewardIds, setDetailStewardIds] = useState<string[]>([]);
@@ -199,6 +216,48 @@ export default function DataDomainsPage() {
     addToast('success', 'Governance details saved'); fetchData();
   };
 
+  const handleBulkApply = async () => {
+    const ids = Array.from(bulkSelectedIds);
+    if (ids.length === 0) return;
+    const updates: Record<string, string | null> = {};
+    if (bulkUpdates.ownerId) updates.ownerId = bulkUpdates.ownerId === '__unassign__' ? null : bulkUpdates.ownerId;
+    if (bulkUpdates.status) updates.status = bulkUpdates.status;
+    if (Object.keys(updates).length === 0) {
+      addToast('error', 'Pick at least one field to change.');
+      return;
+    }
+    setApplyingBulk(true);
+    try {
+      const res = await apiClient.patch<{ success: boolean; updated: number; skipped: Array<{ id: string; reason: string }> }>('/data-domains/bulk', { ids, updates });
+      const skippedCount = res.skipped?.length || 0;
+      addToast('success', `Updated ${res.updated} domain${res.updated !== 1 ? 's' : ''}${skippedCount ? ` (skipped ${skippedCount})` : ''}`);
+      clearBulkSelection();
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Bulk update failed');
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(bulkSelectedIds);
+    if (ids.length === 0) return;
+    setApplyingBulk(true);
+    try {
+      const res = await apiClient.post<{ success: boolean; deleted: number }>('/data-domains/bulk-delete', { ids });
+      addToast('success', `Deleted ${res.deleted} domain${res.deleted !== 1 ? 's' : ''}`);
+      if (selectedDomainId && ids.includes(selectedDomainId)) setSelectedDomainId(null);
+      clearBulkSelection();
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Bulk delete failed');
+    } finally {
+      setApplyingBulk(false);
+      setConfirmBulkDelete(false);
+    }
+  };
+
   const handleStatusChange = async (domainId: string, newStatus: string) => {
     try {
       await apiClient.put(`/data-domains/${domainId}`, { status: newStatus });
@@ -289,6 +348,13 @@ export default function DataDomainsPage() {
         onCancel={() => { setConfirmDelete(null); setDeleteImpact(null); }}
       />
 
+      <ConfirmDialog open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedIds.size} domain${bulkSelectedIds.size !== 1 ? 's' : ''}?`}
+        message={`This will permanently delete the ${bulkSelectedIds.size} selected data domain${bulkSelectedIds.size !== 1 ? 's' : ''}. This cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)} />
+
       {/* Add/Edit Form */}
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
@@ -339,23 +405,64 @@ export default function DataDomainsPage() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              {canWrite && filteredDomains.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible domains"
+                    checked={filteredDomains.every((d) => bulkSelectedIds.has(d.id))}
+                    ref={(el) => {
+                      if (el) {
+                        const some = filteredDomains.some((d) => bulkSelectedIds.has(d.id));
+                        const all = filteredDomains.every((d) => bulkSelectedIds.has(d.id));
+                        el.indeterminate = some && !all;
+                      }
+                    }}
+                    onChange={() => {
+                      const allSelected = filteredDomains.every((d) => bulkSelectedIds.has(d.id));
+                      setBulkSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (allSelected) filteredDomains.forEach((d) => next.delete(d.id));
+                        else filteredDomains.forEach((d) => next.add(d.id));
+                        return next;
+                      });
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span>{bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size} selected` : 'Select all visible'}</span>
+                  {bulkSelectedIds.size > 0 && (
+                    <button onClick={clearBulkSelection} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 11, padding: 0 }}>Clear</button>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {filteredDomains.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No domains match.</div>
               ) : filteredDomains.map((d) => {
                 const isActive = selectedDomainId === d.id;
+                const isChecked = bulkSelectedIds.has(d.id);
                 return (
                   <div key={d.id} onClick={() => openDetail(d)} style={{
                     padding: '10px 12px', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 8,
-                    background: isActive ? '#dbeafe' : 'transparent',
+                    background: isActive ? '#dbeafe' : isChecked ? '#f0f9ff' : 'transparent',
                     borderBottom: '1px solid var(--color-border)',
                     borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
                     transition: 'background 0.1s',
                   }}
-                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
+                    onMouseEnter={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                    onMouseLeave={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'transparent'; }}>
+                    {canWrite && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${d.name}`}
+                        checked={isChecked}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleBulkSelect(d.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    )}
                     <span style={statusDot(d.status)} title={d.status} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
@@ -374,9 +481,53 @@ export default function DataDomainsPage() {
             </div>
           </div>
 
-          {/* Right: Domain detail */}
+          {/* Right: Domain detail (or bulk edit panel) */}
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', minHeight: 400 }}>
-            {selectedDomain ? (
+            {bulkSelectedIds.size > 0 ? (
+              <div style={{ padding: '24px 28px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Bulk edit {bulkSelectedIds.size} domain{bulkSelectedIds.size !== 1 ? 's' : ''}</h2>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4, margin: 0 }}>
+                      Pick the fields to change. Empty fields are left untouched. Status changes that aren't a valid transition for a given domain will be skipped.
+                    </p>
+                  </div>
+                  <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 12 }} onClick={clearBulkSelection}>Clear selection</button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={labelStyle}>Owner</label>
+                    <select style={selectStyle} value={bulkUpdates.ownerId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerId: e.target.value })}>
+                      <option value="">— No change —</option>
+                      <option value="__unassign__">— Clear owner —</option>
+                      {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Status</label>
+                    <select style={selectStyle} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
+                      <option value="">— No change —</option>
+                      {(statusMode === 'advanced' ? ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'] : ['DRAFT', 'ACTIVE', 'DEPRECATED']).map((s) => (
+                        <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <button style={{ ...btnSecondary, color: '#991b1b', borderColor: '#fca5a5' }} disabled={applyingBulk} onClick={() => setConfirmBulkDelete(true)}>
+                    Delete {bulkSelectedIds.size} domain{bulkSelectedIds.size !== 1 ? 's' : ''}
+                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={btnSecondary} disabled={applyingBulk} onClick={clearBulkSelection}>Cancel</button>
+                    <button style={{ ...btnPrimary, opacity: applyingBulk ? 0.6 : 1 }} disabled={applyingBulk} onClick={handleBulkApply}>
+                      {applyingBulk ? 'Applying…' : 'Apply changes'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : selectedDomain ? (
               <div style={{ padding: '24px 28px' }}>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>

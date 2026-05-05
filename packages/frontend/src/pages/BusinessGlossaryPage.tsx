@@ -120,6 +120,23 @@ export default function BusinessGlossaryPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null);
 
+  // Bulk selection
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkUpdates, setBulkUpdates] = useState<{ status: string; category: string; ownerPersonId: string; domainId: string }>({ status: '', category: '', ownerPersonId: '', domainId: '' });
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [applyingBulk, setApplyingBulk] = useState(false);
+  const toggleBulkSelect = (id: string) => {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearBulkSelection = () => {
+    setBulkSelectedIds(new Set());
+    setBulkUpdates({ status: '', category: '', ownerPersonId: '', domainId: '' });
+  };
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -251,6 +268,49 @@ export default function BusinessGlossaryPage() {
     }
   };
 
+  const handleBulkApply = async () => {
+    const ids = Array.from(bulkSelectedIds);
+    if (ids.length === 0) return;
+    const updates: Record<string, string | null> = {};
+    if (bulkUpdates.status) updates.status = bulkUpdates.status;
+    if (bulkUpdates.category) updates.category = bulkUpdates.category;
+    if (bulkUpdates.ownerPersonId) updates.ownerPersonId = bulkUpdates.ownerPersonId === '__unassign__' ? null : bulkUpdates.ownerPersonId;
+    if (bulkUpdates.domainId) updates.domainId = bulkUpdates.domainId === '__unassign__' ? null : bulkUpdates.domainId;
+    if (Object.keys(updates).length === 0) {
+      addToast('error', 'Pick at least one field to change.');
+      return;
+    }
+    setApplyingBulk(true);
+    try {
+      const res = await apiClient.patch<{ success: boolean; updated: number; skipped: string[] }>('/business-glossary/bulk', { ids, updates });
+      addToast('success', `Updated ${res.updated} term${res.updated !== 1 ? 's' : ''}${res.skipped?.length ? ` (skipped ${res.skipped.length})` : ''}`);
+      clearBulkSelection();
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Bulk update failed');
+    } finally {
+      setApplyingBulk(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(bulkSelectedIds);
+    if (ids.length === 0) return;
+    setApplyingBulk(true);
+    try {
+      const res = await apiClient.post<{ success: boolean; deleted: number }>('/business-glossary/bulk-delete', { ids });
+      addToast('success', `Deleted ${res.deleted} term${res.deleted !== 1 ? 's' : ''}`);
+      if (selectedTermId && ids.includes(selectedTermId)) setSelectedTermId(null);
+      clearBulkSelection();
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Bulk delete failed');
+    } finally {
+      setApplyingBulk(false);
+      setConfirmBulkDelete(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await apiClient.delete(`/business-glossary/${id}`);
@@ -327,6 +387,13 @@ export default function BusinessGlossaryPage() {
         message="This will permanently delete this glossary term." confirmLabel="Delete"
         onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); if (id) await handleDelete(id); }}
         onCancel={() => setConfirmDelete(null)} />
+
+      <ConfirmDialog open={confirmBulkDelete}
+        title={`Delete ${bulkSelectedIds.size} term${bulkSelectedIds.size !== 1 ? 's' : ''}?`}
+        message={`This will permanently delete the ${bulkSelectedIds.size} selected glossary term${bulkSelectedIds.size !== 1 ? 's' : ''}. This cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)} />
 
       {/* Add/Edit Form (overlay) */}
       {showForm && (
@@ -467,6 +534,36 @@ export default function BusinessGlossaryPage() {
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
+              {canWrite && filteredTerms.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible terms"
+                    checked={filteredTerms.length > 0 && filteredTerms.every((t) => bulkSelectedIds.has(t.id))}
+                    ref={(el) => {
+                      if (el) {
+                        const some = filteredTerms.some((t) => bulkSelectedIds.has(t.id));
+                        const all = filteredTerms.length > 0 && filteredTerms.every((t) => bulkSelectedIds.has(t.id));
+                        el.indeterminate = some && !all;
+                      }
+                    }}
+                    onChange={() => {
+                      const allSelected = filteredTerms.every((t) => bulkSelectedIds.has(t.id));
+                      setBulkSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (allSelected) filteredTerms.forEach((t) => next.delete(t.id));
+                        else filteredTerms.forEach((t) => next.add(t.id));
+                        return next;
+                      });
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span>{bulkSelectedIds.size > 0 ? `${bulkSelectedIds.size} selected` : 'Select all visible'}</span>
+                  {bulkSelectedIds.size > 0 && (
+                    <button onClick={clearBulkSelection} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 11, padding: 0 }}>Clear</button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Term list grouped by category */}
@@ -476,42 +573,84 @@ export default function BusinessGlossaryPage() {
               ) : (
                 CATEGORY_ORDER.filter((cat) => groupedTerms[cat]?.length > 0).map((cat) => {
                   const isExpanded = expandedCategories.has(cat);
+                  const catIds = groupedTerms[cat].map((t) => t.id);
+                  const allSelected = catIds.every((id) => bulkSelectedIds.has(id));
+                  const someSelected = !allSelected && catIds.some((id) => bulkSelectedIds.has(id));
+                  const toggleCategorySelection = (e: React.MouseEvent | React.ChangeEvent) => {
+                    e.stopPropagation();
+                    setBulkSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (allSelected) catIds.forEach((id) => next.delete(id));
+                      else catIds.forEach((id) => next.add(id));
+                      return next;
+                    });
+                  };
                   return (
                     <div key={cat}>
-                      <button
-                        type="button"
-                        onClick={() => toggleCategory(cat)}
-                        aria-expanded={isExpanded}
+                      <div
                         style={{
                           width: '100%', display: 'flex', alignItems: 'center', gap: 6,
                           padding: '8px 12px', fontSize: 10, fontWeight: 600,
                           textTransform: 'uppercase', letterSpacing: '0.05em',
                           color: CATEGORY_COLORS[cat]?.color || '#64748b',
                           background: 'var(--color-bg)',
-                          border: 'none', borderBottom: '1px solid var(--color-border)',
-                          cursor: 'pointer', textAlign: 'left',
+                          borderBottom: '1px solid var(--color-border)',
                         }}
                       >
-                        <span style={{ display: 'inline-block', width: 10, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
-                        <span style={{ flex: 1 }}>{cat} ({groupedTerms[cat].length})</span>
-                      </button>
+                        {canWrite && (
+                          <input
+                            type="checkbox"
+                            aria-label={`Select all ${cat} terms`}
+                            checked={allSelected}
+                            ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={toggleCategorySelection}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(cat)}
+                          aria-expanded={isExpanded}
+                          style={{
+                            flex: 1, display: 'flex', alignItems: 'center', gap: 6,
+                            background: 'transparent', border: 'none', padding: 0,
+                            cursor: 'pointer', textAlign: 'left',
+                            color: 'inherit', font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit',
+                          }}
+                        >
+                          <span style={{ display: 'inline-block', width: 10, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
+                          <span style={{ flex: 1 }}>{cat} ({groupedTerms[cat].length})</span>
+                        </button>
+                      </div>
                       {isExpanded && groupedTerms[cat].map((t) => {
                         const isActive = selectedTermId === t.id;
+                        const isChecked = bulkSelectedIds.has(t.id);
                         return (
                           <div
                             key={t.id}
                             onClick={() => { setSelectedTermId(t.id); setShowForm(false); }}
                             style={{
-                              padding: '8px 12px 8px 28px', cursor: 'pointer',
+                              padding: '8px 12px 8px 12px', cursor: 'pointer',
                               display: 'flex', alignItems: 'center', gap: 8,
-                              background: isActive ? '#dbeafe' : 'transparent',
+                              background: isActive ? '#dbeafe' : isChecked ? '#f0f9ff' : 'transparent',
                               borderBottom: '1px solid var(--color-border)',
                               borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
                               transition: 'background 0.1s',
                             }}
-                            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                            onMouseEnter={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                            onMouseLeave={(e) => { if (!isActive && !isChecked) e.currentTarget.style.background = 'transparent'; }}
                           >
+                            {canWrite && (
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${t.term}`}
+                                checked={isChecked}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={() => toggleBulkSelect(t.id)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            )}
                             <span style={statusDot(t.status)} title={t.status} />
                             <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.term}</span>
                           </div>
@@ -529,9 +668,66 @@ export default function BusinessGlossaryPage() {
             </div>
           </div>
 
-          {/* Right: Term detail */}
+          {/* Right: Term detail (or bulk edit panel) */}
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', minHeight: 400 }}>
-            {selectedTerm ? (
+            {bulkSelectedIds.size > 0 ? (
+              <div style={{ padding: '24px 28px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Bulk edit {bulkSelectedIds.size} term{bulkSelectedIds.size !== 1 ? 's' : ''}</h2>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4, margin: 0 }}>
+                      Pick the fields you want to change. Empty fields are left untouched.
+                    </p>
+                  </div>
+                  <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 12 }} onClick={clearBulkSelection}>Clear selection</button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={labelStyle}>Status</label>
+                    <select style={selectStyle} value={bulkUpdates.status} onChange={(e) => setBulkUpdates({ ...bulkUpdates, status: e.target.value })}>
+                      <option value="">— No change —</option>
+                      {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Category</label>
+                    <select style={selectStyle} value={bulkUpdates.category} onChange={(e) => setBulkUpdates({ ...bulkUpdates, category: e.target.value })}>
+                      <option value="">— No change —</option>
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Owner</label>
+                    <select style={selectStyle} value={bulkUpdates.ownerPersonId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerPersonId: e.target.value })}>
+                      <option value="">— No change —</option>
+                      <option value="__unassign__">— Clear owner —</option>
+                      {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Domain</label>
+                    <select style={selectStyle} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
+                      <option value="">— No change —</option>
+                      <option value="__unassign__">— Clear domain —</option>
+                      {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <button style={{ ...btnSecondary, color: '#991b1b', borderColor: '#fca5a5' }} disabled={applyingBulk} onClick={() => setConfirmBulkDelete(true)}>
+                    Delete {bulkSelectedIds.size} term{bulkSelectedIds.size !== 1 ? 's' : ''}
+                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={btnSecondary} disabled={applyingBulk} onClick={clearBulkSelection}>Cancel</button>
+                    <button style={{ ...btnPrimary, opacity: applyingBulk ? 0.6 : 1 }} disabled={applyingBulk} onClick={handleBulkApply}>
+                      {applyingBulk ? 'Applying…' : 'Apply changes'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : selectedTerm ? (
               <div style={{ padding: '24px 28px' }}>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>

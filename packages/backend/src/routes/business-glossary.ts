@@ -383,4 +383,71 @@ router.post('/seed', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * PATCH /api/v1/business-glossary/bulk
+ *
+ * Body: { ids: string[], updates: { status?, category?, ownerPersonId?, domainId? } }
+ *
+ * Applies the same partial update to every term in `ids`. Unknown ids are
+ * skipped. Invalid status/category values are ignored field-by-field.
+ */
+router.patch('/bulk', (req: Request, res: Response) => {
+  const { ids, updates } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    return;
+  }
+  if (!updates || typeof updates !== 'object') {
+    res.status(400).json({ success: false, error: 'updates object is required' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  let updated = 0;
+  const skipped: string[] = [];
+
+  for (const id of ids) {
+    const t = glossaryTerms.find((x) => x.id === id);
+    if (!t) { skipped.push(id); continue; }
+    const before = { ...t };
+    if (updates.status !== undefined && (VALID_STATUSES as readonly string[]).includes(updates.status)) t.status = updates.status;
+    if (updates.category !== undefined && (VALID_CATEGORIES as readonly string[]).includes(updates.category)) t.category = updates.category;
+    if (updates.ownerPersonId !== undefined) t.ownerPersonId = updates.ownerPersonId || null;
+    if (updates.domainId !== undefined) t.domainId = updates.domainId || null;
+    t.updatedAt = now;
+    auditService.log('system', t.orgId, 'GlossaryTerm', t.id, 'BULK_UPDATE', before, t);
+    updated++;
+  }
+
+  if (updated > 0) saveStore('glossaryTerms', glossaryTerms);
+  logger.info({ updated, skipped: skipped.length }, 'Bulk-updated glossary terms');
+  res.json({ success: true, updated, skipped });
+});
+
+/**
+ * POST /api/v1/business-glossary/bulk-delete
+ *
+ * Body: { ids: string[] }
+ *
+ * Removes every term whose id is in `ids`. Unknown ids are silently skipped.
+ */
+router.post('/bulk-delete', (req: Request, res: Response) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    return;
+  }
+  const idSet = new Set(ids);
+  const removed = glossaryTerms.filter((t) => idSet.has(t.id));
+  for (const r of removed) {
+    auditService.log('system', r.orgId, 'GlossaryTerm', r.id, 'DELETE', r, null);
+  }
+  for (let i = glossaryTerms.length - 1; i >= 0; i--) {
+    if (idSet.has(glossaryTerms[i].id)) glossaryTerms.splice(i, 1);
+  }
+  if (removed.length > 0) saveStore('glossaryTerms', glossaryTerms);
+  logger.info({ count: removed.length }, 'Bulk-deleted glossary terms');
+  res.json({ success: true, deleted: removed.length });
+});
+
 export default router;
