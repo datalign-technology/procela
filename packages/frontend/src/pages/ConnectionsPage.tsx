@@ -351,6 +351,13 @@ export default function ConnectionsPage() {
       }
 
       setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null);
+      // After adding a new connection, drop the user back on the unfiltered
+      // default view so the row they just created is visible regardless of
+      // any system/type filter that was active during creation.
+      if (!editingId) {
+        setSearchParams(new URLSearchParams(), { replace: true });
+        setFilterConnType('');
+      }
       fetchData();
       return savedId;
     } catch (e) {
