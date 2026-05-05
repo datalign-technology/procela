@@ -268,65 +268,306 @@ router.get('/:id/impact', (req: AuthenticatedRequest, res: Response) => {
   });
 });
 
+/**
+ * DELETE /api/v1/organizations/:id
+ *
+ * Default behavior (empty body, or {"actions": {}}): cascade-deletes every
+ * descendant org and every entity tied to the deleted subtree. This matches
+ * the original cascade behavior so existing callers stay working.
+ *
+ * With an `actions` body, the caller can choose per-category cleanup:
+ *   - "delete": drop every matching row (default for any unspecified key)
+ *   - "move":   re-home every matching row to `targetOrgId`
+ *   - "orphan": for multi-org entities only (people, processes), strip the
+ *               removed org IDs from `orgIds[]`. If the array becomes empty
+ *               the row is deleted.
+ *
+ * Body shape:
+ *   {
+ *     "actions": {
+ *       "childOrgs": { "type": "move", "targetOrgId": "..." },
+ *       "people":    { "type": "orphan" },
+ *       "dataAssets":{ "type": "delete" },
+ *       ...
+ *     }
+ *   }
+ */
+type ActionType = 'delete' | 'move' | 'orphan';
+interface CategoryAction { type: ActionType; targetOrgId?: string }
+type CategoryKey =
+  | 'childOrgs' | 'people' | 'processes' | 'dataAssets' | 'systems'
+  | 'dataDomains' | 'mappings' | 'governanceGroups' | 'damaRoles'
+  | 'tasks' | 'issues' | 'policies' | 'controls'
+  | 'glossaryTerms' | 'sops' | 'calendarEvents' | 'decisionRights';
+
+const ORPHAN_ELIGIBLE: ReadonlySet<CategoryKey> = new Set<CategoryKey>(['people', 'processes']);
+
+interface ApplyResult { deleted: number; moved: number; orphaned: number }
+
 router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
-  const { canAccessOrg } = accessHelpers();
+  const { canAccessOrg, getDescendantOrgIds } = accessHelpers();
   if (!canAccessOrg(req.user, org.id)) {
     res.status(403).json({ success: false, error: 'You do not have access to this organization' });
     return;
   }
 
-  // Collect this org + all descendant org IDs
-  const orgIds = new Set<string>([org.id]);
-  const collectDescendants = (parentId: string) => {
-    for (const child of organizations.filter((o) => o.parentId === parentId)) {
-      orgIds.add(child.id);
-      collectDescendants(child.id);
-    }
-  };
-  collectDescendants(org.id);
+  const subtreeIds = new Set<string>([org.id, ...getDescendantOrgIds(org.id)]);
+  const directChildIds = new Set(organizations.filter((o) => o.parentId === org.id).map((o) => o.id));
 
-  // Cascade delete all associated data
-  const cascadeDelete = (store: any[], storeName: string, matchFn: (item: any) => boolean) => {
-    let removed = 0;
+  // Resolve and validate actions up front. An unspecified action defaults
+  // to "delete" so callers that don't send a body get the original cascade.
+  const incoming: Partial<Record<CategoryKey, CategoryAction>> = req.body?.actions || {};
+  const resolved: Record<CategoryKey, CategoryAction> = {} as any;
+  const KEYS: CategoryKey[] = [
+    'childOrgs', 'people', 'processes', 'dataAssets', 'systems',
+    'dataDomains', 'mappings', 'governanceGroups', 'damaRoles',
+    'tasks', 'issues', 'policies', 'controls',
+    'glossaryTerms', 'sops', 'calendarEvents', 'decisionRights',
+  ];
+  for (const key of KEYS) {
+    const a = incoming[key] || { type: 'delete' };
+    if (a.type !== 'delete' && a.type !== 'move' && a.type !== 'orphan') {
+      res.status(400).json({ success: false, error: `Invalid action type for "${key}"` });
+      return;
+    }
+    if (a.type === 'orphan' && !ORPHAN_ELIGIBLE.has(key)) {
+      res.status(400).json({ success: false, error: `Orphan is only allowed for People and Processes (rejected for "${key}")` });
+      return;
+    }
+    if (a.type === 'move') {
+      if (!a.targetOrgId) {
+        res.status(400).json({ success: false, error: `targetOrgId is required for move action on "${key}"` });
+        return;
+      }
+      if (subtreeIds.has(a.targetOrgId)) {
+        res.status(400).json({ success: false, error: `Move target for "${key}" cannot be inside the deleted subtree` });
+        return;
+      }
+      if (!organizations.find((o) => o.id === a.targetOrgId)) {
+        res.status(400).json({ success: false, error: `Move target organization for "${key}" not found` });
+        return;
+      }
+      if (!canAccessOrg(req.user, a.targetOrgId)) {
+        res.status(403).json({ success: false, error: `You do not have access to the move target for "${key}"` });
+        return;
+      }
+    }
+    resolved[key] = a;
+  }
+
+  // The set of org IDs whose entities receive the action. If child orgs are
+  // being moved the descendants survive, so only the org itself is "removed."
+  const removedOrgIds = resolved.childOrgs.type === 'move'
+    ? new Set<string>([org.id])
+    : new Set<string>(subtreeIds);
+
+  // Apply child-org action first so subsequent entity ops see the right tree.
+  let childOrgsDeleted = 0;
+  let childOrgsMoved = 0;
+  if (resolved.childOrgs.type === 'move') {
+    // Reparent direct children only — descendants below them stay put.
+    for (const o of organizations) {
+      if (directChildIds.has(o.id)) {
+        o.parentId = resolved.childOrgs.targetOrgId!;
+        o.updatedAt = new Date().toISOString();
+        childOrgsMoved++;
+      }
+    }
+  } else {
+    // Delete every descendant; the root org is removed at the end.
+    for (let i = organizations.length - 1; i >= 0; i--) {
+      if (subtreeIds.has(organizations[i].id) && organizations[i].id !== org.id) {
+        organizations.splice(i, 1);
+        childOrgsDeleted++;
+      }
+    }
+  }
+
+  // Track IDs that were physically removed so we can prune cross-references.
+  const deletedIds = {
+    people: new Set<string>(),
+    processNodes: new Set<string>(),
+    dataAssets: new Set<string>(),
+    dataDomains: new Set<string>(),
+    governanceGroups: new Set<string>(),
+  };
+
+  // ── Helpers for applying actions ────────────────────────────────────────
+  const applySingleOrg = (
+    store: any[],
+    storeName: string,
+    action: CategoryAction,
+    deletedSet?: Set<string>,
+    orgField: string = 'orgId',
+  ): ApplyResult => {
+    let deleted = 0, moved = 0;
+    if (action.type === 'delete') {
+      for (let i = store.length - 1; i >= 0; i--) {
+        if (removedOrgIds.has(store[i][orgField])) {
+          if (deletedSet) deletedSet.add(store[i].id);
+          store.splice(i, 1); deleted++;
+        }
+      }
+    } else if (action.type === 'move') {
+      for (const item of store) {
+        if (removedOrgIds.has(item[orgField])) {
+          item[orgField] = action.targetOrgId!;
+          if (item.updatedAt !== undefined) item.updatedAt = new Date().toISOString();
+          moved++;
+        }
+      }
+    }
+    if (deleted > 0 || moved > 0) saveStore(storeName, store);
+    return { deleted, moved, orphaned: 0 };
+  };
+
+  const applyMultiOrg = (
+    store: any[],
+    storeName: string,
+    action: CategoryAction,
+    deletedSet: Set<string>,
+  ): ApplyResult => {
+    let deleted = 0, moved = 0, orphaned = 0;
     for (let i = store.length - 1; i >= 0; i--) {
-      if (matchFn(store[i])) { store.splice(i, 1); removed++; }
+      const item = store[i];
+      const itemOrgIds: string[] = item.orgIds || [];
+      const matched = itemOrgIds.some((id: string) => removedOrgIds.has(id))
+        || (item.orgId !== undefined && removedOrgIds.has(item.orgId));
+      if (!matched) continue;
+
+      if (action.type === 'delete') {
+        deletedSet.add(item.id); store.splice(i, 1); deleted++;
+        continue;
+      }
+
+      const remaining = itemOrgIds.filter((id: string) => !removedOrgIds.has(id));
+
+      if (action.type === 'move') {
+        const target = action.targetOrgId!;
+        if (!remaining.includes(target)) remaining.push(target);
+        item.orgIds = remaining;
+        if (item.orgId !== undefined && removedOrgIds.has(item.orgId)) item.orgId = target;
+        if (item.updatedAt !== undefined) item.updatedAt = new Date().toISOString();
+        moved++;
+      } else { // orphan
+        if (remaining.length === 0) {
+          // No surviving org → delete row instead of leaving it homeless.
+          deletedSet.add(item.id); store.splice(i, 1); deleted++;
+        } else {
+          item.orgIds = remaining;
+          if (item.orgId !== undefined && removedOrgIds.has(item.orgId)) item.orgId = remaining[0];
+          if (item.updatedAt !== undefined) item.updatedAt = new Date().toISOString();
+          orphaned++;
+        }
+      }
     }
-    if (removed > 0) saveStore(storeName, store);
-    return removed;
+    if (deleted > 0 || moved > 0 || orphaned > 0) saveStore(storeName, store);
+    return { deleted, moved, orphaned };
   };
 
-  const matchOrg = (item: any) => orgIds.has(item.orgId);
-  const matchOrgIds = (item: any) => (item.orgIds || []).some((id: string) => orgIds.has(id));
-  const cascaded: Record<string, number> = {};
+  const summary: Record<string, ApplyResult> = {};
 
-  try { cascaded.people = cascadeDelete(require('./people').people, 'people', matchOrgIds); } catch {}
-  try { cascaded.processNodes = cascadeDelete(require('./process-catalog').processNodes, 'processNodes', (n) => (n.orgIds || []).some((id: string) => orgIds.has(id)) || orgIds.has(n.orgId)); } catch {}
-  try { cascaded.dataAssets = cascadeDelete(require('./data-assets').dataAssets, 'dataAssets', matchOrg); } catch {}
-  try { cascaded.systems = cascadeDelete(require('./systems').systems, 'systems', matchOrg); } catch {}
-  try { cascaded.dataDomains = cascadeDelete(require('./data-domains').dataDomains, 'dataDomains', matchOrg); } catch {}
-  try { cascaded.mappings = cascadeDelete(require('./mappings').mappings, 'mappings', matchOrg); } catch {}
-  try { cascaded.governanceGroups = cascadeDelete(require('./governance-groups').governanceGroups, 'governanceGroups', matchOrg); } catch {}
-  try { cascaded.damaRoles = cascadeDelete(require('./dama-roles').damaRoles, 'damaRoles', (r) => orgIds.has(r.scopeId)); } catch {}
-  try { cascaded.governanceTasks = cascadeDelete(require('./governance-tasks').governanceTasks, 'governanceTasks', matchOrg); } catch {}
-  try { cascaded.governanceIssues = cascadeDelete(require('./governance-issues').governanceIssues, 'governanceIssues', matchOrg); } catch {}
-  try { cascaded.governancePolicies = cascadeDelete(require('./governance-policies').governancePolicies, 'governancePolicies', matchOrg); } catch {}
-  try { cascaded.governanceControls = cascadeDelete(require('./governance-controls').governanceControls, 'governanceControls', matchOrg); } catch {}
-  try { cascaded.glossaryTerms = cascadeDelete(require('./business-glossary').glossaryTerms, 'glossaryTerms', matchOrg); } catch {}
-  try { cascaded.sops = cascadeDelete(require('./sops').sops, 'sops', matchOrg); } catch {}
-  try { cascaded.calendarEvents = cascadeDelete(require('./governance-calendar').calendarEvents, 'calendarEvents', matchOrg); } catch {}
-  try { cascaded.decisionRights = cascadeDelete(require('./decision-rights').decisionRights, 'decisionRights', matchOrg); } catch {}
+  // ── Apply actions per category ──────────────────────────────────────────
+  try { summary.people           = applyMultiOrg(require('./people').people,                          'people',             resolved.people,            deletedIds.people); } catch {}
+  try { summary.processes        = applyMultiOrg(require('./process-catalog').processNodes,          'processNodes',       resolved.processes,         deletedIds.processNodes); } catch {}
+  try { summary.dataAssets       = applySingleOrg(require('./data-assets').dataAssets,                'dataAssets',         resolved.dataAssets,        deletedIds.dataAssets); } catch {}
+  try { summary.systems          = applySingleOrg(require('./systems').systems,                      'systems',            resolved.systems); } catch {}
+  try { summary.dataDomains      = applySingleOrg(require('./data-domains').dataDomains,             'dataDomains',        resolved.dataDomains,       deletedIds.dataDomains); } catch {}
+  try { summary.mappings         = applySingleOrg(require('./mappings').mappings,                    'mappings',           resolved.mappings); } catch {}
+  try { summary.governanceGroups = applySingleOrg(require('./governance-groups').governanceGroups,   'governanceGroups',   resolved.governanceGroups,  deletedIds.governanceGroups); } catch {}
+  try { summary.damaRoles        = applySingleOrg(require('./dama-roles').damaRoles,                 'damaRoles',          resolved.damaRoles, undefined, 'scopeId'); } catch {}
+  try { summary.tasks            = applySingleOrg(require('./governance-tasks').governanceTasks,     'governanceTasks',    resolved.tasks); } catch {}
+  try { summary.issues           = applySingleOrg(require('./governance-issues').governanceIssues,   'governanceIssues',   resolved.issues); } catch {}
+  try { summary.policies         = applySingleOrg(require('./governance-policies').governancePolicies, 'governancePolicies', resolved.policies); } catch {}
+  try { summary.controls         = applySingleOrg(require('./governance-controls').governanceControls, 'governanceControls', resolved.controls); } catch {}
+  try { summary.glossaryTerms    = applySingleOrg(require('./business-glossary').glossaryTerms,      'glossaryTerms',      resolved.glossaryTerms); } catch {}
+  try { summary.sops             = applySingleOrg(require('./sops').sops,                            'sops',               resolved.sops); } catch {}
+  try { summary.calendarEvents   = applySingleOrg(require('./governance-calendar').calendarEvents,   'calendarEvents',     resolved.calendarEvents); } catch {}
+  try { summary.decisionRights   = applySingleOrg(require('./decision-rights').decisionRights,       'decisionRights',     resolved.decisionRights); } catch {}
 
-  // Delete the org(s) themselves
-  const orgIdsArray = Array.from(orgIds);
+  // ── Cross-reference cleanup ─────────────────────────────────────────────
+  // Anything physically deleted above leaves dangling IDs on surviving rows.
+  // Prune them so we don't ship the org with stale references.
+  if (deletedIds.people.size > 0) {
+    try {
+      const groups = require('./governance-groups').governanceGroups;
+      let changed = false;
+      for (const g of groups) {
+        if (!Array.isArray(g.members)) continue;
+        const before = g.members.length;
+        g.members = g.members.filter((m: any) => !deletedIds.people.has(m.personId));
+        if (g.members.length !== before) { changed = true; g.updatedAt = new Date().toISOString(); }
+      }
+      if (changed) saveStore('governanceGroups', groups);
+    } catch {}
+    try {
+      const damaRoles = require('./dama-roles').damaRoles;
+      let removed = 0;
+      for (let i = damaRoles.length - 1; i >= 0; i--) {
+        if (damaRoles[i].personId && deletedIds.people.has(damaRoles[i].personId)) {
+          damaRoles.splice(i, 1); removed++;
+        }
+      }
+      if (removed > 0) saveStore('damaRoles', damaRoles);
+    } catch {}
+  }
+
+  if (deletedIds.dataAssets.size > 0) {
+    try {
+      const mappings = require('./mappings').mappings;
+      let removed = 0;
+      for (let i = mappings.length - 1; i >= 0; i--) {
+        if (deletedIds.dataAssets.has(mappings[i].dataAssetId)) { mappings.splice(i, 1); removed++; }
+      }
+      if (removed > 0) saveStore('mappings', mappings);
+    } catch {}
+    try {
+      const domains = require('./data-domains').dataDomains;
+      let changed = false;
+      for (const d of domains) {
+        if (!Array.isArray(d.dataAssetIds)) continue;
+        const before = d.dataAssetIds.length;
+        d.dataAssetIds = d.dataAssetIds.filter((aid: string) => !deletedIds.dataAssets.has(aid));
+        if (d.dataAssetIds.length !== before) { changed = true; d.updatedAt = new Date().toISOString(); }
+      }
+      if (changed) saveStore('dataDomains', domains);
+    } catch {}
+  }
+
+  if (deletedIds.processNodes.size > 0) {
+    try {
+      const mappings = require('./mappings').mappings;
+      let removed = 0;
+      for (let i = mappings.length - 1; i >= 0; i--) {
+        if (deletedIds.processNodes.has(mappings[i].processStepId)) { mappings.splice(i, 1); removed++; }
+      }
+      if (removed > 0) saveStore('mappings', mappings);
+    } catch {}
+  }
+
+  // Finally, remove the root org itself.
   for (let i = organizations.length - 1; i >= 0; i--) {
-    if (orgIds.has(organizations[i].id)) organizations.splice(i, 1);
+    if (organizations[i].id === org.id) { organizations.splice(i, 1); break; }
   }
   saveStore('organizations', organizations);
 
-  logger.info({ orgId: org.id, orgName: org.name, descendantCount: orgIds.size - 1, cascaded }, 'Deleted organization with cascade');
-  res.json({ success: true, deleted: orgIdsArray.length, cascaded });
+  // Single summary audit entry — easier to scan than 16 separate lines.
+  logger.info({
+    orgId: org.id,
+    orgName: org.name,
+    actions: resolved,
+    summary,
+    childOrgsDeleted, childOrgsMoved,
+  }, 'Deleted organization with cleanup');
+
+  res.json({
+    success: true,
+    deletedOrgId: org.id,
+    childOrgs: { deleted: childOrgsDeleted, moved: childOrgsMoved },
+    summary,
+  });
 });
 
 /**

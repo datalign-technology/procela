@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
@@ -23,6 +24,7 @@ const PHASE_INFO = [
 ];
 
 export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
+  const navigate = useNavigate();
   const { setActiveOrg, triggerRefresh } = useOrgContext();
   const [step, setStep] = useState(0);
   const [orgName, setOrgName] = useState('');
@@ -51,6 +53,16 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     } catch (err: any) {
       setError(err?.message || 'Failed to create organization. Please try again.');
     } finally { setSaving(false); }
+  };
+
+  const handleSkipToImport = () => {
+    // Mark onboarding done so the wizard doesn't reappear, then route to
+    // /organizations with the import panel auto-opened. The user can paste
+    // CSV/JSON or browse a file there; the imported org becomes active via
+    // Layout's fetchOrgs auto-select.
+    localStorage.setItem('procela:onboarding-complete', 'true');
+    triggerRefresh();
+    navigate('/organizations?import=1');
   };
 
   const handleFinish = async () => {
@@ -172,6 +184,16 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   onClick={handleCreateOrg}
                 >
                   {saving ? 'Creating...' : 'Create Organization'}
+                </button>
+              </div>
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--color-border)', textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                Already have organization data?{' '}
+                <button
+                  type="button"
+                  onClick={handleSkipToImport}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline', fontSize: 12, padding: 0, fontWeight: 500 }}
+                >
+                  Import from CSV or JSON
                 </button>
               </div>
             </>

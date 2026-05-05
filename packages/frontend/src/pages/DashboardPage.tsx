@@ -264,16 +264,15 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'alerts' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'alerts', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
   overview: 'Overview',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
-  alerts: 'Alerts',
   whatsNext: "What's Next",
   stewardOnboarding: 'Steward Onboarding',
   quickActions: 'Quick Actions',
@@ -282,12 +281,17 @@ const SECTION_LABELS: Record<SectionKey, string> = {
 
 function useDashboardLayout() {
   const STORAGE_KEY = 'procela_dashboard_layout';
+  const KNOWN_KEYS = new Set<SectionKey>(DEFAULT_SECTIONS);
+  const isKnown = (k: string): k is SectionKey => KNOWN_KEYS.has(k as SectionKey);
   const [order, setOrder] = useState<SectionKey[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as { order: SectionKey[]; hidden: SectionKey[] };
-        return parsed.order.length > 0 ? parsed.order : DEFAULT_SECTIONS;
+        const parsed = JSON.parse(raw) as { order: string[]; hidden: string[] };
+        const cleaned = (parsed.order || []).filter(isKnown);
+        // Append any DEFAULT keys missing from the stored layout (e.g. new sections added in a release)
+        for (const k of DEFAULT_SECTIONS) if (!cleaned.includes(k)) cleaned.push(k);
+        return cleaned.length > 0 ? cleaned : DEFAULT_SECTIONS;
       }
     } catch { /* */ }
     return DEFAULT_SECTIONS;
@@ -296,8 +300,8 @@ function useDashboardLayout() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as { order: SectionKey[]; hidden: SectionKey[] };
-        return new Set(parsed.hidden || []);
+        const parsed = JSON.parse(raw) as { order: string[]; hidden: string[] };
+        return new Set((parsed.hidden || []).filter(isKnown));
       }
     } catch { /* */ }
     return new Set();
@@ -353,7 +357,6 @@ const quickActions = [
   { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
   { icon: '↔', label: 'Mappings', description: 'Link processes to data', link: '/mappings' },
   { icon: '▨', label: 'Enterprise View', description: 'Full cross-entity visibility', link: '/enterprise-view' },
-  { icon: '⚠', label: 'View Gaps', description: 'See unmapped steps and ungoverned assets', link: '/gap-detection' },
 ];
 
 function QuickActions() {
@@ -405,125 +408,6 @@ function QuickActions() {
 }
 
 
-interface AlertItem {
-  level: 'red' | 'amber' | 'info' | 'green';
-  icon: string;
-  message: string;
-  count: number;
-  link: string;
-}
-
-const ALERT_BORDER_COLORS: Record<string, string> = {
-  red: '#ef4444',
-  amber: '#eab308',
-  info: '#3b82f6',
-  green: '#22c55e',
-};
-
-const ALERT_BG_COLORS: Record<string, string> = {
-  red: '#fef2f2',
-  amber: '#fefce8',
-  info: '#eff6ff',
-  green: '#f0fdf4',
-};
-
-const ALERT_TEXT_COLORS: Record<string, string> = {
-  red: '#991b1b',
-  amber: '#854d0e',
-  info: '#1e40af',
-  green: '#166534',
-};
-
-function DashboardAlerts({ stats }: { stats: DashboardStats }) {
-  const alerts: AlertItem[] = [];
-
-  const unmappedActivities = stats.gaps.unmappedActivities ?? stats.gaps.unmappedSteps ?? 0;
-  if (unmappedActivities > 0) {
-    alerts.push({
-      level: 'red',
-      icon: '\u26A0',
-      message: `${unmappedActivities} process ${unmappedActivities === 1 ? 'activity has' : 'activities have'} no data assets linked`,
-      count: unmappedActivities,
-      link: '/gap-detection',
-    });
-  }
-
-  if (stats.gaps.ungovernedAssets > 0) {
-    alerts.push({
-      level: 'amber',
-      icon: '\u25B3',
-      message: `${stats.gaps.ungovernedAssets} Bronze-tier data ${stats.gaps.ungovernedAssets === 1 ? 'asset' : 'assets'} linked to processes`,
-      count: stats.gaps.ungovernedAssets,
-      link: '/data-assets',
-    });
-  }
-
-  if (stats.gaps.ownerlessItems > 0) {
-    alerts.push({
-      level: 'amber',
-      icon: '\u2639',
-      message: `${stats.gaps.ownerlessItems} value ${stats.gaps.ownerlessItems === 1 ? 'stream/process has' : 'streams/processes have'} no owner`,
-      count: stats.gaps.ownerlessItems,
-      link: '/processes',
-    });
-  }
-
-  const ungovernedDomains = stats.gaps.ungovernedDomains ?? 0;
-  if (ungovernedDomains > 0) {
-    alerts.push({
-      level: 'info',
-      icon: '\u25C8',
-      message: `${ungovernedDomains} data ${ungovernedDomains === 1 ? 'domain has' : 'domains have'} no owner assigned`,
-      count: ungovernedDomains,
-      link: '/data-domains',
-    });
-  }
-
-  if (alerts.length === 0) {
-    return null; // No alerts = don't show the section at all
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Alerts</h2>
-      {alerts.map((alert, idx) => (
-        <div
-          key={idx}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px 16px',
-            background: ALERT_BG_COLORS[alert.level],
-            borderLeft: `4px solid ${ALERT_BORDER_COLORS[alert.level]}`,
-            borderRadius: 'var(--radius-md)',
-          }}
-        >
-          <span style={{ fontSize: 18, flexShrink: 0 }}>{alert.icon}</span>
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: ALERT_TEXT_COLORS[alert.level] }}>
-            {alert.message}
-          </span>
-          <Link
-            to={alert.link}
-            style={{
-              padding: '4px 12px',
-              fontSize: 12,
-              fontWeight: 500,
-              color: ALERT_TEXT_COLORS[alert.level],
-              border: `1px solid ${ALERT_BORDER_COLORS[alert.level]}`,
-              borderRadius: 'var(--radius-md)',
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            View
-          </Link>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Build suggestions based on current state
   const suggestions: Array<{ icon: string; title: string; description: string; link: string }> = [];
@@ -564,7 +448,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
       icon: '⚠',
       title: 'Improve coverage',
       description: `Only ${stats.coverage.percentage}% of process steps have data mapped. Review gaps to find unmapped steps.`,
-      link: '/gap-detection',
+      link: '/mappings',
     });
   }
 
@@ -944,7 +828,6 @@ export default function DashboardPage() {
     overview: <StatsOverview stats={stats} />,
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
-    alerts: <DashboardAlerts stats={stats} />,
     whatsNext: <WhatsNext stats={stats} />,
     stewardOnboarding: <StewardOnboarding />,
     quickActions: <QuickActions />,

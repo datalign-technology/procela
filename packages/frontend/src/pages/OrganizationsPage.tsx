@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import { exportCsv } from '../lib/exportCsv';
 import ConfirmDialog from '../components/ConfirmDialog';
+import OrgDeleteCleanupDialog, { CleanupActions } from '../components/OrgDeleteCleanupDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
@@ -214,6 +215,7 @@ export default function OrganizationsPage() {
   const { triggerRefresh, orgs: accessibleOrgs, activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Org state
   const [tree, setTree] = useState<OrgNode[]>([]);
@@ -270,6 +272,18 @@ export default function OrganizationsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Auto-open the import panel when navigated with ?import=1 (e.g. from the
+  // OnboardingWizard's "skip and import" link). Strips the param after opening
+  // so a refresh doesn't keep re-opening it.
+  useEffect(() => {
+    if (searchParams.get('import') === '1') {
+      setShowImport(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('import');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   const orgOptions = flattenTreeForSelect(tree);
   const accessibleOrgIds = new Set(accessibleOrgs.map((o) => o.id));
   const detailOrg = detailOrgId ? flatOrgs.find((o) => o.id === detailOrgId) || null : null;
@@ -288,6 +302,7 @@ export default function OrganizationsPage() {
   };
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<string | null>(null);
   const [deleteOrgImpact, setDeleteOrgImpact] = useState<Record<string, number> | null>(null);
+  const [deleteOrgBusy, setDeleteOrgBusy] = useState(false);
 
   const promptDeleteOrg = async (id: string) => {
     try {
@@ -297,16 +312,41 @@ export default function OrganizationsPage() {
     setConfirmDeleteOrg(id);
   };
 
-  const handleDeleteOrg = async (id: string) => {
+  // Compute the org and all its descendants — used to lock the move-target
+  // picker so a category can't be re-homed inside the subtree being deleted.
+  const subtreeIdsFor = useCallback((rootId: string): Set<string> => {
+    const ids = new Set<string>([rootId]);
+    const walk = (pid: string) => {
+      for (const o of flatOrgs) {
+        if (o.parentId === pid && !ids.has(o.id)) {
+          ids.add(o.id);
+          walk(o.id);
+        }
+      }
+    };
+    walk(rootId);
+    return ids;
+  }, [flatOrgs]);
+
+  const handleDeleteOrg = async (id: string, actions?: CleanupActions) => {
+    setDeleteOrgBusy(true);
     try {
-      await apiClient.delete(`/organizations/${id}`);
-      addToast('success', 'Organization deleted with all associated data');
+      await apiClient.delete(`/organizations/${id}`, actions ? { actions } : undefined);
+      // Build a brief summary toast from the chosen actions, if any.
+      const moves = actions ? Object.values(actions).filter((a) => a?.type === 'move').length : 0;
+      const orphans = actions ? Object.values(actions).filter((a) => a?.type === 'orphan').length : 0;
+      const parts: string[] = ['Organization deleted'];
+      if (moves > 0) parts.push(`${moves} categor${moves === 1 ? 'y' : 'ies'} moved`);
+      if (orphans > 0) parts.push(`${orphans} categor${orphans === 1 ? 'y' : 'ies'} orphaned`);
+      addToast('success', parts.join(' · '));
       setConfirmDeleteOrg(null);
       setDeleteOrgImpact(null);
       fetchData();
       triggerRefresh();
     } catch (e: any) {
       addToast('error', e?.response?.data?.error || e?.message || 'Cannot delete');
+    } finally {
+      setDeleteOrgBusy(false);
     }
   };
 
@@ -568,32 +608,19 @@ export default function OrganizationsPage() {
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      <ConfirmDialog
+      <OrgDeleteCleanupDialog
         open={confirmDeleteOrg !== null}
-        title="Delete Organization?"
-        message={(() => {
-          if (!deleteOrgImpact) return 'This will permanently delete this organization and all its data. This cannot be undone.';
-          const items: string[] = [];
-          if (deleteOrgImpact.childOrgs > 0) items.push(`${deleteOrgImpact.childOrgs} child org${deleteOrgImpact.childOrgs !== 1 ? 's' : ''}`);
-          if (deleteOrgImpact.people > 0) items.push(`${deleteOrgImpact.people} people`);
-          if (deleteOrgImpact.processes > 0) items.push(`${deleteOrgImpact.processes} processes`);
-          if (deleteOrgImpact.dataAssets > 0) items.push(`${deleteOrgImpact.dataAssets} data assets`);
-          if (deleteOrgImpact.systems > 0) items.push(`${deleteOrgImpact.systems} systems`);
-          if (deleteOrgImpact.dataDomains > 0) items.push(`${deleteOrgImpact.dataDomains} data domains`);
-          if (deleteOrgImpact.mappings > 0) items.push(`${deleteOrgImpact.mappings} mappings`);
-          if (deleteOrgImpact.governanceGroups > 0) items.push(`${deleteOrgImpact.governanceGroups} governance groups`);
-          if (deleteOrgImpact.policies > 0) items.push(`${deleteOrgImpact.policies} policies`);
-          if (deleteOrgImpact.tasks > 0) items.push(`${deleteOrgImpact.tasks} tasks`);
-          if (deleteOrgImpact.issues > 0) items.push(`${deleteOrgImpact.issues} issues`);
-          if (deleteOrgImpact.glossaryTerms > 0) items.push(`${deleteOrgImpact.glossaryTerms} glossary terms`);
-          if (deleteOrgImpact.sops > 0) items.push(`${deleteOrgImpact.sops} SOPs`);
-          if (deleteOrgImpact.calendarEvents > 0) items.push(`${deleteOrgImpact.calendarEvents} calendar events`);
-          if (items.length === 0) return 'This organization has no associated data. It will be permanently deleted.';
-          return `This will permanently delete this organization and ALL associated data:\n\n${items.join(', ')}.\n\nThis cannot be undone.`;
+        orgName={(() => {
+          const o = flatOrgs.find((x) => x.id === confirmDeleteOrg);
+          return o?.name || 'this organization';
         })()}
-        confirmLabel="Delete Everything"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => { const id = confirmDeleteOrg; setConfirmDeleteOrg(null); setDeleteOrgImpact(null); if (id) await handleDeleteOrg(id); }}
+        impact={deleteOrgImpact}
+        accessibleOrgs={accessibleOrgs.map((o) => ({ id: o.id, name: o.name, type: (o as any).type || 'org' }))}
+        excludedTargetIds={confirmDeleteOrg ? subtreeIdsFor(confirmDeleteOrg) : new Set()}
+        busy={deleteOrgBusy}
+        onConfirm={async (actions) => {
+          if (confirmDeleteOrg) await handleDeleteOrg(confirmDeleteOrg, actions);
+        }}
         onCancel={() => { setConfirmDeleteOrg(null); setDeleteOrgImpact(null); }}
       />
 
