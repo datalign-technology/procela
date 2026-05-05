@@ -264,6 +264,9 @@ export default function DataAssetsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const formValidation = useFormValidation({
     name: (v: any) => !v?.trim() ? 'Name is required.' : null,
+    sourceAsset: (v: any, form: any) => form?.sourceConnectionId && !v?.trim()
+      ? 'Pick the table / file / asset to link to.'
+      : null,
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterCategory, setFilterCategory] = useState('');
@@ -986,7 +989,15 @@ export default function DataAssetsPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection</label>
-                <select style={selectStyle} value={form.sourceConnectionId} onChange={(e) => updateField('sourceConnectionId', e.target.value)}>
+                <select
+                  style={selectStyle}
+                  value={form.sourceConnectionId}
+                  onChange={(e) => {
+                    updateField('sourceConnectionId', e.target.value);
+                    formValidation.touch('sourceAsset');
+                    formValidation.validateField('sourceAsset', form.sourceAsset, { ...form, sourceConnectionId: e.target.value });
+                  }}
+                >
                   <option value="">-- No connection --</option>
                   {connectionsList.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}{c.connectionType ? ` (${c.connectionType})` : ''}</option>
@@ -994,8 +1005,17 @@ export default function DataAssetsPage() {
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table / File / Asset</label>
-                <input style={inputStyle} value={form.sourceAsset} onChange={(e) => updateField('sourceAsset', e.target.value)} placeholder="e.g. customers, invoices.csv" />
+                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                  Table / File / Asset{form.sourceConnectionId ? ' *' : ''}
+                </label>
+                <input
+                  style={{ ...inputStyle, border: formValidation.fieldError('sourceAsset') ? inputErrorBorder : inputStyle.border }}
+                  value={form.sourceAsset}
+                  onChange={(e) => updateField('sourceAsset', e.target.value)}
+                  onBlur={() => { formValidation.touch('sourceAsset'); formValidation.validateField('sourceAsset', form.sourceAsset, form); }}
+                  placeholder="e.g. customers, invoices.csv"
+                />
+                {formValidation.fieldError('sourceAsset') && <div style={fieldErrorStyle}>{formValidation.fieldError('sourceAsset')}</div>}
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Column (optional)</label>
