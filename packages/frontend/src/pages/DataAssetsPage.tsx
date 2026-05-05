@@ -388,7 +388,10 @@ export default function DataAssetsPage() {
   };
 
   const filteredAssets = assets.filter((a) => {
-    if (filterCategory && (a.category || '') !== filterCategory) return false;
+    if (filterCategory) {
+      if (filterCategory === '__none__') { if (a.category) return false; }
+      else if ((a.category || '') !== filterCategory) return false;
+    }
     if (filterTier && (a.governanceTier || 'BRONZE') !== filterTier) return false;
     if (filterSystemId && a.systemId !== filterSystemId) return false;
     if (searchQuery) {
@@ -774,6 +777,86 @@ export default function DataAssetsPage() {
         </div>
       </div>
 
+      {/* Two-column layout: Categories sidebar + content (mirrors Systems page) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+        {/* Categories Sidebar */}
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: 10,
+          position: 'sticky',
+          top: 12,
+          maxHeight: 'calc(100vh - 180px)',
+          overflowY: 'auto',
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
+            Categories
+          </div>
+          <div
+            onClick={() => setFilterCategory('')}
+            style={{
+              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+              fontWeight: !filterCategory ? 600 : 400,
+              background: !filterCategory ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              color: !filterCategory ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+            onMouseEnter={(e) => { if (filterCategory) e.currentTarget.style.background = 'var(--color-bg)'; }}
+            onMouseLeave={(e) => { if (filterCategory) e.currentTarget.style.background = 'transparent'; }}
+          >
+            All Assets ({assets.length})
+          </div>
+          {[
+            { key: 'OPERATIONAL', label: 'Operational' },
+            { key: 'GOVERNANCE', label: 'Governance' },
+            { key: 'REFERENCE', label: 'Reference' },
+            { key: 'ANALYTICAL', label: 'Analytical' },
+            { key: 'MASTER', label: 'Master' },
+          ].map(({ key, label }) => {
+            const count = assets.filter((a) => a.category === key).length;
+            if (count === 0) return null;
+            const isActive = filterCategory === key;
+            return (
+              <div
+                key={key}
+                onClick={() => setFilterCategory(isActive ? '' : key)}
+                style={{
+                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                  fontWeight: isActive ? 600 : 400,
+                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span>{label}</span>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
+              </div>
+            );
+          })}
+          {assets.filter((a) => !a.category).length > 0 && (
+            <div
+              onClick={() => setFilterCategory(filterCategory === '__none__' ? '' : '__none__')}
+              style={{
+                padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                fontWeight: filterCategory === '__none__' ? 600 : 400,
+                background: filterCategory === '__none__' ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                color: filterCategory === '__none__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                fontStyle: 'italic',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+              onMouseEnter={(e) => { if (filterCategory !== '__none__') e.currentTarget.style.background = 'var(--color-bg)'; }}
+              onMouseLeave={(e) => { if (filterCategory !== '__none__') e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span>Uncategorized</span>
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{assets.filter((a) => !a.category).length}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Content area */}
+        <div>
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
@@ -783,14 +866,6 @@ export default function DataAssetsPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
         />
-        <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-          <option value="">All Categories</option>
-          <option value="OPERATIONAL">Operational ({assets.filter((a) => a.category === 'OPERATIONAL').length})</option>
-          <option value="GOVERNANCE">Governance ({assets.filter((a) => a.category === 'GOVERNANCE').length})</option>
-          <option value="REFERENCE">Reference ({assets.filter((a) => a.category === 'REFERENCE').length})</option>
-          <option value="ANALYTICAL">Analytical ({assets.filter((a) => a.category === 'ANALYTICAL').length})</option>
-          <option value="MASTER">Master ({assets.filter((a) => a.category === 'MASTER').length})</option>
-        </select>
         <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
           <option value="">All Tiers</option>
           <option value="GOLD">Gold ({assets.filter((a) => a.governanceTier === 'GOLD').length})</option>
@@ -1413,6 +1488,8 @@ export default function DataAssetsPage() {
             </tbody>
           </table>
         )}
+      </div>
+        </div>
       </div>
 
       {/* Data Asset 360 View Modal */}
