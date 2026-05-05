@@ -249,6 +249,48 @@ router.delete('/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+/**
+ * POST /api/v1/connections/test — test a connection config without persisting.
+ *
+ * Body: { id?, connectionType, config, credentials }
+ *
+ * If `id` is provided and matches a saved profile, masked/empty credential
+ * fields are replaced with the saved values (so users can test edits without
+ * re-entering secrets). Nothing is written to the store.
+ */
+router.post('/test', async (req: Request, res: Response) => {
+  const { id, connectionType, config, credentials } = req.body || {};
+
+  if (!connectionType || !CONNECTION_TYPES.includes(connectionType)) {
+    res.status(400).json({ success: false, error: `connectionType must be one of: ${CONNECTION_TYPES.join(', ')}` });
+    return;
+  }
+
+  const mergedCreds: ConnectionProfile['credentials'] = { ...(credentials || {}) };
+  if (id) {
+    const saved = connections.find((c) => c.id === id);
+    if (saved) {
+      const isMasked = (v: unknown) => typeof v === 'string' && (v === '' || v.endsWith('***'));
+      if (isMasked(mergedCreds.password)) mergedCreds.password = saved.credentials.password;
+      if (isMasked(mergedCreds.apiKey)) mergedCreds.apiKey = saved.credentials.apiKey;
+      if (isMasked(mergedCreds.token)) mergedCreds.token = saved.credentials.token;
+      if (mergedCreds.username === undefined) mergedCreds.username = saved.credentials.username;
+    }
+  }
+
+  try {
+    const result = await testConnection({
+      connectionType,
+      config: config || {},
+      credentials: mergedCreds,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    logger.error({ err }, 'Ad-hoc connection test failed');
+    res.status(500).json({ success: false, error: 'Connection test failed' });
+  }
+});
+
 /** POST /api/v1/connections/:id/test — test connection */
 router.post('/:id/test', async (req: Request, res: Response) => {
   const conn = connections.find((c) => c.id === req.params.id);

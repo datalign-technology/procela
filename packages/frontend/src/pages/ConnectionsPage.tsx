@@ -361,21 +361,25 @@ export default function ConnectionsPage() {
   };
 
   const handleTest = async () => {
-    const savedId = await handleSave();
-    if (!savedId) return;
+    if (!form.name.trim()) return;
     setFormTesting(true);
     setFormTestResult(null);
-    setShowForm(true); // keep form open to show result
-    setEditingId(savedId);
     try {
-      const res = await apiClient.post<{ success: boolean; data: { success: boolean; message: string } }>(`/connections/${savedId}/test`);
+      const res = await apiClient.post<{ success: boolean; data: { success: boolean; message: string } }>(
+        '/connections/test',
+        {
+          ...(editingId ? { id: editingId } : {}),
+          connectionType: form.connectionType,
+          config: form.config,
+          credentials: form.credentials,
+        },
+      );
       setFormTestResult({ success: res.data.success, message: res.data.message });
       if (res.data.success) {
         addToast('success', `Test passed: ${res.data.message}`);
       } else {
         addToast('error', `Test failed: ${res.data.message}`);
       }
-      fetchData();
     } catch {
       setFormTestResult({ success: false, message: 'Connection test failed' });
       addToast('error', 'Connection test failed');
