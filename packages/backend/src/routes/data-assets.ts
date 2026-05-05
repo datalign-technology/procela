@@ -114,6 +114,47 @@ function migrateLegacySourceFieldsToBindings(): void {
 }
 migrateLegacySourceFieldsToBindings();
 
+/**
+ * Ensure a DataAssetBinding exists that matches the asset's current
+ * sourceConnectionId/sourceAsset/sourceColumn fields. Used when create/update
+ * routes accept the legacy single-source form so the bindings store (which
+ * drives the UI's "Source" column and Link button) stays in sync.
+ *
+ * If the asset has no source fields, this is a no-op. If a binding for the
+ * same (asset, connection) already exists, its sourceAsset/sourceColumn are
+ * refreshed; otherwise a new primary binding is appended.
+ */
+function syncBindingFromAssetFields(asset: StoredDataAsset): boolean {
+  if (!asset.sourceConnectionId || !asset.sourceAsset) return false;
+  const now = new Date().toISOString();
+  const existing = dataAssetBindings.find(
+    (b) => b.dataAssetId === asset.id && b.connectionId === asset.sourceConnectionId,
+  );
+  if (existing) {
+    const changed =
+      existing.sourceAsset !== asset.sourceAsset ||
+      existing.sourceColumn !== asset.sourceColumn;
+    if (!changed) return false;
+    existing.sourceAsset = asset.sourceAsset;
+    existing.sourceColumn = asset.sourceColumn;
+    existing.updatedAt = now;
+    return true;
+  }
+  const isFirstBinding = !dataAssetBindings.some((b) => b.dataAssetId === asset.id);
+  dataAssetBindings.push({
+    id: uuid(),
+    orgId: asset.orgId,
+    dataAssetId: asset.id,
+    connectionId: asset.sourceConnectionId,
+    sourceAsset: asset.sourceAsset,
+    sourceColumn: asset.sourceColumn,
+    isPrimary: isFirstBinding,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return true;
+}
+
 // ── Data Asset Columns ──────────────────────────────────────────────────
 //
 // Columns are the measurable data points within a Data Asset. A Data Asset
@@ -474,6 +515,7 @@ router.post('/', (req: Request, res: Response) => {
   };
   dataAssets.push(asset);
   saveStore('dataAssets', dataAssets);
+  if (syncBindingFromAssetFields(asset)) saveStore('dataAssetBindings', dataAssetBindings);
   res.status(201).json({ success: true, data: asset });
 });
 
@@ -501,6 +543,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (refreshFrequency !== undefined) asset.refreshFrequency = refreshFrequency || undefined;
   asset.updatedAt = new Date().toISOString();
   saveStore('dataAssets', dataAssets);
+  if (syncBindingFromAssetFields(asset)) saveStore('dataAssetBindings', dataAssetBindings);
   res.json({ success: true, data: asset });
 });
 
