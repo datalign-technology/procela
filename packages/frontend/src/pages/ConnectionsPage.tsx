@@ -436,7 +436,7 @@ export default function ConnectionsPage() {
   // Test
   // -----------------------------------------------------------------------
 
-  const handleTest = async (id: string) => {
+  const handleRowTest = async (id: string) => {
     setTestingIds((prev) => new Set(prev).add(id));
     try {
       const res = await apiClient.post<{ success: boolean; data: { success: boolean; message: string; latencyMs: number; profile: ConnectionProfile } }>(`/connections/${id}/test`);
@@ -992,7 +992,7 @@ export default function ConnectionsPage() {
                         <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}
                           label={isTesting ? 'Testing...' : 'Test connection'}
                           disabled={isTesting}
-                          onClick={() => !isTesting && handleTest(conn.id)} />
+                          onClick={() => !isTesting && handleRowTest(conn.id)} />
                         {conn.status === 'CONNECTED' && (
                           <IconButton size="sm" icon="search" label="Discover assets" onClick={() => handleDiscover(conn)} />
                         )}
