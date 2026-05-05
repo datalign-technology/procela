@@ -360,7 +360,7 @@ export default function ConnectionsPage() {
     }
   };
 
-  const handleSaveAndTest = async () => {
+  const handleTest = async () => {
     const savedId = await handleSave();
     if (!savedId) return;
     setFormTesting(true);
@@ -841,9 +841,9 @@ export default function ConnectionsPage() {
             <button
               style={{ ...btnSecondary, opacity: !form.name.trim() || uploading || formTesting ? 0.6 : 1, cursor: !form.name.trim() || uploading || formTesting ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim() || uploading || formTesting}
-              onClick={handleSaveAndTest}
+              onClick={handleTest}
             >
-              {formTesting ? 'Testing\u2026' : 'Save & Test'}
+              {formTesting ? 'Testing\u2026' : 'Test'}
             </button>
             <button
               style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1, cursor: !form.name.trim() || uploading ? 'not-allowed' : 'pointer' }}
