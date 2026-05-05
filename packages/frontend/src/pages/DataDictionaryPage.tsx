@@ -1,6 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import EmptyState from '../components/EmptyState';
+import SortableTh from '../components/SortableTh';
+import { SkeletonRows } from '../components/Skeleton';
+import { useSortedList } from '../hooks/useSortedList';
 
 /* ── Interfaces ─────────────────────────────────────────────────── */
 
@@ -61,10 +65,16 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
-const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
 const btnPrimary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-primary)', color: '#fff',
   border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+};
+const thStyle: React.CSSProperties = {
+  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
+  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
+};
+const tdStyle: React.CSSProperties = {
+  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
@@ -76,18 +86,13 @@ const TIER_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 function tierBadge(tier?: string) {
-  if (!tier) return null;
+  if (!tier) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>;
   const c = TIER_COLORS[tier] || { bg: '#e5e7eb', text: '#374151' };
   return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', background: c.bg, color: c.text }}>
       {tier}
     </span>
   );
-}
-
-function healthDot(score?: number): React.CSSProperties {
-  const color = score == null ? '#d1d5db' : score >= 80 ? '#22c55e' : score >= 50 ? '#eab308' : '#ef4444';
-  return { display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 };
 }
 
 function healthBar(score?: number) {
@@ -120,7 +125,12 @@ export default function DataDictionaryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
   const [filterTier, setFilterTier] = useState('');
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [expandedAssetIds, setExpandedAssetIds] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) => setExpandedAssetIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const fetchAll = useCallback(async () => {
     try {
@@ -145,37 +155,43 @@ export default function DataDictionaryPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Fan-out: pull columns for every asset so we can show a count column and
+  // expandable column tables. Cached by asset id; refreshes when the asset
+  // list changes.
   useEffect(() => {
-    if (assets.length > 0 && Object.keys(columnsMap).length === 0) {
-      setLoadingColumns(true);
-      Promise.all(
-        assets.map((a) =>
-          apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${a.id}/columns`)
-            .then((r) => [a.id, r.data || []] as [string, DataAssetColumn[]])
-            .catch(() => [a.id, []] as [string, DataAssetColumn[]])
-        )
-      ).then((results) => {
-        const map: Record<string, DataAssetColumn[]> = {};
-        for (const [id, cols] of results) map[id] = cols;
-        setColumnsMap(map);
-      }).finally(() => setLoadingColumns(false));
-    }
+    if (assets.length === 0) return;
+    const missing = assets.filter((a) => !columnsMap[a.id]);
+    if (missing.length === 0) return;
+    setLoadingColumns(true);
+    Promise.all(
+      missing.map((a) =>
+        apiClient.get<{ success: boolean; data: DataAssetColumn[] }>(`/data-assets/${a.id}/columns`)
+          .then((r) => [a.id, r.data || []] as [string, DataAssetColumn[]])
+          .catch(() => [a.id, []] as [string, DataAssetColumn[]])
+      )
+    ).then((results) => {
+      setColumnsMap((prev) => {
+        const next = { ...prev };
+        for (const [id, cols] of results) next[id] = cols;
+        return next;
+      });
+    }).finally(() => setLoadingColumns(false));
   }, [assets]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Lookups ─────────────────────────────────────────────────── */
 
-  const systemMap = new Map(systems.map((s) => [s.id, s]));
-  const personMap = new Map(people.map((p) => [p.id, p]));
-  const personName = (id?: string | null) => id ? personMap.get(id)?.name || null : null;
+  const systemMap = useMemo(() => new Map(systems.map((s) => [s.id, s])), [systems]);
+  const personMap = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  const personName = useCallback((id?: string | null) => id ? personMap.get(id)?.name || null : null, [personMap]);
 
-  const domainMap = new Map(domains.map((d) => [d.id, d]));
+  const domainMap = useMemo(() => new Map(domains.map((d) => [d.id, d])), [domains]);
   const assetDomainMap = useMemo(() => {
     const m = new Map<string, string>();
     for (const d of domains) for (const aid of d.dataAssetIds || []) m.set(aid, d.id);
     return m;
   }, [domains]);
 
-  /* ── Filtered & grouped ──────────────────────────────────────── */
+  /* ── Filtered ────────────────────────────────────────────────── */
 
   const filteredAssets = useMemo(() => {
     let result = assets;
@@ -192,42 +208,32 @@ export default function DataDictionaryPage() {
       if (filterDomain === '__unassigned__') result = result.filter((a) => !assetDomainMap.has(a.id));
       else result = result.filter((a) => assetDomainMap.get(a.id) === filterDomain);
     }
-    return result.sort((a, b) => a.name.localeCompare(b.name));
+    return result;
   }, [assets, searchQuery, filterTier, filterDomain, assetDomainMap, columnsMap]);
 
-  const groupedByDomain = useMemo(() => {
-    const grouped = new Map<string | null, DataAssetEntity[]>();
-    for (const a of filteredAssets) {
-      const did = assetDomainMap.get(a.id) || null;
-      if (!grouped.has(did)) grouped.set(did, []);
-      grouped.get(did)!.push(a);
-    }
-    return Array.from(grouped.entries()).sort(([a], [b]) => {
-      if (a === null) return 1;
-      if (b === null) return -1;
-      return (domainMap.get(a)?.name || '').localeCompare(domainMap.get(b)?.name || '');
-    });
-  }, [filteredAssets, assetDomainMap, domainMap]);
+  const { sorted, sortKey, sortDir, toggleSort } = useSortedList<DataAssetEntity>(
+    filteredAssets,
+    {
+      name: (a, b) => a.name.localeCompare(b.name),
+      system: (a, b) => (systemMap.get(a.systemId)?.name || '').localeCompare(systemMap.get(b.systemId)?.name || ''),
+      domain: (a, b) => {
+        const ad = assetDomainMap.get(a.id);
+        const bd = assetDomainMap.get(b.id);
+        return (ad ? domainMap.get(ad)?.name || '' : '').localeCompare(bd ? domainMap.get(bd)?.name || '' : '');
+      },
+      tier: (a, b) => (a.governanceTier || '').localeCompare(b.governanceTier || ''),
+      health: (a, b) => (a.healthScore ?? -1) - (b.healthScore ?? -1),
+      owner: (a, b) => (a.ownerName || personName(a.owner) || '').localeCompare(b.ownerName || personName(b.owner) || ''),
+      columns: (a, b) => (columnsMap[a.id]?.length || 0) - (columnsMap[b.id]?.length || 0),
+    },
+    'name',
+  );
 
-  const selectedAsset = selectedAssetId ? assets.find((a) => a.id === selectedAssetId) || null : null;
-  const selectedCols = selectedAssetId ? columnsMap[selectedAssetId] || [] : [];
-
-  // Auto-select first asset
-  useEffect(() => {
-    if (!selectedAssetId && filteredAssets.length > 0) setSelectedAssetId(filteredAssets[0].id);
-    else if (selectedAssetId && !filteredAssets.find((a) => a.id === selectedAssetId) && filteredAssets.length > 0) setSelectedAssetId(filteredAssets[0].id);
-  }, [filteredAssets, selectedAssetId]);
+  const goldCount = assets.filter((a) => a.governanceTier === 'GOLD').length;
+  const silverCount = assets.filter((a) => a.governanceTier === 'SILVER').length;
+  const bronzeCount = assets.filter((a) => a.governanceTier === 'BRONZE').length;
 
   /* ── Render ──────────────────────────────────────────────────── */
-
-  if (loading) {
-    return (
-      <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Data Dictionary</h1>
-        <div style={{ color: 'var(--color-text-muted)' }}>Loading data dictionary...</div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -246,235 +252,284 @@ export default function DataDictionaryPage() {
           body { background: white !important; font-size: 11pt; }
           main { padding: 0 !important; }
         }
-        .col-table tr:nth-child(even) { background: var(--color-bg, #f9fafb); }
       `}</style>
 
       {/* Header */}
-      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Data Dictionary</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
             Technical catalog of data assets, columns, ownership, and lineage.
           </p>
+          {assets.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+              <span>{assets.length} assets</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{goldCount} gold</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{silverCount} silver</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{bronzeCount} bronze</span>
+              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+              <span>{domains.length} domains</span>
+            </div>
+          )}
         </div>
-        <button onClick={() => window.print()} style={btnPrimary}>Print / Export PDF</button>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button onClick={() => window.print()} style={btnPrimary}>Print / Export PDF</button>
+        </div>
       </div>
 
-      {assets.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-          <div style={{ fontSize: 36, marginBottom: 12, color: 'var(--color-text-muted)' }}>{'📚'}</div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No data assets yet</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', maxWidth: 440, margin: '0 auto' }}>
-            Create data assets on the Data Assets page to populate this dictionary.
-          </p>
+      {/* Two-column layout: Domains sidebar + content */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+        {/* Domains Sidebar */}
+        <div className="no-print" style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          padding: 10,
+          position: 'sticky',
+          top: 12,
+          maxHeight: 'calc(100vh - 180px)',
+          overflowY: 'auto',
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
+            Domains
+          </div>
+          <div
+            onClick={() => setFilterDomain('')}
+            style={{
+              padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+              fontWeight: !filterDomain ? 600 : 400,
+              background: !filterDomain ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+              color: !filterDomain ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+            onMouseEnter={(e) => { if (filterDomain) e.currentTarget.style.background = 'var(--color-bg)'; }}
+            onMouseLeave={(e) => { if (filterDomain) e.currentTarget.style.background = 'transparent'; }}
+          >
+            All Assets ({assets.length})
+          </div>
+          {domains.slice().sort((a, b) => a.name.localeCompare(b.name)).map((d) => {
+            const count = assets.filter((a) => assetDomainMap.get(a.id) === d.id).length;
+            if (count === 0) return null;
+            const isActive = filterDomain === d.id;
+            return (
+              <div
+                key={d.id}
+                onClick={() => setFilterDomain(isActive ? '' : d.id)}
+                style={{
+                  padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                  fontWeight: isActive ? 600 : 400,
+                  background: isActive ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
+              </div>
+            );
+          })}
+          {assets.some((a) => !assetDomainMap.has(a.id)) && (
+            <div
+              onClick={() => setFilterDomain(filterDomain === '__unassigned__' ? '' : '__unassigned__')}
+              style={{
+                padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+                fontWeight: filterDomain === '__unassigned__' ? 600 : 400,
+                background: filterDomain === '__unassigned__' ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+                color: filterDomain === '__unassigned__' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                fontStyle: 'italic',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+              onMouseEnter={(e) => { if (filterDomain !== '__unassigned__') e.currentTarget.style.background = 'var(--color-bg)'; }}
+              onMouseLeave={(e) => { if (filterDomain !== '__unassigned__') e.currentTarget.style.background = 'transparent'; }}
+            >
+              <span>Unassigned</span>
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{assets.filter((a) => !assetDomainMap.has(a.id)).length}</span>
+            </div>
+          )}
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
-          {/* Left: Asset index */}
-          <div className="no-print" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
-            {/* Search + filters */}
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
+
+        {/* Content area */}
+        <div>
+          {/* Content header: title, search, tier filter */}
+          <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
+              {filterDomain
+                ? (filterDomain === '__unassigned__' ? 'Unassigned Assets' : domainMap.get(filterDomain)?.name || 'Assets')
+                : 'All Assets'}
+              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{filteredAssets.length} asset{filteredAssets.length !== 1 ? 's' : ''}</span>
+              {filterDomain && (
+                <button onClick={() => setFilterDomain('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear domain filter">&times;</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <input
-                style={{ ...inputStyle, fontSize: 12, padding: '6px 10px', marginBottom: 8 }}
+                style={{ ...inputStyle, width: 240, fontSize: 12, padding: '4px 8px' }}
                 placeholder="Search assets & columns..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <select style={{ ...selectStyle, fontSize: 11, padding: '3px 6px', flex: 1 }} value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
-                  <option value="">All Domains</option>
-                  {domains.sort((a, b) => a.name.localeCompare(b.name)).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  <option value="__unassigned__">Unassigned</option>
-                </select>
-                <select style={{ ...selectStyle, fontSize: 11, padding: '3px 6px', width: 'auto', minWidth: 80 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
-                  <option value="">All Tiers</option>
-                  <option value="GOLD">Gold</option>
-                  <option value="SILVER">Silver</option>
-                  <option value="BRONZE">Bronze</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Asset list grouped by domain */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {filteredAssets.length === 0 ? (
-                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No assets match your filters.</div>
-              ) : (
-                groupedByDomain.map(([domainId, domainAssets]) => {
-                  const domain = domainId ? domainMap.get(domainId) : null;
-                  return (
-                    <div key={domainId || '__unassigned__'}>
-                      <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-primary)', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', position: 'sticky', top: 0, zIndex: 1 }}>
-                        {domain?.name || 'Unassigned'} ({domainAssets.length})
-                      </div>
-                      {domainAssets.map((a) => {
-                        const isActive = selectedAssetId === a.id;
-                        const colCount = (columnsMap[a.id] || []).length;
-                        return (
-                          <div
-                            key={a.id}
-                            onClick={() => setSelectedAssetId(a.id)}
-                            style={{
-                              padding: '8px 12px', cursor: 'pointer',
-                              display: 'flex', alignItems: 'center', gap: 8,
-                              background: isActive ? '#dbeafe' : 'transparent',
-                              borderBottom: '1px solid var(--color-border)',
-                              borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
-                              transition: 'background 0.1s',
-                            }}
-                            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                          >
-                            <span style={healthDot(a.healthScore)} title={a.healthScore != null ? `${a.healthScore}% health` : 'No health score'} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                              {colCount > 0 && <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{colCount} columns</div>}
-                            </div>
-                            {a.governanceTier && (
-                              <span style={{ fontSize: 9, fontWeight: 700, color: TIER_COLORS[a.governanceTier]?.text || '#374151', flexShrink: 0 }}>
-                                {a.governanceTier.charAt(0)}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })
+              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Tier:</label>
+              <select style={{ ...inputStyle, width: 'auto', minWidth: 110, fontSize: 12, padding: '4px 8px' }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
+                <option value="">All</option>
+                <option value="GOLD">Gold ({goldCount})</option>
+                <option value="SILVER">Silver ({silverCount})</option>
+                <option value="BRONZE">Bronze ({bronzeCount})</option>
+              </select>
+              {filterTier && (
+                <button onClick={() => setFilterTier('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
               )}
-            </div>
-
-            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--color-border)', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)' }}>
-              {filteredAssets.length} of {assets.length} assets
             </div>
           </div>
 
-          {/* Right: Asset detail */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', minHeight: 400 }}>
-            {selectedAsset ? (() => {
-              const sys = systemMap.get(selectedAsset.systemId);
-              const ownerDisplay = selectedAsset.ownerName || personName(selectedAsset.owner);
-              const stewardDisplay = selectedAsset.stewardName || (selectedAsset.stewardIds?.length ? selectedAsset.stewardIds.map((sid) => personName(sid)).filter(Boolean).join(', ') : null);
-              const domainId = assetDomainMap.get(selectedAsset.id);
-              const domain = domainId ? domainMap.get(domainId) : null;
-
-              return (
-                <div style={{ padding: '24px 28px' }}>
-                  {/* Header */}
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                      <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{selectedAsset.name}</h2>
-                      {tierBadge(selectedAsset.governanceTier)}
-                      {selectedAsset.dataClassification && (
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: '#e0e7ff', color: '#3730a3' }}>
-                          {selectedAsset.dataClassification}
-                        </span>
-                      )}
-                    </div>
-                    {selectedAsset.description && (
-                      <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--color-text-secondary)', margin: 0 }}>{selectedAsset.description}</p>
-                    )}
-                  </div>
-
-                  {/* Metadata grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-                    {sys && (
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>System</div>
-                        <div style={{ fontSize: 13 }}>{sys.name}{sys.systemType ? ` (${sys.systemType})` : ''}</div>
-                      </div>
-                    )}
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Health</div>
-                      <div>{healthBar(selectedAsset.healthScore)}</div>
-                    </div>
-                    {domain && (
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Domain</div>
-                        <div style={{ fontSize: 13 }}>{domain.name}</div>
-                      </div>
-                    )}
-                    {ownerDisplay && (
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Owner</div>
-                        <div style={{ fontSize: 13 }}>{ownerDisplay}</div>
-                      </div>
-                    )}
-                    {stewardDisplay && (
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Steward</div>
-                        <div style={{ fontSize: 13 }}>{stewardDisplay}</div>
-                      </div>
-                    )}
-                    {selectedAsset.refreshFrequency && (
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Refresh</div>
-                        <div style={{ fontSize: 13 }}>{selectedAsset.refreshFrequency.replace(/_/g, ' ')}</div>
-                      </div>
-                    )}
-                    {selectedAsset.retentionPolicy && (
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Retention</div>
-                        <div style={{ fontSize: 13 }}>{selectedAsset.retentionPolicy}</div>
-                      </div>
-                    )}
-                    {selectedAsset.sourceAsset && (
-                      <div style={{ gridColumn: 'span 3' }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Source</div>
-                        <div style={{ fontSize: 13, fontFamily: 'monospace' }}>
-                          {sys ? `${sys.name} > ` : ''}{selectedAsset.sourceAsset}{selectedAsset.sourceColumn ? ` > ${selectedAsset.sourceColumn}` : ''}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Columns table */}
-                  {loadingColumns && selectedCols.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '12px 0' }}>Loading columns...</div>
-                  ) : selectedCols.length > 0 ? (
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                        Columns ({selectedCols.length})
-                      </div>
-                      <table className="col-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                            <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Name</th>
-                            <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', width: 120 }}>Type</th>
-                            <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedCols.map((col) => (
-                            <tr key={col.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                              <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>{col.columnName}</td>
-                              <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{col.dataType || '--'}</td>
-                              <td style={{ padding: '6px 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>{col.description || ''}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', padding: '12px 0', borderTop: '1px solid var(--color-border)' }}>
-                      No columns defined for this asset.
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', borderTop: '1px solid var(--color-border)', paddingTop: 12, marginTop: 20 }}>
-                    Created {new Date(selectedAsset.createdAt).toLocaleDateString()} · Updated {new Date(selectedAsset.updatedAt).toLocaleDateString()}
-                  </div>
-                </div>
-              );
-            })() : (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Select a data asset from the list to view its details and columns.</p>
+          {/* Table */}
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+            {loading ? (
+              <SkeletonRows rows={5} columns={7} />
+            ) : assets.length === 0 ? (
+              <EmptyState icon={'📚'} title="No data assets yet"
+                description="Create data assets on the Data Assets page to populate this dictionary." />
+            ) : sorted.length === 0 ? (
+              <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                No assets match your filters.
               </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={{ ...thStyle, width: 32 }} />
+                    <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Asset</SortableTh>
+                    <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
+                    <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
+                    <SortableTh sortKey="tier" active={sortKey} dir={sortDir} onClick={toggleSort}>Tier</SortableTh>
+                    <SortableTh sortKey="health" active={sortKey} dir={sortDir} onClick={toggleSort}>Health</SortableTh>
+                    <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
+                    <SortableTh sortKey="columns" active={sortKey} dir={sortDir} onClick={toggleSort}>Columns</SortableTh>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((a) => {
+                    const sys = systemMap.get(a.systemId);
+                    const domainId = assetDomainMap.get(a.id);
+                    const domain = domainId ? domainMap.get(domainId) : null;
+                    const ownerDisplay = a.ownerName || personName(a.owner);
+                    const stewardDisplay = a.stewardName
+                      || (a.stewardIds?.length ? a.stewardIds.map((sid) => personName(sid)).filter(Boolean).join(', ') : null);
+                    const cols = columnsMap[a.id] || [];
+                    const isExpanded = expandedAssetIds.has(a.id);
+                    return (
+                      <Fragment key={a.id}>
+                        <tr style={{ transition: 'background 0.1s', cursor: 'pointer' }}
+                          onClick={() => toggleExpand(a.id)}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>
+                          <td style={{ ...tdStyle, textAlign: 'center', width: 32, color: 'var(--color-text-muted)' }}>
+                            <span style={{ display: 'inline-block', transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
+                          </td>
+                          <td style={{ ...tdStyle, fontWeight: 500 }}>
+                            {a.name}
+                            {a.description && (
+                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }} title={a.description}>
+                                {a.description}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyle, color: sys ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {sys ? sys.name : '—'}
+                          </td>
+                          <td style={{ ...tdStyle, color: domain ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {domain ? domain.name : '—'}
+                          </td>
+                          <td style={tdStyle}>{tierBadge(a.governanceTier)}</td>
+                          <td style={tdStyle}>{healthBar(a.healthScore)}</td>
+                          <td style={{ ...tdStyle, color: ownerDisplay ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {ownerDisplay || '—'}
+                            {stewardDisplay && (
+                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>Steward: {stewardDisplay}</div>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyle, color: cols.length > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {cols.length > 0 ? `${cols.length} column${cols.length !== 1 ? 's' : ''}` : (loadingColumns ? '…' : '—')}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={8} style={{ padding: 0, borderTop: '1px solid var(--color-border)', background: '#fafbfc' }}>
+                              <div style={{ padding: '14px 22px' }}>
+                                {/* Metadata strip */}
+                                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: cols.length > 0 ? 12 : 0 }}>
+                                  {a.dataClassification && (
+                                    <div>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Classification</div>
+                                      <div style={{ fontSize: 12 }}>{a.dataClassification}</div>
+                                    </div>
+                                  )}
+                                  {a.refreshFrequency && (
+                                    <div>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Refresh</div>
+                                      <div style={{ fontSize: 12 }}>{a.refreshFrequency.replace(/_/g, ' ')}</div>
+                                    </div>
+                                  )}
+                                  {a.retentionPolicy && (
+                                    <div>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Retention</div>
+                                      <div style={{ fontSize: 12 }}>{a.retentionPolicy}</div>
+                                    </div>
+                                  )}
+                                  {a.sourceAsset && (
+                                    <div>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source</div>
+                                      <div style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                                        {sys ? `${sys.name} > ` : ''}{a.sourceAsset}{a.sourceColumn ? ` > ${a.sourceColumn}` : ''}
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Updated</div>
+                                    <div style={{ fontSize: 12 }}>{new Date(a.updatedAt).toLocaleDateString()}</div>
+                                  </div>
+                                </div>
+                                {/* Columns */}
+                                {cols.length > 0 ? (
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
+                                    <thead>
+                                      <tr style={{ background: 'var(--color-bg)' }}>
+                                        <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Column</th>
+                                        <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', width: 140 }}>Type</th>
+                                        <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {cols.map((col) => (
+                                        <tr key={col.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                                          <td style={{ padding: '6px 12px', fontFamily: 'monospace' }}>{col.columnName}</td>
+                                          <td style={{ padding: '6px 12px', fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>{col.dataType || '—'}</td>
+                                          <td style={{ padding: '6px 12px', color: 'var(--color-text-secondary)' }}>{col.description || ''}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                    {loadingColumns ? 'Loading columns…' : 'No columns defined for this asset.'}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
