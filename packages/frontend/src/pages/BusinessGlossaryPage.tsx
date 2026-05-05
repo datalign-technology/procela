@@ -125,6 +125,17 @@ export default function BusinessGlossaryPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
 
+  // Left-pane category expansion. Empty set = all categories collapsed,
+  // showing only the category headers as the initial view.
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      return next;
+    });
+  };
+
   // Generate
   const [generatedTerms, setGeneratedTerms] = useState<Array<{ term: string; definition: string; category: string; selected: boolean }>>([]);
   const [showGeneratePreview, setShowGeneratePreview] = useState(false);
@@ -176,12 +187,24 @@ export default function BusinessGlossaryPage() {
 
   const selectedTerm = selectedTermId ? terms.find((t) => t.id === selectedTermId) || null : null;
 
-  // Auto-select first term when list changes and nothing is selected
+  // When the user is searching or filtering, auto-expand any category that
+  // has matching terms so results are visible without an extra click.
+  // When all filters are cleared, collapse everything back to the default.
   useEffect(() => {
-    if (!selectedTermId && filteredTerms.length > 0) {
-      setSelectedTermId(filteredTerms[0].id);
-    } else if (selectedTermId && !filteredTerms.find((t) => t.id === selectedTermId) && filteredTerms.length > 0) {
-      setSelectedTermId(filteredTerms[0].id);
+    const hasFilter = !!(searchQuery.trim() || filterStatus || filterCategory);
+    if (!hasFilter) {
+      setExpandedCategories(new Set());
+      return;
+    }
+    const matching = CATEGORY_ORDER.filter((cat) => groupedTerms[cat]?.length > 0);
+    setExpandedCategories(new Set(matching));
+  }, [searchQuery, filterStatus, filterCategory, groupedTerms]);
+
+  // If the selected term gets filtered out, clear the selection so the
+  // right pane returns to its prompt state.
+  useEffect(() => {
+    if (selectedTermId && !filteredTerms.find((t) => t.id === selectedTermId)) {
+      setSelectedTermId(null);
     }
   }, [filteredTerms, selectedTermId]);
 
@@ -451,35 +474,52 @@ export default function BusinessGlossaryPage() {
               {filteredTerms.length === 0 ? (
                 <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>No terms match your filters.</div>
               ) : (
-                CATEGORY_ORDER.filter((cat) => groupedTerms[cat]?.length > 0).map((cat) => (
-                  <div key={cat}>
-                    <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: CATEGORY_COLORS[cat]?.color || '#64748b', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)', position: 'sticky', top: 0, zIndex: 1 }}>
-                      {cat} ({groupedTerms[cat].length})
+                CATEGORY_ORDER.filter((cat) => groupedTerms[cat]?.length > 0).map((cat) => {
+                  const isExpanded = expandedCategories.has(cat);
+                  return (
+                    <div key={cat}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCategory(cat)}
+                        aria-expanded={isExpanded}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '8px 12px', fontSize: 10, fontWeight: 600,
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                          color: CATEGORY_COLORS[cat]?.color || '#64748b',
+                          background: 'var(--color-bg)',
+                          border: 'none', borderBottom: '1px solid var(--color-border)',
+                          cursor: 'pointer', textAlign: 'left',
+                        }}
+                      >
+                        <span style={{ display: 'inline-block', width: 10, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
+                        <span style={{ flex: 1 }}>{cat} ({groupedTerms[cat].length})</span>
+                      </button>
+                      {isExpanded && groupedTerms[cat].map((t) => {
+                        const isActive = selectedTermId === t.id;
+                        return (
+                          <div
+                            key={t.id}
+                            onClick={() => { setSelectedTermId(t.id); setShowForm(false); }}
+                            style={{
+                              padding: '8px 12px 8px 28px', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              background: isActive ? '#dbeafe' : 'transparent',
+                              borderBottom: '1px solid var(--color-border)',
+                              borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
+                              transition: 'background 0.1s',
+                            }}
+                            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <span style={statusDot(t.status)} title={t.status} />
+                            <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.term}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {groupedTerms[cat].map((t) => {
-                      const isActive = selectedTermId === t.id;
-                      return (
-                        <div
-                          key={t.id}
-                          onClick={() => { setSelectedTermId(t.id); setShowForm(false); }}
-                          style={{
-                            padding: '8px 12px', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            background: isActive ? '#dbeafe' : 'transparent',
-                            borderBottom: '1px solid var(--color-border)',
-                            borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
-                            transition: 'background 0.1s',
-                          }}
-                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                          onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                        >
-                          <span style={statusDot(t.status)} title={t.status} />
-                          <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.term}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
