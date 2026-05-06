@@ -4,6 +4,7 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { organizations } from './organizations';
 import { people } from './people';
 import { systems } from './systems';
+import { glossaryTerms } from './business-glossary';
 import logger from '../lib/logger';
 
 // ---------------------------------------------------------------------------
@@ -14,7 +15,7 @@ interface SyncConnection {
   id: string;
   orgId: string;
   name: string;
-  targetEntity: 'organizations' | 'people' | 'systems';
+  targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary';
   sourceType: 'DATABASE' | 'CSV_URL' | 'JSON_URL';
   config: {
     // DATABASE
@@ -55,7 +56,7 @@ interface SyncConnection {
 // ---------------------------------------------------------------------------
 
 const SOURCE_TYPES = ['DATABASE', 'CSV_URL', 'JSON_URL'] as const;
-const TARGET_ENTITIES = ['organizations', 'people', 'systems'] as const;
+const TARGET_ENTITIES = ['organizations', 'people', 'systems', 'business-glossary'] as const;
 const DB_TYPES = ['POSTGRESQL', 'MYSQL', 'SQLSERVER'] as const;
 
 const TARGET_FIELD_MAP: Record<string, string[]> = {
@@ -81,6 +82,7 @@ function getEntityStore(targetEntity: string): any[] | null {
     case 'organizations': return organizations;
     case 'people': return people;
     case 'systems': return systems;
+    case 'business-glossary': return glossaryTerms;
     default: return null;
   }
 }
@@ -247,6 +249,19 @@ function applyRow(
     if (!newRecord.name) return 'skipped';
     if (!newRecord.description) newRecord.description = '';
     if (!newRecord.systemType) newRecord.systemType = 'Other';
+  } else if (targetEntity === 'business-glossary') {
+    if (!newRecord.term) return 'skipped';
+    if (!newRecord.definition) newRecord.definition = '';
+    if (!newRecord.category) newRecord.category = 'BUSINESS';
+    if (!newRecord.status) newRecord.status = 'DRAFT';
+    if (!Array.isArray(newRecord.synonyms)) newRecord.synonyms = [];
+    if (!Array.isArray(newRecord.relatedTerms)) newRecord.relatedTerms = [];
+    if (newRecord.domainId === undefined) newRecord.domainId = null;
+    if (newRecord.ownerPersonId === undefined) newRecord.ownerPersonId = null;
+    if (!newRecord.context) newRecord.context = '';
+    if (!newRecord.exampleValues) newRecord.exampleValues = '';
+    if (!newRecord.businessRules) newRecord.businessRules = '';
+    if (!newRecord.sourceOfTruth) newRecord.sourceOfTruth = '';
   }
 
   store.push(newRecord);
@@ -474,8 +489,11 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     }
   }
 
-  // Persist the target entity store
-  saveStore(sc.targetEntity, store);
+  // Persist the target entity store. Most targets share their key name
+  // with the persistence file ("organizations", "people", "systems"), but
+  // glossary lives under "glossaryTerms" so map explicitly when needed.
+  const STORE_KEY_FOR_ENTITY: Record<string, string> = { 'business-glossary': 'glossaryTerms' };
+  saveStore(STORE_KEY_FOR_ENTITY[sc.targetEntity] || sc.targetEntity, store);
 
   // Update sync connection metadata
   sc.lastSyncResult = result;

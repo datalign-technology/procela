@@ -461,4 +461,139 @@ router.post('/bulk-delete', (req: Request, res: Response) => {
   res.json({ success: true, deleted: removed.length });
 });
 
+/**
+ * POST /api/v1/business-glossary/import
+ * Import glossary terms from CSV or a JSON array. orgId is required.
+ *
+ * JSON: { orgId, terms: [{ term, definition?, category?, status?, synonyms?, ... }] }
+ * CSV:  { orgId, csv: "Term,Definition,Category,Status\nClient,A purchaser,BUSINESS,DRAFT" }
+ *
+ * Duplicates (same term name in same org, case-insensitive) are skipped.
+ * Returns { created, skipped, message } so the UI can flag partial imports.
+ */
+router.post('/import', (req: Request, res: Response) => {
+  try {
+    const { orgId, terms: termList, csv } = req.body;
+
+    if (!orgId) {
+      res.status(400).json({ success: false, error: 'Organization is required for import' });
+      return;
+    }
+
+    type ImportRow = {
+      term: string;
+      definition?: string;
+      category?: string;
+      status?: string;
+      synonyms?: string[] | string;
+      context?: string;
+      sourceOfTruth?: string;
+      exampleValues?: string;
+      businessRules?: string;
+    };
+    let rows: ImportRow[] = [];
+
+    if (csv && typeof csv === 'string') {
+      const lines = csv.trim().split('\n');
+      if (lines.length < 2) {
+        res.status(400).json({ success: false, error: 'CSV must have a header row and at least one data row' });
+        return;
+      }
+      const header = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
+      const idx = (...names: string[]) => header.findIndex((h: string) => names.includes(h));
+      const termIdx = idx('term', 'name');
+      const defIdx = idx('definition');
+      const catIdx = idx('category');
+      const statusIdx = idx('status');
+      const synIdx = idx('synonyms');
+      const ctxIdx = idx('context');
+      const sotIdx = idx('source of truth', 'sourceoftruth', 'source_of_truth');
+
+      if (termIdx === -1) {
+        res.status(400).json({ success: false, error: 'CSV must have a "Term" column' });
+        return;
+      }
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map((c: string) => c.trim());
+        if (!cols[termIdx]) continue;
+        rows.push({
+          term: cols[termIdx],
+          definition: defIdx >= 0 ? cols[defIdx] : undefined,
+          category: catIdx >= 0 ? cols[catIdx] : undefined,
+          status: statusIdx >= 0 ? cols[statusIdx] : undefined,
+          synonyms: synIdx >= 0 && cols[synIdx] ? cols[synIdx].split(/[;|]/).map((s) => s.trim()).filter(Boolean) : undefined,
+          context: ctxIdx >= 0 ? cols[ctxIdx] : undefined,
+          sourceOfTruth: sotIdx >= 0 ? cols[sotIdx] : undefined,
+        });
+      }
+    } else if (Array.isArray(termList)) {
+      rows = termList;
+    } else {
+      res.status(400).json({ success: false, error: 'Provide a "terms" array or "csv" string' });
+      return;
+    }
+
+    if (rows.length === 0) {
+      res.status(400).json({ success: false, error: 'No terms to import' });
+      return;
+    }
+
+    const created: StoredGlossaryTerm[] = [];
+    const skipped: string[] = [];
+    const now = new Date().toISOString();
+
+    for (const row of rows) {
+      if (!row.term || !row.term.trim()) continue;
+      const dup = glossaryTerms.find(
+        (t) => t.orgId === orgId && t.term.trim().toLowerCase() === row.term.trim().toLowerCase(),
+      );
+      if (dup) { skipped.push(row.term); continue; }
+
+      const status = (row.status && (VALID_STATUSES as readonly string[]).includes(row.status.toUpperCase()))
+        ? row.status.toUpperCase() as StoredGlossaryTerm['status']
+        : 'DRAFT';
+      const category = (row.category && (VALID_CATEGORIES as readonly string[]).includes(row.category.toUpperCase()))
+        ? row.category.toUpperCase() as StoredGlossaryTerm['category']
+        : 'BUSINESS';
+
+      const newTerm: StoredGlossaryTerm = {
+        id: uuid(),
+        orgId,
+        term: row.term.trim(),
+        definition: row.definition || '',
+        context: row.context || '',
+        synonyms: Array.isArray(row.synonyms) ? row.synonyms : [],
+        relatedTerms: [],
+        domainId: null,
+        ownerPersonId: null,
+        status,
+        category,
+        exampleValues: row.exampleValues || '',
+        businessRules: row.businessRules || '',
+        sourceOfTruth: row.sourceOfTruth || '',
+        createdAt: now,
+        updatedAt: now,
+      };
+      glossaryTerms.push(newTerm);
+      created.push(newTerm);
+    }
+
+    if (created.length > 0) {
+      saveStore('glossaryTerms', glossaryTerms);
+      auditService.log('system', orgId, 'GlossaryTerm', '*', 'IMPORT', null, { count: created.length, skipped: skipped.length });
+    }
+    logger.info({ created: created.length, skipped: skipped.length, orgId }, 'Imported glossary terms');
+    res.status(201).json({
+      success: true,
+      data: created.map(enrichTerm),
+      skipped: skipped.length,
+      message: skipped.length > 0 ? `Imported ${created.length} terms; skipped ${skipped.length} duplicate${skipped.length !== 1 ? 's' : ''}.` : `Imported ${created.length} terms.`,
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'Glossary import failed');
+    res.status(500).json({ success: false, error: err?.message || 'Import failed' });
+  }
+});
+
 export default router;

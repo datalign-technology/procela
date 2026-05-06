@@ -6,7 +6,7 @@ import { useOrgContext } from '../stores/orgContext';
 interface SyncConnectionWizardProps {
   open: boolean;
   onClose: () => void;
-  targetEntity: 'organizations' | 'people' | 'systems';
+  targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary';
   orgId: string;
   onCreated: () => void;
 }
@@ -35,12 +35,21 @@ const TARGET_FIELDS: Record<string, { key: string; label: string; required?: boo
     { key: 'vendor', label: 'Vendor' },
     { key: 'businessCriticality', label: 'Business Criticality' },
   ],
+  'business-glossary': [
+    { key: 'term', label: 'Term', required: true },
+    { key: 'definition', label: 'Definition' },
+    { key: 'category', label: 'Category' },
+    { key: 'status', label: 'Status' },
+    { key: 'sourceOfTruth', label: 'Source of Truth' },
+    { key: 'context', label: 'Context' },
+  ],
 };
 
 const DEFAULT_MATCH_KEY: Record<string, string> = {
   organizations: 'name',
   people: 'email',
   systems: 'name',
+  'business-glossary': 'term',
 };
 
 const INTERVALS = [
@@ -55,6 +64,7 @@ const ENTITY_LABELS: Record<string, string> = {
   organizations: 'Organizations',
   people: 'People',
   systems: 'Systems',
+  'business-glossary': 'Glossary Terms',
 };
 
 const inputStyle: React.CSSProperties = {

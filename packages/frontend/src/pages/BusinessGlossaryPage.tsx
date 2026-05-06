@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
+import SyncConnectionWizard from '../components/SyncConnectionWizard';
 
 // ── Types ──
 
@@ -209,6 +210,42 @@ export default function BusinessGlossaryPage() {
   const [showGeneratePreview, setShowGeneratePreview] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [detectedIndustry, setDetectedIndustry] = useState<string | null>(null);
+
+  // Import + Connect-to-Source
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
+  const [showSync, setShowSync] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImport = async () => {
+    if (!importText.trim()) return;
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    try {
+      const body: { orgId: string; csv?: string; terms?: unknown[] } = { orgId: activeOrgId };
+      if (importFormat === 'csv') body.csv = importText;
+      else body.terms = JSON.parse(importText);
+      const res = await apiClient.post<{ success: boolean; data: GlossaryTerm[]; skipped?: number; message?: string }>('/business-glossary/import', body);
+      addToast(res.skipped && res.skipped > 0 ? 'info' : 'success', res.message || `Imported ${res.data?.length || 0} terms`);
+      setShowImport(false);
+      setImportText('');
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Import failed');
+    }
+  };
+
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImportText(reader.result as string);
+      if (file.name.endsWith('.json')) setImportFormat('json');
+      if (file.name.endsWith('.csv')) setImportFormat('csv');
+    };
+    reader.readAsText(file);
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -443,6 +480,8 @@ export default function BusinessGlossaryPage() {
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
+          {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
+          {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
           {canWrite && terms.length === 0 && (
             <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
           )}
@@ -461,6 +500,57 @@ export default function BusinessGlossaryPage() {
         confirmLabel="Delete"
         onConfirm={handleBulkDelete}
         onCancel={() => setConfirmBulkDelete(false)} />
+
+      {/* Import Panel */}
+      {showImport && (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Glossary Terms</h3>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Paste CSV or JSON, or browse a file. Format is auto-detected.
+              </span>
+            </div>
+            <button onClick={() => { setShowImport(false); setImportText(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
+          </div>
+          {!activeOrgId && (
+            <div style={{ background: '#fef3c7', padding: '8px 12px', borderRadius: 4, fontSize: 12, color: '#92400e', marginBottom: 10 }}>
+              Select an organization from the "Working in" dropdown before importing.
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input ref={fileInputRef} type="file" accept=".csv,.json,.txt" onChange={handleFileRead} style={{ display: 'none' }} />
+            <button style={{ ...btnSecondary, padding: '4px 10px', fontSize: 11 }} onClick={() => fileInputRef.current?.click()}>Browse File</button>
+          </div>
+          <textarea
+            style={{ ...inputStyle, width: '100%', minHeight: 120, fontFamily: 'var(--font-mono)', fontSize: 11 }}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder={'Term,Definition,Category,Status\nCustomer Lifetime Value,Total expected revenue from a customer over the relationship,METRIC,DRAFT'}
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>
+              CSV columns: Term (required), Definition, Category, Status, Synonyms (; or | separated), Context, Source of Truth
+            </span>
+            <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
+            <button
+              style={{ ...btnPrimary, opacity: !importText.trim() || !activeOrgId ? 0.6 : 1, cursor: !importText.trim() || !activeOrgId ? 'not-allowed' : 'pointer' }}
+              disabled={!importText.trim() || !activeOrgId}
+              onClick={handleImport}
+            >
+              Import
+            </button>
+          </div>
+        </div>
+      )}
+
+      <SyncConnectionWizard
+        open={showSync}
+        onClose={() => setShowSync(false)}
+        targetEntity="business-glossary"
+        orgId={activeOrgId || ''}
+        onCreated={fetchData}
+      />
 
       {/* Two-column layout: Categories sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
