@@ -137,6 +137,7 @@ export default function SystemsPage() {
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
   const [filterType, setFilterType] = useState('');
   const [filterCriticality, setFilterCriticality] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -336,6 +337,15 @@ export default function SystemsPage() {
     if (filterType === '__none__' && s.systemType) return false;
     if (filterType && filterType !== '__none__' && s.systemType !== filterType) return false;
     if (filterCriticality && (s.businessCriticality || '') !== filterCriticality) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !s.name.toLowerCase().includes(q) &&
+        !(s.description || '').toLowerCase().includes(q) &&
+        !(s.vendor || '').toLowerCase().includes(q) &&
+        !(s.systemType || '').toLowerCase().includes(q)
+      ) return false;
+    }
     return true;
   });
 
@@ -478,15 +488,22 @@ export default function SystemsPage() {
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Search systems..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+              />
               <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
                 <option value="">All Criticality</option>
                 <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
                 <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
                 <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
               </select>
-              {filterCriticality && (
+              {(filterCriticality || searchQuery) && (
                 <button
-                  onClick={() => setFilterCriticality('')}
+                  onClick={() => { setFilterCriticality(''); setSearchQuery(''); }}
                   style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
                 >
                   Clear Filters
