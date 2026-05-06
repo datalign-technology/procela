@@ -5,6 +5,7 @@ import { organizations } from './organizations';
 import { people } from './people';
 import { systems } from './systems';
 import { glossaryTerms } from './business-glossary';
+import { connections } from './connections';
 import logger from '../lib/logger';
 
 // ---------------------------------------------------------------------------
@@ -17,6 +18,12 @@ interface SyncConnection {
   name: string;
   targetEntity: 'organizations' | 'people' | 'systems' | 'business-glossary';
   sourceType: 'DATABASE' | 'CSV_URL' | 'JSON_URL';
+  /** Optional reference to a saved Connection profile in the admin
+   *  Connections area. When set, the sync resolves host/port/credentials
+   *  from the profile at run time and `config` only carries source-
+   *  specific overrides (table, query, URL path suffix, etc.). When
+   *  null, the sync owns its config inline. */
+  connectionId: string | null;
   config: {
     // DATABASE
     dbType?: 'POSTGRESQL' | 'MYSQL' | 'SQLSERVER';
@@ -73,9 +80,64 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 export const syncConnections: SyncConnection[] = loadStore<SyncConnection>('syncConnections');
 
+// Backfill connectionId on legacy rows so consumers can rely on the
+// field existing. null = inline (no saved-connection reference).
+let connectionIdMigrated = false;
+for (const sc of syncConnections) {
+  if (sc.connectionId === undefined) {
+    sc.connectionId = null;
+    connectionIdMigrated = true;
+  }
+}
+if (connectionIdMigrated) saveStore('syncConnections', syncConnections);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Build the effective config a sync run will use. When a `connectionId`
+ * is set, we overlay the saved Connection profile's host/port/database/
+ * baseUrl/auth on top of the sync's own config so the source can be
+ * fetched without re-entering credentials per sync. Sync-owned fields
+ * (table, query, URL path) always win — those are sync-specific even
+ * when the underlying server isn't.
+ *
+ * For URL-based syncs we synthesize an Authorization header from saved
+ * credentials (apiKey or token) when the sync didn't already set one.
+ * Returns the original config unchanged if the connection ref is dead.
+ */
+function resolveEffectiveConfig(sc: SyncConnection): SyncConnection['config'] {
+  if (!sc.connectionId) return sc.config;
+  const conn = connections.find((c) => c.id === sc.connectionId);
+  if (!conn) return sc.config;
+
+  const merged: SyncConnection['config'] = { ...sc.config };
+  if (sc.sourceType === 'DATABASE') {
+    if (conn.config.dbType && !merged.dbType) merged.dbType = conn.config.dbType as any;
+    if (conn.config.host && !merged.host) merged.host = conn.config.host;
+    if (conn.config.port && !merged.port) merged.port = conn.config.port;
+    if (conn.config.database && !merged.database) merged.database = conn.config.database;
+    if (conn.config.schema && !merged.schema) merged.schema = conn.config.schema;
+  } else {
+    // CSV_URL / JSON_URL — pull baseUrl when sync didn't carry its own
+    if (conn.config.baseUrl && !merged.url) merged.url = conn.config.baseUrl;
+    if (!merged.authHeader) {
+      const cred = conn.credentials || {};
+      if (cred.apiKey) merged.authHeader = `Bearer ${cred.apiKey}`;
+      else if (cred.token) merged.authHeader = `Bearer ${cred.token}`;
+      else if (cred.username && cred.password) {
+        merged.authHeader = `Basic ${Buffer.from(`${cred.username}:${cred.password}`).toString('base64')}`;
+      }
+    }
+  }
+  return merged;
+}
+
+function isConnectionCompatible(conn: { connectionType: string }, sourceType: string): boolean {
+  if (sourceType === 'DATABASE') return conn.connectionType === 'DATABASE' || conn.connectionType === 'DATA_WAREHOUSE';
+  return conn.connectionType === 'API' || conn.connectionType === 'FILE_STORAGE';
+}
 
 function getEntityStore(targetEntity: string): any[] | null {
   switch (targetEntity) {
@@ -305,7 +367,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/sync-connections — create new sync connection */
 router.post('/', (req: Request, res: Response) => {
-  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId } = req.body;
+  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId, connectionId } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -323,6 +385,17 @@ router.post('/', (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'matchKey is required' });
     return;
   }
+  if (connectionId) {
+    const conn = connections.find((c) => c.id === connectionId);
+    if (!conn) {
+      res.status(400).json({ success: false, error: `connectionId ${connectionId} not found` });
+      return;
+    }
+    if (!isConnectionCompatible(conn, sourceType)) {
+      res.status(400).json({ success: false, error: `connection type ${conn.connectionType} is not compatible with sourceType ${sourceType}` });
+      return;
+    }
+  }
 
   const now = new Date().toISOString();
   const intervalMinutes = schedule?.intervalMinutes || 360;
@@ -333,6 +406,7 @@ router.post('/', (req: Request, res: Response) => {
     name,
     targetEntity,
     sourceType,
+    connectionId: connectionId || null,
     config: config || {},
     fieldMapping: fieldMapping || {},
     matchKey,
@@ -362,7 +436,7 @@ router.put('/:id', (req: Request, res: Response) => {
     return;
   }
 
-  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, status } = req.body;
+  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, status, connectionId } = req.body;
 
   if (name !== undefined) sc.name = name;
   if (targetEntity !== undefined) {
@@ -378,6 +452,22 @@ router.put('/:id', (req: Request, res: Response) => {
       return;
     }
     sc.sourceType = sourceType;
+  }
+  if (connectionId !== undefined) {
+    if (connectionId === null || connectionId === '') {
+      sc.connectionId = null;
+    } else {
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn) {
+        res.status(400).json({ success: false, error: `connectionId ${connectionId} not found` });
+        return;
+      }
+      if (!isConnectionCompatible(conn, sc.sourceType)) {
+        res.status(400).json({ success: false, error: `connection type ${conn.connectionType} is not compatible with sourceType ${sc.sourceType}` });
+        return;
+      }
+      sc.connectionId = connectionId;
+    }
   }
   if (config !== undefined) sc.config = { ...sc.config, ...config };
   if (fieldMapping !== undefined) sc.fieldMapping = fieldMapping;
@@ -449,7 +539,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
       simulated = true;
     } else {
       // CSV_URL or JSON_URL — attempt real fetch
-      rows = await fetchUrlRows(sc.sourceType, sc.config);
+      rows = await fetchUrlRows(sc.sourceType, resolveEffectiveConfig(sc));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown fetch error';
@@ -538,7 +628,7 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
       rows = generateMockRows(sc.targetEntity, sc.fieldMapping);
       simulated = true;
     } else {
-      rows = await fetchUrlRows(sc.sourceType, sc.config);
+      rows = await fetchUrlRows(sc.sourceType, resolveEffectiveConfig(sc));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown fetch error';

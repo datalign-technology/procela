@@ -85,6 +85,22 @@ const STEPS = ['Source', 'Connect', 'Map Fields', 'Schedule', 'Review'];
 
 interface OrgOption { id: string; name: string; type: string }
 
+interface ConnectionOption {
+  id: string;
+  name: string;
+  connectionType: string;
+  status?: string;
+  systemId?: string;
+  config?: { host?: string; port?: number; database?: string; baseUrl?: string };
+}
+
+type ConnectionMode = 'saved' | 'inline';
+
+function isCompatibleConnection(c: ConnectionOption, sourceType: SourceType): boolean {
+  if (sourceType === 'DATABASE') return c.connectionType === 'DATABASE' || c.connectionType === 'DATA_WAREHOUSE';
+  return c.connectionType === 'API' || c.connectionType === 'FILE_STORAGE';
+}
+
 export default function SyncConnectionWizard({ open, onClose, targetEntity, orgId, onCreated }: SyncConnectionWizardProps) {
   const { addToast } = useToastStore();
   const { orgs: contextOrgs } = useOrgContext();
@@ -105,7 +121,11 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
       .catch(() => setOrgList(contextOrgs.map((o) => ({ id: o.id, name: o.name, type: o.type || 'company' }))));
   }, [open, orgId, contextOrgs]);
 
-  // Step 2
+  // Step 2 — connection mode + saved/inline fields
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('saved');
+  const [savedConnectionId, setSavedConnectionId] = useState('');
+  const [saveAsConnection, setSaveAsConnection] = useState(false);
+  const [allConnections, setAllConnections] = useState<ConnectionOption[]>([]);
   const [dbType, setDbType] = useState<DbType>('POSTGRESQL');
   const [host, setHost] = useState('');
   const [port, setPort] = useState('5432');
@@ -115,6 +135,33 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
   const [authHeader, setAuthHeader] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    apiClient
+      .get<{ success: boolean; data: ConnectionOption[] }>(`/connections${orgId ? `?orgId=${orgId}` : ''}`)
+      .then((res) => setAllConnections(res.data || []))
+      .catch(() => setAllConnections([]));
+  }, [open, orgId]);
+
+  // If switching source types makes the previously selected connection
+  // incompatible, clear it so we don't submit a stale reference.
+  useEffect(() => {
+    if (!savedConnectionId) return;
+    const sel = allConnections.find((c) => c.id === savedConnectionId);
+    if (!sel || !isCompatibleConnection(sel, sourceType)) setSavedConnectionId('');
+  }, [sourceType, allConnections, savedConnectionId]);
+
+  const compatibleConnections = allConnections.filter((c) => isCompatibleConnection(c, sourceType));
+
+  // No saved connections → fall back to inline so the user isn't stuck on
+  // an empty dropdown they can't satisfy without leaving the wizard.
+  useEffect(() => {
+    if (!open) return;
+    if (compatibleConnections.length === 0 && connectionMode === 'saved') {
+      setConnectionMode('inline');
+    }
+  }, [open, compatibleConnections.length, connectionMode]);
 
   // Step 3
   const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
@@ -132,6 +179,14 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
   const canAdvance = (): boolean => {
     if (step === 0) return name.trim().length > 0 && targetOrgId.length > 0;
     if (step === 1) {
+      if (connectionMode === 'saved') {
+        // A saved connection covers host/port/credentials. We still need
+        // the source-specific fields the connection profile doesn't
+        // capture: which table/query, or which path under baseUrl.
+        if (!savedConnectionId) return false;
+        if (sourceType === 'DATABASE') return table.trim().length > 0;
+        return true;
+      }
       if (sourceType === 'DATABASE') return host.trim().length > 0 && database.trim().length > 0 && table.trim().length > 0;
       return url.trim().length > 0;
     }
@@ -146,17 +201,53 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
     setCreating(true);
     try {
       const config: Record<string, any> = {};
-      if (sourceType === 'DATABASE') {
-        config.dbType = dbType;
-        config.host = host;
-        config.port = Number(port) || 5432;
-        config.database = database;
-        config.schema = schema || 'public';
-        config.table = table;
-        if (query.trim()) config.query = query;
+      let connectionId: string | null = null;
+
+      if (connectionMode === 'saved') {
+        connectionId = savedConnectionId;
+        // Sync still owns table/query (DB) or any URL fragment that the
+        // saved baseUrl doesn't cover. Everything else comes from the
+        // referenced connection at run time via resolveEffectiveConfig.
+        if (sourceType === 'DATABASE') {
+          if (table.trim()) config.table = table;
+          if (query.trim()) config.query = query;
+        } else if (url.trim()) {
+          // Allow a sync to override baseUrl with a fully qualified URL.
+          config.url = url;
+        }
       } else {
-        config.url = url;
-        if (authHeader.trim()) config.authHeader = authHeader;
+        if (sourceType === 'DATABASE') {
+          config.dbType = dbType;
+          config.host = host;
+          config.port = Number(port) || 5432;
+          config.database = database;
+          config.schema = schema || 'public';
+          config.table = table;
+          if (query.trim()) config.query = query;
+        } else {
+          config.url = url;
+          if (authHeader.trim()) config.authHeader = authHeader;
+        }
+
+        if (saveAsConnection) {
+          // Promote the inline definition to a reusable Connection profile
+          // before creating the sync, so future syncs can pick it up.
+          try {
+            const saved = await apiClient.post<{ success: boolean; data: { id: string } }>('/connections', {
+              orgId: targetOrgId,
+              name: `${name.trim()} (saved)`,
+              connectionType: sourceType === 'DATABASE' ? 'DATABASE' : 'API',
+              config: sourceType === 'DATABASE'
+                ? { dbType, host, port: Number(port) || 5432, database, schema: schema || 'public' }
+                : { baseUrl: url },
+              credentials: {},
+            });
+            if (saved?.data?.id) connectionId = saved.data.id;
+          } catch {
+            // Non-fatal: fall through and create the sync inline only.
+            addToast('error', 'Could not save inline connection — sync will use inline credentials only.');
+          }
+        }
       }
 
       const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/sync-connections', {
@@ -164,6 +255,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
         name: name.trim(),
         targetEntity,
         sourceType,
+        connectionId,
         config,
         fieldMapping,
         matchKey,
@@ -273,7 +365,65 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
         )}
 
         {/* Step 2: Connection Details */}
-        {step === 1 && sourceType === 'DATABASE' && (
+        {step === 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 6, padding: 4, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+              <button
+                type="button"
+                onClick={() => setConnectionMode('saved')}
+                disabled={compatibleConnections.length === 0}
+                style={{
+                  flex: 1, padding: '6px 12px', fontSize: 12, fontWeight: 500, border: 'none', cursor: compatibleConnections.length === 0 ? 'not-allowed' : 'pointer',
+                  borderRadius: 'var(--radius-sm)',
+                  background: connectionMode === 'saved' ? 'var(--color-surface)' : 'transparent',
+                  color: connectionMode === 'saved' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  boxShadow: connectionMode === 'saved' ? 'var(--shadow-sm)' : 'none',
+                  opacity: compatibleConnections.length === 0 ? 0.5 : 1,
+                }}
+                title={compatibleConnections.length === 0 ? 'No compatible saved connections — define one in the Connections page first' : 'Reuse a connection profile'}
+              >
+                Use saved connection {compatibleConnections.length > 0 && `(${compatibleConnections.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConnectionMode('inline')}
+                style={{
+                  flex: 1, padding: '6px 12px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+                  borderRadius: 'var(--radius-sm)',
+                  background: connectionMode === 'inline' ? 'var(--color-surface)' : 'transparent',
+                  color: connectionMode === 'inline' ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  boxShadow: connectionMode === 'inline' ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                Define inline
+              </button>
+            </div>
+
+            {connectionMode === 'saved' && (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Saved Connection *</label>
+                <select style={selectStyle} value={savedConnectionId} onChange={(e) => setSavedConnectionId(e.target.value)}>
+                  <option value="">-- Select a saved connection --</option>
+                  {compatibleConnections.map((c) => {
+                    const detail = c.config?.host
+                      ? `${c.config.host}${c.config.port ? `:${c.config.port}` : ''}${c.config.database ? `/${c.config.database}` : ''}`
+                      : c.config?.baseUrl || '';
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} — {c.connectionType}{detail ? ` (${detail})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', display: 'block', marginTop: 4 }}>
+                  Host, credentials, and base URL are read from the saved connection at sync time.
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 1 && sourceType === 'DATABASE' && connectionMode === 'inline' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Database Type</label>
@@ -315,7 +465,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           </div>
         )}
 
-        {step === 1 && (sourceType === 'CSV_URL' || sourceType === 'JSON_URL') && (
+        {step === 1 && (sourceType === 'CSV_URL' || sourceType === 'JSON_URL') && connectionMode === 'inline' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>URL *</label>
@@ -327,6 +477,43 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Sent as the Authorization header on each request</span>
             </div>
           </div>
+        )}
+
+        {step === 1 && sourceType === 'DATABASE' && connectionMode === 'saved' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Table *</label>
+              <input style={inputStyle} value={table} onChange={(e) => setTable(e.target.value)} placeholder="e.g. employees, org_units" />
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Which table on the saved connection to read from</span>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Custom Query (optional)</label>
+              <textarea style={{ ...inputStyle, minHeight: 50, fontFamily: 'var(--font-mono, monospace)', fontSize: 12 }} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SELECT * FROM employees WHERE active = true" />
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Overrides the table setting. Use this for filtered or joined data.</span>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && (sourceType === 'CSV_URL' || sourceType === 'JSON_URL') && connectionMode === 'saved' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Override URL (optional)</label>
+              <input style={inputStyle} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Leave blank to use the saved connection's base URL" />
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Useful when one base URL serves multiple endpoints</span>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && connectionMode === 'inline' && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={saveAsConnection} onChange={(e) => setSaveAsConnection(e.target.checked)} style={{ marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>Save as a reusable connection</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Promote this inline definition to a Connection profile so future syncs can pick it up.
+              </div>
+            </div>
+          </label>
         )}
 
         {/* Step 3: Field Mapping */}
@@ -398,7 +585,16 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Connection</div>
               <div style={{ fontSize: 13, fontWeight: 500 }}>{name}</div>
               <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                {sourceType === 'DATABASE' ? `${dbType} → ${host}:${port}/${database}.${table}` : url}
+                {connectionMode === 'saved'
+                  ? (() => {
+                      const sel = compatibleConnections.find((c) => c.id === savedConnectionId);
+                      const base = sel ? `Using saved: ${sel.name}` : 'Using saved connection';
+                      if (sourceType === 'DATABASE') return `${base} · table ${table}${query ? ' (custom query)' : ''}`;
+                      return url ? `${base} · ${url}` : base;
+                    })()
+                  : sourceType === 'DATABASE'
+                    ? `${dbType} → ${host}:${port}/${database}.${table}${saveAsConnection ? ' · will save as connection' : ''}`
+                    : `${url}${saveAsConnection ? ' · will save as connection' : ''}`}
               </div>
             </div>
             <div style={{ padding: '12px 14px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
