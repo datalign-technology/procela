@@ -131,7 +131,6 @@ export default function AgentsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
@@ -315,9 +314,6 @@ export default function AgentsPage() {
             <option value="">All organizations</option>
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          {agents.length > 0 && (
-            <IconButton icon="trash" label="Delete all agents" variant="danger" onClick={() => setShowDeleteAll(true)} />
-          )}
           {filtered.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('agents.csv', ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'], filtered.map((a) => [
@@ -505,21 +501,6 @@ export default function AgentsPage() {
           </button>
         </div>
       )}
-
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Agents?"
-        message={`This will permanently delete all ${agents.length} agents. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/agents/all');
-          setSelectedIds(new Set());
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
 
       <ConfirmDialog
         open={confirmBulkDelete}

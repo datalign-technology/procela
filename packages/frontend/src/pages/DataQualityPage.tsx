@@ -208,7 +208,6 @@ export default function DataQualityPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterAssetId, setFilterAssetId] = useState('');
@@ -518,10 +517,6 @@ export default function DataQualityPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {rules.length > 0 && canWrite && (
-            <IconButton icon="trash" label="Delete all rules" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
           {rules.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-quality-rules.csv', ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'], rules.map((r) => [
@@ -768,20 +763,6 @@ export default function DataQualityPage() {
       )}
 
       {/* Confirm dialogs */}
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Quality Rules?"
-        message={`This will permanently delete all ${rules.length} quality rules. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/data-quality/all');
-          setSelectedRuleIds(new Set());
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
       <ConfirmDialog
         open={!!confirmDelete}
         title="Delete Quality Rule?"

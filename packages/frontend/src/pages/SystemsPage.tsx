@@ -148,7 +148,6 @@ export default function SystemsPage() {
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -391,10 +390,6 @@ export default function SystemsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {systems.length > 0 && (
-            <IconButton icon="trash" label="Delete all systems" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
-          {systems.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('systems.csv', ['Name', 'Type', 'Description'], systems.map((s) => [s.name, s.systemType, s.description]))} />
           )}
@@ -622,21 +617,6 @@ export default function SystemsPage() {
           </button>
         </div>
       )}
-
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Systems?"
-        message={`This will permanently delete all ${systems.length} systems. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/systems/all');
-          setSelectedIds(new Set());
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
 
       <ConfirmDialog
         open={confirmDelete !== null}

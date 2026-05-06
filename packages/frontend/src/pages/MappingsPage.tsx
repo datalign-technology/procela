@@ -138,7 +138,6 @@ export default function MappingsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [showBatchWizard, setShowBatchWizard] = useState(false);
@@ -307,10 +306,6 @@ export default function MappingsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {mappings.length > 0 && canWrite && (
-            <IconButton icon="trash" label="Delete all mappings" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
           {mappings.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('mappings.csv', ['Process Step', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'], mappings.map((m) => [
@@ -555,21 +550,6 @@ export default function MappingsPage() {
           </button>
         </div>
       )}
-
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Mappings?"
-        message={`This will permanently delete all ${mappings.length} mappings. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/mappings/all');
-          setSelectedIds(new Set());
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
 
       <ConfirmDialog
         open={confirmDelete !== null}

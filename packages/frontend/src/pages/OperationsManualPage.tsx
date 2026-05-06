@@ -61,7 +61,6 @@ export default function OperationsManualPage() {
   const [newManualLabel, setNewManualLabel] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
@@ -124,12 +123,6 @@ export default function OperationsManualPage() {
     setSelectedIds(new Set()); setConfirmBulkDelete(false);
     addToast('success', `Deleted ${count} manual${count === 1 ? '' : 's'}`); await fetchManuals();
   };
-  const handleDeleteAll = async () => {
-    const count = manuals.length;
-    await Promise.all(manuals.map((m) => apiClient.delete(`/operations-manuals/${m.id}`)));
-    setSelectedIds(new Set()); setShowDeleteAll(false);
-    addToast('success', `Deleted ${count} manual${count === 1 ? '' : 's'}`); await fetchManuals();
-  };
   const toggleSelectAll = () => {
     setSelectedIds(selectedIds.size === manuals.length ? new Set() : new Set(manuals.map((m) => m.id)));
   };
@@ -186,7 +179,6 @@ export default function OperationsManualPage() {
           </p>
         ) : undefined}
         actions={<>
-          {manuals.length > 0 && canWrite && <IconButton icon="trash" label="Delete all manuals" variant="danger" onClick={() => setShowDeleteAll(true)} />}
           <button style={btnSecondary} onClick={handleSeed} disabled={seeding}>{seedLabel}</button>
           {canWrite && <button style={btnPrimary} onClick={() => setShowAddManual(true)}>+ Add Manual</button>}
         </>}
@@ -359,9 +351,6 @@ export default function OperationsManualPage() {
           <ConfirmDialog open={confirmBulkDelete} title="Delete Selected Manuals"
             message={`This will permanently delete ${selectedIds.size} manual${selectedIds.size === 1 ? '' : 's'}. This cannot be undone.`}
             confirmLabel="Delete" variant="danger" onConfirm={handleBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
-          <ConfirmDialog open={showDeleteAll} title="Delete All Manuals?"
-            message={`This will permanently delete all ${manuals.length} manual${manuals.length === 1 ? '' : 's'}. This cannot be undone.`}
-            confirmLabel="Delete All" variant="danger" onConfirm={handleDeleteAll} onCancel={() => setShowDeleteAll(false)} />
           {showAddManual && renderAddManualDialog()}
         </>
       )}

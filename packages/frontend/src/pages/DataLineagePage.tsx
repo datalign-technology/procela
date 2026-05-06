@@ -190,7 +190,6 @@ export default function DataLineagePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -346,10 +345,6 @@ export default function DataLineagePage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {links.length > 0 && (
-            <IconButton icon="trash" label="Delete all flows" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
-          {links.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-lineage.csv', ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'], links.map((l) => [
                 l.sourceSystemName,
@@ -449,21 +444,6 @@ export default function DataLineagePage() {
       )}
 
       {/* Confirm dialogs */}
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Lineage Flows?"
-        message={`This will permanently delete all ${links.length} lineage flows. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/data-lineage/all');
-          setSelectedIds(new Set());
-          fetchData();
-          if (viewMode === 'visualization') fetchVisualization();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
       <ConfirmDialog
         open={!!confirmDelete}
         title="Delete Lineage Flow?"

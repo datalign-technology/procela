@@ -275,7 +275,6 @@ export default function DataAssetsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
@@ -755,10 +754,6 @@ export default function DataAssetsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {assets.length > 0 && canWrite && (
-            <IconButton icon="trash" label="Delete all data assets" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
           {assets.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-assets.csv', ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'], assets.map((a) => [
@@ -1170,21 +1165,6 @@ export default function DataAssetsPage() {
           </button>
         </div>
       )}
-
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Data Assets?"
-        message={`This will permanently delete all ${assets.length} data assets. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/data-assets/all');
-          setSelectedIds(new Set());
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
 
       <ConfirmDialog
         open={confirmDelete !== null}
