@@ -294,7 +294,7 @@ export default function BusinessGlossaryPage() {
       }
       closeForm(); fetchData();
     } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to save term');
+      addToast('error', err?.message || err?.response?.data?.error || 'Failed to save term');
     }
   };
 
@@ -305,7 +305,7 @@ export default function BusinessGlossaryPage() {
       await apiClient.put(`/business-glossary/${id}`, { [field]: value });
       fetchData();
     } catch (err: any) {
-      addToast('error', err?.response?.data?.error || `Failed to update ${field}`);
+      addToast('error', err?.message || err?.response?.data?.error || `Failed to update ${field}`);
     }
   };
 
@@ -554,11 +554,27 @@ export default function BusinessGlossaryPage() {
           {showForm && (
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Term' : 'Add New Term'}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={labelStyle}>Term *</label>
-                  <input autoFocus style={inputStyle} value={form.term} onChange={(e) => setForm({ ...form, term: e.target.value })} placeholder="e.g. Customer Lifetime Value" />
-                </div>
+              {(() => {
+                const trimmed = form.term.trim().toLowerCase();
+                const isDuplicate = !!trimmed && terms.some((t) => t.id !== editingId && t.term.trim().toLowerCase() === trimmed);
+                return (
+                  <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Term *</label>
+                      <input
+                        autoFocus
+                        style={{ ...inputStyle, borderColor: isDuplicate ? '#fca5a5' : (inputStyle.border as string)?.includes('var') ? undefined : undefined }}
+                        value={form.term}
+                        onChange={(e) => setForm({ ...form, term: e.target.value })}
+                        placeholder="e.g. Customer Lifetime Value"
+                      />
+                      {isDuplicate && (
+                        <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>
+                          A term with this name already exists in this organization.
+                        </div>
+                      )}
+                    </div>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={labelStyle}>Definition *</label>
                   <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.definition} onChange={(e) => setForm({ ...form, definition: e.target.value })} placeholder="Plain-language definition..." />
@@ -609,14 +625,20 @@ export default function BusinessGlossaryPage() {
                   <label style={labelStyle}>Example Values</label>
                   <input style={inputStyle} value={form.exampleValues} onChange={(e) => setForm({ ...form, exampleValues: e.target.value })} placeholder="e.g. $12,500" />
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-                <button style={btnSecondary} onClick={closeForm}>Cancel</button>
-                <button style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim()) ? 0.6 : 1 }}
-                  disabled={!form.term.trim() || !form.definition.trim()} onClick={handleSave}>
-                  {editingId ? 'Save Changes' : 'Add Term'}
-                </button>
-              </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+                    <button style={btnSecondary} onClick={closeForm}>Cancel</button>
+                    <button
+                      style={{ ...btnPrimary, opacity: (!form.term.trim() || !form.definition.trim() || isDuplicate) ? 0.6 : 1, cursor: (!form.term.trim() || !form.definition.trim() || isDuplicate) ? 'not-allowed' : 'pointer' }}
+                      disabled={!form.term.trim() || !form.definition.trim() || isDuplicate}
+                      onClick={handleSave}
+                    >
+                      {editingId ? 'Save Changes' : 'Add Term'}
+                    </button>
+                  </div>
+                </>
+                );
+              })()}
             </div>
           )}
 

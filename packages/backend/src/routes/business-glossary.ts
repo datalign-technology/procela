@@ -272,6 +272,17 @@ router.put('/:id', (req: Request, res: Response) => {
     exampleValues, businessRules, sourceOfTruth,
   } = req.body;
 
+  if (term !== undefined && term.trim().toLowerCase() !== existing.term.trim().toLowerCase()) {
+    const duplicate = glossaryTerms.find(
+      (t) => t.id !== existing.id
+        && t.orgId === existing.orgId
+        && t.term.trim().toLowerCase() === term.trim().toLowerCase(),
+    );
+    if (duplicate) {
+      res.status(409).json({ success: false, error: `A glossary term "${term}" already exists in this organization` });
+      return;
+    }
+  }
   if (term !== undefined) existing.term = term;
   if (definition !== undefined) existing.definition = definition;
   if (context !== undefined) existing.context = context;
