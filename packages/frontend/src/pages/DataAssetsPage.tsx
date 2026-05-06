@@ -26,16 +26,28 @@ interface DataAssetEntity {
   name: string;
   description: string;
   systemId: string;
+  /** @deprecated free-text owner; prefer ownerPersonId */
   owner?: string;
+  ownerPersonId?: string | null;
   stewardIds?: string[];
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
+  healthScoreAt?: string | null;
   dataClassification?: string;
+  /** Content classification (Master/Reference/Transactional/Analytical/Metadata). */
+  dataType?: string;
+  /** @deprecated mixed-axis legacy enum; replaced by dataType. */
   category?: string;
+  /** @deprecated free-text retention; prefer retentionDuration + retentionReason */
   retentionPolicy?: string;
+  retentionDuration?: { value: number; unit: 'DAYS' | 'MONTHS' | 'YEARS' };
+  retentionReason?: string;
   refreshFrequency?: string;
+  /** @deprecated use bindings */
   sourceConnectionId?: string;
+  /** @deprecated use bindings */
   sourceAsset?: string;
+  /** @deprecated use bindings */
   sourceColumn?: string;
   createdAt: string;
   updatedAt: string;
@@ -137,13 +149,15 @@ interface FormData {
   name: string;
   description: string;
   systemId: string;
-  owner: string;
+  ownerPersonId: string;
   stewardIds: string[];
   governanceTier: string;
   domainId: string;
-  category: string;
+  dataType: string;
   dataClassification: string;
-  retentionPolicy: string;
+  retentionDurationValue: string;
+  retentionDurationUnit: 'DAYS' | 'MONTHS' | 'YEARS' | '';
+  retentionReason: string;
   refreshFrequency: string;
   sourceConnectionId: string;
   sourceAsset: string;
@@ -154,13 +168,15 @@ const emptyForm: FormData = {
   name: '',
   description: '',
   systemId: '',
-  owner: '',
+  ownerPersonId: '',
   stewardIds: [],
   governanceTier: 'BRONZE',
   domainId: '',
-  category: '',
+  dataType: '',
   dataClassification: '',
-  retentionPolicy: '',
+  retentionDurationValue: '',
+  retentionDurationUnit: '',
+  retentionReason: '',
   refreshFrequency: '',
   sourceConnectionId: '',
   sourceAsset: '',
@@ -388,8 +404,8 @@ export default function DataAssetsPage() {
 
   const filteredAssets = assets.filter((a) => {
     if (filterCategory) {
-      if (filterCategory === '__none__') { if (a.category) return false; }
-      else if ((a.category || '') !== filterCategory) return false;
+      if (filterCategory === '__none__') { if (a.dataType) return false; }
+      else if ((a.dataType || '') !== filterCategory) return false;
     }
     if (filterTier && (a.governanceTier || 'BRONZE') !== filterTier) return false;
     if (filterSystemId && a.systemId !== filterSystemId) return false;
@@ -488,13 +504,15 @@ export default function DataAssetsPage() {
       name: asset.name,
       description: asset.description,
       systemId: asset.systemId,
-      owner: asset.owner || '',
+      ownerPersonId: asset.ownerPersonId || '',
       stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: dom?.id || '',
-      category: asset.category || '',
+      dataType: asset.dataType || '',
       dataClassification: asset.dataClassification || '',
-      retentionPolicy: asset.retentionPolicy || '',
+      retentionDurationValue: asset.retentionDuration?.value ? String(asset.retentionDuration.value) : '',
+      retentionDurationUnit: asset.retentionDuration?.unit || '',
+      retentionReason: asset.retentionReason || asset.retentionPolicy || '',
       refreshFrequency: asset.refreshFrequency || '',
       sourceConnectionId: asset.sourceConnectionId || '',
       sourceAsset: asset.sourceAsset || '',
@@ -509,13 +527,15 @@ export default function DataAssetsPage() {
       name: `${asset.name} (copy)`,
       description: asset.description,
       systemId: asset.systemId,
-      owner: asset.owner || '',
+      ownerPersonId: asset.ownerPersonId || '',
       stewardIds: asset.stewardIds || [],
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: '',
-      category: asset.category || '',
+      dataType: asset.dataType || '',
       dataClassification: asset.dataClassification || '',
-      retentionPolicy: asset.retentionPolicy || '',
+      retentionDurationValue: asset.retentionDuration?.value ? String(asset.retentionDuration.value) : '',
+      retentionDurationUnit: asset.retentionDuration?.unit || '',
+      retentionReason: asset.retentionReason || asset.retentionPolicy || '',
       refreshFrequency: asset.refreshFrequency || '',
       sourceConnectionId: asset.sourceConnectionId || '',
       sourceAsset: asset.sourceAsset || '',
@@ -527,7 +547,14 @@ export default function DataAssetsPage() {
 
   const handleSave = async (keepOpen: boolean = false) => {
     if (!formValidation.validateAll(form)) return;
-    const { domainId, ...assetFields } = form;
+    const { domainId, retentionDurationValue, retentionDurationUnit, ...rest } = form;
+    // Translate the split duration inputs into the structured shape the
+    // backend expects. Empty value clears the field.
+    const durationValue = retentionDurationValue ? Number(retentionDurationValue) : NaN;
+    const retentionDuration = (Number.isFinite(durationValue) && durationValue > 0 && retentionDurationUnit)
+      ? { value: durationValue, unit: retentionDurationUnit }
+      : null;
+    const assetFields = { ...rest, retentionDuration };
     let savedId = editingId;
     if (editingId) {
       await apiClient.put(`/data-assets/${editingId}`, assetFields);
@@ -586,12 +613,14 @@ export default function DataAssetsPage() {
           handler: async () => {
             await apiClient.post('/data-assets', {
               name: asset.name, description: asset.description,
-              systemId: asset.systemId, owner: asset.owner,
+              systemId: asset.systemId,
+              ownerPersonId: asset.ownerPersonId,
               stewardIds: asset.stewardIds,
               governanceTier: asset.governanceTier,
-              category: asset.category,
+              dataType: asset.dataType,
               dataClassification: asset.dataClassification,
-              retentionPolicy: asset.retentionPolicy,
+              retentionDuration: asset.retentionDuration,
+              retentionReason: asset.retentionReason,
               refreshFrequency: asset.refreshFrequency,
               ...(activeOrgId ? { orgId: activeOrgId } : {}),
             });
@@ -786,7 +815,7 @@ export default function DataAssetsPage() {
           overflowY: 'auto',
         }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
-            Categories
+            Data Types
           </div>
           <div
             onClick={() => setFilterCategory('')}
@@ -802,13 +831,13 @@ export default function DataAssetsPage() {
             All Assets ({assets.length})
           </div>
           {[
-            { key: 'OPERATIONAL', label: 'Operational' },
-            { key: 'GOVERNANCE', label: 'Governance' },
-            { key: 'REFERENCE', label: 'Reference' },
-            { key: 'ANALYTICAL', label: 'Analytical' },
             { key: 'MASTER', label: 'Master' },
+            { key: 'REFERENCE', label: 'Reference' },
+            { key: 'TRANSACTIONAL', label: 'Transactional' },
+            { key: 'ANALYTICAL', label: 'Analytical' },
+            { key: 'METADATA', label: 'Metadata' },
           ].map(({ key, label }) => {
-            const count = assets.filter((a) => a.category === key).length;
+            const count = assets.filter((a) => a.dataType === key).length;
             if (count === 0) return null;
             const isActive = filterCategory === key;
             return (
@@ -830,7 +859,7 @@ export default function DataAssetsPage() {
               </div>
             );
           })}
-          {assets.filter((a) => !a.category).length > 0 && (
+          {assets.filter((a) => !a.dataType).length > 0 && (
             <div
               onClick={() => setFilterCategory(filterCategory === '__none__' ? '' : '__none__')}
               style={{
@@ -844,8 +873,8 @@ export default function DataAssetsPage() {
               onMouseEnter={(e) => { if (filterCategory !== '__none__') e.currentTarget.style.background = 'var(--color-bg)'; }}
               onMouseLeave={(e) => { if (filterCategory !== '__none__') e.currentTarget.style.background = 'transparent'; }}
             >
-              <span>Uncategorized</span>
-              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{assets.filter((a) => !a.category).length}</span>
+              <span>Untyped</span>
+              <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{assets.filter((a) => !a.dataType).length}</span>
             </div>
           )}
         </div>
@@ -909,14 +938,14 @@ export default function DataAssetsPage() {
               {formValidation.fieldError('name') && <div style={fieldErrorStyle}>{formValidation.fieldError('name')}</div>}
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>
-              <select style={selectStyle} value={form.category} onChange={(e) => updateField('category', e.target.value)}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Type</label>
+              <select style={selectStyle} value={form.dataType} onChange={(e) => updateField('dataType', e.target.value)}>
                 <option value="">-- Select --</option>
-                <option value="OPERATIONAL">Operational</option>
-                <option value="GOVERNANCE">Governance</option>
-                <option value="REFERENCE">Reference</option>
-                <option value="ANALYTICAL">Analytical</option>
                 <option value="MASTER">Master</option>
+                <option value="REFERENCE">Reference</option>
+                <option value="TRANSACTIONAL">Transactional</option>
+                <option value="ANALYTICAL">Analytical</option>
+                <option value="METADATA">Metadata</option>
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -950,7 +979,7 @@ export default function DataAssetsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
-              <select style={selectStyle} value={form.owner} onChange={(e) => updateField('owner', e.target.value)}>
+              <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => updateField('ownerPersonId', e.target.value)}>
                 <option value="">-- No owner --</option>
                 {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -1035,16 +1064,50 @@ export default function DataAssetsPage() {
                   <select style={selectStyle} value={form.refreshFrequency} onChange={(e) => updateField('refreshFrequency', e.target.value)}>
                     <option value="">-- Select --</option>
                     <option value="REAL_TIME">Real-time</option>
+                    <option value="STREAMING">Streaming</option>
+                    <option value="EVENT_DRIVEN">Event-driven</option>
                     <option value="HOURLY">Hourly</option>
                     <option value="DAILY">Daily</option>
                     <option value="WEEKLY">Weekly</option>
                     <option value="MONTHLY">Monthly</option>
+                    <option value="AD_HOC">Ad-hoc</option>
                     <option value="MANUAL">Manual</option>
                   </select>
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Retention Policy <HelpPopover id="asset-retention" title="Retention Policy">How long is this data kept before deletion or archival? Include the regulatory or business reason if applicable.</HelpPopover></label>
-                  <input style={inputStyle} value={form.retentionPolicy} onChange={(e) => updateField('retentionPolicy', e.target.value)} placeholder="e.g. 7 years per regulatory requirement, 90 days rolling" />
+                <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '120px 140px 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Retention <HelpPopover id="asset-retention" title="Retention Policy">How long is this data kept before deletion or archival? Add the regulatory or business reason for the policy.</HelpPopover></label>
+                    <input
+                      type="number"
+                      min={0}
+                      style={inputStyle}
+                      value={form.retentionDurationValue}
+                      onChange={(e) => updateField('retentionDurationValue', e.target.value)}
+                      placeholder="e.g. 7"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Unit</label>
+                    <select
+                      style={selectStyle}
+                      value={form.retentionDurationUnit}
+                      onChange={(e) => updateField('retentionDurationUnit', e.target.value)}
+                    >
+                      <option value="">-- Unit --</option>
+                      <option value="DAYS">Days</option>
+                      <option value="MONTHS">Months</option>
+                      <option value="YEARS">Years</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Reason</label>
+                    <input
+                      style={inputStyle}
+                      value={form.retentionReason}
+                      onChange={(e) => updateField('retentionReason', e.target.value)}
+                      placeholder="e.g. Regulatory: SOX 404 / 7-year retention"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -16,12 +16,19 @@ interface DataAssetEntity {
   description: string;
   systemId: string;
   owner?: string;
+  ownerPersonId?: string | null;
   stewardIds?: string[];
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
+  healthScoreAt?: string | null;
   dataClassification?: string;
+  dataType?: string;
+  /** @deprecated use dataType */
   category?: string;
+  /** @deprecated use retentionDuration + retentionReason */
   retentionPolicy?: string;
+  retentionDuration?: { value: number; unit: 'DAYS' | 'MONTHS' | 'YEARS' };
+  retentionReason?: string;
   refreshFrequency?: string;
   sourceConnectionId?: string;
   sourceAsset?: string;
@@ -250,18 +257,21 @@ export default function DataDictionaryPage() {
   const handleExportCsv = () => {
     exportCsv(
       'data-dictionary.csv',
-      ['Asset', 'Description', 'System', 'Domain', 'Tier', 'Health', 'Owner', 'Steward', 'Classification', 'Refresh', 'Retention', 'Source', 'Columns'],
+      ['Asset', 'Description', 'System', 'Domain', 'Tier', 'Health', 'Owner', 'Steward', 'Data Type', 'Classification', 'Refresh', 'Retention', 'Retention Reason', 'Source', 'Columns'],
       sorted.map((a) => {
         const sys = systemMap.get(a.systemId);
         const did = assetDomainMap.get(a.id);
         const dom = did ? domainMap.get(did) : null;
-        const ownerDisplay = a.ownerName || personName(a.owner) || '';
+        const ownerDisplay = a.ownerName || personName(a.ownerPersonId) || personName(a.owner) || '';
         const stewardDisplay = a.stewardName
           || (a.stewardIds?.length ? a.stewardIds.map((sid) => personName(sid)).filter(Boolean).join('; ') : '');
         const cols = columnsMap[a.id] || [];
         const source = a.sourceAsset
           ? `${sys ? sys.name + ' > ' : ''}${a.sourceAsset}${a.sourceColumn ? ' > ' + a.sourceColumn : ''}`
           : '';
+        const retention = a.retentionDuration
+          ? `${a.retentionDuration.value} ${a.retentionDuration.unit.toLowerCase()}`
+          : (a.retentionPolicy || '');
         return [
           a.name,
           a.description || '',
@@ -271,9 +281,11 @@ export default function DataDictionaryPage() {
           a.healthScore != null ? `${a.healthScore}%` : '',
           ownerDisplay,
           stewardDisplay,
+          a.dataType || a.category || '',
           a.dataClassification || '',
           (a.refreshFrequency || '').replace(/_/g, ' '),
-          a.retentionPolicy || '',
+          retention,
+          a.retentionReason || '',
           source,
           cols.length > 0 ? cols.map((c) => `${c.columnName}${c.dataType ? ':' + c.dataType : ''}`).join('; ') : '',
         ];
@@ -491,6 +503,12 @@ export default function DataDictionaryPage() {
                               <div style={{ padding: '14px 22px' }}>
                                 {/* Metadata strip */}
                                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: cols.length > 0 ? 12 : 0 }}>
+                                  {(a.dataType || a.category) && (
+                                    <div>
+                                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Type</div>
+                                      <div style={{ fontSize: 12 }}>{a.dataType || a.category}</div>
+                                    </div>
+                                  )}
                                   {a.dataClassification && (
                                     <div>
                                       <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Classification</div>
@@ -503,10 +521,17 @@ export default function DataDictionaryPage() {
                                       <div style={{ fontSize: 12 }}>{a.refreshFrequency.replace(/_/g, ' ')}</div>
                                     </div>
                                   )}
-                                  {a.retentionPolicy && (
+                                  {(a.retentionDuration || a.retentionPolicy) && (
                                     <div>
                                       <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Retention</div>
-                                      <div style={{ fontSize: 12 }}>{a.retentionPolicy}</div>
+                                      <div style={{ fontSize: 12 }}>
+                                        {a.retentionDuration
+                                          ? `${a.retentionDuration.value} ${a.retentionDuration.unit.toLowerCase()}`
+                                          : a.retentionPolicy}
+                                        {a.retentionReason && (
+                                          <span style={{ color: 'var(--color-text-muted)' }}> — {a.retentionReason}</span>
+                                        )}
+                                      </div>
                                     </div>
                                   )}
                                   {a.sourceAsset && (

@@ -16,20 +16,50 @@ interface StoredDataAsset {
   name: string;
   description: string;
   systemId: string;
+  /** @deprecated Use `ownerPersonId` (person FK). Kept for legacy display
+   *  when no person link is set. Migrations attempt to resolve this to a
+   *  person id where possible. */
   owner: string;
+  /** Person id of the accountable owner. Aligns with how Domains and
+   *  Glossary store ownership and lets the UI render a real name link. */
+  ownerPersonId?: string | null;
   stewardIds: string[];
   governanceTier: 'BRONZE' | 'SILVER' | 'GOLD';
+  /** Manual snapshot. When DQ rules are configured the engine derives a
+   *  live score per column and rolls up to the asset; treat this field as
+   *  the last manual override and use `healthScoreAt` for its provenance. */
   healthScore: number;
-  // Optional provenance: set when the asset was imported from a discovered
-  // connection column. Enables "where did this come from?" and later
-  // re-sync against the source.
+  /** Timestamp of the last manual healthScore set. */
+  healthScoreAt?: string | null;
+  /** @deprecated Use `bindings` (DataAssetBinding) — these flat fields
+   *  are kept only for legacy reads and migration into bindings. */
   sourceConnectionId?: string;
+  /** @deprecated see `bindings` */
   sourceAsset?: string;
+  /** @deprecated see `bindings` */
   sourceColumn?: string;
   dataClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
+  /** Content classification of the data, not how it's used.
+   *  Replaces the legacy mixed-axis `category`. */
+  dataType?: 'MASTER' | 'REFERENCE' | 'TRANSACTIONAL' | 'ANALYTICAL' | 'METADATA';
+  /** @deprecated Use `dataType`. Migrated on load. Kept for backwards-
+   *  compatible reads from older callers / exports. */
   category?: 'OPERATIONAL' | 'GOVERNANCE' | 'REFERENCE' | 'ANALYTICAL' | 'MASTER';
+  /** @deprecated Use `retentionDuration` + `retentionReason` for queryable
+   *  retention policy. Free-text `retentionPolicy` kept for legacy reads. */
   retentionPolicy?: string;
-  refreshFrequency?: 'REAL_TIME' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'MANUAL';
+  retentionDuration?: { value: number; unit: 'DAYS' | 'MONTHS' | 'YEARS' };
+  retentionReason?: string;
+  refreshFrequency?:
+    | 'REAL_TIME'
+    | 'HOURLY'
+    | 'DAILY'
+    | 'WEEKLY'
+    | 'MONTHLY'
+    | 'MANUAL'
+    | 'EVENT_DRIVEN'
+    | 'STREAMING'
+    | 'AD_HOC';
   createdAt: string;
   updatedAt: string;
 }
@@ -47,9 +77,65 @@ for (const a of dataAssets) {
     migrated = true;
   }
 }
+
+// Migrate legacy `category` → `dataType`. The old enum mixed three axes
+// (use-case, content-type, stewardship); the new one is content-type only.
+const CATEGORY_TO_DATA_TYPE: Record<string, StoredDataAsset['dataType']> = {
+  OPERATIONAL: 'TRANSACTIONAL',
+  GOVERNANCE:  'METADATA',
+  MASTER:      'MASTER',
+  REFERENCE:   'REFERENCE',
+  ANALYTICAL:  'ANALYTICAL',
+};
+for (const a of dataAssets) {
+  if (!a.dataType && a.category && CATEGORY_TO_DATA_TYPE[a.category]) {
+    a.dataType = CATEGORY_TO_DATA_TYPE[a.category];
+    migrated = true;
+  }
+}
+
+// Backfill `healthScoreAt` from updatedAt where a manual score exists but
+// no provenance timestamp is recorded. Cheap and lossless.
+for (const a of dataAssets) {
+  if (a.healthScore && a.healthScoreAt === undefined) {
+    a.healthScoreAt = a.updatedAt;
+    migrated = true;
+  }
+}
+
 if (migrated) saveStore('dataAssets', dataAssets);
 
+// Resolve free-text `owner` to a person id where the names match. Runs
+// once at module load (people store is loaded above). Leaves the legacy
+// string in place when no match is found so the UI can still display it.
+function backfillOwnerPersonIds(): void {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { people } = require('./people') as { people: { id: string; name: string }[] };
+  let touched = false;
+  for (const a of dataAssets) {
+    if (a.ownerPersonId !== undefined) continue;
+    if (!a.owner) { a.ownerPersonId = null; touched = true; continue; }
+    // The legacy `owner` field has been used inconsistently — sometimes it
+    // holds a person id (the UI dropdown wrote the id into it) and other
+    // times a free-text name. Try id match first, then name match.
+    const byId = people.find((p) => p.id === a.owner);
+    if (byId) { a.ownerPersonId = byId.id; touched = true; continue; }
+    const byName = people.find((p) => p.name.trim().toLowerCase() === a.owner.trim().toLowerCase());
+    a.ownerPersonId = byName ? byName.id : null;
+    touched = true;
+  }
+  if (touched) saveStore('dataAssets', dataAssets);
+}
+backfillOwnerPersonIds();
+
 const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'];
+const VALID_DATA_TYPES = ['MASTER', 'REFERENCE', 'TRANSACTIONAL', 'ANALYTICAL', 'METADATA'];
+const VALID_REFRESH_FREQUENCIES = [
+  'REAL_TIME', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'MANUAL',
+  'EVENT_DRIVEN', 'STREAMING', 'AD_HOC',
+];
+const VALID_RETENTION_UNITS = ['DAYS', 'MONTHS', 'YEARS'];
+const VALID_CLASSIFICATIONS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
 
 // ── Data Asset Bindings ──────────────────────────────────────────────────
 //
@@ -259,8 +345,12 @@ router.get('/', (req: Request, res: Response) => {
     let domainName: string | null = null;
     let ownerName: string | null = null;
     let stewardName: string | null = null;
-    // Resolve owner from asset-level owner (preferred), falling back to domain owner
-    if (asset.owner) {
+    // Resolve owner: prefer the new ownerPersonId FK; fall back to the legacy
+    // free-text/id `owner` field for assets that haven't been re-saved yet.
+    if (asset.ownerPersonId) {
+      ownerName = people.find((p) => p.id === asset.ownerPersonId)?.name || null;
+    }
+    if (!ownerName && asset.owner) {
       ownerName = people.find((p) => p.id === asset.owner || p.name === asset.owner)?.name || asset.owner;
     }
     if (domain) {
@@ -487,30 +577,54 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-assets */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemId, owner, stewardIds, governanceTier, healthScore, orgId,
+  const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore, orgId,
     sourceConnectionId, sourceAsset, sourceColumn,
-    dataClassification, category, retentionPolicy, refreshFrequency } = req.body;
+    dataClassification, dataType, category,
+    retentionPolicy, retentionDuration, retentionReason,
+    refreshFrequency } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
 
   const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
   const score = typeof healthScore === 'number' ? Math.max(0, Math.min(100, healthScore)) : 0;
-
   const now = new Date().toISOString();
+
+  // Map legacy `category` to `dataType` if a new caller still sends only the
+  // old field. Prefer an explicit `dataType` value when both are present.
+  const resolvedDataType: StoredDataAsset['dataType'] | undefined =
+    (dataType && VALID_DATA_TYPES.includes(dataType)) ? dataType
+    : (category && CATEGORY_TO_DATA_TYPE[category]) ? CATEGORY_TO_DATA_TYPE[category]
+    : undefined;
+
+  const validatedClassification = (dataClassification && VALID_CLASSIFICATIONS.includes(dataClassification))
+    ? dataClassification : undefined;
+  const validatedRefresh = (refreshFrequency && VALID_REFRESH_FREQUENCIES.includes(refreshFrequency))
+    ? refreshFrequency : undefined;
+  const validatedRetentionDuration = (retentionDuration
+    && typeof retentionDuration.value === 'number' && retentionDuration.value > 0
+    && VALID_RETENTION_UNITS.includes(retentionDuration.unit))
+    ? { value: retentionDuration.value, unit: retentionDuration.unit }
+    : undefined;
+
   const asset: StoredDataAsset = {
     id: uuid(), orgId: orgId || DEV_ORG_ID, name,
     description: description || '',
     systemId: systemId || '',
     owner: owner || '',
+    ownerPersonId: ownerPersonId || null,
     stewardIds: Array.isArray(stewardIds) ? stewardIds : [],
     governanceTier: tier,
     healthScore: score,
+    ...(score > 0 ? { healthScoreAt: now } : { healthScoreAt: null }),
     ...(sourceConnectionId ? { sourceConnectionId } : {}),
     ...(sourceAsset ? { sourceAsset } : {}),
     ...(sourceColumn ? { sourceColumn } : {}),
-    ...(dataClassification ? { dataClassification } : {}),
+    ...(validatedClassification ? { dataClassification: validatedClassification } : {}),
+    ...(resolvedDataType ? { dataType: resolvedDataType } : {}),
     ...(category ? { category } : {}),
     ...(retentionPolicy ? { retentionPolicy } : {}),
-    ...(refreshFrequency ? { refreshFrequency } : {}),
+    ...(validatedRetentionDuration ? { retentionDuration: validatedRetentionDuration } : {}),
+    ...(retentionReason ? { retentionReason } : {}),
+    ...(validatedRefresh ? { refreshFrequency: validatedRefresh } : {}),
     createdAt: now, updatedAt: now,
   };
   dataAssets.push(asset);
@@ -524,24 +638,55 @@ router.put('/:id', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
-  const { name, description, systemId, owner, stewardIds, governanceTier, healthScore,
+  const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore,
     sourceConnectionId, sourceAsset, sourceColumn,
-    dataClassification, category, retentionPolicy, refreshFrequency } = req.body;
+    dataClassification, dataType, category,
+    retentionPolicy, retentionDuration, retentionReason,
+    refreshFrequency } = req.body;
+  const now = new Date().toISOString();
+
   if (name !== undefined) asset.name = name;
   if (description !== undefined) asset.description = description;
   if (systemId !== undefined) asset.systemId = systemId;
   if (owner !== undefined) asset.owner = owner;
+  if (ownerPersonId !== undefined) asset.ownerPersonId = ownerPersonId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) asset.stewardIds = stewardIds;
   if (governanceTier !== undefined && VALID_TIERS.includes(governanceTier)) asset.governanceTier = governanceTier;
-  if (healthScore !== undefined && typeof healthScore === 'number') asset.healthScore = Math.max(0, Math.min(100, healthScore));
+  if (healthScore !== undefined && typeof healthScore === 'number') {
+    const clamped = Math.max(0, Math.min(100, healthScore));
+    if (clamped !== asset.healthScore) {
+      asset.healthScore = clamped;
+      asset.healthScoreAt = now;
+    }
+  }
   if (sourceConnectionId !== undefined) asset.sourceConnectionId = sourceConnectionId || undefined;
   if (sourceAsset !== undefined) asset.sourceAsset = sourceAsset || undefined;
   if (sourceColumn !== undefined) asset.sourceColumn = sourceColumn || undefined;
-  if (dataClassification !== undefined) asset.dataClassification = dataClassification || undefined;
+  if (dataClassification !== undefined) {
+    asset.dataClassification = (dataClassification && VALID_CLASSIFICATIONS.includes(dataClassification))
+      ? dataClassification : undefined;
+  }
+  if (dataType !== undefined) {
+    asset.dataType = (dataType && VALID_DATA_TYPES.includes(dataType)) ? dataType : undefined;
+  } else if (category !== undefined && CATEGORY_TO_DATA_TYPE[category]) {
+    // Older callers may still send only the legacy `category`; carry over.
+    asset.dataType = CATEGORY_TO_DATA_TYPE[category];
+  }
   if (category !== undefined) asset.category = category || undefined;
   if (retentionPolicy !== undefined) asset.retentionPolicy = retentionPolicy || undefined;
-  if (refreshFrequency !== undefined) asset.refreshFrequency = refreshFrequency || undefined;
-  asset.updatedAt = new Date().toISOString();
+  if (retentionDuration !== undefined) {
+    asset.retentionDuration = (retentionDuration
+      && typeof retentionDuration.value === 'number' && retentionDuration.value > 0
+      && VALID_RETENTION_UNITS.includes(retentionDuration.unit))
+      ? { value: retentionDuration.value, unit: retentionDuration.unit }
+      : undefined;
+  }
+  if (retentionReason !== undefined) asset.retentionReason = retentionReason || undefined;
+  if (refreshFrequency !== undefined) {
+    asset.refreshFrequency = (refreshFrequency && VALID_REFRESH_FREQUENCIES.includes(refreshFrequency))
+      ? refreshFrequency : undefined;
+  }
+  asset.updatedAt = now;
   saveStore('dataAssets', dataAssets);
   if (syncBindingFromAssetFields(asset)) saveStore('dataAssetBindings', dataAssetBindings);
   res.json({ success: true, data: asset });
