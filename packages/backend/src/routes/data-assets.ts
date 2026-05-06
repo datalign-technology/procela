@@ -60,12 +60,18 @@ interface StoredDataAsset {
     | 'EVENT_DRIVEN'
     | 'STREAMING'
     | 'AD_HOC';
+  /** Provenance — how the asset entered the catalog. Immutable after
+   *  creation. Used by the Data Assets page to filter governance
+   *  placeholders out of source-data views, and by gap detection so a
+   *  GOVERNANCE_TEMPLATE asset isn't penalised for lacking a binding. */
+  origin?: 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED';
   createdAt: string;
   updatedAt: string;
 }
 
 export const dataAssets: StoredDataAsset[] = loadStore<StoredDataAsset>('dataAssets');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
+const VALID_ORIGINS = ['MANUAL', 'GOVERNANCE_TEMPLATE', 'DISCOVERED', 'IMPORTED', 'SYNCED'] as const;
 
 // Migrate legacy `steward` string → `stewardIds[]`
 let migrated = false;
@@ -101,6 +107,20 @@ for (const a of dataAssets) {
     a.healthScoreAt = a.updatedAt;
     migrated = true;
   }
+}
+
+// Backfill `origin` for legacy rows. The legacy `category === 'GOVERNANCE'`
+// is the only structural marker we have for governance-template seeds;
+// rows with a sourceConnectionId or sourceAsset clearly came from a
+// connection scan, so call those DISCOVERED. Everything else is treated
+// as MANUAL — the safer default since we'd rather underclaim provenance
+// than mislabel a real user-typed asset.
+for (const a of dataAssets) {
+  if (a.origin) continue;
+  if ((a as any).category === 'GOVERNANCE') a.origin = 'GOVERNANCE_TEMPLATE';
+  else if (a.sourceConnectionId || a.sourceAsset) a.origin = 'DISCOVERED';
+  else a.origin = 'MANUAL';
+  migrated = true;
 }
 
 if (migrated) saveStore('dataAssets', dataAssets);
@@ -583,8 +603,17 @@ router.post('/', (req: Request, res: Response) => {
     sourceConnectionId, sourceAsset, sourceColumn,
     dataClassification, dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
-    refreshFrequency } = req.body;
+    refreshFrequency, origin } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
+  if (origin && !VALID_ORIGINS.includes(origin)) {
+    res.status(400).json({ success: false, error: `origin must be one of ${VALID_ORIGINS.join(', ')}` });
+    return;
+  }
+  // Trust an explicit origin from the caller (governance template, sync,
+  // future importer); otherwise infer DISCOVERED when source-connection
+  // fields are present, MANUAL by default.
+  const resolvedOrigin: StoredDataAsset['origin'] =
+    origin || (sourceConnectionId || sourceAsset ? 'DISCOVERED' : 'MANUAL');
 
   const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
   const score = typeof healthScore === 'number' ? Math.max(0, Math.min(100, healthScore)) : 0;
@@ -627,6 +656,7 @@ router.post('/', (req: Request, res: Response) => {
     ...(validatedRetentionDuration ? { retentionDuration: validatedRetentionDuration } : {}),
     ...(retentionReason ? { retentionReason } : {}),
     ...(validatedRefresh ? { refreshFrequency: validatedRefresh } : {}),
+    origin: resolvedOrigin,
     createdAt: now, updatedAt: now,
   };
   dataAssets.push(asset);

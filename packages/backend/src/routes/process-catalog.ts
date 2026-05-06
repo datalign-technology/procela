@@ -1160,6 +1160,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
         governanceTier: def.governanceTier, healthScore: 0,
         dataClassification: def.dataClassification,
         category: 'GOVERNANCE',
+        origin: 'GOVERNANCE_TEMPLATE',
         createdAt: now, updatedAt: now,
       };
       dataAssets.push(asset);

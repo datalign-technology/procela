@@ -43,6 +43,7 @@ interface DataAssetEntity {
   retentionDuration?: { value: number; unit: 'DAYS' | 'MONTHS' | 'YEARS' };
   retentionReason?: string;
   refreshFrequency?: string;
+  origin?: 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED';
   /** @deprecated use bindings */
   sourceConnectionId?: string;
   /** @deprecated use bindings */
@@ -212,6 +213,27 @@ interface DataAssetColumn {
   rules?: ColumnRule[];
 }
 
+const ORIGIN_BADGE: Record<string, { label: string; bg: string; fg: string; title: string }> = {
+  GOVERNANCE_TEMPLATE: { label: 'Gov',       bg: '#ede9fe', fg: '#5b21b6', title: 'Seeded by the Data Governance value stream' },
+  DISCOVERED:          { label: 'Discovered', bg: '#dbeafe', fg: '#1e40af', title: 'Created from a connection scan' },
+  IMPORTED:            { label: 'Imported',  bg: '#fef3c7', fg: '#92400e', title: 'Created via bulk import' },
+  SYNCED:              { label: 'Synced',    bg: '#dcfce7', fg: '#166534', title: 'Created by a sync connection' },
+};
+
+function OriginBadge({ origin }: { origin?: string }) {
+  if (!origin || origin === 'MANUAL') return null;
+  const m = ORIGIN_BADGE[origin];
+  if (!m) return null;
+  return (
+    <span
+      title={m.title}
+      style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: m.bg, color: m.fg }}
+    >
+      {m.label}
+    </span>
+  );
+}
+
 function InlineCellEdit({ value, onSave, type = 'text', options }: {
   value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
 }) {
@@ -288,6 +310,7 @@ export default function DataAssetsPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterTier, setFilterTier] = useState('');
   const [filterSystemId, setFilterSystemId] = useState('');
+  const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
@@ -409,6 +432,7 @@ export default function DataAssetsPage() {
     }
     if (filterTier && (a.governanceTier || 'BRONZE') !== filterTier) return false;
     if (filterSystemId && a.systemId !== filterSystemId) return false;
+    if (filterOrigin && (a.origin || 'MANUAL') !== filterOrigin) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (!a.name.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
@@ -416,7 +440,7 @@ export default function DataAssetsPage() {
     return true;
   });
 
-  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || searchQuery);
+  const hasActiveFilters = !!(filterCategory || filterTier || filterSystemId || filterOrigin || searchQuery);
 
   // URL-persisted sort.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(
@@ -882,6 +906,35 @@ export default function DataAssetsPage() {
 
         {/* Content area */}
         <div>
+      {/* Origin chips — separate governance/discovered/synced rows from manual entries */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {([
+          { key: '', label: 'All', count: assets.length, hint: 'Show every data asset' },
+          { key: 'MANUAL', label: 'Manual', count: assets.filter((a) => (a.origin || 'MANUAL') === 'MANUAL').length, hint: 'Typed by a user' },
+          { key: 'DISCOVERED', label: 'Discovered', count: assets.filter((a) => a.origin === 'DISCOVERED').length, hint: 'Created from a connection' },
+          { key: 'GOVERNANCE_TEMPLATE', label: 'Governance', count: assets.filter((a) => a.origin === 'GOVERNANCE_TEMPLATE').length, hint: 'Seeded by the Data Governance value stream' },
+          { key: 'IMPORTED', label: 'Imported', count: assets.filter((a) => a.origin === 'IMPORTED').length, hint: 'Created via bulk import' },
+          { key: 'SYNCED', label: 'Synced', count: assets.filter((a) => a.origin === 'SYNCED').length, hint: 'Created by a sync connection' },
+        ] as const).filter((o) => o.key === '' || o.count > 0).map((o) => {
+          const active = filterOrigin === o.key;
+          return (
+            <button
+              key={o.key || 'all'}
+              onClick={() => setFilterOrigin(o.key as typeof filterOrigin)}
+              title={o.hint}
+              style={{
+                padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 999,
+                border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                background: active ? 'var(--color-primary-light, #dbeafe)' : 'var(--color-surface)',
+                color: active ? 'var(--color-primary)' : 'var(--color-text)',
+                cursor: 'pointer',
+              }}
+            >
+              {o.label} <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>({o.count})</span>
+            </button>
+          );
+        })}
+      </div>
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
@@ -905,7 +958,7 @@ export default function DataAssetsPage() {
         )}
         {hasActiveFilters && (
           <button
-            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setSearchQuery(''); }}
+            onClick={() => { setFilterCategory(''); setFilterTier(''); setFilterSystemId(''); setFilterOrigin(''); setSearchQuery(''); }}
             style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
           >
             Clear Filters
@@ -1306,7 +1359,7 @@ export default function DataAssetsPage() {
                         >
                           {isExpanded ? '\u25BC' : '\u25B6'}
                         </button>
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           {canWrite ? (
                             <InlineCellEdit
                               value={asset.name}
@@ -1322,6 +1375,7 @@ export default function DataAssetsPage() {
                               {asset.name}
                             </span>
                           )}
+                          <OriginBadge origin={asset.origin} />
                         </div>
                       </div>
                     </td>
