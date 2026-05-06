@@ -614,13 +614,32 @@ export default function BusinessGlossaryPage() {
         <div>
           {/* Filters (left-aligned, mirrors Data Assets) */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              placeholder="Search terms..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
-            />
+            <div style={{ position: 'relative', width: 200 }}>
+              <input
+                type="text"
+                placeholder="Search terms..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape' && searchQuery) setSearchQuery(''); }}
+                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 28px 5px 10px', fontSize: 12, background: 'var(--color-surface)', width: '100%', boxSizing: 'border-box' }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                  title="Clear search (Esc)"
+                  style={{
+                    position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-muted)', fontSize: 14, lineHeight: 1,
+                    padding: '2px 6px', borderRadius: 3,
+                  }}
+                >
+                  &times;
+                </button>
+              )}
+            </div>
             <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="">All Statuses</option>
               {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
