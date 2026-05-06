@@ -587,7 +587,7 @@ export default function BusinessGlossaryPage() {
                   <input style={inputStyle} value={form.sourceOfTruth} onChange={(e) => setForm({ ...form, sourceOfTruth: e.target.value })} placeholder="e.g. Salesforce CRM" />
                 </div>
                 <div>
-                  <label style={labelStyle}>Domain</label>
+                  <label style={labelStyle}>Primary Domain</label>
                   <select style={selectStyle} value={form.domainId} onChange={(e) => setForm({ ...form, domainId: e.target.value })}>
                     <option value="">-- No Domain --</option>
                     {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -681,7 +681,7 @@ export default function BusinessGlossaryPage() {
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
               <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
-                <option value="">Domain…</option>
+                <option value="">Primary Domain…</option>
                 <option value="__unassign__">Clear domain</option>
                 {domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
@@ -740,7 +740,7 @@ export default function BusinessGlossaryPage() {
                     <SortableTh sortKey="term" active={sortKey} dir={sortDir} onClick={toggleSort}>Term</SortableTh>
                     <SortableTh sortKey="category" active={sortKey} dir={sortDir} onClick={toggleSort}>Category</SortableTh>
                     <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                    <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
+                    <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Primary Domain</SortableTh>
                     <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
                     <th style={thStyle}>Definition</th>
                     <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
