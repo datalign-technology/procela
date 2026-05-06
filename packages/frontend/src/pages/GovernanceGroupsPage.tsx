@@ -367,7 +367,6 @@ export default function GovernanceGroupsPage() {
   // When adding a child, restrict the type dropdown to valid child types
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -685,10 +684,6 @@ export default function GovernanceGroupsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {flatGroups.length > 0 && (
-            <IconButton icon="trash" label="Delete all groups" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
-          {flatGroups.length > 0 && (
             <IconButton icon="eye" label="Visualize"
               onClick={() => navigate('/governance/visualization')} />
           )}
@@ -735,22 +730,6 @@ export default function GovernanceGroupsPage() {
         }}
         onCancel={() => setConfirmGenerate(false)}
       />
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Governance Groups?"
-        message={`This will permanently delete all ${flatGroups.length} governance groups. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/governance-groups/all');
-          setSelectedGroupId(null);
-          setSelectedGroupDetail(null);
-          fetchGroups();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
-
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Delete Governance Group?"

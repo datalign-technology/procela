@@ -208,7 +208,6 @@ export default function ConnectionsPage() {
   const [formTestResult, setFormTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [formTesting, setFormTesting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterConnType, setFilterConnType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -402,15 +401,6 @@ export default function ConnectionsPage() {
       addToast('success', 'Connection deleted');
       fetchData();
     } catch { addToast('error', 'Delete failed'); }
-  };
-
-  const handleDeleteAll = async () => {
-    try {
-      await apiClient.delete('/connections/all');
-      setSelectedIds(new Set());
-      addToast('success', 'All connections deleted');
-      fetchData();
-    } catch { addToast('error', 'Delete all failed'); }
   };
 
   // ── Bulk select handlers ──
@@ -715,10 +705,6 @@ export default function ConnectionsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {connections.length > 0 && (
-            <IconButton icon="trash" label="Delete all connections" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
           <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -885,16 +871,6 @@ export default function ConnectionsPage() {
       )}
 
       {/* Confirm dialogs */}
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Connections?"
-        message={`This will permanently delete all ${connections.length} connection profiles. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => { setShowDeleteAll(false); await handleDeleteAll(); }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
-
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Delete Connection?"

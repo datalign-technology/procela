@@ -281,7 +281,6 @@ export default function PeoplePage() {
   // warning.
   const [loading360, _setLoading360] = useState(false); void _setLoading360;
   const [saving360, setSaving360] = useState(false);
-  const [showDeleteAllPeople, setShowDeleteAllPeople] = useState(false);
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
@@ -896,10 +895,6 @@ export default function PeoplePage() {
                   {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {people.length > 0 && (
-                    <IconButton icon="trash" label="Delete all people" variant="danger"
-                      onClick={() => setShowDeleteAllPeople(true)} />
-                  )}
                   {filteredPeople.length > 0 && (
                     <IconButton icon="download" label="Export CSV"
                       onClick={() => exportCsv('people.csv', ['Name', 'Email', 'Role', 'Title'], filteredPeople.map((p) => [
@@ -945,21 +940,6 @@ export default function PeoplePage() {
                   </span>
                 )}
               </div>
-
-              <ConfirmDialog
-                open={showDeleteAllPeople}
-                title="Delete All People?"
-                message={`This will permanently delete all ${people.length} people across all organizations. This cannot be undone.`}
-                confirmLabel="Delete All"
-                requireTypedConfirmation="DELETE"
-                onConfirm={async () => {
-                  setShowDeleteAllPeople(false);
-                  await apiClient.delete('/people/all');
-                  setSelectedPersonIds(new Set());
-                  fetchData();
-                }}
-                onCancel={() => setShowDeleteAllPeople(false)}
-              />
 
               <ConfirmDialog
                 open={confirmBulkDeletePeople}

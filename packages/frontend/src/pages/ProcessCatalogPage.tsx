@@ -991,7 +991,6 @@ export default function ProcessCatalogPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [addingTo, setAddingTo] = useState<string | null>(null);
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
@@ -1367,10 +1366,6 @@ export default function ProcessCatalogPage() {
               <IconButton icon="download" label="Export to Excel (CSV)"
                 onClick={handleExportExcel} />
             )}
-            {totalNodes > 0 && canWrite && (
-              <IconButton icon="trash" label="Delete all processes" variant="danger"
-                onClick={() => setShowDeleteAll(true)} />
-            )}
             {totalNodes > 0 && (
               <IconButton icon="eye" label="Visualize"
                 onClick={() => navigate('/processes/visualization')} />
@@ -1425,19 +1420,6 @@ export default function ProcessCatalogPage() {
         </div>
       )}
 
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Processes?"
-        message={`This will permanently delete all ${totalNodes} process nodes and their flow relationships. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/process-catalog/all');
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
       <ConfirmDialog
         open={confirmGovTemplate}
         title="Generate Governance Processes?"

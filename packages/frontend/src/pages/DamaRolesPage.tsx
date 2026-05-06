@@ -130,7 +130,6 @@ export default function DamaRolesPage() {
     scopeId: (v: any) => !v ? 'Select an organization.' : null,
   });
   const [error, setError] = useState('');
-  const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -242,10 +241,6 @@ export default function DamaRolesPage() {
         subtitle="Assign data management governance roles to people across organizations and data domains."
         actions={<>
           {roles.length > 0 && (
-            <IconButton icon="trash" label="Delete all roles" variant="danger"
-              onClick={() => setShowDeleteAll(true)} />
-          )}
-          {roles.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('governance-roles.csv', ['Person', 'Governance Role', 'Organization', 'Since'], roles.map((r) => [
                 r.personName,
@@ -356,21 +351,6 @@ export default function DamaRolesPage() {
           </div>
         </SectionCard>
       )}
-
-      <ConfirmDialog
-        open={showDeleteAll}
-        title="Delete All Governance Roles?"
-        message={`This will permanently delete all ${roles.length} governance role assignments. This cannot be undone.`}
-        confirmLabel="Delete All"
-        requireTypedConfirmation="DELETE"
-        onConfirm={async () => {
-          setShowDeleteAll(false);
-          await apiClient.delete('/dama-roles/all');
-          setSelectedIds(new Set());
-          fetchData();
-        }}
-        onCancel={() => setShowDeleteAll(false)}
-      />
 
       <ConfirmDialog
         open={confirmDelete !== null}
