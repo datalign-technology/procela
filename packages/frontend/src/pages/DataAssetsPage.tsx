@@ -423,6 +423,7 @@ export default function DataAssetsPage() {
     filteredAssets,
     {
       name: (a, b) => a.name.localeCompare(b.name),
+      description: (a, b) => (a.description || '').localeCompare(b.description || ''),
       system: (a, b) => systemName(a.systemId).localeCompare(systemName(b.systemId)),
       domain: (a, b) => (a.domainName || '').localeCompare(b.domainName || ''),
       owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
@@ -1273,6 +1274,7 @@ export default function DataAssetsPage() {
                   <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} aria-label="Select all assets" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
+                <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
                 <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
                 <th style={thStyle}>Source</th>
                 <th style={thStyle}>Tier</th>
@@ -1320,13 +1322,18 @@ export default function DataAssetsPage() {
                               {asset.name}
                             </span>
                           )}
-                          {asset.description && (
-                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
-                              {asset.description}
-                            </div>
-                          )}
                         </div>
                       </div>
+                    </td>
+                    <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }}>
+                      {canWrite ? (
+                        <InlineCellEdit
+                          value={asset.description || ''}
+                          onSave={(v) => inlineSaveField(asset.id, 'description', v)}
+                        />
+                      ) : (
+                        asset.description || '--'
+                      )}
                     </td>
                     <td style={tdStyle}>
                       {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
@@ -1393,7 +1400,7 @@ export default function DataAssetsPage() {
                   {/* Expanded columns section */}
                   {isExpanded && (
                     <tr>
-                      <td colSpan={10} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                      <td colSpan={11} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
                         <div style={{ padding: '12px 20px 12px 60px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
