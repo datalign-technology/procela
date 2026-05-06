@@ -16,6 +16,8 @@ import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
 
+type Connectivity = 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
+
 interface SystemEntity {
   id: string;
   name: string;
@@ -24,6 +26,11 @@ interface SystemEntity {
   businessCriticality?: string;
   vendor?: string;
   integrationPoints?: string;
+  connectivity?: Connectivity;
+  /** Rolled-up status from backend: profile health if connectivity is
+   *  INTEGRATED, otherwise mirrors the connectivity intent. */
+  connectionStatus?: 'CONNECTED' | 'ERROR' | 'UNTESTED' | 'NOT_CONNECTED' | 'MANUAL' | 'EXTERNAL';
+  connectionCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +40,12 @@ interface ConnectionSummary {
   systemId: string;
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNTESTED';
 }
+
+const CONNECTIVITY_LABEL: Record<Connectivity, string> = {
+  INTEGRATED: 'Integrated',
+  MANUAL: 'Manual',
+  EXTERNAL: 'Vendor-managed',
+};
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
@@ -72,9 +85,13 @@ interface FormData {
   businessCriticality: string;
   vendor: string;
   integrationPoints: string;
+  connectivity: Connectivity;
 }
 
-const emptyForm: FormData = { name: '', description: '', systemType: '', businessCriticality: '', vendor: '', integrationPoints: '' };
+const emptyForm: FormData = {
+  name: '', description: '', systemType: '', businessCriticality: '',
+  vendor: '', integrationPoints: '', connectivity: 'INTEGRATED',
+};
 
 function InlineCellEdit({ value, onSave, type = 'text', options }: {
   value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
@@ -123,6 +140,61 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
       }}
       style={{ fontSize: 'inherit', padding: '2px 4px', width: type === 'number' ? 60 : '100%', border: '1px solid var(--color-primary)', borderRadius: 3 }}
     />
+  );
+}
+
+const pillBase: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+};
+
+const PILL_STYLE: Record<NonNullable<SystemEntity['connectionStatus']>, React.CSSProperties> = {
+  CONNECTED:     { ...pillBase, background: '#dcfce7', color: '#166534' },
+  ERROR:         { ...pillBase, background: '#fee2e2', color: '#991b1b' },
+  UNTESTED:      { ...pillBase, background: '#fef3c7', color: '#92400e' },
+  NOT_CONNECTED: { ...pillBase, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)' },
+  MANUAL:        { ...pillBase, background: '#e0e7ff', color: '#3730a3' },
+  EXTERNAL:      { ...pillBase, background: '#f3e8ff', color: '#6b21a8' },
+};
+
+function renderConnectivityCell(
+  sys: SystemEntity,
+  configuredCount: number,
+  connectedCount: number,
+  navigate: (to: string) => void,
+) {
+  const connectivity: Connectivity = sys.connectivity || 'INTEGRATED';
+  const status = sys.connectionStatus
+    || (connectivity === 'MANUAL' ? 'MANUAL'
+       : connectivity === 'EXTERNAL' ? 'EXTERNAL'
+       : configuredCount === 0 ? 'NOT_CONNECTED'
+       : connectedCount > 0 ? 'CONNECTED'
+       : 'UNTESTED');
+
+  if (connectivity !== 'INTEGRATED') {
+    return <span style={PILL_STYLE[status]}>{CONNECTIVITY_LABEL[connectivity]}</span>;
+  }
+
+  if (configuredCount === 0) {
+    return (
+      <button
+        onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}&open=1`)}
+        style={{ ...pillBase, background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}
+        title="Configure a connection profile for this system"
+      >
+        + Connect
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}`)}
+      style={{ ...PILL_STYLE[status], border: 'none', cursor: 'pointer' }}
+      title="View connections for this system"
+    >
+      {configuredCount} configured{connectedCount > 0 ? ` · ${connectedCount} live` : ''}
+    </button>
   );
 }
 
@@ -198,6 +270,7 @@ export default function SystemsPage() {
       businessCriticality: sys.businessCriticality || '',
       vendor: sys.vendor || '',
       integrationPoints: sys.integrationPoints || '',
+      connectivity: sys.connectivity || 'INTEGRATED',
     });
     setEditingId(sys.id); setShowForm(true);
   };
@@ -236,6 +309,7 @@ export default function SystemsPage() {
               businessCriticality: sys.businessCriticality,
               vendor: sys.vendor,
               integrationPoints: sys.integrationPoints,
+              connectivity: sys.connectivity,
               ...(activeOrgId ? { orgId: activeOrgId } : {}),
             });
             addToast('success', `"${sys.name}" restored`);
@@ -322,6 +396,7 @@ export default function SystemsPage() {
           await Promise.all(toDelete.map((s) =>
             apiClient.post('/systems', {
               name: s.name, description: s.description, systemType: s.systemType,
+              connectivity: s.connectivity,
               ...(activeOrgId ? { orgId: activeOrgId } : {}),
             }).catch(() => {}),
           ));
@@ -572,6 +647,19 @@ export default function SystemsPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vendor / Platform</label>
               <input style={inputStyle} value={form.vendor} onChange={(e) => setFormDirty({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
             </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                Connectivity
+                <HelpPopover id="sys-connectivity" title="Connectivity">
+                  How this system is reached. <strong>Integrated</strong>: a connection profile will be (or has been) configured. <strong>Manual</strong>: paper, spreadsheet, or human handoff — won't show as a connection gap. <strong>Vendor-managed</strong>: vendor owns the data; no API expected.
+                </HelpPopover>
+              </label>
+              <select style={selectStyle} value={form.connectivity} onChange={(e) => setFormDirty({ ...form, connectivity: e.target.value as Connectivity })}>
+                <option value="INTEGRATED">Integrated (will connect)</option>
+                <option value="MANUAL">Manual (no integration)</option>
+                <option value="EXTERNAL">Vendor-managed</option>
+              </select>
+            </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Points</label>
               <input style={inputStyle} value={form.integrationPoints} onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })} placeholder="e.g. Connects to SAP via API, feeds Data Warehouse nightly" />
@@ -707,23 +795,7 @@ export default function SystemsPage() {
                       {sys.description || '--'}
                     </td>
                     <td style={tdStyle}>
-                      {sysConnections.length > 0 ? (
-                        <button
-                          onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}`)}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-primary)', fontSize: 12, textDecoration: 'underline' }}
-                          title="View connections for this system"
-                        >
-                          {sysConnections.length} configured{connectedCount > 0 ? ` · ${connectedCount} live` : ''}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}&open=1`)}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 12 }}
-                          title="Add a connection for this system"
-                        >
-                          + Add
-                        </button>
-                      )}
+                      {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate)}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>

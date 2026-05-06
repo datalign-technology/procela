@@ -17,12 +17,28 @@ interface StoredSystem {
   businessCriticality?: 'HIGH' | 'MEDIUM' | 'LOW';
   vendor?: string;
   integrationPoints?: string;
+  /** How this system is intended to be reached. INTEGRATED expects one or
+   *  more Connection profiles; MANUAL is a paper/spreadsheet/handoff
+   *  process; EXTERNAL is vendor-managed with no API. Used by gap
+   *  detection so a missing connection on a MANUAL system isn't a gap. */
+  connectivity?: 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
   createdAt: string;
   updatedAt: string;
 }
 
 export const systems: StoredSystem[] = loadStore<StoredSystem>('systems');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
+const VALID_CONNECTIVITY = ['INTEGRATED', 'MANUAL', 'EXTERNAL'] as const;
+
+let connectivityMigrated = false;
+for (const s of systems) {
+  if (!s.connectivity) {
+    s.connectivity = 'INTEGRATED';
+    connectivityMigrated = true;
+  }
+}
+if (connectivityMigrated) saveStore('systems', systems);
 
 const SYSTEM_TYPES = [
   'ERP', 'CRM', 'GIS', 'SCADA', 'Data Warehouse', 'Data Lake',
@@ -31,6 +47,36 @@ const SYSTEM_TYPES = [
 ];
 
 const router = Router();
+
+/**
+ * Roll connection-profile statuses up to a single system-level pill the UI
+ * can render without doing its own join. INTEGRATED systems with zero
+ * profiles are flagged so they show up in coverage gaps; MANUAL/EXTERNAL
+ * systems return their connectivity verbatim so the absent connection
+ * isn't treated as missing.
+ */
+function rollupConnectionStatus(
+  sys: StoredSystem,
+): 'CONNECTED' | 'ERROR' | 'UNTESTED' | 'NOT_CONNECTED' | 'MANUAL' | 'EXTERNAL' {
+  const profiles = connections.filter((c) => c.systemId === sys.id);
+  if (profiles.length === 0) {
+    if (sys.connectivity === 'MANUAL') return 'MANUAL';
+    if (sys.connectivity === 'EXTERNAL') return 'EXTERNAL';
+    return 'NOT_CONNECTED';
+  }
+  if (profiles.some((p) => p.status === 'ERROR')) return 'ERROR';
+  if (profiles.some((p) => p.status === 'CONNECTED')) return 'CONNECTED';
+  return 'UNTESTED';
+}
+
+function decorate(sys: StoredSystem) {
+  return {
+    ...sys,
+    connectivity: sys.connectivity || 'INTEGRATED',
+    connectionCount: connections.filter((c) => c.systemId === sys.id).length,
+    connectionStatus: rollupConnectionStatus(sys),
+  };
+}
 
 /** DELETE /api/v1/systems/all — delete all systems */
 router.delete('/all', (_req: Request, res: Response) => {
@@ -46,24 +92,34 @@ router.delete('/all', (_req: Request, res: Response) => {
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(systems, orgId as string | undefined);
-  res.json({ success: true, data: filtered, systemTypes: SYSTEM_TYPES });
+  res.json({
+    success: true,
+    data: filtered.map(decorate),
+    systemTypes: SYSTEM_TYPES,
+    connectivityOptions: VALID_CONNECTIVITY,
+  });
 });
 
 /** GET /api/v1/systems/:id */
 router.get('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  res.json({ success: true, data: sys });
+  res.json({ success: true, data: decorate(sys) });
 });
 
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints } = req.body;
+  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
+  if (connectivity && !VALID_CONNECTIVITY.includes(connectivity)) {
+    res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
+    return;
+  }
   const now = new Date().toISOString();
   const sys: StoredSystem = {
     id: uuid(), orgId: orgId || DEV_ORG_ID, name,
     description: description || '', systemType: systemType || '',
+    connectivity: connectivity || 'INTEGRATED',
     ...(businessCriticality ? { businessCriticality } : {}),
     ...(vendor ? { vendor } : {}),
     ...(integrationPoints ? { integrationPoints } : {}),
@@ -79,13 +135,18 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const { name, description, systemType, businessCriticality, vendor, integrationPoints } = req.body;
+  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity } = req.body;
+  if (connectivity !== undefined && !VALID_CONNECTIVITY.includes(connectivity)) {
+    res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
+    return;
+  }
   if (name !== undefined) sys.name = name;
   if (description !== undefined) sys.description = description;
   if (systemType !== undefined) sys.systemType = systemType;
   if (businessCriticality !== undefined) sys.businessCriticality = businessCriticality || undefined;
   if (vendor !== undefined) sys.vendor = vendor || undefined;
   if (integrationPoints !== undefined) sys.integrationPoints = integrationPoints || undefined;
+  if (connectivity !== undefined) sys.connectivity = connectivity;
   sys.updatedAt = new Date().toISOString();
   saveStore('systems', systems);
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
