@@ -38,7 +38,10 @@ interface SystemEntity {
 interface ConnectionSummary {
   id: string;
   systemId: string;
+  name?: string;
+  connectionType?: string;
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNTESTED';
+  config?: { host?: string; port?: number; database?: string; baseUrl?: string };
 }
 
 const CONNECTIVITY_LABEL: Record<Connectivity, string> = {
@@ -162,6 +165,7 @@ function renderConnectivityCell(
   configuredCount: number,
   connectedCount: number,
   navigate: (to: string) => void,
+  onOpenPicker: (sys: SystemEntity) => void,
 ) {
   const connectivity: Connectivity = sys.connectivity || 'INTEGRATED';
   const status = sys.connectionStatus
@@ -178,9 +182,9 @@ function renderConnectivityCell(
   if (configuredCount === 0) {
     return (
       <button
-        onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}&open=1`)}
+        onClick={() => onOpenPicker(sys)}
         style={{ ...pillBase, background: 'var(--color-primary)', color: '#fff', border: 'none', cursor: 'pointer' }}
-        title="Configure a connection profile for this system"
+        title="Attach an existing connection or configure a new one"
       >
         + Connect
       </button>
@@ -195,6 +199,130 @@ function renderConnectivityCell(
     >
       {configuredCount} configured{connectedCount > 0 ? ` · ${connectedCount} live` : ''}
     </button>
+  );
+}
+
+function ConnectPickerModal({
+  sys, connections, systems, orgId, onClose, onAttached, onCreateNew, addToast,
+}: {
+  sys: SystemEntity;
+  connections: ConnectionSummary[];
+  systems: SystemEntity[];
+  orgId: string | undefined | null;
+  onClose: () => void;
+  onAttached: () => void;
+  onCreateNew: () => void;
+  addToast: (level: 'success' | 'error' | 'info', msg: string) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const orgConnections = orgId
+    ? connections.filter((c) => !(c as any).orgId || (c as any).orgId === orgId)
+    : connections;
+
+  const alreadyOnThis = orgConnections.filter((c) => c.systemId === sys.id);
+  const unassigned = orgConnections.filter((c) => !c.systemId);
+  const onOtherSystem = orgConnections.filter((c) => c.systemId && c.systemId !== sys.id);
+  const systemNameById = (id: string) => systems.find((s) => s.id === id)?.name || id;
+
+  const attach = async (conn: ConnectionSummary) => {
+    setBusy(conn.id);
+    try {
+      await apiClient.put(`/connections/${conn.id}`, { systemId: sys.id });
+      addToast('success', `Connected "${conn.name || conn.id}" to ${sys.name}`);
+      onAttached();
+    } catch (err: any) {
+      addToast('error', err?.response?.data?.error || 'Failed to attach connection');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const renderConn = (c: ConnectionSummary, allowAttach: boolean) => {
+    const detail = c.config?.host
+      ? `${c.config.host}${c.config.port ? `:${c.config.port}` : ''}${c.config.database ? `/${c.config.database}` : ''}`
+      : c.config?.baseUrl || '';
+    return (
+      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderTop: '1px solid var(--color-border)' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name || c.id}</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            {c.connectionType || 'Connection'}{detail ? ` · ${detail}` : ''}
+            {c.systemId && c.systemId !== sys.id ? ` · currently on ${systemNameById(c.systemId)}` : ''}
+          </div>
+        </div>
+        {allowAttach ? (
+          <button
+            onClick={() => attach(c)}
+            disabled={busy === c.id}
+            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: busy === c.id ? 'not-allowed' : 'pointer', opacity: busy === c.id ? 0.6 : 1 }}
+          >
+            {busy === c.id ? 'Attaching…' : 'Use'}
+          </button>
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>already linked</span>
+        )}
+      </div>
+    );
+  };
+
+  const empty = alreadyOnThis.length === 0 && unassigned.length === 0 && onOtherSystem.length === 0;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', width: '100%', maxWidth: 540, maxHeight: '85vh', overflow: 'auto', padding: 20, boxShadow: 'var(--shadow-lg)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Connect to a source</h2>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Pick an existing connection for <strong>{sys.name}</strong>, or create a new one.</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+        </div>
+
+        {empty && (
+          <div style={{ padding: 16, fontSize: 12, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+            No connections defined yet. Create the first one and Procela will offer it as a reusable option next time.
+          </div>
+        )}
+
+        {alreadyOnThis.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Already on this system</div>
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              {alreadyOnThis.map((c) => renderConn(c, false))}
+            </div>
+          </div>
+        )}
+
+        {unassigned.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Unassigned ({unassigned.length})</div>
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              {unassigned.map((c) => renderConn(c, true))}
+            </div>
+          </div>
+        )}
+
+        {onOtherSystem.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>On other systems ({onOtherSystem.length})</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Attaching one of these will move it from its current system.</div>
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              {onOtherSystem.map((c) => renderConn(c, true))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--color-border)' }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={onCreateNew} style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+            + Create new connection
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -216,6 +344,7 @@ export default function SystemsPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [connectingSystem, setConnectingSystem] = useState<SystemEntity | null>(null);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -795,7 +924,7 @@ export default function SystemsPage() {
                       {sys.description || '--'}
                     </td>
                     <td style={tdStyle}>
-                      {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate)}
+                      {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem)}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -819,6 +948,22 @@ export default function SystemsPage() {
         </div>
       </div>
       <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
+      {connectingSystem && (
+        <ConnectPickerModal
+          sys={connectingSystem}
+          connections={connections}
+          systems={systems}
+          orgId={activeOrgId}
+          addToast={addToast}
+          onClose={() => setConnectingSystem(null)}
+          onAttached={() => { setConnectingSystem(null); fetchData(); }}
+          onCreateNew={() => {
+            const id = connectingSystem.id;
+            setConnectingSystem(null);
+            navigate(`/connections?systemId=${encodeURIComponent(id)}&open=1`);
+          }}
+        />
+      )}
     </div>
   );
 }
