@@ -293,6 +293,7 @@ export default function PeoplePage() {
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
   const [filterAppRole, setFilterAppRole] = useState('');
   const [filterGovRole, setFilterGovRole] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Quick-add row state
   const [quickName, setQuickName] = useState('');
@@ -394,6 +395,14 @@ export default function PeoplePage() {
     if (filterGovRole) {
       const hasRole = allDamaRoles.some((r) => r.personId === p.id && r.roleType === filterGovRole);
       if (!hasRole) return false;
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !p.name.toLowerCase().includes(q) &&
+        !(p.email || '').toLowerCase().includes(q) &&
+        !(p.title || '').toLowerCase().includes(q)
+      ) return false;
     }
     return true;
   });
@@ -869,28 +878,6 @@ export default function PeoplePage() {
                     </h2>
                     {selectedOrgId && selectedOrg && <span style={typeBadge(selectedOrg.type || '')}>{selectedOrg.type}</span>}
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{filteredPeople.length} {filteredPeople.length === 1 ? 'person' : 'people'}</span>
-                    {selectedOrgId && (
-                      // Active-filter chip with an x to clear — mirrors the
-                      // dropdown at the top so users see at a glance that
-                      // they're looking at a subset.
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '2px 4px 2px 8px', borderRadius: 999,
-                        background: '#eff6ff', color: '#1e40af',
-                        fontSize: 11, fontWeight: 500,
-                      }}>
-                        Filter: {selectedOrg?.name || selectedOrgId}
-                        <button
-                          onClick={() => applyOrgFilter('')}
-                          aria-label="Clear org filter"
-                          title="Clear filter"
-                          style={{
-                            border: 'none', background: 'transparent', cursor: 'pointer',
-                            color: '#1e40af', fontSize: 14, lineHeight: 1, padding: '0 4px',
-                          }}
-                        >&times;</button>
-                      </span>
-                    )}
                   </div>
                   {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
@@ -909,35 +896,47 @@ export default function PeoplePage() {
                 </div>
               </div>
 
-              {/* Filters */}
-              <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>App Role:</label>
-                  <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterAppRole} onChange={(e) => setFilterAppRole(e.target.value)}>
-                    <option value="">All</option>
-                    {Object.entries(ROLE_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Governance Role:</label>
-                  <select style={{ ...inputStyle, width: 'auto', minWidth: 160, fontSize: 12, padding: '4px 8px' }} value={filterGovRole} onChange={(e) => setFilterGovRole(e.target.value)}>
-                    <option value="">All</option>
-                    {Object.entries(DAMA_ROLE_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-                {(filterAppRole || filterGovRole) && (
-                  <button onClick={() => { setFilterAppRole(''); setFilterGovRole(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                    Clear filters
-                  </button>
-                )}
-                {(filterAppRole || filterGovRole) && (
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    Showing {filteredPeople.length} of {people.length}
-                  </span>
+              {/* Filters (left-aligned, mirrors Data Assets) */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Search people..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+                />
+                <select
+                  style={{ ...inputStyle, width: 'auto', minWidth: 130, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
+                  value={filterAppRole}
+                  onChange={(e) => setFilterAppRole(e.target.value)}
+                >
+                  <option value="">All App Roles</option>
+                  {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  style={{ ...inputStyle, width: 'auto', minWidth: 160, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
+                  value={filterGovRole}
+                  onChange={(e) => setFilterGovRole(e.target.value)}
+                >
+                  <option value="">All Governance Roles</option>
+                  {Object.entries(DAMA_ROLE_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+                {(filterAppRole || filterGovRole || searchQuery || selectedOrgId) && (
+                  <>
+                    <button
+                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setSearchQuery(''); applyOrgFilter(''); }}
+                      style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                    >
+                      Clear Filters
+                    </button>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                      Showing {filteredPeople.length} of {people.length}
+                    </span>
+                  </>
                 )}
               </div>
 

@@ -126,6 +126,7 @@ export default function SopsPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterOwner, setFilterOwner] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -267,6 +268,14 @@ export default function SopsPage() {
     if (filterCategory && s.category !== filterCategory) return false;
     if (filterStatus && s.status !== filterStatus) return false;
     if (filterOwner && (s.ownerPersonId || '') !== filterOwner) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !s.title.toLowerCase().includes(q) &&
+        !(s.code || '').toLowerCase().includes(q) &&
+        !(s.purpose || '').toLowerCase().includes(q)
+      ) return false;
+    }
     return true;
   });
 
@@ -293,31 +302,39 @@ export default function SopsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Category:</label>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-            <option value="">All</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Status:</label>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">All</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Owner:</label>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140, fontSize: 12, padding: '4px 8px' }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
-            <option value="">All</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-        {(filterCategory || filterStatus || filterOwner) && (
-          <button onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterOwner(''); }} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear filters</button>
+      {/* Filters (left-aligned, mirrors Data Assets) */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Search SOPs..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+        />
+        <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+          <option value="">All Categories</option>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+        </select>
+        <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All Statuses</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</option>)}
+        </select>
+        <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
+          <option value="">All Owners</option>
+          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {(filterCategory || filterStatus || filterOwner || searchQuery) && (
+          <>
+            <button
+              onClick={() => { setFilterCategory(''); setFilterStatus(''); setFilterOwner(''); setSearchQuery(''); }}
+              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+            >
+              Clear Filters
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              Showing {filtered.length} of {sops.length}
+            </span>
+          </>
         )}
       </div>
 
