@@ -105,9 +105,11 @@ for (const a of dataAssets) {
 
 if (migrated) saveStore('dataAssets', dataAssets);
 
-// Resolve free-text `owner` to a person id where the names match. Runs
-// once at module load (people store is loaded above). Leaves the legacy
-// string in place when no match is found so the UI can still display it.
+// Resolve free-text `owner` to a person id where the names match. Deferred
+// to next tick because people.ts and data-assets.ts import each other —
+// running this synchronously can hit the people export while it is still
+// in the TDZ. Leaves the legacy string in place when no match is found
+// so the UI can still display it.
 function backfillOwnerPersonIds(): void {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { people } = require('./people') as { people: { id: string; name: string }[] };
@@ -126,7 +128,7 @@ function backfillOwnerPersonIds(): void {
   }
   if (touched) saveStore('dataAssets', dataAssets);
 }
-backfillOwnerPersonIds();
+setImmediate(backfillOwnerPersonIds);
 
 const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'];
 const VALID_DATA_TYPES = ['MASTER', 'REFERENCE', 'TRANSACTIONAL', 'ANALYTICAL', 'METADATA'];
