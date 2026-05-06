@@ -533,18 +533,23 @@ export default function BusinessGlossaryPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <input
-                style={{ ...inputStyle, width: 220, fontSize: 12, padding: '4px 8px' }}
+                type="text"
                 placeholder="Search terms..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
               />
-              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Status:</label>
-              <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="">All</option>
-                {STATUSES.map((s) => <option key={s} value={s}>{s} ({terms.filter((t) => t.status === s).length})</option>)}
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                <option value="">All Statuses</option>
+                {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
               </select>
               {filterStatus && (
-                <button onClick={() => setFilterStatus('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+                <button
+                  onClick={() => setFilterStatus('')}
+                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                >
+                  Clear Filters
+                </button>
               )}
             </div>
           </div>

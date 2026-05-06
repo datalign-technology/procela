@@ -477,16 +477,20 @@ export default function SystemsPage() {
                 <button onClick={() => setFilterType('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear filter">&times;</button>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Criticality:</label>
-              <select style={{ ...inputStyle, width: 'auto', minWidth: 120, fontSize: 12, padding: '4px 8px' }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
-                <option value="">All</option>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
+                <option value="">All Criticality</option>
                 <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
                 <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
                 <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
               </select>
               {filterCriticality && (
-                <button onClick={() => setFilterCriticality('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+                <button
+                  onClick={() => setFilterCriticality('')}
+                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                >
+                  Clear Filters
+                </button>
               )}
             </div>
           </div>

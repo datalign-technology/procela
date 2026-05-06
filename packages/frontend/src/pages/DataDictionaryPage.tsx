@@ -67,6 +67,11 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
   padding: '6px 10px', fontSize: 13, width: '100%', background: 'var(--color-surface)',
 };
+const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as any };
+const btnSecondary: React.CSSProperties = {
+  padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+};
 const thStyle: React.CSSProperties = {
   textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
   color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -393,20 +398,25 @@ export default function DataDictionaryPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <input
-                style={{ ...inputStyle, width: 240, fontSize: 12, padding: '4px 8px' }}
+                type="text"
                 placeholder="Search assets & columns..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
               />
-              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>Tier:</label>
-              <select style={{ ...inputStyle, width: 'auto', minWidth: 110, fontSize: 12, padding: '4px 8px' }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
-                <option value="">All</option>
+              <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
+                <option value="">All Tiers</option>
                 <option value="GOLD">Gold ({goldCount})</option>
                 <option value="SILVER">Silver ({silverCount})</option>
                 <option value="BRONZE">Bronze ({bronzeCount})</option>
               </select>
               {filterTier && (
-                <button onClick={() => setFilterTier('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
+                <button
+                  onClick={() => setFilterTier('')}
+                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                >
+                  Clear Filters
+                </button>
               )}
             </div>
           </div>
