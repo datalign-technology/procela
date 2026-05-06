@@ -159,6 +159,7 @@ export default function GovernanceTasksPage() {
   const [filterPriority, setFilterPriority] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -183,6 +184,10 @@ export default function GovernanceTasksPage() {
     if (filterPriority && t.priority !== filterPriority) return false;
     if (filterType && t.taskType !== filterType) return false;
     if (filterAssignee && t.assigneeId !== filterAssignee) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (!t.title.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false;
+    }
     return true;
   });
 
@@ -342,9 +347,16 @@ export default function GovernanceTasksPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters (left-aligned, mirrors Data Assets) */}
       {tasks.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder="Search tasks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+          />
           <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All Statuses</option>
             {TASK_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
@@ -361,13 +373,18 @@ export default function GovernanceTasksPage() {
             <option value="">All Assignees</option>
             {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {(filterStatus || filterPriority || filterType || filterAssignee) && (
-            <button
-              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-              onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterType(''); setFilterAssignee(''); }}
-            >
-              Clear Filters
-            </button>
+          {(filterStatus || filterPriority || filterType || filterAssignee || searchQuery) && (
+            <>
+              <button
+                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterType(''); setFilterAssignee(''); setSearchQuery(''); }}
+              >
+                Clear Filters
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Showing {filtered.length} of {tasks.length}
+              </span>
+            </>
           )}
         </div>
       )}

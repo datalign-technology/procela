@@ -211,6 +211,7 @@ export default function ConnectionsPage() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filterConnType, setFilterConnType] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   // Which assets in the Discover modal are expanded to show their columns.
   const [expandedAssets, setExpandedAssets] = useState<Set<string>>(new Set());
@@ -495,6 +496,15 @@ export default function ConnectionsPage() {
   const visibleConnections = connections.filter((c) => {
     if (systemFilter && c.systemId !== systemFilter) return false;
     if (filterConnType && c.connectionType !== filterConnType) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const sysName = systems.find((s) => s.id === c.systemId)?.name || '';
+      if (
+        !c.name.toLowerCase().includes(q) &&
+        !sysName.toLowerCase().includes(q) &&
+        !(c.connectionType || '').toLowerCase().includes(q)
+      ) return false;
+    }
     return true;
   });
   const connectedCount = visibleConnections.filter((c) => c.status === 'CONNECTED').length;
@@ -770,25 +780,32 @@ export default function ConnectionsPage() {
 
         {/* Content Area */}
         <div>
-          {/* Content header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
-              {filterConnType ? filterConnType.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()) : 'All Connections'}
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{visibleConnections.length} connection{visibleConnections.length !== 1 ? 's' : ''}</span>
-              {filterConnType && (
-                <button onClick={() => setFilterConnType('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear filter">&times;</button>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-muted)' }}>System:</label>
-              <select style={{ ...selectStyle, width: 'auto', minWidth: 160, fontSize: 12, padding: '4px 8px' }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
-                <option value="">All</option>
-                {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
-              </select>
-              {systemFilter && (
-                <button onClick={() => setSystemFilter('')} style={{ fontSize: 11, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Clear</button>
-              )}
-            </div>
+          {/* Filters (left-aligned, mirrors Data Assets) */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Search connections..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+            />
+            <select style={{ ...selectStyle, width: 'auto', minWidth: 160 }} value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
+              <option value="">All Systems</option>
+              {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
+            </select>
+            {(searchQuery || systemFilter || filterConnType) && (
+              <>
+                <button
+                  onClick={() => { setSearchQuery(''); setSystemFilter(''); setFilterConnType(''); }}
+                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+                >
+                  Clear Filters
+                </button>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  Showing {visibleConnections.length} of {connections.length}
+                </span>
+              </>
+            )}
           </div>
 
       {/* Add/Edit Form */}

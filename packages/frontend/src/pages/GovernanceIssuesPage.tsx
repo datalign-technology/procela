@@ -156,6 +156,7 @@ export default function GovernanceIssuesPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -181,6 +182,10 @@ export default function GovernanceIssuesPage() {
     if (filterStatus && i.status !== filterStatus) return false;
     if (filterSeverity && i.severity !== filterSeverity) return false;
     if (filterType && i.issueType !== filterType) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (!i.title.toLowerCase().includes(q) && !(i.description || '').toLowerCase().includes(q)) return false;
+    }
     return true;
   });
 
@@ -325,34 +330,38 @@ export default function GovernanceIssuesPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Filters (left-aligned, mirrors Data Assets) */}
       {issues.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Status</label>
+          <input
+            type="text"
+            placeholder="Search issues..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+          />
           <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
             <option value="">All Statuses</option>
             {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </select>
-          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Severity</label>
           <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
             <option value="">All Severities</option>
             {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Type</label>
           <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
             <option value="">All Types</option>
             {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
           </select>
-          {(filterStatus || filterSeverity || filterType) && (
+          {(filterStatus || filterSeverity || filterType || searchQuery) && (
             <>
               <button
                 style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-                onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); }}
+                onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); setSearchQuery(''); }}
               >
                 Clear Filters
               </button>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                showing {filtered.length} of {issues.length}
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Showing {filtered.length} of {issues.length}
               </span>
             </>
           )}

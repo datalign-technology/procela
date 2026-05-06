@@ -136,6 +136,7 @@ export default function AgentsPage() {
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
   const [importOrgId, setImportOrgId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [agentRoles, setAgentRoles] = useState<DamaRoleAssignment[]>([]);
   const [agentExecutions, setAgentExecutions] = useState<AgentExecution[]>([]);
@@ -176,8 +177,15 @@ export default function AgentsPage() {
   const personNameById: Record<string, string> = {};
   for (const p of people) personNameById[p.id] = p.name;
 
-  const filtered = selectedOrgId
-    ? agents.filter((a) => a.orgIds.includes(selectedOrgId))
+  const filtered = (selectedOrgId || searchQuery.trim())
+    ? agents.filter((a) => {
+        if (selectedOrgId && !a.orgIds.includes(selectedOrgId)) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          if (!a.name.toLowerCase().includes(q) && !(a.description || '').toLowerCase().includes(q)) return false;
+        }
+        return true;
+      })
     : agents;
 
   const openAdd = () => {
@@ -373,20 +381,37 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* Active filter chip */}
-      {selectedOrgId && (
-        <div style={{ marginBottom: 12 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '2px 4px 2px 8px', borderRadius: 999,
-            background: '#eff6ff', color: '#1e40af',
-            fontSize: 11, fontWeight: 500,
-          }}>
-            Filter: {orgNameById[selectedOrgId] || selectedOrgId}
-            <button onClick={() => applyOrgFilter('')} aria-label="Clear filter" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#1e40af', fontSize: 14, lineHeight: 1, padding: '0 4px' }}>&times;</button>
-          </span>
-        </div>
-      )}
+      {/* Filters (left-aligned, mirrors Data Assets) */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Search agents..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+        />
+        <select
+          value={selectedOrgId}
+          onChange={(e) => applyOrgFilter(e.target.value)}
+          style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 'auto', minWidth: 160, appearance: 'auto' as any }}
+        >
+          <option value="">All Organizations</option>
+          {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+        {(selectedOrgId || searchQuery) && (
+          <>
+            <button
+              onClick={() => { applyOrgFilter(''); setSearchQuery(''); }}
+              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+            >
+              Clear Filters
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              Showing {filtered.length} of {agents.length}
+            </span>
+          </>
+        )}
+      </div>
 
       {/* Add / Edit form */}
       {showForm && (

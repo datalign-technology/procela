@@ -99,6 +99,7 @@ export default function SkillsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterCategory, setFilterCategory] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [seeding, setSeeding] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -113,8 +114,15 @@ export default function SkillsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const filtered = filterCategory
-    ? skills.filter((s) => s.category === filterCategory)
+  const filtered = (filterCategory || searchQuery.trim())
+    ? skills.filter((s) => {
+        if (filterCategory && s.category !== filterCategory) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          if (!s.name.toLowerCase().includes(q) && !(s.description || '').toLowerCase().includes(q)) return false;
+        }
+        return true;
+      })
     : skills;
 
   // Sort
@@ -239,15 +247,6 @@ export default function SkillsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Category:</label>
-          <select
-            style={{ ...inputStyle, width: 'auto', minWidth: 160, appearance: 'auto' as any, fontSize: 13 }}
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-          >
-            <option value="">All categories</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{formatCategory(c)}</option>)}
-          </select>
           {filtered.length > 0 && (
             <IconButton icon="download" label="Export CSV" onClick={handleExport} />
           )}
@@ -267,21 +266,37 @@ export default function SkillsPage() {
         </div>
       </div>
 
-      {/* Active filter chip */}
-      {filterCategory && (
-        <div style={{ marginBottom: 12 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '2px 4px 2px 8px', borderRadius: 999,
-            background: (CATEGORY_BADGES[filterCategory] || CATEGORY_BADGES.GOVERNANCE).bg,
-            color: (CATEGORY_BADGES[filterCategory] || CATEGORY_BADGES.GOVERNANCE).color,
-            fontSize: 11, fontWeight: 500,
-          }}>
-            Filter: {formatCategory(filterCategory)}
-            <button onClick={() => setFilterCategory('')} aria-label="Clear filter" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: '0 4px' }}>&times;</button>
-          </span>
-        </div>
-      )}
+      {/* Filters (left-aligned, mirrors Data Assets) */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="Search skills..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+        />
+        <select
+          style={{ ...inputStyle, width: 'auto', minWidth: 130, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+        >
+          <option value="">All Categories</option>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{formatCategory(c)}</option>)}
+        </select>
+        {(filterCategory || searchQuery) && (
+          <>
+            <button
+              onClick={() => { setFilterCategory(''); setSearchQuery(''); }}
+              style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+            >
+              Clear Filters
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              Showing {filtered.length} of {skills.length}
+            </span>
+          </>
+        )}
+      </div>
 
       {/* Add / Edit form */}
       {showForm && (
