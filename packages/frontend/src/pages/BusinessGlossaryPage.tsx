@@ -522,36 +522,32 @@ export default function BusinessGlossaryPage() {
 
         {/* Content area */}
         <div>
-          {/* Content header: title, search, status filter */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
-              {filterCategory || 'All Terms'}
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{filteredTerms.length} term{filteredTerms.length !== 1 ? 's' : ''}</span>
-              {filterCategory && (
-                <button onClick={() => setFilterCategory('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear category filter">&times;</button>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                placeholder="Search terms..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
-              />
-              <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="">All Statuses</option>
-                {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
-              </select>
-              {filterStatus && (
-                <button
-                  onClick={() => setFilterStatus('')}
-                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
+          {/* Filters (left-aligned, mirrors Data Assets) */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Search terms..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+            />
+            <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">All Statuses</option>
+              {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()} ({terms.filter((t) => t.status === s).length})</option>)}
+            </select>
+            {(filterStatus || searchQuery || filterCategory) && (
+              <button
+                onClick={() => { setFilterStatus(''); setSearchQuery(''); setFilterCategory(''); }}
+                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+              >
+                Clear Filters
+              </button>
+            )}
+            {(filterStatus || searchQuery || filterCategory) && (
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Showing {filteredTerms.length} of {terms.length}
+              </span>
+            )}
           </div>
 
           {/* Add/Edit Form */}

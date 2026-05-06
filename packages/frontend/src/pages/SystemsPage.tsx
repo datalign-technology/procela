@@ -478,38 +478,34 @@ export default function SystemsPage() {
 
         {/* Content Area */}
         <div>
-          {/* Content header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
-              {filterType && filterType !== '__none__' ? filterType : filterType === '__none__' ? 'Untyped Systems' : 'All Systems'}
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{filteredSystems.length} system{filteredSystems.length !== 1 ? 's' : ''}</span>
-              {filterType && (
-                <button onClick={() => setFilterType('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear filter">&times;</button>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="text"
-                placeholder="Search systems..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
-              />
-              <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
-                <option value="">All Criticality</option>
-                <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
-                <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
-                <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
-              </select>
-              {(filterCriticality || searchQuery) && (
-                <button
-                  onClick={() => { setFilterCriticality(''); setSearchQuery(''); }}
-                  style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
+          {/* Filters (left-aligned, mirrors Data Assets) */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Search systems..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+            />
+            <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterCriticality} onChange={(e) => setFilterCriticality(e.target.value)}>
+              <option value="">All Criticality</option>
+              <option value="HIGH">High ({systems.filter((s) => s.businessCriticality === 'HIGH').length})</option>
+              <option value="MEDIUM">Medium ({systems.filter((s) => s.businessCriticality === 'MEDIUM').length})</option>
+              <option value="LOW">Low ({systems.filter((s) => s.businessCriticality === 'LOW').length})</option>
+            </select>
+            {(filterCriticality || searchQuery || filterType) && (
+              <button
+                onClick={() => { setFilterCriticality(''); setSearchQuery(''); setFilterType(''); }}
+                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
+              >
+                Clear Filters
+              </button>
+            )}
+            {(filterCriticality || searchQuery || filterType) && (
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Showing {filteredSystems.length} of {systems.length}
+              </span>
+            )}
           </div>
 
       {/* Import Panel */}

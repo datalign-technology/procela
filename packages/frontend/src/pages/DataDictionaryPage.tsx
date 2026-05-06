@@ -385,40 +385,34 @@ export default function DataDictionaryPage() {
 
         {/* Content area */}
         <div>
-          {/* Content header: title, search, tier filter */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
-              {filterDomain
-                ? (filterDomain === '__unassigned__' ? 'Unassigned Assets' : domainMap.get(filterDomain)?.name || 'Assets')
-                : 'All Assets'}
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>{filteredAssets.length} asset{filteredAssets.length !== 1 ? 's' : ''}</span>
-              {filterDomain && (
-                <button onClick={() => setFilterDomain('')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: '0 4px' }} title="Clear domain filter">&times;</button>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                placeholder="Search assets & columns..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
-              />
-              <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
-                <option value="">All Tiers</option>
-                <option value="GOLD">Gold ({goldCount})</option>
-                <option value="SILVER">Silver ({silverCount})</option>
-                <option value="BRONZE">Bronze ({bronzeCount})</option>
-              </select>
-              {filterTier && (
+          {/* Filters (left-aligned, mirrors Data Assets) */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Search assets & columns..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
+            />
+            <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
+              <option value="">All Tiers</option>
+              <option value="GOLD">Gold ({goldCount})</option>
+              <option value="SILVER">Silver ({silverCount})</option>
+              <option value="BRONZE">Bronze ({bronzeCount})</option>
+            </select>
+            {(filterTier || searchQuery || filterDomain) && (
+              <>
                 <button
-                  onClick={() => setFilterTier('')}
+                  onClick={() => { setFilterTier(''); setSearchQuery(''); setFilterDomain(''); }}
                   style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
                 >
                   Clear Filters
                 </button>
-              )}
-            </div>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  Showing {filteredAssets.length} of {assets.length}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Table */}
