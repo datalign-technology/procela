@@ -113,7 +113,7 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Data Assets</h3>
         <ul style={listStyle}>
-          <li>Register data assets in business terms with governance tier (Bronze/Silver/Gold)</li>
+          <li>Register data assets in business terms with governance tier (Uncertified/Managed/Certified)</li>
           <li>Category filter: Operational, Governance, Reference, Analytical, Master</li>
           <li>Inline editing for governance tier and health score directly in the table</li>
           <li><strong>Link to Source</strong>: connect assets to database tables, files, or APIs in the add/edit form</li>
@@ -259,9 +259,9 @@ export default function HelpPage() {
         </p>
         <h3 style={h3Style}>Governance Tiers</h3>
         <ul style={listStyle}>
-          <li><strong>Bronze</strong> &mdash; Raw or minimally governed data. No formal ownership.</li>
-          <li><strong>Silver</strong> &mdash; Managed data with defined ownership and basic quality rules.</li>
-          <li><strong>Gold</strong> &mdash; Fully governed, certified, audit-ready data with complete documentation.</li>
+          <li><strong>Uncertified</strong> &mdash; Catalogued but not yet governed. No formal ownership or quality rules.</li>
+          <li><strong>Managed</strong> &mdash; Owner and steward assigned, basic quality rules in place.</li>
+          <li><strong>Certified</strong> &mdash; Fully governed, audit-ready data with complete documentation.</li>
         </ul>
         <h3 style={h3Style}>DAMA Roles</h3>
         <ul style={listStyle}>

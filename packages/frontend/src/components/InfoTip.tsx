@@ -23,7 +23,7 @@ export const GLOSSARY: Record<string, string> = {
   'Data Domain':
     'A logical grouping of related data assets, typically organized by business function (e.g., Customer Data, Financial Data).',
   'Governance Tier':
-    'A maturity level for a data asset: Bronze (raw/minimal governance), Silver (managed), or Gold (fully governed and certified).',
+    'A maturity level for a data asset: Uncertified (catalogued but not yet governed), Managed (owner and steward assigned), or Certified (fully governed and audit-ready).',
   'Health Score':
     'A 0–100 rating of a data asset’s quality and reliability. Higher scores mean more trustworthy data.',
   'RACI':

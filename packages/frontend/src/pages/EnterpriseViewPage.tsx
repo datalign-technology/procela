@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { tierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import HelpPopover from '../components/HelpPopover';
@@ -381,7 +382,7 @@ export default function EnterpriseViewPage() {
                                 background: n.meta.governanceTier === 'GOLD' ? '#fef3c7' : n.meta.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa',
                                 color: n.meta.governanceTier === 'GOLD' ? '#92400e' : n.meta.governanceTier === 'SILVER' ? '#475569' : '#9a3412',
                               }}>
-                                {n.meta.governanceTier}
+                                {tierLabel(n.meta.governanceTier)}
                               </span>
                             )}
                             {n.meta.healthScore != null && (

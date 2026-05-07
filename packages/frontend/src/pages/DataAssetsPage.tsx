@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { tierLabel, TIER_VALUES } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
@@ -1020,9 +1021,9 @@ export default function DataAssetsPage() {
         />
         <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
           <option value="">All Tiers</option>
-          <option value="GOLD">Gold ({assets.filter((a) => a.governanceTier === 'GOLD').length})</option>
-          <option value="SILVER">Silver ({assets.filter((a) => a.governanceTier === 'SILVER').length})</option>
-          <option value="BRONZE">Bronze ({assets.filter((a) => !a.governanceTier || a.governanceTier === 'BRONZE').length})</option>
+          <option value="GOLD">{tierLabel('GOLD')} ({assets.filter((a) => a.governanceTier === 'GOLD').length})</option>
+          <option value="SILVER">{tierLabel('SILVER')} ({assets.filter((a) => a.governanceTier === 'SILVER').length})</option>
+          <option value="BRONZE">{tierLabel('BRONZE')} ({assets.filter((a) => !a.governanceTier || a.governanceTier === 'BRONZE').length})</option>
         </select>
         {systems.length > 0 && (
           <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterSystemId} onChange={(e) => setFilterSystemId(e.target.value)}>
@@ -1098,11 +1099,9 @@ export default function DataAssetsPage() {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Governance Tier <HelpPopover id="asset-tier" title="Governance Tiers">Bronze = raw/minimal governance. Silver = managed with defined ownership. Gold = fully governed, certified, audit-ready.</HelpPopover></label>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Governance Tier <HelpPopover id="asset-tier" title="Governance Tiers">Uncertified = catalogued but not yet governed. Managed = owner and steward assigned, basic quality rules in place. Certified = fully governed, audit-ready.</HelpPopover></label>
               <select style={selectStyle} value={form.governanceTier} onChange={(e) => updateField('governanceTier', e.target.value)}>
-                <option value="BRONZE">Bronze</option>
-                <option value="SILVER">Silver</option>
-                <option value="GOLD">Gold</option>
+                {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
               </select>
             </div>
             <div>
@@ -1327,9 +1326,9 @@ export default function DataAssetsPage() {
         }}>
           <span style={{ fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
           <span style={{ color: '#93c5fd' }}>|</span>
-          <button onClick={() => bulkSetTier('GOLD')} style={bulkBtnStyle}>Set Gold</button>
-          <button onClick={() => bulkSetTier('SILVER')} style={bulkBtnStyle}>Set Silver</button>
-          <button onClick={() => bulkSetTier('BRONZE')} style={bulkBtnStyle}>Set Bronze</button>
+          <button onClick={() => bulkSetTier('GOLD')} style={bulkBtnStyle}>Set {tierLabel('GOLD')}</button>
+          <button onClick={() => bulkSetTier('SILVER')} style={bulkBtnStyle}>Set {tierLabel('SILVER')}</button>
+          <button onClick={() => bulkSetTier('BRONZE')} style={bulkBtnStyle}>Set {tierLabel('BRONZE')}</button>
           <span style={{ color: '#93c5fd' }}>|</span>
           <select
             onChange={(e) => { if (e.target.value) bulkSetOwner(e.target.value); e.target.value = ''; }}
@@ -1486,14 +1485,15 @@ export default function DataAssetsPage() {
                     {isVisible('tier') && (
                       <td style={tdStyle}>
                         {canWrite ? (
-                          <InlineCellEdit
+                          <select
                             value={asset.governanceTier || 'BRONZE'}
-                            onSave={(v) => inlineSaveField(asset.id, 'governanceTier', v)}
-                            type="select"
-                            options={['BRONZE', 'SILVER', 'GOLD']}
-                          />
+                            onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
+                            style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
+                          >
+                            {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
+                          </select>
                         ) : (
-                          <span>{asset.governanceTier || 'BRONZE'}</span>
+                          <span>{tierLabel(asset.governanceTier)}</span>
                         )}
                       </td>
                     )}

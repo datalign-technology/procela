@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { tierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
@@ -403,7 +404,7 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
           </span>
           <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
           <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierBg, color: tierColor }}>
-            {m.assetInfo.governanceTier}
+            {tierLabel(m.assetInfo.governanceTier)}
           </span>
           {m.criticality && (
             <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: m.criticality === 'REQUIRED' ? '#fee2e2' : '#f1f5f9', color: m.criticality === 'REQUIRED' ? '#991b1b' : '#64748b' }}>

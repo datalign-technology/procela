@@ -37,7 +37,7 @@ interface ScorecardSnapshot {
 // ---------------------------------------------------------------------------
 const RECOMMENDATIONS: Record<string, string> = {
   'Process Documentation': 'Set more value streams to ACTIVE status and ensure they have complete paths (Value Stream > Process > Activity).',
-  'Data Governance': 'Promote Bronze-tier data assets to Silver or Gold by adding quality rules, owners, and documentation.',
+  'Data Governance': 'Promote Uncertified data assets to Managed or Certified by adding quality rules, owners, and documentation.',
   'Domain Coverage': 'Assign owners to your data domains to establish accountability and stewardship.',
   'Governance Structure': 'Establish the missing governance bodies (Council, Office, Committee, or Stewardship Teams) to build a complete governance framework.',
   'People Coverage': 'Add members to governance groups that currently have no participants.',

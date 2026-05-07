@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
+import { tierLabel } from '../lib/governanceTier';
 
 // ── Types ──
 
@@ -113,7 +114,7 @@ const GAP_SECTIONS: GapSection[] = [
   {
     key: 'ungovernedAssets',
     title: 'Ungoverned Assets',
-    description: 'BRONZE-tier data assets linked to process steps. Critical processes depend on minimally governed data.',
+    description: 'Uncertified data assets linked to process steps. Critical processes depend on minimally governed data.',
     severity: 'warning',
     icon: '\u26C1',
   },
@@ -357,7 +358,7 @@ function renderItems(key: string, items: any[]) {
       return items.map((a: UngovervedAsset) => (
         <div key={a.id} style={rowStyle}>
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
-          <span style={badgeStyle('#fed7aa', '#9a3412')}>BRONZE</span>
+          <span style={badgeStyle('#fed7aa', '#9a3412')}>{tierLabel('BRONZE')}</span>
           <span style={mutedStyle}>{a.healthScore}% health</span>
         </div>
       ));

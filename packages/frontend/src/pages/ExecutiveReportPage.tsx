@@ -281,15 +281,15 @@ export default function ExecutiveReportPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
             <div style={{ ...metricBoxStyle, borderLeft: '4px solid #d4a017' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#d4a017' }}>{stats.governance.gold}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Gold Tier</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Certified</div>
             </div>
             <div style={{ ...metricBoxStyle, borderLeft: '4px solid #9ca3af' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#9ca3af' }}>{stats.governance.silver}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Silver Tier</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Managed</div>
             </div>
             <div style={{ ...metricBoxStyle, borderLeft: '4px solid #b45309' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#b45309' }}>{stats.governance.bronze}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Bronze Tier</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Uncertified</div>
             </div>
             <div style={metricBoxStyle}>
               <div style={{ fontSize: 28, fontWeight: 700, color: stats.averageHealth >= 80 ? '#22c55e' : stats.averageHealth >= 50 ? '#eab308' : '#ef4444' }}>
@@ -328,7 +328,7 @@ export default function ExecutiveReportPage() {
                 </td>
               </tr>
               <tr>
-                <td style={tdStyle}>Ungoverned Assets (Bronze linked to processes)</td>
+                <td style={tdStyle}>Ungoverned Assets (Uncertified, linked to processes)</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>{stats.gaps.ungovernedAssets}</td>
                 <td style={tdStyle}>
                   <span style={{

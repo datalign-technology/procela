@@ -7,6 +7,7 @@ import IconButton from '../components/IconButton';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
+import { tierLabel } from '../lib/governanceTier';
 
 /* ── Interfaces ─────────────────────────────────────────────────── */
 
@@ -100,7 +101,7 @@ function tierBadge(tier?: string) {
   const c = TIER_COLORS[tier] || { bg: '#e5e7eb', text: '#374151' };
   return (
     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', background: c.bg, color: c.text }}>
-      {tier}
+      {tierLabel(tier)}
     </span>
   );
 }
@@ -306,11 +307,11 @@ export default function DataDictionaryPage() {
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
               <span>{assets.length} assets</span>
               <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{goldCount} gold</span>
+              <span>{goldCount} {tierLabel('GOLD').toLowerCase()}</span>
               <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{silverCount} silver</span>
+              <span>{silverCount} {tierLabel('SILVER').toLowerCase()}</span>
               <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{bronzeCount} bronze</span>
+              <span>{bronzeCount} {tierLabel('BRONZE').toLowerCase()}</span>
               <span style={{ color: 'var(--color-border)' }}>&middot;</span>
               <span>{domains.length} domains</span>
             </div>
@@ -408,9 +409,9 @@ export default function DataDictionaryPage() {
             />
             <select style={{ ...selectStyle, width: 'auto', minWidth: 130 }} value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
               <option value="">All Tiers</option>
-              <option value="GOLD">Gold ({goldCount})</option>
-              <option value="SILVER">Silver ({silverCount})</option>
-              <option value="BRONZE">Bronze ({bronzeCount})</option>
+              <option value="GOLD">{tierLabel('GOLD')} ({goldCount})</option>
+              <option value="SILVER">{tierLabel('SILVER')} ({silverCount})</option>
+              <option value="BRONZE">{tierLabel('BRONZE')} ({bronzeCount})</option>
             </select>
             {(filterTier || searchQuery || filterDomain) && (
               <>

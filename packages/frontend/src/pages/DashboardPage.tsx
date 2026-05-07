@@ -472,12 +472,12 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
     });
   }
 
-  // Phase 7: Bronze-heavy governance
+  // Phase 7: catalogue is dominated by uncertified (BRONZE-tier) assets
   if (stats.governance.bronze > 0 && stats.governance.gold === 0) {
     suggestions.push({
       icon: '▲',
       title: 'Elevate governance tiers',
-      description: `All ${stats.governance.bronze} data assets are at Bronze tier. Promote assets to Silver or Gold as you define ownership and quality rules.`,
+      description: `All ${stats.governance.bronze} data assets are Uncertified. Promote them to Managed or Certified as you define ownership and quality rules.`,
       link: '/data-assets',
     });
   }
@@ -718,7 +718,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
   const items = [
     { label: 'Unmapped activities', count: gaps.unmappedActivities || gaps.unmappedSteps || 0, severity: 'critical' as const, link: '/mappings' },
     { label: 'Ownerless processes', count: gaps.ownerlessItems || 0, severity: 'critical' as const, link: '/processes' },
-    { label: 'Ungoverned assets (Bronze)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
+    { label: 'Ungoverned assets (Uncertified)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
     { label: 'Unowned domains', count: gaps.ungovernedDomains || 0, severity: 'warning' as const, link: '/data-domains' },
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
