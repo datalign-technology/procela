@@ -382,7 +382,10 @@ export default function ConnectionsPage() {
         !!pendingFile;
       const res = useStagedTest
         ? await apiClient.upload<{ success: boolean; data: { success: boolean; message: string } }>(
-            `/connections/test-file?filename=${encodeURIComponent(pendingFile!.name)}`,
+            // apiClient.upload appends ?filename=… automatically; passing
+            // it again here would produce a duplicate param that the
+            // backend rejects with 400.
+            '/connections/test-file',
             pendingFile!,
           )
         : await apiClient.post<{ success: boolean; data: { success: boolean; message: string } }>(
@@ -400,9 +403,10 @@ export default function ConnectionsPage() {
       } else {
         addToast('error', `Test failed: ${res.data.message}`);
       }
-    } catch {
-      setFormTestResult({ success: false, message: 'Connection test failed' });
-      addToast('error', 'Connection test failed');
+    } catch (err: any) {
+      const detail = err?.message && err.message !== 'Connection test failed' ? `: ${err.message}` : '';
+      setFormTestResult({ success: false, message: `Connection test failed${detail}` });
+      addToast('error', `Connection test failed${detail}`);
     } finally {
       setFormTesting(false);
     }
