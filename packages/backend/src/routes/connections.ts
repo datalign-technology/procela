@@ -291,6 +291,60 @@ router.post('/test', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/v1/connections/test-file?filename=foo.csv
+ *
+ * Test a LOCAL file-storage connection against an in-flight upload —
+ * before the connection has been created, so the user can validate the
+ * file without a Save→Test→Save round-trip. Body is the raw file bytes.
+ * The file is written to the OS tmp dir, parsed by analyzeLocalFile, and
+ * deleted in `finally` whether or not the test succeeds. Nothing
+ * persists.
+ */
+router.post(
+  '/test-file',
+  raw({ type: '*/*', limit: '50mb' }),
+  async (req: Request, res: Response) => {
+    const rawName = typeof req.query.filename === 'string' ? req.query.filename : '';
+    const safeName = path.basename(rawName).replace(/[^\w.\-]+/g, '_');
+    if (!safeName) {
+      res.status(400).json({ success: false, error: 'filename query parameter is required' });
+      return;
+    }
+    const body = req.body;
+    if (!body || !(body instanceof Buffer) || body.length === 0) {
+      res.status(400).json({ success: false, error: 'Empty upload body' });
+      return;
+    }
+
+    const tmpDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'procela-test-'));
+    const tmpPath = path.join(tmpDir, safeName);
+    const start = Date.now();
+    try {
+      fs.writeFileSync(tmpPath, body);
+      const analysis = analyzeLocalFile(tmpPath);
+      res.json({
+        success: true,
+        data: {
+          success: true,
+          message: `Parsed ${safeName} — ${analysis.rowCount} row(s), ${analysis.columns.length} column(s)`,
+          latencyMs: Date.now() - start,
+          rowCount: analysis.rowCount,
+          columns: analysis.columns,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Parse failed';
+      res.json({
+        success: true,
+        data: { success: false, message, latencyMs: Date.now() - start },
+      });
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+    }
+  },
+);
+
 /** POST /api/v1/connections/:id/test — test connection */
 router.post('/:id/test', async (req: Request, res: Response) => {
   const conn = connections.find((c) => c.id === req.params.id);

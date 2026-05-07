@@ -372,15 +372,28 @@ export default function ConnectionsPage() {
     setFormTesting(true);
     setFormTestResult(null);
     try {
-      const res = await apiClient.post<{ success: boolean; data: { success: boolean; message: string } }>(
-        '/connections/test',
-        {
-          ...(editingId ? { id: editingId } : {}),
-          connectionType: form.connectionType,
-          config: form.config,
-          credentials: form.credentials,
-        },
-      );
+      // Pre-save LOCAL file upload: send the staged file bytes to a
+      // dedicated test endpoint that parses against an OS tmp file and
+      // immediately deletes it, so the user can validate the file
+      // without needing to Save first.
+      const useStagedTest =
+        form.connectionType === 'FILE_STORAGE' &&
+        form.config.storageType === 'LOCAL' &&
+        !!pendingFile;
+      const res = useStagedTest
+        ? await apiClient.upload<{ success: boolean; data: { success: boolean; message: string } }>(
+            `/connections/test-file?filename=${encodeURIComponent(pendingFile!.name)}`,
+            pendingFile!,
+          )
+        : await apiClient.post<{ success: boolean; data: { success: boolean; message: string } }>(
+            '/connections/test',
+            {
+              ...(editingId ? { id: editingId } : {}),
+              connectionType: form.connectionType,
+              config: form.config,
+              credentials: form.credentials,
+            },
+          );
       setFormTestResult({ success: res.data.success, message: res.data.message });
       if (res.data.success) {
         addToast('success', `Test passed: ${res.data.message}`);
@@ -852,31 +865,14 @@ export default function ConnectionsPage() {
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel} disabled={uploading || formTesting}>Cancel</button>
-            {(() => {
-              // For LOCAL file storage the file only uploads after Save (the
-              // upload endpoint needs the saved connection's id). Testing
-              // against a not-yet-uploaded file would always fail with a
-              // misleading "no file uploaded" error, so disable the button
-              // in that case and explain why in the tooltip.
-              const hasPendingLocalUpload =
-                form.connectionType === 'FILE_STORAGE' &&
-                form.config.storageType === 'LOCAL' &&
-                !!pendingFile;
-              const testDisabled = !form.name.trim() || uploading || formTesting || hasPendingLocalUpload;
-              const tip = hasPendingLocalUpload
-                ? 'Save the connection first \u2014 the file uploads on Save, then Test will work from the connection list.'
-                : !form.name.trim() ? 'Enter a connection name first.' : '';
-              return (
-                <button
-                  style={{ ...btnSecondary, opacity: testDisabled ? 0.6 : 1, cursor: testDisabled ? 'not-allowed' : 'pointer' }}
-                  disabled={testDisabled}
-                  title={tip}
-                  onClick={handleTest}
-                >
-                  {formTesting ? 'Testing\u2026' : 'Test'}
-                </button>
-              );
-            })()}
+            <button
+              style={{ ...btnSecondary, opacity: !form.name.trim() || uploading || formTesting ? 0.6 : 1, cursor: !form.name.trim() || uploading || formTesting ? 'not-allowed' : 'pointer' }}
+              disabled={!form.name.trim() || uploading || formTesting}
+              title={!form.name.trim() ? 'Enter a connection name first.' : ''}
+              onClick={handleTest}
+            >
+              {formTesting ? 'Testing\u2026' : 'Test'}
+            </button>
             <button
               style={{ ...btnPrimary, opacity: !form.name.trim() || uploading ? 0.6 : 1, cursor: !form.name.trim() || uploading ? 'not-allowed' : 'pointer' }}
               disabled={!form.name.trim() || uploading}
