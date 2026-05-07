@@ -432,8 +432,16 @@ export default function SystemsPage() {
 
   const handleSave = async (keepOpen: boolean = false) => {
     if (!form.name.trim()) return;
-    if (editingId) { await apiClient.put(`/systems/${editingId}`, form); }
-    else { await apiClient.post('/systems', { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) }); }
+    let savedId: string | null = editingId;
+    if (editingId) {
+      await apiClient.put(`/systems/${editingId}`, form);
+    } else {
+      const res = await apiClient.post<{ success: boolean; data: { id: string } }>(
+        '/systems',
+        { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) },
+      );
+      savedId = res?.data?.id || null;
+    }
     addToast('success', editingId ? 'System updated' : 'System created');
     markClean();
     if (keepOpen && !editingId) {
@@ -441,7 +449,19 @@ export default function SystemsPage() {
       fetchData();
       return;
     }
-    setShowForm(false); setEditingId(null); setForm(emptyForm); fetchData();
+    setShowForm(false); setEditingId(null); setForm(emptyForm);
+    // After creating a new INTEGRATED system, jump straight into the
+    // connection picker so the user can wire up the data source without
+    // leaving the page. Refetch first so the new system is in state, then
+    // open the modal against it. Skip for MANUAL/EXTERNAL systems
+    // (paper-process or vendor-managed — connections aren't applicable).
+    await fetchData();
+    if (!editingId && savedId && form.connectivity === 'INTEGRATED') {
+      const fresh = await apiClient.get<{ success: boolean; data: SystemEntity }>(`/systems/${savedId}`)
+        .then((r) => r.data)
+        .catch(() => null);
+      if (fresh) setConnectingSystem(fresh);
+    }
   };
 
   const handleDelete = async (id: string) => {
