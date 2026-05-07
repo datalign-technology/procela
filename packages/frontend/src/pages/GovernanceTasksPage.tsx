@@ -10,6 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceTasksPage — full CRUD list page for governance tasks. Supports
@@ -178,6 +179,7 @@ export default function GovernanceTasksPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   // ── Filtering ──
   const filtered = tasks.filter((t) => {

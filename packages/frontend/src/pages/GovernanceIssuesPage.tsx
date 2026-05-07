@@ -10,6 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceIssuesPage — full CRUD list page for governance issues. Supports
@@ -177,6 +178,7 @@ export default function GovernanceIssuesPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   // ── Filtering ──
   const filtered = issues.filter((i) => {

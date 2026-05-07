@@ -13,6 +13,7 @@ import SortableTh from '../components/SortableTh';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useSortedList } from '../hooks/useSortedList';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 interface DamaRoleAssignment {
   id: string;
@@ -157,6 +158,7 @@ export default function DamaRolesPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }

@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ── Types ──
 
@@ -447,6 +448,7 @@ export default function GovernanceGroupsPage() {
   }, []);
 
   useEffect(() => { fetchGroups(); }, [fetchGroups]);
+  useRefreshOnFocus(fetchGroups);
 
   useEffect(() => {
     if (selectedGroupId) {

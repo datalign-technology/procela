@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ── Types ──
 
@@ -146,6 +147,7 @@ export default function GovernancePoliciesPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   // ── Policy CRUD ──
 

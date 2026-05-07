@@ -7,6 +7,7 @@ import HelpPopover from '../components/HelpPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 interface Program {
   id: string;
@@ -396,6 +397,7 @@ export default function GovernanceProgramPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useRefreshOnFocus(fetchAll);
 
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }

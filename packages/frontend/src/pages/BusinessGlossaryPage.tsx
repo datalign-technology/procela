@@ -11,6 +11,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ── Types ──
 
@@ -264,6 +265,7 @@ export default function BusinessGlossaryPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   // ── Filtered list ──
   const filteredTerms = useMemo(() => {

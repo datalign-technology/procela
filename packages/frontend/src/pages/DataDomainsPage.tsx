@@ -13,6 +13,7 @@ import HelpPopover from '../components/HelpPopover';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 interface DataDomain {
   id: string; orgId: string; name: string; description: string;
@@ -125,6 +126,7 @@ export default function DataDomainsPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   const filteredDomains = useMemo(() => {
     if (!searchQuery.trim()) return domains.sort((a, b) => a.name.localeCompare(b.name));

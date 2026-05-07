@@ -103,6 +103,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 
 import { DAMA_ROLE_LABELS } from '../types';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useRefreshOnFocus } from '../hooks/usePolling';
 
 const DAMA_ROLES = Object.keys(DAMA_ROLE_LABELS);
 const ROLE_LABELS = DAMA_ROLE_LABELS;
@@ -147,6 +148,7 @@ export default function SopsPage() {
   }, [activeOrgId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useRefreshOnFocus(fetchData);
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
