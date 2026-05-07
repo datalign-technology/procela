@@ -459,10 +459,18 @@ router.post(
     delete conn.config.bucket;
     delete conn.config.path;
 
-    // Uploading a new file invalidates any prior test result.
-    conn.status = 'UNTESTED';
-    conn.lastTestedAt = null;
-    conn.lastTestResult = parseError ? `Upload stored but parse failed: ${parseError}` : null;
+    // For a LOCAL file connection a successful parse during upload IS
+    // the connection test — what /test would re-run is the same
+    // analyzeLocalFile call. Record CONNECTED so the user doesn't have
+    // to click Test a second time after Save just to flip the badge.
+    if (parseError) {
+      conn.status = 'ERROR';
+      conn.lastTestResult = `Upload stored but parse failed: ${parseError}`;
+    } else {
+      conn.status = 'CONNECTED';
+      conn.lastTestResult = `Read ${safeName}: ${(rowCount ?? 0).toLocaleString()} rows × ${(columns?.length ?? 0)} column${columns?.length === 1 ? '' : 's'}`;
+    }
+    conn.lastTestedAt = conn.config.lastUploadedAt;
     conn.updatedAt = conn.config.lastUploadedAt;
     saveStore('connections', connections);
 
