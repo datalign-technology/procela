@@ -234,6 +234,35 @@ function OriginBadge({ origin }: { origin?: string }) {
   );
 }
 
+// Toggleable columns. Name + Actions are always visible; everything
+// listed here is user-controllable from the Columns popover. Order
+// here is the render order in the table.
+type ColumnId = 'description' | 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward';
+const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
+  { id: 'description', label: 'Description', defaultVisible: true  },
+  { id: 'system',      label: 'System',      defaultVisible: true  },
+  { id: 'source',      label: 'Source',      defaultVisible: false },
+  { id: 'tier',        label: 'Tier',        defaultVisible: true  },
+  { id: 'health',      label: 'Health',      defaultVisible: true  },
+  { id: 'domain',      label: 'Domain',      defaultVisible: true  },
+  { id: 'owner',       label: 'Owner',       defaultVisible: true  },
+  { id: 'steward',     label: 'Steward',     defaultVisible: false },
+];
+const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v1';
+
+function loadVisibleCols(): Set<ColumnId> {
+  try {
+    const raw = localStorage.getItem(COLUMN_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as ColumnId[];
+      // Ignore stored ids we don't recognise — schema may have changed.
+      const known = new Set(COLUMN_DEFS.map((c) => c.id));
+      return new Set(arr.filter((id) => known.has(id)));
+    }
+  } catch { /* fall through to defaults */ }
+  return new Set(COLUMN_DEFS.filter((c) => c.defaultVisible).map((c) => c.id));
+}
+
 function InlineCellEdit({ value, onSave, type = 'text', options }: {
   value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
 }) {
@@ -312,6 +341,22 @@ export default function DataAssetsPage() {
   const [filterSystemId, setFilterSystemId] = useState('');
   const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Column visibility — toggleable from the Columns popover, persisted
+  // per-browser so the user's selection sticks across sessions.
+  const [visibleCols, setVisibleColsState] = useState<Set<ColumnId>>(() => loadVisibleCols());
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+  const setVisibleCols = (next: Set<ColumnId>) => {
+    setVisibleColsState(next);
+    try { localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify([...next])); } catch { /* quota / private mode */ }
+  };
+  const toggleCol = (id: ColumnId) => {
+    const next = new Set(visibleCols);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setVisibleCols(next);
+  };
+  const isVisible = (id: ColumnId) => visibleCols.has(id);
+  const visibleColCount = visibleCols.size;
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -807,7 +852,36 @@ export default function DataAssetsPage() {
             Data assets described in business terms, linked to the systems that hold them.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
+          <IconButton icon="settings" label="Columns" onClick={() => setShowColumnPicker((v) => !v)} />
+          {showColumnPicker && (
+            <div
+              style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 10,
+                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
+                padding: 10, minWidth: 200,
+              }}
+              onMouseLeave={() => setShowColumnPicker(false)}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Columns</span>
+                <button
+                  onClick={() => setVisibleCols(new Set(COLUMN_DEFS.filter((c) => c.defaultVisible).map((c) => c.id)))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-primary)', padding: 0 }}
+                  title="Reset to default columns"
+                >
+                  Reset
+                </button>
+              </div>
+              {COLUMN_DEFS.map((c) => (
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 2px', cursor: 'pointer', fontSize: 12 }}>
+                  <input type="checkbox" checked={isVisible(c.id)} onChange={() => toggleCol(c.id)} />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          )}
           {assets.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-assets.csv', ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'], assets.map((a) => [
@@ -1327,14 +1401,14 @@ export default function DataAssetsPage() {
                   <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} aria-label="Select all assets" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
-                <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
-                <th style={thStyle}>Source</th>
-                <th style={thStyle}>Tier</th>
-                <th style={thStyle}>Health</th>
-                <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
-                <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
-                <th style={thStyle}>Steward</th>
+                {isVisible('description') && <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>}
+                {isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
+                {isVisible('source') && <th style={thStyle}>Source</th>}
+                {isVisible('tier') && <th style={thStyle}>Tier</th>}
+                {isVisible('health') && <th style={thStyle}>Health</th>}
+                {isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
+                {isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
+                {isVisible('steward') && <th style={thStyle}>Steward</th>}
                 <th style={{ ...thStyle, width: 180, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -1379,62 +1453,78 @@ export default function DataAssetsPage() {
                         </div>
                       </div>
                     </td>
-                    <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }}>
-                      {canWrite ? (
-                        <InlineCellEdit
-                          value={asset.description || ''}
-                          onSave={(v) => inlineSaveField(asset.id, 'description', v)}
-                        />
-                      ) : (
-                        asset.description || '--'
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                    </td>
-                    <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      {binding ? (
-                        <span title={`Linked to connection ${connName || binding.connectionId}`}>
-                          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                            {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
-                          </code>
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {canWrite ? (
-                        <InlineCellEdit
-                          value={asset.governanceTier || 'BRONZE'}
-                          onSave={(v) => inlineSaveField(asset.id, 'governanceTier', v)}
-                          type="select"
-                          options={['BRONZE', 'SILVER', 'GOLD']}
-                        />
-                      ) : (
-                        <span>{asset.governanceTier || 'BRONZE'}</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {canWrite ? (
-                        <InlineCellEdit
-                          value={asset.healthScore != null ? String(asset.healthScore) : ''}
-                          onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
-                          type="number"
-                        />
-                      ) : (
-                        <span>{asset.healthScore != null ? `${asset.healthScore}%` : '—'}</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {asset.domainName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                    </td>
-                    <td style={tdStyle}>
-                      {asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                    </td>
-                    <td style={tdStyle}>
-                      {asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
-                    </td>
+                    {isVisible('description') && (
+                      <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }}>
+                        {canWrite ? (
+                          <InlineCellEdit
+                            value={asset.description || ''}
+                            onSave={(v) => inlineSaveField(asset.id, 'description', v)}
+                          />
+                        ) : (
+                          asset.description || '--'
+                        )}
+                      </td>
+                    )}
+                    {isVisible('system') && (
+                      <td style={tdStyle}>
+                        {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
+                      </td>
+                    )}
+                    {isVisible('source') && (
+                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        {binding ? (
+                          <span title={`Linked to connection ${connName || binding.connectionId}`}>
+                            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                              {binding.sourceAsset}{binding.sourceColumn ? `.${binding.sourceColumn}` : ''}
+                            </code>
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>
+                        )}
+                      </td>
+                    )}
+                    {isVisible('tier') && (
+                      <td style={tdStyle}>
+                        {canWrite ? (
+                          <InlineCellEdit
+                            value={asset.governanceTier || 'BRONZE'}
+                            onSave={(v) => inlineSaveField(asset.id, 'governanceTier', v)}
+                            type="select"
+                            options={['BRONZE', 'SILVER', 'GOLD']}
+                          />
+                        ) : (
+                          <span>{asset.governanceTier || 'BRONZE'}</span>
+                        )}
+                      </td>
+                    )}
+                    {isVisible('health') && (
+                      <td style={tdStyle}>
+                        {canWrite ? (
+                          <InlineCellEdit
+                            value={asset.healthScore != null ? String(asset.healthScore) : ''}
+                            onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
+                            type="number"
+                          />
+                        ) : (
+                          <span>{asset.healthScore != null ? `${asset.healthScore}%` : '—'}</span>
+                        )}
+                      </td>
+                    )}
+                    {isVisible('domain') && (
+                      <td style={tdStyle}>
+                        {asset.domainName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
+                      </td>
+                    )}
+                    {isVisible('owner') && (
+                      <td style={tdStyle}>
+                        {asset.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
+                      </td>
+                    )}
+                    {isVisible('steward') && (
+                      <td style={tdStyle}>
+                        {asset.stewardName || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
+                      </td>
+                    )}
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                         {binding ? (
@@ -1454,7 +1544,7 @@ export default function DataAssetsPage() {
                   {/* Expanded columns section */}
                   {isExpanded && (
                     <tr>
-                      <td colSpan={11} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
+                      <td colSpan={3 + visibleColCount} style={{ padding: 0, background: '#fafbfc', borderTop: 'none' }}>
                         <div style={{ padding: '12px 20px 12px 60px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
