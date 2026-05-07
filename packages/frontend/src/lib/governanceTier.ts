@@ -23,3 +23,13 @@ export function tierLabel(value: GovernanceTier | string | null | undefined): st
   if (!value) return TIER_LABEL.BRONZE;
   return TIER_LABEL[value as GovernanceTier] ?? value;
 }
+
+const TIER_ORDER: Record<GovernanceTier, number> = { BRONZE: 0, SILVER: 1, GOLD: 2 };
+
+/** > 0 if `a` is higher than `b`, < 0 if lower, 0 if equal. Unknown values
+ *  sort to BRONZE so a malformed value never blocks a promotion suggestion. */
+export function compareTier(a: string | null | undefined, b: string | null | undefined): number {
+  const av = TIER_ORDER[(a || 'BRONZE') as GovernanceTier] ?? 0;
+  const bv = TIER_ORDER[(b || 'BRONZE') as GovernanceTier] ?? 0;
+  return av - bv;
+}

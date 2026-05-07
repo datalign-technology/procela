@@ -338,6 +338,33 @@ export function purgeBindingsForConnection(connectionId: string): number {
   return victims.length;
 }
 
+const HEALTH_SCORE_THRESHOLD = 80;
+
+/**
+ * Derive the highest tier this asset is currently *eligible* for based
+ * on observable governance signals. This is advisory only — actual
+ * promotion still requires a human action so "Certified" retains its
+ * attestation meaning. Used by the UI to surface a "Promote?" prompt.
+ *
+ * Eligibility ladder (each rung includes the rungs below):
+ *   SILVER   needs: owner, ≥1 steward, classification
+ *   GOLD     needs: SILVER + ≥1 binding + healthScore ≥ threshold
+ *
+ * BRONZE is the floor; everyone is eligible for it.
+ */
+function computeSuggestedTier(asset: StoredDataAsset): 'BRONZE' | 'SILVER' | 'GOLD' {
+  const hasOwner = !!asset.ownerPersonId;
+  const hasSteward = Array.isArray(asset.stewardIds) && asset.stewardIds.length > 0;
+  const hasClassification = !!asset.dataClassification;
+  const silverEligible = hasOwner && hasSteward && hasClassification;
+  if (!silverEligible) return 'BRONZE';
+
+  const hasBinding = dataAssetBindings.some((b) => b.dataAssetId === asset.id);
+  const healthOk = (asset.healthScore || 0) >= HEALTH_SCORE_THRESHOLD;
+  if (hasBinding && healthOk) return 'GOLD';
+  return 'SILVER';
+}
+
 const router = Router();
 
 /** DELETE /api/v1/data-assets/all — delete all data assets */
@@ -389,7 +416,8 @@ router.get('/', (req: Request, res: Response) => {
         .join(', ') || null;
     }
     const systemName = asset.systemId ? filteredSystems.find((s) => s.id === asset.systemId)?.name || null : null;
-    return { ...asset, domainName, ownerName, stewardName, systemName };
+    const suggestedTier = computeSuggestedTier(asset);
+    return { ...asset, domainName, ownerName, stewardName, systemName, suggestedTier };
   });
 
   res.json({ success: true, data: enriched, systems: filteredSystems, dataTypes: STANDARD_DATA_TYPES });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import { tierLabel, TIER_VALUES } from '../lib/governanceTier';
+import { tierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
@@ -57,6 +57,10 @@ interface DataAssetEntity {
   domainName?: string | null;
   ownerName?: string | null;
   stewardName?: string | null;
+  /** Highest tier the asset is eligible for given current signals.
+   *  Advisory only — set by the backend, never persisted. The UI shows
+   *  a Promote prompt when this exceeds the actual governanceTier. */
+  suggestedTier?: 'BRONZE' | 'SILVER' | 'GOLD';
 }
 
 interface SystemRef {
@@ -1484,17 +1488,32 @@ export default function DataAssetsPage() {
                     )}
                     {isVisible('tier') && (
                       <td style={tdStyle}>
-                        {canWrite ? (
-                          <select
-                            value={asset.governanceTier || 'BRONZE'}
-                            onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
-                            style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
-                          >
-                            {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
-                          </select>
-                        ) : (
-                          <span>{tierLabel(asset.governanceTier)}</span>
-                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {canWrite ? (
+                            <select
+                              value={asset.governanceTier || 'BRONZE'}
+                              onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
+                              style={{ fontSize: 13, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
+                            >
+                              {TIER_VALUES.map((t) => <option key={t} value={t}>{tierLabel(t)}</option>)}
+                            </select>
+                          ) : (
+                            <span>{tierLabel(asset.governanceTier)}</span>
+                          )}
+                          {canWrite && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
+                            <button
+                              onClick={() => inlineSaveField(asset.id, 'governanceTier', asset.suggestedTier!)}
+                              title={`This asset meets the criteria for ${tierLabel(asset.suggestedTier)}. Click to promote.`}
+                              style={{
+                                fontSize: 10, fontWeight: 500, padding: '2px 8px', borderRadius: 999,
+                                background: '#dcfce7', color: '#166534', border: '1px solid #86efac',
+                                cursor: 'pointer', alignSelf: 'flex-start',
+                              }}
+                            >
+                              {'↑'} Promote to {tierLabel(asset.suggestedTier)}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                     {isVisible('health') && (
