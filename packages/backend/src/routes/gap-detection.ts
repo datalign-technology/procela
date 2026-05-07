@@ -3,6 +3,7 @@ import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { dataDomains } from './data-domains';
 import { people } from './people';
+import { connections, systemIdsForConnection } from './connections';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
@@ -146,6 +147,16 @@ router.get('/', (req: Request, res: Response) => {
     .filter((p) => !ownerIds.has(p.id))
     .map((p) => ({ id: p.id, name: p.name, role: p.role }));
 
+  // 9. Connections without a system — registered but not yet wired into
+  // the business view. Filter to the visible org scope when one was
+  // provided so the gap respects multi-tenant boundaries.
+  const orgScopedConnections = orgId
+    ? filterByOrgScope(connections, orgId as string)
+    : connections;
+  const unassignedConnections = orgScopedConnections
+    .filter((c) => systemIdsForConnection(c.id).length === 0 && !c.systemId)
+    .map((c) => ({ id: c.id, name: c.name, connectionType: c.connectionType, status: c.status }));
+
   const summary = {
     unmappedSteps: unmappedSteps.length,
     ungovernedAssets: ungovernedAssets.length,
@@ -155,8 +166,10 @@ router.get('/', (req: Request, res: Response) => {
     orphanedAssets: orphanedAssets.length,
     unlinkedAssets: unlinkedAssets.length,
     unassignedPeople: unassignedPeople.length,
+    unassignedConnections: unassignedConnections.length,
     totalGaps: unmappedSteps.length + ungovernedAssets.length + ownerlessProcesses.length
-      + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length,
+      + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length
+      + unassignedConnections.length,
   };
 
   res.json({
@@ -170,6 +183,7 @@ router.get('/', (req: Request, res: Response) => {
       orphanedAssets,
       unlinkedAssets,
       unassignedPeople,
+      unassignedConnections,
     },
     summary,
   });

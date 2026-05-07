@@ -5,7 +5,7 @@ import { loadStore, saveStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import logger from '../lib/logger';
 import { dataAssets } from './data-assets';
-import { connections } from './connections';
+import { connections, connectionSystemLinks, connectionsForSystem } from './connections';
 import { mappings } from './mappings';
 
 interface StoredSystem {
@@ -55,10 +55,17 @@ const router = Router();
  * systems return their connectivity verbatim so the absent connection
  * isn't treated as missing.
  */
+function profilesForSystem(systemId: string) {
+  // Pull profiles via the join table (authoritative) and fall back to
+  // any remaining legacy single-systemId rows for migrations in flight.
+  const linkedIds = new Set(connectionsForSystem(systemId));
+  return connections.filter((c) => linkedIds.has(c.id) || c.systemId === systemId);
+}
+
 function rollupConnectionStatus(
   sys: StoredSystem,
 ): 'CONNECTED' | 'ERROR' | 'UNTESTED' | 'NOT_CONNECTED' | 'MANUAL' | 'EXTERNAL' {
-  const profiles = connections.filter((c) => c.systemId === sys.id);
+  const profiles = profilesForSystem(sys.id);
   if (profiles.length === 0) {
     if (sys.connectivity === 'MANUAL') return 'MANUAL';
     if (sys.connectivity === 'EXTERNAL') return 'EXTERNAL';
@@ -73,7 +80,7 @@ function decorate(sys: StoredSystem) {
   return {
     ...sys,
     connectivity: sys.connectivity || 'INTEGRATED',
-    connectionCount: connections.filter((c) => c.systemId === sys.id).length,
+    connectionCount: profilesForSystem(sys.id).length,
     connectionStatus: rollupConnectionStatus(sys),
   };
 }
@@ -155,12 +162,12 @@ router.put('/:id', (req: Request, res: Response) => {
 
 /** GET /api/v1/systems/:id/impact — preview what would be affected by deleting this system */
 router.get('/:id/impact', (req: Request, res: Response) => {
-  const id = req.params.id;
+  const id = String(req.params.id);
   const sys = systems.find((s) => s.id === id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
 
   const assetsCount = dataAssets.filter((a) => a.systemId === id).length;
-  const connectionsCount = connections.filter((c) => c.systemId === id).length;
+  const connectionsCount = profilesForSystem(id).length;
   const assetIds = new Set(dataAssets.filter((a) => a.systemId === id).map((a) => a.id));
   const mappingsCount = mappings.filter((m) => assetIds.has(m.dataAssetId)).length;
 
@@ -171,9 +178,36 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
   const idx = systems.findIndex((s) => s.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  auditService.log(DEV_ORG_ID, null, 'System', systems[idx].id, 'DELETE', systems[idx], null);
+  const removed = systems[idx];
+  auditService.log(DEV_ORG_ID, null, 'System', removed.id, 'DELETE', removed, null);
   systems.splice(idx, 1);
   saveStore('systems', systems);
+  // Cascade: remove every connection→system link that pointed at this
+  // system. The connections themselves keep existing — they may still
+  // serve other systems, and a connection with zero links is a valid
+  // "unassigned" state captured by gap detection.
+  let removedLinks = 0;
+  for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
+    if (connectionSystemLinks[i].systemId === removed.id) {
+      connectionSystemLinks.splice(i, 1);
+      removedLinks++;
+    }
+  }
+  if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
+  // Re-mirror legacy systemId field on any connection that lost its
+  // primary link, so older readers see the next remaining link (or '').
+  let connsTouched = false;
+  for (const c of connections) {
+    if (c.systemId === removed.id) {
+      const remaining = connectionsForSystem.length > 0 ? [] : []; // placeholder
+      // Use the helper directly to read the current set per connection.
+      const links = connectionSystemLinks.filter((l) => l.connectionId === c.id);
+      c.systemId = links[0]?.systemId || '';
+      c.updatedAt = new Date().toISOString();
+      connsTouched = true;
+    }
+  }
+  if (connsTouched) saveStore('connections', connections);
   res.status(204).send();
 });
 

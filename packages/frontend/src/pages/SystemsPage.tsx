@@ -37,11 +37,21 @@ interface SystemEntity {
 
 interface ConnectionSummary {
   id: string;
+  /** Legacy single-system field, kept for back-compat. Use systemIds. */
   systemId: string;
+  /** All systems this connection serves (many-to-many). */
+  systemIds?: string[];
   name?: string;
   connectionType?: string;
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'UNTESTED';
   config?: { host?: string; port?: number; database?: string; baseUrl?: string };
+}
+
+/** Connection's effective set of system links — prefer systemIds, fall
+ *  back to the legacy single field, and treat empty as unassigned. */
+function connSystemIds(c: ConnectionSummary): string[] {
+  if (c.systemIds && c.systemIds.length > 0) return c.systemIds;
+  return c.systemId ? [c.systemId] : [];
 }
 
 const CONNECTIVITY_LABEL: Record<Connectivity, string> = {
@@ -220,16 +230,26 @@ function ConnectPickerModal({
     ? connections.filter((c) => !(c as any).orgId || (c as any).orgId === orgId)
     : connections;
 
-  const alreadyOnThis = orgConnections.filter((c) => c.systemId === sys.id);
-  const unassigned = orgConnections.filter((c) => !c.systemId);
-  const onOtherSystem = orgConnections.filter((c) => c.systemId && c.systemId !== sys.id);
+  // Connections are partitioned by their relationship to *this* system.
+  // With many-to-many, "on other systems" no longer means mutually
+  // exclusive — a connection can already serve System A and also be
+  // attached here without losing A. So we only really care about whether
+  // this system is already in the link set.
+  const alreadyOnThis = orgConnections.filter((c) => connSystemIds(c).includes(sys.id));
+  const unassigned = orgConnections.filter((c) => connSystemIds(c).length === 0);
+  const onOtherSystems = orgConnections.filter((c) => {
+    const ids = connSystemIds(c);
+    return ids.length > 0 && !ids.includes(sys.id);
+  });
   const systemNameById = (id: string) => systems.find((s) => s.id === id)?.name || id;
 
   const attach = async (conn: ConnectionSummary) => {
     setBusy(conn.id);
     try {
-      await apiClient.put(`/connections/${conn.id}`, { systemId: sys.id });
-      addToast('success', `Connected "${conn.name || conn.id}" to ${sys.name}`);
+      // Use the additive endpoint so attaching to this system doesn't
+      // unlink the connection from any other systems it already serves.
+      await apiClient.post(`/connections/${conn.id}/systems`, { systemId: sys.id });
+      addToast('success', `Linked "${conn.name || conn.id}" to ${sys.name}`);
       onAttached();
     } catch (err: any) {
       addToast('error', err?.response?.data?.error || 'Failed to attach connection');
@@ -242,13 +262,14 @@ function ConnectPickerModal({
     const detail = c.config?.host
       ? `${c.config.host}${c.config.port ? `:${c.config.port}` : ''}${c.config.database ? `/${c.config.database}` : ''}`
       : c.config?.baseUrl || '';
+    const otherSystems = connSystemIds(c).filter((id) => id !== sys.id).map(systemNameById);
     return (
       <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderTop: '1px solid var(--color-border)' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name || c.id}</div>
           <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
             {c.connectionType || 'Connection'}{detail ? ` · ${detail}` : ''}
-            {c.systemId && c.systemId !== sys.id ? ` · currently on ${systemNameById(c.systemId)}` : ''}
+            {otherSystems.length > 0 ? ` · also serves ${otherSystems.join(', ')}` : ''}
           </div>
         </div>
         {allowAttach ? (
@@ -266,7 +287,7 @@ function ConnectPickerModal({
     );
   };
 
-  const empty = alreadyOnThis.length === 0 && unassigned.length === 0 && onOtherSystem.length === 0;
+  const empty = alreadyOnThis.length === 0 && unassigned.length === 0 && onOtherSystems.length === 0;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
@@ -303,12 +324,12 @@ function ConnectPickerModal({
           </div>
         )}
 
-        {onOtherSystem.length > 0 && (
+        {onOtherSystems.length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>On other systems ({onOtherSystem.length})</div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Attaching one of these will move it from its current system.</div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Already on other systems ({onOtherSystems.length})</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>Linking adds this system without unlinking it from the others.</div>
             <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-              {onOtherSystem.map((c) => renderConn(c, true))}
+              {onOtherSystems.map((c) => renderConn(c, true))}
             </div>
           </div>
         )}
@@ -893,7 +914,7 @@ export default function SystemsPage() {
             </thead>
             <tbody>
               {sorted.map((sys) => {
-                const sysConnections = connections.filter((c) => c.systemId === sys.id);
+                const sysConnections = connections.filter((c) => connSystemIds(c).includes(sys.id));
                 const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
                 return (
                   <tr key={sys.id} id={`row-${sys.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}

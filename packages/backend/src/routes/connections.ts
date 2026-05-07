@@ -87,6 +87,58 @@ const WAREHOUSE_TYPES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT', 'DATABRICKS'];
 export const connections: ConnectionProfile[] = loadStore<ConnectionProfile>('connections');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
+// ── Connection ↔ System join table ────────────────────────────────────────
+//
+// In real enterprises a connection (a Postgres host, an SFTP server, an
+// API gateway) often serves many systems — and a system may aggregate
+// several connections. The legacy `systemId` field on ConnectionProfile
+// could only express one link, so we capture the relationship in a
+// dedicated join table. The legacy field is kept on the row for
+// backward-compat reads but is no longer authoritative; `systemIds` on
+// the public response is the source of truth.
+
+export interface ConnectionSystemLink {
+  id: string;
+  orgId: string;
+  connectionId: string;
+  systemId: string;
+  createdAt: string;
+}
+
+export const connectionSystemLinks: ConnectionSystemLink[] =
+  loadStore<ConnectionSystemLink>('connectionSystemLinks');
+
+// One-time migration: seed link rows from the legacy single systemId
+// per connection. Idempotent — only inserts a row if no link already
+// exists for the (connectionId, systemId) pair.
+let linksMigrated = false;
+for (const c of connections) {
+  if (c.systemId && c.systemId.trim()) {
+    const exists = connectionSystemLinks.some(
+      (l) => l.connectionId === c.id && l.systemId === c.systemId,
+    );
+    if (!exists) {
+      connectionSystemLinks.push({
+        id: uuid(),
+        orgId: c.orgId,
+        connectionId: c.id,
+        systemId: c.systemId,
+        createdAt: c.createdAt || new Date().toISOString(),
+      });
+      linksMigrated = true;
+    }
+  }
+}
+if (linksMigrated) saveStore('connectionSystemLinks', connectionSystemLinks);
+
+export function systemIdsForConnection(connectionId: string): string[] {
+  return connectionSystemLinks.filter((l) => l.connectionId === connectionId).map((l) => l.systemId);
+}
+
+export function connectionsForSystem(systemId: string): string[] {
+  return connectionSystemLinks.filter((l) => l.systemId === systemId).map((l) => l.connectionId);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -107,9 +159,21 @@ function maskCredentials(creds: ConnectionProfile['credentials']): ConnectionPro
   return masked;
 }
 
-/** Return a copy of the profile with masked credentials */
-function toPublic(profile: ConnectionProfile): Omit<ConnectionProfile, 'credentials'> & { credentials: ConnectionProfile['credentials'] } {
-  return { ...profile, credentials: maskCredentials(profile.credentials) };
+/** Return a copy of the profile with masked credentials. The public
+ *  shape adds `systemIds` (resolved from the join table) so callers
+ *  don't need a second round-trip to discover the connection's system
+ *  links. The legacy single `systemId` is preserved for backward
+ *  compatibility but `systemIds` is the source of truth. */
+function toPublic(profile: ConnectionProfile) {
+  const systemIds = systemIdsForConnection(profile.id);
+  return {
+    ...profile,
+    // Keep the legacy field for back-compat but mirror the first link
+    // so older readers see the expected shape.
+    systemId: systemIds[0] || profile.systemId || '',
+    systemIds,
+    credentials: maskCredentials(profile.credentials),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +188,11 @@ router.delete('/all', (_req: Request, res: Response) => {
   const removedIds = connections.map((c) => c.id);
   connections.splice(0, connections.length);
   saveStore('connections', connections);
-  auditService.log(DEV_ORG_ID, null, 'ConnectionProfile', '*', 'DELETE_ALL', null, { count });
+  // Cascade: drop every system link too.
+  const removedLinks = connectionSystemLinks.length;
+  connectionSystemLinks.splice(0, connectionSystemLinks.length);
+  saveStore('connectionSystemLinks', connectionSystemLinks);
+  auditService.log(DEV_ORG_ID, null, 'ConnectionProfile', '*', 'DELETE_ALL', null, { count, removedLinks });
   // Clean up every connection's upload dir alongside its profile.
   for (const id of removedIds) deleteLocalFileDir(id);
   // Cascade: any bindings pointing at deleted connections are now orphans.
@@ -132,7 +200,7 @@ router.delete('/all', (_req: Request, res: Response) => {
   const { purgeBindingsForConnection } = require('./data-assets') as typeof import('./data-assets');
   let removedBindings = 0;
   for (const id of removedIds) removedBindings += purgeBindingsForConnection(id);
-  logger.info({ count, removedBindings }, 'Deleted all connection profiles');
+  logger.info({ count, removedBindings, removedLinks }, 'Deleted all connection profiles');
   res.json({ success: true, deleted: count });
 });
 
@@ -141,7 +209,12 @@ router.get('/', (req: Request, res: Response) => {
   const { orgId, systemId } = req.query;
   let filtered = connections;
   if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
-  if (systemId) filtered = filtered.filter((c) => c.systemId === systemId);
+  if (systemId) {
+    const linkedIds = new Set(connectionsForSystem(systemId as string));
+    // Also accept the legacy single field so any rows whose links haven't
+    // migrated still show up in a system-scoped query.
+    filtered = filtered.filter((c) => linkedIds.has(c.id) || c.systemId === systemId);
+  }
   res.json({
     success: true,
     data: filtered.map(toPublic),
@@ -162,7 +235,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/connections — create connection profile */
 router.post('/', (req: Request, res: Response) => {
-  const { name, systemId, connectionType, config, credentials, orgId } = req.body;
+  const { name, systemId, systemIds, connectionType, config, credentials, orgId } = req.body;
 
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!connectionType || !CONNECTION_TYPES.includes(connectionType)) {
@@ -170,11 +243,19 @@ router.post('/', (req: Request, res: Response) => {
     return;
   }
 
+  // Accept either the legacy single systemId or the new systemIds[]; the
+  // first link in the array also gets mirrored into the legacy column for
+  // back-compat reads. Empty/missing means "unassigned" — that's allowed
+  // and surfaces as a coverage gap rather than a validation error.
+  const requestedSystemIds: string[] = Array.isArray(systemIds)
+    ? systemIds.filter((s) => typeof s === 'string' && s.trim())
+    : (typeof systemId === 'string' && systemId.trim() ? [systemId] : []);
+
   const now = new Date().toISOString();
   const conn: ConnectionProfile = {
     id: uuid(),
     orgId: orgId || DEV_ORG_ID,
-    systemId: systemId || '',
+    systemId: requestedSystemIds[0] || '',
     name,
     connectionType,
     config: config || {},
@@ -188,8 +269,16 @@ router.post('/', (req: Request, res: Response) => {
 
   connections.push(conn);
   saveStore('connections', connections);
+  // Persist the full set of system links via the join table.
+  for (const sid of requestedSystemIds) {
+    connectionSystemLinks.push({
+      id: uuid(), orgId: conn.orgId, connectionId: conn.id, systemId: sid, createdAt: now,
+    });
+  }
+  if (requestedSystemIds.length > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
+
   auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'CREATE', null, toPublic(conn));
-  logger.info({ id: conn.id, name: conn.name, type: conn.connectionType }, 'Created connection profile');
+  logger.info({ id: conn.id, name: conn.name, type: conn.connectionType, systemIds: requestedSystemIds }, 'Created connection profile');
   res.status(201).json({ success: true, data: toPublic(conn) });
 });
 
@@ -199,10 +288,43 @@ router.put('/:id', (req: Request, res: Response) => {
   if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
 
   const before = toPublic({ ...conn });
-  const { name, systemId, connectionType, config, credentials } = req.body;
+  const { name, systemId, systemIds, connectionType, config, credentials } = req.body;
 
   if (name !== undefined) conn.name = name;
-  if (systemId !== undefined) conn.systemId = systemId;
+  // Two ways to update the system links:
+  //  - systemIds[] replaces the full set (preferred)
+  //  - legacy systemId sets a single link (kept for older callers and the
+  //    System "Connect" picker, which still adds-or-moves one at a time)
+  let linksChanged = false;
+  if (Array.isArray(systemIds)) {
+    const next = systemIds.filter((s) => typeof s === 'string' && s.trim());
+    // Drop existing links for this connection in place; reinsert the new set.
+    for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
+      if (connectionSystemLinks[i].connectionId === conn.id) connectionSystemLinks.splice(i, 1);
+    }
+    const now = new Date().toISOString();
+    for (const sid of next) {
+      connectionSystemLinks.push({ id: uuid(), orgId: conn.orgId, connectionId: conn.id, systemId: sid, createdAt: now });
+    }
+    conn.systemId = next[0] || '';
+    linksChanged = true;
+  } else if (systemId !== undefined) {
+    // Legacy single-system semantics: empty string means "unlink all";
+    // otherwise replace any existing single link with this one. To match
+    // historical behavior the picker uses, this REPLACES rather than ADDS.
+    for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
+      if (connectionSystemLinks[i].connectionId === conn.id) connectionSystemLinks.splice(i, 1);
+    }
+    if (systemId) {
+      connectionSystemLinks.push({
+        id: uuid(), orgId: conn.orgId, connectionId: conn.id, systemId, createdAt: new Date().toISOString(),
+      });
+    }
+    conn.systemId = systemId || '';
+    linksChanged = true;
+  }
+  if (linksChanged) saveStore('connectionSystemLinks', connectionSystemLinks);
+
   if (connectionType !== undefined && CONNECTION_TYPES.includes(connectionType)) {
     conn.connectionType = connectionType as ConnectionProfile['connectionType'];
   }
@@ -236,6 +358,15 @@ router.delete('/:id', (req: Request, res: Response) => {
   auditService.log(removed.orgId, null, 'ConnectionProfile', removed.id, 'DELETE', toPublic(removed), null);
   connections.splice(idx, 1);
   saveStore('connections', connections);
+  // Cascade: drop any system links for the deleted connection.
+  let removedLinks = 0;
+  for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
+    if (connectionSystemLinks[i].connectionId === removed.id) {
+      connectionSystemLinks.splice(i, 1);
+      removedLinks++;
+    }
+  }
+  if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
   // Clean up any locally-uploaded file for this connection.
   deleteLocalFileDir(removed.id);
   // Cascade: any DataAssetBindings pointing at this connection become
@@ -243,8 +374,8 @@ router.delete('/:id', (req: Request, res: Response) => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { purgeBindingsForConnection } = require('./data-assets') as typeof import('./data-assets');
   const removedBindings = purgeBindingsForConnection(removed.id);
-  if (removedBindings > 0) {
-    logger.info({ connectionId: removed.id, removedBindings }, 'Cascaded binding removal for deleted connection');
+  if (removedBindings > 0 || removedLinks > 0) {
+    logger.info({ connectionId: removed.id, removedBindings, removedLinks }, 'Cascaded cleanup for deleted connection');
   }
   res.status(204).send();
 });
@@ -492,5 +623,74 @@ router.post(
     });
   },
 );
+
+/**
+ * POST /api/v1/connections/:id/systems
+ * body: { systemId }
+ *
+ * Link an additional system to this connection without disturbing the
+ * connection's other links — used by the System "+ Connect" picker so
+ * attaching a connection to a second system doesn't unlink it from the
+ * first. Idempotent: re-posting an existing link returns the link row
+ * with a 200 instead of duplicating.
+ */
+router.post('/:id/systems', (req: Request, res: Response) => {
+  const conn = connections.find((c) => c.id === req.params.id);
+  if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  const { systemId } = req.body || {};
+  if (typeof systemId !== 'string' || !systemId.trim()) {
+    res.status(400).json({ success: false, error: 'systemId is required' });
+    return;
+  }
+  const existing = connectionSystemLinks.find((l) => l.connectionId === conn.id && l.systemId === systemId);
+  if (existing) {
+    res.json({ success: true, data: existing, alreadyLinked: true });
+    return;
+  }
+  const link: ConnectionSystemLink = {
+    id: uuid(), orgId: conn.orgId, connectionId: conn.id, systemId,
+    createdAt: new Date().toISOString(),
+  };
+  connectionSystemLinks.push(link);
+  // Mirror the first link into the legacy field so older readers that
+  // still join on conn.systemId keep working until they're updated.
+  if (!conn.systemId) {
+    conn.systemId = systemId;
+    conn.updatedAt = link.createdAt;
+    saveStore('connections', connections);
+  }
+  saveStore('connectionSystemLinks', connectionSystemLinks);
+  auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'LINK_SYSTEM', null, { systemId });
+  res.status(201).json({ success: true, data: link });
+});
+
+/** DELETE /api/v1/connections/:id/systems/:systemId — remove a single link */
+router.delete('/:id/systems/:systemId', (req: Request, res: Response) => {
+  const conn = connections.find((c) => c.id === req.params.id);
+  if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  const { systemId } = req.params;
+  const idx = connectionSystemLinks.findIndex((l) => l.connectionId === conn.id && l.systemId === systemId);
+  if (idx === -1) { res.status(404).json({ success: false, error: 'Link not found' }); return; }
+  connectionSystemLinks.splice(idx, 1);
+  // Re-mirror the legacy field to whatever link is now first, so the
+  // shape stays sane even when the just-removed link was the legacy one.
+  const remaining = systemIdsForConnection(conn.id);
+  conn.systemId = remaining[0] || '';
+  conn.updatedAt = new Date().toISOString();
+  saveStore('connectionSystemLinks', connectionSystemLinks);
+  saveStore('connections', connections);
+  auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'UNLINK_SYSTEM', { systemId }, null);
+  res.status(204).send();
+});
+
+/** GET /api/v1/connections/:id/systems — the system links for this connection */
+router.get('/:id/systems', (req: Request, res: Response) => {
+  const conn = connections.find((c) => c.id === req.params.id);
+  if (!conn) { res.status(404).json({ success: false, error: 'Connection profile not found' }); return; }
+  res.json({
+    success: true,
+    data: connectionSystemLinks.filter((l) => l.connectionId === conn.id),
+  });
+});
 
 export default router;

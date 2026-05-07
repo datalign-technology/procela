@@ -18,7 +18,12 @@ import { SkeletonRows } from '../components/Skeleton';
 interface ConnectionProfile {
   id: string;
   orgId: string;
+  /** Legacy single-system field, mirrored from systemIds[0] for older
+   *  callers. Use systemIds for the authoritative set. */
   systemId: string;
+  /** All systems this connection serves (many-to-many). Populated by
+   *  the backend from the connectionSystemLinks join table. */
+  systemIds?: string[];
   name: string;
   connectionType: string;
   config: Record<string, any> & {
@@ -116,14 +121,14 @@ const TYPE_LABELS: Record<string, string> = {
 
 interface FormData {
   name: string;
-  systemId: string;
+  systemIds: string[];
   connectionType: string;
   config: Record<string, any>;
   credentials: Record<string, any>;
 }
 
 const emptyForm: FormData = {
-  name: '', systemId: '', connectionType: 'DATABASE',
+  name: '', systemIds: [], connectionType: 'DATABASE',
   config: {}, credentials: {},
 };
 
@@ -260,7 +265,8 @@ export default function ConnectionsPage() {
   // reload doesn't re-trigger the form.
   useEffect(() => {
     if (searchParams.get('open') === '1') {
-      setForm({ ...emptyForm, systemId: searchParams.get('systemId') || '' });
+      const sid = searchParams.get('systemId') || '';
+      setForm({ ...emptyForm, systemIds: sid ? [sid] : [] });
       setEditingId(null);
       setShowForm(true);
       const params = new URLSearchParams(searchParams);
@@ -275,9 +281,9 @@ export default function ConnectionsPage() {
 
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setFormTestResult(null);
-    // Pre-fill systemId from the active filter so "+ Add Connection" under a
+    // Pre-fill systemIds from the active filter so "+ Add Connection" under a
     // System filter keeps the user's context.
-    setForm({ ...emptyForm, systemId: systemFilter });
+    setForm({ ...emptyForm, systemIds: systemFilter ? [systemFilter] : [] });
     setEditingId(null);
     setPendingFile(null);
     setShowForm(true);
@@ -286,7 +292,9 @@ export default function ConnectionsPage() {
   const openEdit = (conn: ConnectionProfile) => {
     setForm({
       name: conn.name,
-      systemId: conn.systemId,
+      systemIds: conn.systemIds && conn.systemIds.length > 0
+        ? [...conn.systemIds]
+        : (conn.systemId ? [conn.systemId] : []),
       connectionType: conn.connectionType,
       config: { ...conn.config },
       credentials: { ...conn.credentials },
@@ -302,7 +310,9 @@ export default function ConnectionsPage() {
   const openDuplicate = (conn: ConnectionProfile) => {
     setForm({
       name: `${conn.name} (copy)`,
-      systemId: conn.systemId,
+      systemIds: conn.systemIds && conn.systemIds.length > 0
+        ? [...conn.systemIds]
+        : (conn.systemId ? [conn.systemId] : []),
       connectionType: conn.connectionType,
       config: { ...conn.config },
       credentials: { ...conn.credentials },
@@ -470,8 +480,12 @@ export default function ConnectionsPage() {
   // -----------------------------------------------------------------------
 
   const handleDiscover = async (conn: ConnectionProfile) => {
-    const sys = systems.find((s) => s.id === conn.systemId);
-    setDiscoverModal({ connId: conn.id, systemId: conn.systemId, systemName: sys?.name || 'Unknown System' });
+    // Discovery surfaces assets under one system; if a connection serves
+    // multiple, pick the first link as the default landing spot.
+    const ids = conn.systemIds && conn.systemIds.length > 0 ? conn.systemIds : (conn.systemId ? [conn.systemId] : []);
+    const primaryId = ids[0] || '';
+    const sys = systems.find((s) => s.id === primaryId);
+    setDiscoverModal({ connId: conn.id, systemId: primaryId, systemName: sys?.name || 'Unknown System' });
     setDiscoveringId(conn.id);
     setDiscoveredAssets([]);
     try {
@@ -504,7 +518,10 @@ export default function ConnectionsPage() {
   // Stats and the table both operate on the system-filtered view so the
   // numbers line up with what the user is looking at.
   const visibleConnections = connections.filter((c) => {
-    if (systemFilter && c.systemId !== systemFilter) return false;
+    if (systemFilter) {
+      const ids = c.systemIds && c.systemIds.length > 0 ? c.systemIds : (c.systemId ? [c.systemId] : []);
+      if (!ids.includes(systemFilter)) return false;
+    }
     if (filterConnType && c.connectionType !== filterConnType) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -847,10 +864,53 @@ export default function ConnectionsPage() {
               <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Production DB, CRM API" />
             </div>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System</label>
-              <select style={selectStyle} value={form.systemId} onChange={(e) => setForm({ ...form, systemId: e.target.value })}>
-                <option value="">-- Select system --</option>
-                {systems.map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                Systems
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
+                  one or more — leave empty if not yet assigned
+                </span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
+                {form.systemIds.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                    No systems linked yet.
+                  </span>
+                )}
+                {form.systemIds.map((sid) => {
+                  const s = systems.find((sys) => sys.id === sid);
+                  return (
+                    <span key={sid} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+                      background: '#dbeafe', color: '#1e40af',
+                    }}>
+                      {s?.name || sid}
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, systemIds: form.systemIds.filter((id) => id !== sid) })}
+                        aria-label={`Remove ${s?.name || sid}`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 14, lineHeight: 1 }}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              <select
+                style={selectStyle}
+                value=""
+                onChange={(e) => {
+                  const sid = e.target.value;
+                  if (sid && !form.systemIds.includes(sid)) {
+                    setForm({ ...form, systemIds: [...form.systemIds, sid] });
+                  }
+                }}
+              >
+                <option value="">-- Add a system --</option>
+                {systems
+                  .filter((s) => !form.systemIds.includes(s.id))
+                  .map((s) => <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>)}
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -1001,7 +1061,22 @@ export default function ConnectionsPage() {
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(conn.id)} />
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      {systemNameMap[conn.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}
+                      {(() => {
+                        const ids = conn.systemIds && conn.systemIds.length > 0
+                          ? conn.systemIds
+                          : (conn.systemId ? [conn.systemId] : []);
+                        if (ids.length === 0) {
+                          return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
+                        }
+                        const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
+                        if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
+                        if (names.length === 1) return names[0];
+                        return (
+                          <span title={names.join(', ')}>
+                            {names[0]} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>+{names.length - 1}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>{conn.name}</td>
                     <td style={tdStyle}>
