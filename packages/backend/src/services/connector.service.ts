@@ -359,13 +359,21 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
 
 function testLocalFile(profile: ConnectionProfileLike): ConnectorResult {
   const start = Date.now();
-  const { localFilePath, originalFileName } = profile.config;
+  const config = profile.config || {};
+  const { localFilePath, originalFileName } = config;
 
   if (!localFilePath) {
     return { success: false, message: 'No file uploaded yet. Open this connection and use Browse to pick a file, then Save to upload it.', latencyMs: 0 };
   }
   if (!fs.existsSync(localFilePath)) {
-    return { success: false, message: 'Uploaded file is missing on disk. Please re-upload.', latencyMs: Date.now() - start };
+    // Show enough of the path to debug a CWD or rename mismatch without
+    // dumping the full absolute path into the toast.
+    const tail = localFilePath.length > 60 ? `…${localFilePath.slice(-60)}` : localFilePath;
+    return {
+      success: false,
+      message: `Uploaded file is missing on disk at ${tail}. Re-upload via the Browse button to fix.`,
+      latencyMs: Date.now() - start,
+    };
   }
 
   try {

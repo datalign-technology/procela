@@ -369,8 +369,13 @@ router.post('/:id/test', async (req: Request, res: Response) => {
     conn.lastTestResult = err instanceof Error ? err.message : 'Unknown error';
     conn.updatedAt = conn.lastTestedAt;
     saveStore('connections', connections);
-    logger.error({ err, id: conn.id }, 'Connection test failed');
-    res.status(500).json({ success: false, error: 'Connection test failed' });
+    logger.error({ err, id: conn.id, connectionType: conn.connectionType, storageType: conn.config?.storageType }, 'Connection test threw');
+    // Return the real reason so the UI can show it instead of a
+    // generic "Connection test failed" toast that hides what broke.
+    res.status(500).json({
+      success: false,
+      error: err instanceof Error ? err.message : 'Connection test failed',
+    });
   }
 });
 

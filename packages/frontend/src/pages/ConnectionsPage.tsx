@@ -450,8 +450,11 @@ export default function ConnectionsPage() {
         addToast('error', `Failed: ${res.data.message}`);
       }
       fetchData();
-    } catch {
-      addToast('error', 'Connection test failed');
+    } catch (err: any) {
+      // Surface the backend's actual reason instead of a generic toast.
+      // The ApiError carries the parsed `error` field from the response.
+      const detail = err?.message && err.message !== 'Connection test failed' ? `: ${err.message}` : '';
+      addToast('error', `Connection test failed${detail}`);
       fetchData();
     } finally {
       setTestingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
