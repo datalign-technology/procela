@@ -214,14 +214,35 @@ router.delete('/all', (_req: Request, res: Response) => {
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
-  // Enrich with resolved org names so dropdowns can show "Name — Org"
-  // without doing the join client-side. Order is preserved from
-  // person.orgIds so the "primary" assignment lists first.
+  // Build "Root / Parent / Child" for a single org id by walking up
+  // parentId. Cached per request via the closure so a person assigned
+  // to many siblings doesn't re-walk the same ancestry repeatedly.
+  const pathCache = new Map<string, string>();
+  const orgPathFor = (oid: string): string | null => {
+    if (pathCache.has(oid)) return pathCache.get(oid)!;
+    const segments: string[] = [];
+    let current = organizations.find((o) => o.id === oid);
+    if (!current) return null;
+    const seen = new Set<string>();
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      segments.unshift(current.name);
+      current = current.parentId ? organizations.find((o) => o.id === current!.parentId) : undefined;
+    }
+    const joined = segments.join(' / ');
+    pathCache.set(oid, joined);
+    return joined;
+  };
+  // Enrich with both resolved org names (legacy callers) and the full
+  // ancestor path so dropdowns can show "Name — Title · Root / Dept".
   const enriched = filtered.map((p) => ({
     ...p,
     orgNames: p.orgIds
       .map((oid) => organizations.find((o) => o.id === oid)?.name)
       .filter((n): n is string => !!n),
+    orgPaths: p.orgIds
+      .map(orgPathFor)
+      .filter((s): s is string => !!s),
   }));
   res.json({ success: true, data: enriched, roles: ROLES });
 });
