@@ -99,11 +99,16 @@ interface FormData {
   vendor: string;
   integrationPoints: string;
   connectivity: Connectivity;
+  /** Connections the user wants this system linked to. Diffed against
+   *  the system's existing links on save and reconciled via
+   *  POST/DELETE /connections/:cid/systems. */
+  connectionIds: string[];
 }
 
 const emptyForm: FormData = {
   name: '', description: '', systemType: '', businessCriticality: '',
   vendor: '', integrationPoints: '', connectivity: 'INTEGRATED',
+  connectionIds: [],
 };
 
 function InlineCellEdit({ value, onSave, type = 'text', options }: {
@@ -415,12 +420,18 @@ export default function SystemsPage() {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
   const openEdit = (sys: SystemEntity) => {
+    // Pre-select the connections currently linked to this system so the
+    // user can add or remove them inline alongside the other fields.
+    const linkedConnIds = connections
+      .filter((c) => connSystemIds(c).includes(sys.id))
+      .map((c) => c.id);
     setForm({
       name: sys.name, description: sys.description, systemType: sys.systemType,
       businessCriticality: sys.businessCriticality || '',
       vendor: sys.vendor || '',
       integrationPoints: sys.integrationPoints || '',
       connectivity: sys.connectivity || 'INTEGRATED',
+      connectionIds: linkedConnIds,
     });
     setEditingId(sys.id); setShowForm(true);
   };
@@ -432,16 +443,42 @@ export default function SystemsPage() {
 
   const handleSave = async (keepOpen: boolean = false) => {
     if (!form.name.trim()) return;
+
+    // Save the system itself, then reconcile the connection links.
+    // Strip connectionIds from the body — the systems route doesn't
+    // know about them; they're applied via the connection-system join
+    // routes below.
+    const { connectionIds: requestedConnIds, ...systemBody } = form;
     let savedId: string | null = editingId;
     if (editingId) {
-      await apiClient.put(`/systems/${editingId}`, form);
+      await apiClient.put(`/systems/${editingId}`, systemBody);
     } else {
       const res = await apiClient.post<{ success: boolean; data: { id: string } }>(
         '/systems',
-        { ...form, ...(activeOrgId ? { orgId: activeOrgId } : {}) },
+        { ...systemBody, ...(activeOrgId ? { orgId: activeOrgId } : {}) },
       );
       savedId = res?.data?.id || null;
     }
+
+    if (savedId && form.connectivity === 'INTEGRATED') {
+      // Diff against what's currently linked so we only POST/DELETE the
+      // changes, not the full set. For new systems the existing set is
+      // empty, so every selection becomes an add.
+      const existing = editingId
+        ? connections.filter((c) => connSystemIds(c).includes(editingId)).map((c) => c.id)
+        : [];
+      const toAdd = requestedConnIds.filter((id) => !existing.includes(id));
+      const toRemove = existing.filter((id) => !requestedConnIds.includes(id));
+      try {
+        await Promise.all([
+          ...toAdd.map((cid) => apiClient.post(`/connections/${cid}/systems`, { systemId: savedId })),
+          ...toRemove.map((cid) => apiClient.delete(`/connections/${cid}/systems/${savedId}`)),
+        ]);
+      } catch (err: any) {
+        addToast('error', err?.message ? `Some links failed: ${err.message}` : 'Some connection links failed to apply');
+      }
+    }
+
     addToast('success', editingId ? 'System updated' : 'System created');
     markClean();
     if (keepOpen && !editingId) {
@@ -450,18 +487,7 @@ export default function SystemsPage() {
       return;
     }
     setShowForm(false); setEditingId(null); setForm(emptyForm);
-    // After creating a new INTEGRATED system, jump straight into the
-    // connection picker so the user can wire up the data source without
-    // leaving the page. Refetch first so the new system is in state, then
-    // open the modal against it. Skip for MANUAL/EXTERNAL systems
-    // (paper-process or vendor-managed — connections aren't applicable).
-    await fetchData();
-    if (!editingId && savedId && form.connectivity === 'INTEGRATED') {
-      const fresh = await apiClient.get<{ success: boolean; data: SystemEntity }>(`/systems/${savedId}`)
-        .then((r) => r.data)
-        .catch(() => null);
-      if (fresh) setConnectingSystem(fresh);
-    }
+    fetchData();
   };
 
   const handleDelete = async (id: string) => {
@@ -834,6 +860,74 @@ export default function SystemsPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Points</label>
               <input style={inputStyle} value={form.integrationPoints} onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })} placeholder="e.g. Connects to SAP via API, feeds Data Warehouse nightly" />
             </div>
+            {form.connectivity === 'INTEGRATED' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                  Connections
+                  <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
+                    one or more — link the data source(s) that back this system
+                  </span>
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
+                  {form.connectionIds.length === 0 && (
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      No connections linked yet — pick one below or create a new one.
+                    </span>
+                  )}
+                  {form.connectionIds.map((cid) => {
+                    const c = connections.find((cc) => cc.id === cid);
+                    const detail = c?.connectionType ? ` · ${c.connectionType}` : '';
+                    return (
+                      <span key={cid} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+                        background: '#dbeafe', color: '#1e40af',
+                      }}>
+                        {c?.name || cid}{detail}
+                        <button
+                          type="button"
+                          onClick={() => setFormDirty({ ...form, connectionIds: form.connectionIds.filter((id) => id !== cid) })}
+                          aria-label={`Remove ${c?.name || cid}`}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 14, lineHeight: 1 }}
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <select
+                    style={{ ...selectStyle, flex: 1 }}
+                    value=""
+                    onChange={(e) => {
+                      const cid = e.target.value;
+                      if (cid && !form.connectionIds.includes(cid)) {
+                        setFormDirty({ ...form, connectionIds: [...form.connectionIds, cid] });
+                      }
+                    }}
+                  >
+                    <option value="">-- Add an existing connection --</option>
+                    {connections
+                      .filter((c) => !form.connectionIds.includes(c.id))
+                      .map((c) => {
+                        const otherSystems = connSystemIds(c).filter((sid) => sid !== editingId).map((sid) => systems.find((s) => s.id === sid)?.name).filter(Boolean);
+                        const suffix = otherSystems.length > 0 ? ` (also serves ${otherSystems.join(', ')})` : '';
+                        return <option key={c.id} value={c.id}>{c.name}{c.connectionType ? ` — ${c.connectionType}` : ''}{suffix}</option>;
+                      })}
+                  </select>
+                  <a
+                    href="/connections?open=1"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...btnSecondary, textDecoration: 'none', fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}
+                    title="Open the Connections page in a new tab to register a new data source"
+                  >
+                    + Create new
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
