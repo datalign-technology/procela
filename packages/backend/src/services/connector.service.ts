@@ -362,7 +362,7 @@ function testLocalFile(profile: ConnectionProfileLike): ConnectorResult {
   const { localFilePath, originalFileName } = profile.config;
 
   if (!localFilePath) {
-    return { success: false, message: 'No file uploaded yet. Use the Browse button to pick a file.', latencyMs: 0 };
+    return { success: false, message: 'No file uploaded yet. Open this connection and use Browse to pick a file, then Save to upload it.', latencyMs: 0 };
   }
   if (!fs.existsSync(localFilePath)) {
     return { success: false, message: 'Uploaded file is missing on disk. Please re-upload.', latencyMs: Date.now() - start };
@@ -397,7 +397,7 @@ function discoverLocalFile(profile: ConnectionProfileLike): ConnectorResult {
   const { localFilePath, originalFileName } = profile.config;
 
   if (!localFilePath || !fs.existsSync(localFilePath)) {
-    return { success: false, message: 'No file uploaded yet. Use the Browse button to pick a file.', latencyMs: 0 };
+    return { success: false, message: 'No file uploaded yet. Open this connection and use Browse to pick a file, then Save to upload it.', latencyMs: 0 };
   }
 
   try {
