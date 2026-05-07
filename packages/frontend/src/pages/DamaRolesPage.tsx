@@ -12,6 +12,7 @@ import SectionCard from '../components/SectionCard';
 import SortableTh from '../components/SortableTh';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { useSortedList } from '../hooks/useSortedList';
+import { formatPersonLabel } from '../lib/personLabel';
 
 interface DamaRoleAssignment {
   id: string;
@@ -301,7 +302,7 @@ export default function DamaRolesPage() {
                 onChange={(e) => setForm({ ...form, personId: e.target.value })}
                 onBlur={() => { roleValidation.touch('personId'); roleValidation.validateField('personId', form.personId, form); }}>
                 <option value="">-- Select person --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
               {roleValidation.fieldError('personId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('personId')}</div>}
             </div>

@@ -9,6 +9,7 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
+import { formatPersonLabel } from '../lib/personLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceTasksPage — full CRUD list page for governance tasks. Supports
@@ -371,7 +372,7 @@ export default function GovernanceTasksPage() {
           </select>
           <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
             <option value="">All Assignees</option>
-            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
           </select>
           {(filterStatus || filterPriority || filterType || filterAssignee || searchQuery) && (
             <>
@@ -475,7 +476,7 @@ export default function GovernanceTasksPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assignee</label>
               <select style={selectStyle} value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
             <div>

@@ -102,6 +102,7 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 import { DAMA_ROLE_LABELS } from '../types';
+import { formatPersonLabel } from '../lib/personLabel';
 
 const DAMA_ROLES = Object.keys(DAMA_ROLE_LABELS);
 const ROLE_LABELS = DAMA_ROLE_LABELS;
@@ -321,7 +322,7 @@ export default function SopsPage() {
         </select>
         <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)}>
           <option value="">All Owners</option>
-          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
         </select>
         {(filterCategory || filterStatus || filterOwner || searchQuery) && (
           <>
@@ -365,7 +366,7 @@ export default function SopsPage() {
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
               <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
                 <option value="">-- No owner --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
             <div>

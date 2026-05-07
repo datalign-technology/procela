@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
+import { formatPersonLabel } from '../lib/personLabel';
 
 interface Program {
   id: string;
@@ -900,7 +901,7 @@ export default function GovernanceProgramPage() {
                                     </div>
                                     {!isFilled ? (
                                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
                                         <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</button>
                                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
                                         <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12, borderColor: '#c4b5fd' }} value={roleAgentSelections[role.roleType] || ''} onChange={(e) => { setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">{'⚙'} Agent...</option>{agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>

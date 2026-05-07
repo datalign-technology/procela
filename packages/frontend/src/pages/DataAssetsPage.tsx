@@ -21,6 +21,7 @@ import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SectionCard from '../components/SectionCard';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
+import { formatPersonLabel } from '../lib/personLabel';
 
 interface DataAssetEntity {
   id: string;
@@ -1112,7 +1113,7 @@ export default function DataAssetsPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
               <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => updateField('ownerPersonId', e.target.value)}>
                 <option value="">-- No owner --</option>
-                {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
             <div>
@@ -1133,7 +1134,7 @@ export default function DataAssetsPage() {
               >
                 <option value="">+ Add steward...</option>
                 {peopleList.filter((p) => !form.stewardIds.includes(p.id)).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
                 ))}
               </select>
               {form.stewardIds.length > 0 && (
@@ -1340,7 +1341,7 @@ export default function DataAssetsPage() {
           >
             <option value="">Assign Owner...</option>
             {peopleList.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
             ))}
           </select>
           <span style={{ color: '#93c5fd' }}>|</span>

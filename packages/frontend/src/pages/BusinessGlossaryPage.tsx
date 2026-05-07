@@ -10,6 +10,7 @@ import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
+import { formatPersonLabel } from '../lib/personLabel';
 
 // ── Types ──
 
@@ -723,7 +724,7 @@ export default function BusinessGlossaryPage() {
                   <label style={labelStyle}>Owner</label>
                   <select style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
                     <option value="">-- Unassigned --</option>
-                    {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                   </select>
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
@@ -810,7 +811,7 @@ export default function BusinessGlossaryPage() {
               <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.ownerPersonId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerPersonId: e.target.value })}>
                 <option value="">Owner…</option>
                 <option value="__unassign__">Clear owner</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
               <select style={{ ...inputStyle, fontSize: 12, padding: '4px 8px', width: 'auto' }} value={bulkUpdates.domainId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, domainId: e.target.value })}>
                 <option value="">Primary Domain…</option>

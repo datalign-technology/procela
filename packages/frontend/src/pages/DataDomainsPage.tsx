@@ -12,6 +12,7 @@ import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
+import { formatPersonLabel } from '../lib/personLabel';
 
 interface DataDomain {
   id: string; orgId: string; name: string; description: string;
@@ -501,7 +502,7 @@ export default function DataDomainsPage() {
                     <select style={selectStyle} value={bulkUpdates.ownerId} onChange={(e) => setBulkUpdates({ ...bulkUpdates, ownerId: e.target.value })}>
                       <option value="">— No change —</option>
                       <option value="__unassign__">— Clear owner —</option>
-                      {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                     </select>
                   </div>
                   <div>
@@ -569,7 +570,7 @@ export default function DataDomainsPage() {
                   <div style={labelStyle}>Owner (Data Owner)</div>
                   <select style={selectStyle} value={detailOwnerId} onChange={(e) => setDetailOwnerId(e.target.value)}>
                     <option value="">-- Unassigned --</option>
-                    {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                   </select>
                 </div>
 

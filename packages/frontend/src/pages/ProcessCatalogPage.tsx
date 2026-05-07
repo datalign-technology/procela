@@ -76,6 +76,7 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
 };
 
 import { getStatusColor } from '@/lib/statusBadge';
+import { formatPersonLabel } from '../lib/personLabel';
 
 const ALL_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
 const statusColors = Object.fromEntries(ALL_STATUSES.map((s) => [s, getStatusColor(s)]));
@@ -1609,7 +1610,7 @@ export default function ProcessCatalogPage() {
             onChange={(e) => setBulkOwnerValue(e.target.value)}
           >
             <option value="">-- Select person --</option>
-            {peopleList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
           </select>
         </div>
       </ConfirmDialog>

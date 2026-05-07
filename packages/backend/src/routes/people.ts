@@ -214,7 +214,16 @@ router.delete('/all', (_req: Request, res: Response) => {
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
-  res.json({ success: true, data: filtered, roles: ROLES });
+  // Enrich with resolved org names so dropdowns can show "Name — Org"
+  // without doing the join client-side. Order is preserved from
+  // person.orgIds so the "primary" assignment lists first.
+  const enriched = filtered.map((p) => ({
+    ...p,
+    orgNames: p.orgIds
+      .map((oid) => organizations.find((o) => o.id === oid)?.name)
+      .filter((n): n is string => !!n),
+  }));
+  res.json({ success: true, data: enriched, roles: ROLES });
 });
 
 /** GET /api/v1/people/:id/360 — full 360 view of a person */

@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
+import { formatPersonLabel } from '../lib/personLabel';
 
 // ── Types ──
 
@@ -298,7 +299,7 @@ export default function GovernancePoliciesPage() {
               <label style={labelStyle}>Owner</label>
               <select style={selectStyle} value={form.ownerAssignmentId} onChange={(e) => setForm({ ...form, ownerAssignmentId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
             <div>

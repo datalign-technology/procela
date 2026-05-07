@@ -9,6 +9,7 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
+import { formatPersonLabel } from '../lib/personLabel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceIssuesPage — full CRUD list page for governance issues. Supports
@@ -461,7 +462,7 @@ export default function GovernanceIssuesPage() {
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assigned To</label>
               <select style={selectStyle} value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
                 <option value="">-- Unassigned --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
             {editingId && (

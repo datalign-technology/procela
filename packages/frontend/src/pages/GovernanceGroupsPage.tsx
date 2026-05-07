@@ -10,6 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
+import { formatPersonLabel } from '../lib/personLabel';
 
 // ── Types ──
 
@@ -994,7 +995,7 @@ export default function GovernanceGroupsPage() {
                                   >
                                     <option value="">Person...</option>
                                     {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
-                                      <option key={p.id} value={p.id}>{p.name}</option>
+                                      <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
                                     ))}
                                   </select>
                                   <button
@@ -1047,7 +1048,7 @@ export default function GovernanceGroupsPage() {
                       <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person</label>
                       <select style={selectStyle} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)}>
                         <option value="">-- Select person --</option>
-                        {availablePeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        {availablePeople.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                       </select>
                     </div>
                     <div style={{ flex: 1 }}>
