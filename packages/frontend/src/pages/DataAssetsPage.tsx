@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { tierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
@@ -255,19 +257,6 @@ const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean 
 ];
 const COLUMN_STORAGE_KEY = 'procela.dataAssets.visibleCols.v1';
 
-function loadVisibleCols(): Set<ColumnId> {
-  try {
-    const raw = localStorage.getItem(COLUMN_STORAGE_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw) as ColumnId[];
-      // Ignore stored ids we don't recognise — schema may have changed.
-      const known = new Set(COLUMN_DEFS.map((c) => c.id));
-      return new Set(arr.filter((id) => known.has(id)));
-    }
-  } catch { /* fall through to defaults */ }
-  return new Set(COLUMN_DEFS.filter((c) => c.defaultVisible).map((c) => c.id));
-}
-
 function InlineCellEdit({ value, onSave, type = 'text', options }: {
   value: string; onSave: (v: string) => void; type?: 'text' | 'select' | 'number'; options?: string[];
 }) {
@@ -347,21 +336,11 @@ export default function DataAssetsPage() {
   const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Column visibility — toggleable from the Columns popover, persisted
-  // per-browser so the user's selection sticks across sessions.
-  const [visibleCols, setVisibleColsState] = useState<Set<ColumnId>>(() => loadVisibleCols());
-  const [showColumnPicker, setShowColumnPicker] = useState(false);
-  const setVisibleCols = (next: Set<ColumnId>) => {
-    setVisibleColsState(next);
-    try { localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify([...next])); } catch { /* quota / private mode */ }
-  };
-  const toggleCol = (id: ColumnId) => {
-    const next = new Set(visibleCols);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setVisibleCols(next);
-  };
-  const isVisible = (id: ColumnId) => visibleCols.has(id);
-  const visibleColCount = visibleCols.size;
+  // Column visibility — toggleable from the Columns popover via the
+  // shared hook + component. Storage key and column defs declared above.
+  const colPicker = useColumnPicker<ColumnId>(COLUMN_STORAGE_KEY, COLUMN_DEFS);
+  const isVisible = colPicker.isVisible;
+  const visibleColCount = colPicker.visibleCount;
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
   const [loading360, setLoading360] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -900,36 +879,8 @@ export default function DataAssetsPage() {
             Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
-          <IconButton icon="columns" label="Columns" onClick={() => setShowColumnPicker((v) => !v)} />
-          {showColumnPicker && (
-            <div
-              style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 10,
-                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
-                padding: 10, minWidth: 200,
-              }}
-              onMouseLeave={() => setShowColumnPicker(false)}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Columns</span>
-                <button
-                  onClick={() => setVisibleCols(new Set(COLUMN_DEFS.filter((c) => c.defaultVisible).map((c) => c.id)))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-primary)', padding: 0 }}
-                  title="Reset to default columns"
-                >
-                  Reset
-                </button>
-              </div>
-              {COLUMN_DEFS.map((c) => (
-                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 2px', cursor: 'pointer', fontSize: 12 }}>
-                  <input type="checkbox" checked={isVisible(c.id)} onChange={() => toggleCol(c.id)} />
-                  {c.label}
-                </label>
-              ))}
-            </div>
-          )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={colPicker} />
           {assets.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-assets.csv', ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'], assets.map((a) => [
