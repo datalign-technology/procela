@@ -14,7 +14,7 @@
 #   # paste the function body
 #
 # What it does:
-#   1. Confirms you're on the target branch (default create-procela-development)
+#   1. Confirms you're on the target branch (default create-procela-main)
 #      and the working tree is clean.
 #   2. git pull --ff-only origin <target>
 #   3. git fetch origin <helper>:refs/remotes/origin/<helper>
@@ -29,7 +29,7 @@ function Land-ClaudeWork {
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$Branch,
 
-        [string]$Target = 'create-procela-development'
+        [string]$Target = 'create-procela-main'
     )
 
     # Must be inside a git repo
