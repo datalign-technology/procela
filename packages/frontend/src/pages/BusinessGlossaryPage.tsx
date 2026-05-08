@@ -486,7 +486,7 @@ export default function BusinessGlossaryPage() {
           {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
           {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
           {canWrite && terms.length === 0 && (
-            <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
+            <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
           )}
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>

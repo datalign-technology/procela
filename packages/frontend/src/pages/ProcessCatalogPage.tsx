@@ -1377,7 +1377,7 @@ export default function ProcessCatalogPage() {
                 onClick={() => navigate('/processes/compare')} />
             )}
             {canWrite && (
-              <IconButton icon="settings"
+              <IconButton icon="wand"
                 label="Generate from industry template"
                 onClick={() => navigate('/processes/wizard')} />
             )}

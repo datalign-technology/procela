@@ -1239,7 +1239,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                                     <td style={{ padding: '5px 10px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
                                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                                         <IconButton size="sm" icon="check" label="Add NOT NULL rule" onClick={() => quickAddRule(a.id, col, 'NOT_NULL')} />
-                                        <IconButton size="sm" icon="search" label="Add UNIQUE rule" onClick={() => quickAddRule(a.id, col, 'UNIQUE')} />
+                                        <IconButton size="sm" icon="check" label="Add UNIQUE rule" onClick={() => quickAddRule(a.id, col, 'UNIQUE')} />
                                         <IconButton size="sm" icon="settings" label="Manage rules for this column" onClick={() => onManageRules(a, col.columnName)} />
                                       </div>
                                     </td>

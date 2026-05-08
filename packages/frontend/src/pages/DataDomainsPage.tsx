@@ -329,7 +329,7 @@ export default function DataDomainsPage() {
               onClick={() => exportCsv('data-domains.csv', ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'], domains.map((d) => [d.name, d.description, d.ownerName || '', d.stewards.map((s) => s.name).join('; '), d.assets.map((a) => a.name).join('; '), d.status]))} />
           )}
           {canWrite && domains.length === 0 && (
-            <IconButton icon="settings" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
+            <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
           )}
           {canWrite && <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />}
         </div>

@@ -32,7 +32,9 @@ export type IconName =
   | 'unlink'
   | 'users'
   | 'copy'
-  | 'clock';
+  | 'clock'
+  | 'columns'
+  | 'wand';
 
 interface IconButtonProps {
   icon: IconName;
@@ -171,6 +173,13 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
       return <svg {...common}><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>;
     case 'clock':
       return <svg {...common}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
+    case 'columns':
+      // Three vertical bars — column-visibility / table layout intent.
+      return <svg {...common}><rect x="3" y="4" width="4" height="16" rx="1" /><rect x="10" y="4" width="4" height="16" rx="1" /><rect x="17" y="4" width="4" height="16" rx="1" /></svg>;
+    case 'wand':
+      // Magic wand — used for "Generate from template / industry" actions
+      // so they don't share the gear icon with unrelated configuration.
+      return <svg {...common}><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8L19 13M15 9h0M17.8 6.2L19 5M3 21l9-9M12.2 6.2L11 5" /></svg>;
     default:
       return null;
   }

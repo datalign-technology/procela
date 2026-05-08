@@ -702,7 +702,7 @@ export default function GovernanceGroupsPage() {
               ]))} />
           )}
           {canWrite && (
-            <IconButton icon="settings"
+            <IconButton icon="wand"
               label={
                 flatGroups.length > 0
                   ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`

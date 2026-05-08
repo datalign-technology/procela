@@ -859,7 +859,7 @@ export default function DataAssetsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
-          <IconButton icon="settings" label="Columns" onClick={() => setShowColumnPicker((v) => !v)} />
+          <IconButton icon="columns" label="Columns" onClick={() => setShowColumnPicker((v) => !v)} />
           {showColumnPicker && (
             <div
               style={{
