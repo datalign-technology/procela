@@ -13,6 +13,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import SkillPicker from '../components/SkillPicker';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -117,10 +119,21 @@ const STATUS_BADGES: Record<string, { bg: string; color: string }> = {
   RETIRED: { bg: '#f1f5f9', color: '#64748b' },
 };
 
+type AgentColId = 'name' | 'type' | 'provider' | 'status' | 'orgs' | 'responsible';
+const AGENT_COLUMN_DEFS: Array<{ id: AgentColId; label: string; defaultVisible: boolean }> = [
+  { id: 'name',        label: 'Name',          defaultVisible: true  },
+  { id: 'type',        label: 'Type',          defaultVisible: true  },
+  { id: 'provider',    label: 'Provider',      defaultVisible: false },
+  { id: 'status',      label: 'Status',        defaultVisible: true  },
+  { id: 'orgs',        label: 'Organizations', defaultVisible: false },
+  { id: 'responsible', label: 'Responsible',   defaultVisible: true  },
+];
+
 export default function AgentsPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
   const [searchParams, setSearchParams] = useSearchParams();
+  const agentCols = useColumnPicker<AgentColId>('procela.agents.visibleCols.v1', AGENT_COLUMN_DEFS);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [orgs, setOrgs] = useState<OrganizationRef[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -331,6 +344,7 @@ export default function AgentsPage() {
           )}
           <IconButton icon="upload" label="Import agents"
             onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
+          <ColumnPicker state={agentCols} />
           <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -536,12 +550,12 @@ export default function AgentsPage() {
                     checked={filtered.length > 0 && selectedIds.size === filtered.length}
                     onChange={toggleSelectAll} aria-label="Select all agents" />
                 </th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
-                <SortableTh sortKey="provider" active={sortKey} dir={sortDir} onClick={toggleSort}>Provider</SortableTh>
-                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                <th style={thStyle}>Organizations</th>
-                <th style={thStyle}>Responsible</th>
+                {agentCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>}
+                {agentCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
+                {agentCols.isVisible('provider') && <SortableTh sortKey="provider" active={sortKey} dir={sortDir} onClick={toggleSort}>Provider</SortableTh>}
+                {agentCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
+                {agentCols.isVisible('orgs') && <th style={thStyle}>Organizations</th>}
+                {agentCols.isVisible('responsible') && <th style={thStyle}>Responsible</th>}
                 <th style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -561,46 +575,58 @@ export default function AgentsPage() {
                       <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                         <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(a.id)} />
                       </td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>
-                        <span
-                          onClick={() => setExpandedAgentId(isExpanded ? null : a.id)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {a.name}
-                        </span>
-                        {a.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.description}</div>}
-                        {(roles.length > 0 || execs.length > 0) && (
-                          <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
-                            {roles.length > 0 && (
-                              <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', fontWeight: 600 }}>
-                                {roles.length} role{roles.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                            {execs.length > 0 && (
-                              <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#d1fae5', color: '#065f46', fontWeight: 600 }}>
-                                {execs.length} execution{execs.length !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: tb.bg, color: tb.color }}>
-                          {a.agentType.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}</td>
-                      <td style={tdStyle}>
-                        <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
-                          {a.status}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                      </td>
-                      <td style={tdStyle}>
-                        {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                      </td>
+                      {agentCols.isVisible('name') && (
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>
+                          <span
+                            onClick={() => setExpandedAgentId(isExpanded ? null : a.id)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {a.name}
+                          </span>
+                          {a.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.description}</div>}
+                          {(roles.length > 0 || execs.length > 0) && (
+                            <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                              {roles.length > 0 && (
+                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', fontWeight: 600 }}>
+                                  {roles.length} role{roles.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              {execs.length > 0 && (
+                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#d1fae5', color: '#065f46', fontWeight: 600 }}>
+                                  {execs.length} execution{execs.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      {agentCols.isVisible('type') && (
+                        <td style={tdStyle}>
+                          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: tb.bg, color: tb.color }}>
+                            {a.agentType.replace('_', ' ')}
+                          </span>
+                        </td>
+                      )}
+                      {agentCols.isVisible('provider') && (
+                        <td style={tdStyle}>{a.provider || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}</td>
+                      )}
+                      {agentCols.isVisible('status') && (
+                        <td style={tdStyle}>
+                          <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: sb.bg, color: sb.color }}>
+                            {a.status}
+                          </span>
+                        </td>
+                      )}
+                      {agentCols.isVisible('orgs') && (
+                        <td style={tdStyle}>
+                          {a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join(', ') || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
+                        </td>
+                      )}
+                      {agentCols.isVisible('responsible') && (
+                        <td style={tdStyle}>
+                          {a.ownerPersonId ? (personNameById[a.ownerPersonId] || <span style={{ color: 'var(--color-text-muted)' }}>(unknown person)</span>) : <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
+                        </td>
+                      )}
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                           <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(a)} />

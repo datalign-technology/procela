@@ -12,6 +12,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ── Types ──
 
@@ -170,11 +172,22 @@ function InlineCellEdit({
 
 // ── Component ──
 
+type GlossaryColId = 'term' | 'category' | 'status' | 'domain' | 'owner' | 'definition';
+const GLOSSARY_COLUMN_DEFS: Array<{ id: GlossaryColId; label: string; defaultVisible: boolean }> = [
+  { id: 'term',       label: 'Term',           defaultVisible: true  },
+  { id: 'category',   label: 'Category',       defaultVisible: true  },
+  { id: 'status',     label: 'Status',         defaultVisible: true  },
+  { id: 'domain',     label: 'Primary Domain', defaultVisible: true  },
+  { id: 'owner',      label: 'Owner',          defaultVisible: true  },
+  { id: 'definition', label: 'Definition',     defaultVisible: true  },
+];
+
 export default function BusinessGlossaryPage() {
   const { activeOrgId, activeOrgName } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
+  const glossaryCols = useColumnPicker<GlossaryColId>('procela.businessGlossary.visibleCols.v1', GLOSSARY_COLUMN_DEFS);
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -488,6 +501,7 @@ export default function BusinessGlossaryPage() {
           {canWrite && terms.length === 0 && (
             <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
           )}
+          <ColumnPicker state={glossaryCols} />
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>
       </div>
@@ -872,12 +886,12 @@ export default function BusinessGlossaryPage() {
                         />
                       )}
                     </th>
-                    <SortableTh sortKey="term" active={sortKey} dir={sortDir} onClick={toggleSort}>Term</SortableTh>
-                    <SortableTh sortKey="category" active={sortKey} dir={sortDir} onClick={toggleSort}>Category</SortableTh>
-                    <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                    <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Primary Domain</SortableTh>
-                    <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
-                    <th style={thStyle}>Definition</th>
+                    {glossaryCols.isVisible('term') && <SortableTh sortKey="term" active={sortKey} dir={sortDir} onClick={toggleSort}>Term</SortableTh>}
+                    {glossaryCols.isVisible('category') && <SortableTh sortKey="category" active={sortKey} dir={sortDir} onClick={toggleSort}>Category</SortableTh>}
+                    {glossaryCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
+                    {glossaryCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Primary Domain</SortableTh>}
+                    {glossaryCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
+                    {glossaryCols.isVisible('definition') && <th style={thStyle}>Definition</th>}
                     <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
@@ -898,48 +912,60 @@ export default function BusinessGlossaryPage() {
                             />
                           )}
                         </td>
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>
-                          {canWrite ? (
-                            <InlineCellEdit value={t.term} onSave={(v) => inlineSaveField(t.id, 'term', v)} />
-                          ) : (
-                            t.term
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {canWrite ? (
-                            <InlineCellEdit
-                              value={t.category}
-                              display={<span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>}
-                              type="select"
-                              options={CATEGORIES}
-                              onSave={(v) => inlineSaveField(t.id, 'category', v)}
-                            />
-                          ) : (
-                            <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
-                          )}
-                        </td>
-                        <td style={tdStyle}>
-                          {canWrite ? (
-                            <InlineCellEdit
-                              value={t.status}
-                              display={<span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>}
-                              type="select"
-                              options={STATUSES}
-                              onSave={(v) => inlineSaveField(t.id, 'status', v)}
-                            />
-                          ) : (
-                            <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
-                          )}
-                        </td>
-                        <td style={{ ...tdStyle, color: t.domainName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                          {t.domainName || '—'}
-                        </td>
-                        <td style={{ ...tdStyle, color: t.ownerName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                          {t.ownerName || '—'}
-                        </td>
-                        <td style={{ ...tdStyle, color: t.definition ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.definition}>
-                          {t.definition || '—'}
-                        </td>
+                        {glossaryCols.isVisible('term') && (
+                          <td style={{ ...tdStyle, fontWeight: 500 }}>
+                            {canWrite ? (
+                              <InlineCellEdit value={t.term} onSave={(v) => inlineSaveField(t.id, 'term', v)} />
+                            ) : (
+                              t.term
+                            )}
+                          </td>
+                        )}
+                        {glossaryCols.isVisible('category') && (
+                          <td style={tdStyle}>
+                            {canWrite ? (
+                              <InlineCellEdit
+                                value={t.category}
+                                display={<span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>}
+                                type="select"
+                                options={CATEGORIES}
+                                onSave={(v) => inlineSaveField(t.id, 'category', v)}
+                              />
+                            ) : (
+                              <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
+                            )}
+                          </td>
+                        )}
+                        {glossaryCols.isVisible('status') && (
+                          <td style={tdStyle}>
+                            {canWrite ? (
+                              <InlineCellEdit
+                                value={t.status}
+                                display={<span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>}
+                                type="select"
+                                options={STATUSES}
+                                onSave={(v) => inlineSaveField(t.id, 'status', v)}
+                              />
+                            ) : (
+                              <span style={badgeStyle(STATUS_COLORS[t.status] || STATUS_COLORS.DRAFT)}>{t.status}</span>
+                            )}
+                          </td>
+                        )}
+                        {glossaryCols.isVisible('domain') && (
+                          <td style={{ ...tdStyle, color: t.domainName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {t.domainName || '—'}
+                          </td>
+                        )}
+                        {glossaryCols.isVisible('owner') && (
+                          <td style={{ ...tdStyle, color: t.ownerName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                            {t.ownerName || '—'}
+                          </td>
+                        )}
+                        {glossaryCols.isVisible('definition') && (
+                          <td style={{ ...tdStyle, color: t.definition ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.definition}>
+                            {t.definition || '—'}
+                          </td>
+                        )}
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                             {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(t)} />}

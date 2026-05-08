@@ -10,6 +10,8 @@ import EmptyState from './../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -181,6 +183,16 @@ function timeAgo(iso: string | null): string {
 // Component
 // ---------------------------------------------------------------------------
 
+type ConnColId = 'system' | 'name' | 'type' | 'config' | 'status' | 'lastTested';
+const CONN_COLUMN_DEFS: Array<{ id: ConnColId; label: string; defaultVisible: boolean }> = [
+  { id: 'system',     label: 'System',         defaultVisible: true  },
+  { id: 'name',       label: 'Connection Name',defaultVisible: true  },
+  { id: 'type',       label: 'Type',           defaultVisible: true  },
+  { id: 'config',     label: 'Config',         defaultVisible: false },
+  { id: 'status',     label: 'Status',         defaultVisible: true  },
+  { id: 'lastTested', label: 'Last Tested',    defaultVisible: true  },
+];
+
 export default function ConnectionsPage() {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
@@ -196,6 +208,7 @@ export default function ConnectionsPage() {
     setSearchParams(params, { replace: true });
   };
 
+  const connCols = useColumnPicker<ConnColId>('procela.connections.visibleCols.v1', CONN_COLUMN_DEFS);
   const [connections, setConnections] = useState<ConnectionProfile[]>([]);
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -742,6 +755,7 @@ export default function ConnectionsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <ColumnPicker state={connCols} />
           <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -1034,12 +1048,12 @@ export default function ConnectionsPage() {
                       else setSelectedIds(new Set(visibleConnections.map((c) => c.id)));
                     }} />
                 </th>
-                <th style={thStyle}>System</th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Connection Name</SortableTh>
-                <SortableTh sortKey="connectionType" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
-                <th style={thStyle}>Config</th>
-                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                <th style={thStyle}>Last Tested</th>
+                {connCols.isVisible('system') && <th style={thStyle}>System</th>}
+                {connCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Connection Name</SortableTh>}
+                {connCols.isVisible('type') && <SortableTh sortKey="connectionType" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
+                {connCols.isVisible('config') && <th style={thStyle}>Config</th>}
+                {connCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
+                {connCols.isVisible('lastTested') && <th style={thStyle}>Last Tested</th>}
                 <th style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -1060,41 +1074,51 @@ export default function ConnectionsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(conn.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      {(() => {
-                        const ids = conn.systemIds && conn.systemIds.length > 0
-                          ? conn.systemIds
-                          : (conn.systemId ? [conn.systemId] : []);
-                        if (ids.length === 0) {
-                          return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
-                        }
-                        const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
-                        if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
-                        if (names.length === 1) return names[0];
-                        return (
-                          <span title={names.join(', ')}>
-                            {names[0]} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>+{names.length - 1}</span>
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>{conn.name}</td>
-                    <td style={tdStyle}>
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: typeBadge.bg, color: typeBadge.color }}>
-                        {TYPE_LABELS[conn.connectionType] || conn.connectionType}
-                      </span>
-                    </td>
-                    <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-                      {configSummary(conn)}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: statusBadge.bg, color: statusBadge.color }}>
-                        {conn.status}
-                      </span>
-                    </td>
-                    <td style={{ ...tdStyle, color: 'var(--color-text-muted)', fontSize: 12 }}>
-                      {timeAgo(conn.lastTestedAt)}
-                    </td>
+                    {connCols.isVisible('system') && (
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>
+                        {(() => {
+                          const ids = conn.systemIds && conn.systemIds.length > 0
+                            ? conn.systemIds
+                            : (conn.systemId ? [conn.systemId] : []);
+                          if (ids.length === 0) {
+                            return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
+                          }
+                          const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
+                          if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
+                          if (names.length === 1) return names[0];
+                          return (
+                            <span title={names.join(', ')}>
+                              {names[0]} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>+{names.length - 1}</span>
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    )}
+                    {connCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500 }}>{conn.name}</td>}
+                    {connCols.isVisible('type') && (
+                      <td style={tdStyle}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: typeBadge.bg, color: typeBadge.color }}>
+                          {TYPE_LABELS[conn.connectionType] || conn.connectionType}
+                        </span>
+                      </td>
+                    )}
+                    {connCols.isVisible('config') && (
+                      <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+                        {configSummary(conn)}
+                      </td>
+                    )}
+                    {connCols.isVisible('status') && (
+                      <td style={tdStyle}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: statusBadge.bg, color: statusBadge.color }}>
+                          {conn.status}
+                        </span>
+                      </td>
+                    )}
+                    {connCols.isVisible('lastTested') && (
+                      <td style={{ ...tdStyle, color: 'var(--color-text-muted)', fontSize: 12 }}>
+                        {timeAgo(conn.lastTestedAt)}
+                      </td>
+                    )}
                     <td style={{ ...tdStyle, textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                         <IconButton size="sm" icon={isTesting ? 'refresh' : 'play'}

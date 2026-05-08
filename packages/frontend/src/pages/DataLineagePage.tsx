@@ -5,6 +5,8 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
@@ -179,9 +181,21 @@ function Badge({ label, colors }: { label: string; colors: { bg: string; color: 
   );
 }
 
+type LineageColId = 'source' | 'target' | 'asset' | 'flowType' | 'frequency' | 'status' | 'description';
+const LINEAGE_COLUMN_DEFS: Array<{ id: LineageColId; label: string; defaultVisible: boolean }> = [
+  { id: 'source',      label: 'Source System', defaultVisible: true  },
+  { id: 'target',      label: 'Target System', defaultVisible: true  },
+  { id: 'asset',       label: 'Data Asset',    defaultVisible: true  },
+  { id: 'flowType',    label: 'Flow Type',     defaultVisible: true  },
+  { id: 'frequency',   label: 'Frequency',     defaultVisible: true  },
+  { id: 'status',      label: 'Status',        defaultVisible: true  },
+  { id: 'description', label: 'Description',   defaultVisible: false },
+];
+
 export default function DataLineagePage() {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
+  const lineageCols = useColumnPicker<LineageColId>('procela.dataLineage.visibleCols.v1', LINEAGE_COLUMN_DEFS);
   const [links, setLinks] = useState<LineageLink[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
@@ -344,6 +358,7 @@ export default function DataLineagePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={lineageCols} />
           {links.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-lineage.csv', ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'], links.map((l) => [
@@ -514,13 +529,13 @@ export default function DataLineagePage() {
                         checked={links.length > 0 && selectedIds.size === links.length}
                         onChange={toggleSelectAll} />
                     </th>
-                    <th style={thStyle}>Source System</th>
-                    <th style={thStyle}>Target System</th>
-                    <th style={thStyle}>Data Asset</th>
-                    <th style={thStyle}>Flow Type</th>
-                    <th style={thStyle}>Frequency</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Description</th>
+                    {lineageCols.isVisible('source') && <th style={thStyle}>Source System</th>}
+                    {lineageCols.isVisible('target') && <th style={thStyle}>Target System</th>}
+                    {lineageCols.isVisible('asset') && <th style={thStyle}>Data Asset</th>}
+                    {lineageCols.isVisible('flowType') && <th style={thStyle}>Flow Type</th>}
+                    {lineageCols.isVisible('frequency') && <th style={thStyle}>Frequency</th>}
+                    {lineageCols.isVisible('status') && <th style={thStyle}>Status</th>}
+                    {lineageCols.isVisible('description') && <th style={thStyle}>Description</th>}
                     <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
@@ -532,27 +547,37 @@ export default function DataLineagePage() {
                       <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                         <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(link.id)} />
                       </td>
-                      <td style={tdStyle}>{link.sourceSystemName || link.sourceSystemId}</td>
-                      <td style={tdStyle}>{link.targetSystemName || link.targetSystemId}</td>
-                      <td style={tdStyle}>
-                        {link.dataAssetName ? (
-                          <span style={{ color: 'var(--color-text-secondary)' }}>{link.dataAssetName}</span>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <Badge label={link.flowType} colors={FLOW_TYPE_BADGES[link.flowType] || FLOW_TYPE_BADGES.MANUAL} />
-                      </td>
-                      <td style={tdStyle}>
-                        <Badge label={link.frequency} colors={FREQUENCY_BADGES[link.frequency] || FREQUENCY_BADGES.ON_DEMAND} />
-                      </td>
-                      <td style={tdStyle}>
-                        <Badge label={link.status} colors={STATUS_BADGES[link.status] || STATUS_BADGES.ACTIVE} />
-                      </td>
-                      <td style={{ ...tdStyle, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {link.description || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
-                      </td>
+                      {lineageCols.isVisible('source') && <td style={tdStyle}>{link.sourceSystemName || link.sourceSystemId}</td>}
+                      {lineageCols.isVisible('target') && <td style={tdStyle}>{link.targetSystemName || link.targetSystemId}</td>}
+                      {lineageCols.isVisible('asset') && (
+                        <td style={tdStyle}>
+                          {link.dataAssetName ? (
+                            <span style={{ color: 'var(--color-text-secondary)' }}>{link.dataAssetName}</span>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>
+                          )}
+                        </td>
+                      )}
+                      {lineageCols.isVisible('flowType') && (
+                        <td style={tdStyle}>
+                          <Badge label={link.flowType} colors={FLOW_TYPE_BADGES[link.flowType] || FLOW_TYPE_BADGES.MANUAL} />
+                        </td>
+                      )}
+                      {lineageCols.isVisible('frequency') && (
+                        <td style={tdStyle}>
+                          <Badge label={link.frequency} colors={FREQUENCY_BADGES[link.frequency] || FREQUENCY_BADGES.ON_DEMAND} />
+                        </td>
+                      )}
+                      {lineageCols.isVisible('status') && (
+                        <td style={tdStyle}>
+                          <Badge label={link.status} colors={STATUS_BADGES[link.status] || STATUS_BADGES.ACTIVE} />
+                        </td>
+                      )}
+                      {lineageCols.isVisible('description') && (
+                        <td style={{ ...tdStyle, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {link.description || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
+                        </td>
+                      )}
                       <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                           <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(link)} />

@@ -8,6 +8,8 @@ import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { tierLabel } from '../lib/governanceTier';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 /* ── Interfaces ─────────────────────────────────────────────────── */
 
@@ -121,9 +123,20 @@ function healthBar(score?: number) {
 
 /* ── Component ───────────────────────────────────────────────────── */
 
+type DictColId = 'system' | 'domain' | 'tier' | 'health' | 'owner' | 'columns';
+const DICT_COLUMN_DEFS: Array<{ id: DictColId; label: string; defaultVisible: boolean }> = [
+  { id: 'system',  label: 'System',  defaultVisible: true  },
+  { id: 'domain',  label: 'Domain',  defaultVisible: true  },
+  { id: 'tier',    label: 'Tier',    defaultVisible: true  },
+  { id: 'health',  label: 'Health',  defaultVisible: true  },
+  { id: 'owner',   label: 'Owner',   defaultVisible: true  },
+  { id: 'columns', label: 'Columns', defaultVisible: true  },
+];
+
 export default function DataDictionaryPage() {
   const { activeOrgId } = useOrgContext();
 
+  const dictCols = useColumnPicker<DictColId>('procela.dataDictionary.visibleCols.v1', DICT_COLUMN_DEFS);
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [domains, setDomains] = useState<DataDomain[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
@@ -318,6 +331,7 @@ export default function DataDictionaryPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <ColumnPicker state={dictCols} />
           {assets.length > 0 && (
             <IconButton icon="download" label="Export CSV" onClick={handleExportCsv} />
           )}
@@ -445,12 +459,12 @@ export default function DataDictionaryPage() {
                   <tr style={{ background: 'var(--color-bg)' }}>
                     <th style={{ ...thStyle, width: 32 }} />
                     <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Asset</SortableTh>
-                    <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>
-                    <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
-                    <SortableTh sortKey="tier" active={sortKey} dir={sortDir} onClick={toggleSort}>Tier</SortableTh>
-                    <SortableTh sortKey="health" active={sortKey} dir={sortDir} onClick={toggleSort}>Health</SortableTh>
-                    <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
-                    <SortableTh sortKey="columns" active={sortKey} dir={sortDir} onClick={toggleSort}>Columns</SortableTh>
+                    {dictCols.isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
+                    {dictCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
+                    {dictCols.isVisible('tier') && <SortableTh sortKey="tier" active={sortKey} dir={sortDir} onClick={toggleSort}>Tier</SortableTh>}
+                    {dictCols.isVisible('health') && <SortableTh sortKey="health" active={sortKey} dir={sortDir} onClick={toggleSort}>Health</SortableTh>}
+                    {dictCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
+                    {dictCols.isVisible('columns') && <SortableTh sortKey="columns" active={sortKey} dir={sortDir} onClick={toggleSort}>Columns</SortableTh>}
                   </tr>
                 </thead>
                 <tbody>
@@ -480,23 +494,31 @@ export default function DataDictionaryPage() {
                               </div>
                             )}
                           </td>
-                          <td style={{ ...tdStyle, color: sys ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                            {sys ? sys.name : '—'}
-                          </td>
-                          <td style={{ ...tdStyle, color: domain ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                            {domain ? domain.name : '—'}
-                          </td>
-                          <td style={tdStyle}>{tierBadge(a.governanceTier)}</td>
-                          <td style={tdStyle}>{healthBar(a.healthScore)}</td>
-                          <td style={{ ...tdStyle, color: ownerDisplay ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                            {ownerDisplay || '—'}
-                            {stewardDisplay && (
-                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>Steward: {stewardDisplay}</div>
-                            )}
-                          </td>
-                          <td style={{ ...tdStyle, color: cols.length > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
-                            {cols.length > 0 ? `${cols.length} column${cols.length !== 1 ? 's' : ''}` : (loadingColumns ? '…' : '—')}
-                          </td>
+                          {dictCols.isVisible('system') && (
+                            <td style={{ ...tdStyle, color: sys ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                              {sys ? sys.name : '—'}
+                            </td>
+                          )}
+                          {dictCols.isVisible('domain') && (
+                            <td style={{ ...tdStyle, color: domain ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                              {domain ? domain.name : '—'}
+                            </td>
+                          )}
+                          {dictCols.isVisible('tier') && <td style={tdStyle}>{tierBadge(a.governanceTier)}</td>}
+                          {dictCols.isVisible('health') && <td style={tdStyle}>{healthBar(a.healthScore)}</td>}
+                          {dictCols.isVisible('owner') && (
+                            <td style={{ ...tdStyle, color: ownerDisplay ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                              {ownerDisplay || '—'}
+                              {stewardDisplay && (
+                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>Steward: {stewardDisplay}</div>
+                              )}
+                            </td>
+                          )}
+                          {dictCols.isVisible('columns') && (
+                            <td style={{ ...tdStyle, color: cols.length > 0 ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                              {cols.length > 0 ? `${cols.length} column${cols.length !== 1 ? 's' : ''}` : (loadingColumns ? '…' : '—')}
+                            </td>
+                          )}
                         </tr>
                         {isExpanded && (
                           <tr>
