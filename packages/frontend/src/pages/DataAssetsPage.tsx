@@ -854,8 +854,8 @@ export default function DataAssetsPage() {
               the storage location changes.
             </HelpPopover>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Data assets described in business terms, linked to the systems that hold them.
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4, maxWidth: 760 }}>
+            Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
@@ -1057,7 +1057,10 @@ export default function DataAssetsPage() {
           <UnsavedBanner visible={isDirty()} onSave={() => handleSave(false)} onDiscard={closeForm} />
 
           {/* ── Section 1: Basics (always visible) ── */}
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>What is this data?</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>What is this data?</div>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
+            Name the <em>business concept</em>, not the table or file. <em>Customer Accounts</em>, <em>Billing Records</em>, <em>Inventory Levels</em> — the underlying source is configured separately on the row via a Binding.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -1067,7 +1070,7 @@ export default function DataAssetsPage() {
                 value={form.name}
                 onChange={(e) => updateField('name', e.target.value)}
                 onBlur={() => { formValidation.touch('name'); formValidation.validateField('name', form.name, form); }}
-                placeholder="e.g. Customer Account Data"
+                placeholder="e.g. Customer Accounts, Billing Records (a business concept — not a table name)"
               />
               {formValidation.fieldError('name') && <div style={fieldErrorStyle}>{formValidation.fieldError('name')}</div>}
             </div>
@@ -1088,7 +1091,7 @@ export default function DataAssetsPage() {
                 style={inputStyle}
                 value={form.description}
                 onChange={(e) => updateField('description', e.target.value)}
-                placeholder="Describe this data asset in business terms"
+                placeholder="What this data represents in business terms — what it's used for, who depends on it"
               />
             </div>
           </div>
@@ -1394,7 +1397,7 @@ export default function DataAssetsPage() {
           <EmptyState
             icon={'\u26C1'}
             title="No data assets yet"
-            description="Data assets describe your information in business terms — customer accounts, billing records, inventory levels. Define them first, then link each one to where the data actually lives."
+            description="Data assets are business-level concepts — Customer Accounts, Billing Records, Inventory Levels — not the underlying tables, files, or columns. Define them in plain business language, then link each one to its physical source via a Binding on the row."
             action={{ label: '+ Add Data Asset', onClick: openAdd }}
           />
         ) : (
