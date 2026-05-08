@@ -21,7 +21,7 @@ type Connectivity = 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
 
 type IntegrationMechanism =
   | 'REST_API' | 'SOAP' | 'GRAPHQL' | 'MESSAGE_QUEUE' | 'EVENT_STREAM'
-  | 'FILE_DROP' | 'ETL_BATCH' | 'DATABASE_REPLICATION' | 'MANUAL_EXPORT' | 'NONE';
+  | 'FILE_DROP' | 'ETL_BATCH' | 'DATABASE_REPLICATION' | 'MANUAL_EXPORT';
 type IntegrationFrequency =
   | 'REAL_TIME' | 'EVENT_DRIVEN' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_DEMAND';
 
@@ -35,7 +35,6 @@ const MECHANISM_LABEL: Record<IntegrationMechanism, string> = {
   ETL_BATCH:            'ETL Batch',
   DATABASE_REPLICATION: 'DB Replication',
   MANUAL_EXPORT:        'Manual Export',
-  NONE:                 'None',
 };
 const FREQUENCY_LABEL: Record<IntegrationFrequency, string> = {
   REAL_TIME:    'Real-time',
@@ -1050,6 +1049,15 @@ export default function SystemsPage() {
                   );
                 })}
               </div>
+              {form.connectivity === 'INTEGRATED' && form.integrationMechanisms.length === 0 && (
+                <div style={{
+                  marginTop: 6, padding: '6px 10px', fontSize: 11, lineHeight: 1.4,
+                  background: '#fef3c7', color: '#92400e', borderRadius: 'var(--radius-sm, 4px)',
+                  border: '1px solid #fde68a',
+                }}>
+                  This system is marked <strong>Integrated</strong> but no mechanism is selected. You can save without one, but downstream impact reports won't see how it integrates.
+                </div>
+              )}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Frequency</label>

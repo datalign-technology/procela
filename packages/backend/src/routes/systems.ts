@@ -62,7 +62,7 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 const VALID_CONNECTIVITY = ['INTEGRATED', 'MANUAL', 'EXTERNAL'] as const;
 const VALID_INTEGRATION_MECHANISMS = [
   'REST_API', 'SOAP', 'GRAPHQL', 'MESSAGE_QUEUE', 'EVENT_STREAM',
-  'FILE_DROP', 'ETL_BATCH', 'DATABASE_REPLICATION', 'MANUAL_EXPORT', 'NONE',
+  'FILE_DROP', 'ETL_BATCH', 'DATABASE_REPLICATION', 'MANUAL_EXPORT',
 ] as const;
 const VALID_INTEGRATION_FREQUENCY = [
   'REAL_TIME', 'EVENT_DRIVEN', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'ON_DEMAND',
@@ -75,7 +75,21 @@ for (const s of systems) {
     connectivityMigrated = true;
   }
 }
-if (connectivityMigrated) saveStore('systems', systems);
+// One-time strip of the legacy 'NONE' mechanism. NONE conflicted with
+// the connectivity field (an INTEGRATED system declared "no mechanism")
+// and is redundant with an empty array. Drop it everywhere — if the
+// resulting array is empty, remove the field entirely so unrelated
+// readers see the canonical "not specified" shape.
+let mechanismsMigrated = false;
+for (const s of systems) {
+  if (!Array.isArray(s.integrationMechanisms)) continue;
+  const cleaned = s.integrationMechanisms.filter((m) => m !== 'NONE');
+  if (cleaned.length !== s.integrationMechanisms.length) {
+    s.integrationMechanisms = cleaned.length > 0 ? cleaned : undefined;
+    mechanismsMigrated = true;
+  }
+}
+if (connectivityMigrated || mechanismsMigrated) saveStore('systems', systems);
 
 const SYSTEM_TYPES = [
   'ERP', 'CRM', 'GIS', 'SCADA', 'Data Warehouse', 'Data Lake',
