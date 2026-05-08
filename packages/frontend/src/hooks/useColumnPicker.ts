@@ -14,6 +14,10 @@ import { useState, useCallback } from 'react';
 // Selection is persisted under the supplied `storageKey` so a user's
 // preference survives reloads. Unknown column ids in the stored payload
 // (older versions, removed columns) are silently filtered out.
+//
+// Storage-key convention: `procela.<page>.visibleCols.v1`. Versioning
+// the suffix lets us evolve a page's column set without orphaning user
+// state — bump to v2 to force defaults next time the column ids change.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface ColumnSpec<T extends string> {
