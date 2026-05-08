@@ -18,6 +18,36 @@ import SyncConnectionWizard from '../components/SyncConnectionWizard';
 
 type Connectivity = 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
 
+type IntegrationMechanism =
+  | 'REST_API' | 'SOAP' | 'GRAPHQL' | 'MESSAGE_QUEUE' | 'EVENT_STREAM'
+  | 'FILE_DROP' | 'ETL_BATCH' | 'DATABASE_REPLICATION' | 'MANUAL_EXPORT' | 'NONE';
+type IntegrationFrequency =
+  | 'REAL_TIME' | 'EVENT_DRIVEN' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_DEMAND';
+
+const MECHANISM_LABEL: Record<IntegrationMechanism, string> = {
+  REST_API:             'REST API',
+  SOAP:                 'SOAP',
+  GRAPHQL:              'GraphQL',
+  MESSAGE_QUEUE:        'Message Queue',
+  EVENT_STREAM:         'Event Stream',
+  FILE_DROP:            'File Drop',
+  ETL_BATCH:            'ETL Batch',
+  DATABASE_REPLICATION: 'DB Replication',
+  MANUAL_EXPORT:        'Manual Export',
+  NONE:                 'None',
+};
+const FREQUENCY_LABEL: Record<IntegrationFrequency, string> = {
+  REAL_TIME:    'Real-time',
+  EVENT_DRIVEN: 'Event-driven',
+  HOURLY:       'Hourly',
+  DAILY:        'Daily',
+  WEEKLY:       'Weekly',
+  MONTHLY:      'Monthly',
+  ON_DEMAND:    'On-demand',
+};
+const MECHANISM_VALUES: IntegrationMechanism[] = Object.keys(MECHANISM_LABEL) as IntegrationMechanism[];
+const FREQUENCY_VALUES: IntegrationFrequency[] = Object.keys(FREQUENCY_LABEL) as IntegrationFrequency[];
+
 interface SystemEntity {
   id: string;
   name: string;
@@ -26,6 +56,8 @@ interface SystemEntity {
   businessCriticality?: string;
   vendor?: string;
   integrationPoints?: string;
+  integrationMechanisms?: IntegrationMechanism[];
+  integrationFrequency?: IntegrationFrequency;
   connectivity?: Connectivity;
   /** Rolled-up status from backend: profile health if connectivity is
    *  INTEGRATED, otherwise mirrors the connectivity intent. */
@@ -98,6 +130,8 @@ interface FormData {
   businessCriticality: string;
   vendor: string;
   integrationPoints: string;
+  integrationMechanisms: IntegrationMechanism[];
+  integrationFrequency: IntegrationFrequency | '';
   connectivity: Connectivity;
   /** Connections the user wants this system linked to. Diffed against
    *  the system's existing links on save and reconciled via
@@ -107,7 +141,9 @@ interface FormData {
 
 const emptyForm: FormData = {
   name: '', description: '', systemType: '', businessCriticality: '',
-  vendor: '', integrationPoints: '', connectivity: 'INTEGRATED',
+  vendor: '', integrationPoints: '',
+  integrationMechanisms: [], integrationFrequency: '',
+  connectivity: 'INTEGRATED',
   connectionIds: [],
 };
 
@@ -430,6 +466,8 @@ export default function SystemsPage() {
       businessCriticality: sys.businessCriticality || '',
       vendor: sys.vendor || '',
       integrationPoints: sys.integrationPoints || '',
+      integrationMechanisms: sys.integrationMechanisms || [],
+      integrationFrequency: sys.integrationFrequency || '',
       connectivity: sys.connectivity || 'INTEGRATED',
       connectionIds: linkedConnIds,
     });
@@ -505,6 +543,8 @@ export default function SystemsPage() {
               businessCriticality: sys.businessCriticality,
               vendor: sys.vendor,
               integrationPoints: sys.integrationPoints,
+              integrationMechanisms: sys.integrationMechanisms,
+              integrationFrequency: sys.integrationFrequency,
               connectivity: sys.connectivity,
               ...(activeOrgId ? { orgId: activeOrgId } : {}),
             });
@@ -857,8 +897,63 @@ export default function SystemsPage() {
               </select>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Points</label>
-              <input style={inputStyle} value={form.integrationPoints} onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })} placeholder="e.g. Connects to SAP via API, feeds Data Warehouse nightly" />
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                Integration Mechanisms
+                <HelpPopover id="sys-mechanisms" title="Integration Mechanisms">
+                  How this system exchanges data with others. Multi-select — a system that exposes a REST API and also drops nightly batch files lists both. Used by impact analysis and compliance reports ("which systems still depend on FILE_DROP?").
+                </HelpPopover>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {MECHANISM_VALUES.map((m) => {
+                  const checked = form.integrationMechanisms.includes(m);
+                  return (
+                    <label key={m} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '4px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer',
+                      border: `1px solid ${checked ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      background: checked ? 'var(--color-primary-light, #dbeafe)' : 'var(--color-surface)',
+                      color: checked ? 'var(--color-primary)' : 'var(--color-text)',
+                      fontWeight: checked ? 600 : 400,
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setFormDirty({
+                          ...form,
+                          integrationMechanisms: checked
+                            ? form.integrationMechanisms.filter((x) => x !== m)
+                            : [...form.integrationMechanisms, m],
+                        })}
+                        style={{ display: 'none' }}
+                      />
+                      {MECHANISM_LABEL[m]}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Frequency</label>
+              <select
+                style={selectStyle}
+                value={form.integrationFrequency}
+                onChange={(e) => setFormDirty({ ...form, integrationFrequency: e.target.value as IntegrationFrequency | '' })}
+              >
+                <option value="">-- Not specified --</option>
+                {FREQUENCY_VALUES.map((f) => <option key={f} value={f}>{FREQUENCY_LABEL[f]}</option>)}
+              </select>
+            </div>
+            <div>
+              {/* Empty cell to keep the two-column grid aligned next to Frequency */}
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Notes</label>
+              <input
+                style={inputStyle}
+                value={form.integrationPoints}
+                onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })}
+                placeholder="Anything the mechanism + frequency don't capture — target system names, vendor portals, batch windows, etc."
+              />
             </div>
             {form.connectivity === 'INTEGRATED' && (
               <div style={{ gridColumn: '1 / -1' }}>

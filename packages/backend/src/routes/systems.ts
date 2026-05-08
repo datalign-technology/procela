@@ -16,7 +16,25 @@ interface StoredSystem {
   systemType: string;
   businessCriticality?: 'HIGH' | 'MEDIUM' | 'LOW';
   vendor?: string;
+  /** Free-text notes about how this system integrates with others.
+   *  Originally was the only place to capture integration info; now
+   *  paired with the structured mechanism/frequency fields below. */
   integrationPoints?: string;
+  /** Integration patterns this system uses. Multi-select so a system
+   *  that exposes a REST API and also drops batch files can record
+   *  both. Queryable for impact analysis ("which systems still rely
+   *  on FILE_DROP?"). */
+  integrationMechanisms?: string[];
+  /** How often the integration runs. Optional — many systems don't
+   *  have a single canonical answer. */
+  integrationFrequency?:
+    | 'REAL_TIME'
+    | 'EVENT_DRIVEN'
+    | 'HOURLY'
+    | 'DAILY'
+    | 'WEEKLY'
+    | 'MONTHLY'
+    | 'ON_DEMAND';
   /** How this system is intended to be reached. INTEGRATED expects one or
    *  more Connection profiles; MANUAL is a paper/spreadsheet/handoff
    *  process; EXTERNAL is vendor-managed with no API. Used by gap
@@ -30,6 +48,13 @@ export const systems: StoredSystem[] = loadStore<StoredSystem>('systems');
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_CONNECTIVITY = ['INTEGRATED', 'MANUAL', 'EXTERNAL'] as const;
+const VALID_INTEGRATION_MECHANISMS = [
+  'REST_API', 'SOAP', 'GRAPHQL', 'MESSAGE_QUEUE', 'EVENT_STREAM',
+  'FILE_DROP', 'ETL_BATCH', 'DATABASE_REPLICATION', 'MANUAL_EXPORT', 'NONE',
+] as const;
+const VALID_INTEGRATION_FREQUENCY = [
+  'REAL_TIME', 'EVENT_DRIVEN', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'ON_DEMAND',
+] as const;
 
 let connectivityMigrated = false;
 for (const s of systems) {
@@ -104,6 +129,8 @@ router.get('/', (req: Request, res: Response) => {
     data: filtered.map(decorate),
     systemTypes: SYSTEM_TYPES,
     connectivityOptions: VALID_CONNECTIVITY,
+    integrationMechanismOptions: VALID_INTEGRATION_MECHANISMS,
+    integrationFrequencyOptions: VALID_INTEGRATION_FREQUENCY,
   });
 });
 
@@ -114,12 +141,32 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: decorate(sys) });
 });
 
+function validateMechanisms(value: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(value)) return { ok: false, error: 'integrationMechanisms must be an array' };
+  const cleaned: string[] = [];
+  for (const v of value) {
+    if (typeof v !== 'string') return { ok: false, error: 'integrationMechanisms entries must be strings' };
+    if (!VALID_INTEGRATION_MECHANISMS.includes(v as any)) {
+      return { ok: false, error: `integrationMechanism "${v}" must be one of ${VALID_INTEGRATION_MECHANISMS.join(', ')}` };
+    }
+    if (!cleaned.includes(v)) cleaned.push(v);
+  }
+  return { ok: true, value: cleaned };
+}
+
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity } = req.body;
+  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (connectivity && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
+    return;
+  }
+  const mech = validateMechanisms(integrationMechanisms);
+  if (!mech.ok) { res.status(400).json({ success: false, error: mech.error }); return; }
+  if (integrationFrequency !== undefined && integrationFrequency !== '' && !VALID_INTEGRATION_FREQUENCY.includes(integrationFrequency)) {
+    res.status(400).json({ success: false, error: `integrationFrequency must be one of ${VALID_INTEGRATION_FREQUENCY.join(', ')}` });
     return;
   }
   const now = new Date().toISOString();
@@ -130,6 +177,8 @@ router.post('/', (req: Request, res: Response) => {
     ...(businessCriticality ? { businessCriticality } : {}),
     ...(vendor ? { vendor } : {}),
     ...(integrationPoints ? { integrationPoints } : {}),
+    ...(mech.value.length > 0 ? { integrationMechanisms: mech.value } : {}),
+    ...(integrationFrequency ? { integrationFrequency } : {}),
     createdAt: now, updatedAt: now,
   };
   systems.push(sys);
@@ -142,10 +191,25 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity } = req.body;
+  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency } = req.body;
   if (connectivity !== undefined && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
     return;
+  }
+  if (integrationMechanisms !== undefined) {
+    const mech = validateMechanisms(integrationMechanisms);
+    if (!mech.ok) { res.status(400).json({ success: false, error: mech.error }); return; }
+    sys.integrationMechanisms = mech.value.length > 0 ? mech.value : undefined;
+  }
+  if (integrationFrequency !== undefined) {
+    if (integrationFrequency === '' || integrationFrequency === null) {
+      sys.integrationFrequency = undefined;
+    } else if (VALID_INTEGRATION_FREQUENCY.includes(integrationFrequency)) {
+      sys.integrationFrequency = integrationFrequency;
+    } else {
+      res.status(400).json({ success: false, error: `integrationFrequency must be one of ${VALID_INTEGRATION_FREQUENCY.join(', ')}` });
+      return;
+    }
   }
   if (name !== undefined) sys.name = name;
   if (description !== undefined) sys.description = description;
