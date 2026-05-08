@@ -5,6 +5,8 @@ import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
@@ -197,10 +199,25 @@ function ScoreBar({ score, threshold }: { score: number; threshold: number }) {
   );
 }
 
+type DqColId = 'asset' | 'column' | 'name' | 'dimension' | 'threshold' | 'currentScore' | 'weight' | 'status' | 'schedule' | 'lastMeasured';
+const DQ_COLUMN_DEFS: Array<{ id: DqColId; label: string; defaultVisible: boolean }> = [
+  { id: 'asset',         label: 'Data Asset',     defaultVisible: true  },
+  { id: 'column',        label: 'Column',         defaultVisible: true  },
+  { id: 'name',          label: 'Rule Name',      defaultVisible: true  },
+  { id: 'dimension',     label: 'Dimension',      defaultVisible: true  },
+  { id: 'threshold',     label: 'Threshold',      defaultVisible: false },
+  { id: 'currentScore',  label: 'Current Score',  defaultVisible: true  },
+  { id: 'weight',        label: 'Weight',         defaultVisible: false },
+  { id: 'status',        label: 'Status',         defaultVisible: true  },
+  { id: 'schedule',      label: 'Schedule',       defaultVisible: false },
+  { id: 'lastMeasured',  label: 'Last Measured',  defaultVisible: true  },
+];
+
 export default function DataQualityPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
+  const dqCols = useColumnPicker<DqColId>('procela.dataQuality.visibleCols.v1', DQ_COLUMN_DEFS);
   const [rules, setRules] = useState<QualityRule[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -517,6 +534,7 @@ export default function DataQualityPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={dqCols} />
           {rules.length > 0 && (
             <IconButton icon="download" label="Export CSV"
               onClick={() => exportCsv('data-quality-rules.csv', ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'], rules.map((r) => [
@@ -842,16 +860,16 @@ export default function DataQualityPage() {
                       else setSelectedRuleIds(new Set(filteredRules.map((r) => r.id)));
                     }} />
                 </th>
-                <SortableTh sortKey="dataAssetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>
-                <th style={thStyle}>Column</th>
-                <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Rule Name</SortableTh>
-                <SortableTh sortKey="dimension" active={sortKey} dir={sortDir} onClick={toggleSort}>Dimension</SortableTh>
-                <th style={thStyle}>Threshold</th>
-                <SortableTh sortKey="currentScore" active={sortKey} dir={sortDir} onClick={toggleSort}>Current Score</SortableTh>
-                <th style={thStyle}>Weight</th>
-                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                <th style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>
-                <th style={thStyle}>Last Measured</th>
+                {dqCols.isVisible('asset') && <SortableTh sortKey="dataAssetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>}
+                {dqCols.isVisible('column') && <th style={thStyle}>Column</th>}
+                {dqCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Rule Name</SortableTh>}
+                {dqCols.isVisible('dimension') && <SortableTh sortKey="dimension" active={sortKey} dir={sortDir} onClick={toggleSort}>Dimension</SortableTh>}
+                {dqCols.isVisible('threshold') && <th style={thStyle}>Threshold</th>}
+                {dqCols.isVisible('currentScore') && <SortableTh sortKey="currentScore" active={sortKey} dir={sortDir} onClick={toggleSort}>Current Score</SortableTh>}
+                {dqCols.isVisible('weight') && <th style={thStyle}>Weight</th>}
+                {dqCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
+                {dqCols.isVisible('schedule') && <th style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>}
+                {dqCols.isVisible('lastMeasured') && <th style={thStyle}>Last Measured</th>}
                 <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -863,22 +881,31 @@ export default function DataQualityPage() {
                   <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleRuleSelect(rule.id)} />
                   </td>
-                  <td style={tdStyle}>{rule.dataAssetName || rule.dataAssetId}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    {(rule as any).columnName || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
-                  </td>
-                  <td style={tdStyle}>{rule.name}</td>
-                  <td style={tdStyle}>
-                    <Badge label={rule.dimension} colors={DIMENSION_BADGES[rule.dimension] || DIMENSION_BADGES.VALIDITY} />
-                  </td>
-                  <td style={tdStyle}>{rule.threshold}%</td>
-                  <td style={tdStyle}>
-                    <ScoreBar score={rule.currentScore} threshold={rule.threshold} />
-                  </td>
-                  <td style={tdStyle}>{rule.weight}</td>
-                  <td style={tdStyle}>
-                    <Badge label={rule.status} colors={STATUS_BADGES[rule.status] || STATUS_BADGES.NOT_MEASURED} />
-                  </td>
+                  {dqCols.isVisible('asset') && <td style={tdStyle}>{rule.dataAssetName || rule.dataAssetId}</td>}
+                  {dqCols.isVisible('column') && (
+                    <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                      {(rule as any).columnName || <span style={{ color: 'var(--color-text-muted)' }}>{'\u2014'}</span>}
+                    </td>
+                  )}
+                  {dqCols.isVisible('name') && <td style={tdStyle}>{rule.name}</td>}
+                  {dqCols.isVisible('dimension') && (
+                    <td style={tdStyle}>
+                      <Badge label={rule.dimension} colors={DIMENSION_BADGES[rule.dimension] || DIMENSION_BADGES.VALIDITY} />
+                    </td>
+                  )}
+                  {dqCols.isVisible('threshold') && <td style={tdStyle}>{rule.threshold}%</td>}
+                  {dqCols.isVisible('currentScore') && (
+                    <td style={tdStyle}>
+                      <ScoreBar score={rule.currentScore} threshold={rule.threshold} />
+                    </td>
+                  )}
+                  {dqCols.isVisible('weight') && <td style={tdStyle}>{rule.weight}</td>}
+                  {dqCols.isVisible('status') && (
+                    <td style={tdStyle}>
+                      <Badge label={rule.status} colors={STATUS_BADGES[rule.status] || STATUS_BADGES.NOT_MEASURED} />
+                    </td>
+                  )}
+                  {dqCols.isVisible('schedule') && (
                   <td style={{ ...tdStyle, fontSize: 12, position: 'relative' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <IconButton
@@ -921,9 +948,12 @@ export default function DataQualityPage() {
                       </div>
                     )}
                   </td>
-                  <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    {rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--'}
-                  </td>
+                  )}
+                  {dqCols.isVisible('lastMeasured') && (
+                    <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                      {rule.lastMeasured ? new Date(rule.lastMeasured).toLocaleDateString() : '--'}
+                    </td>
+                  )}
                   <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                       {rule.ruleType && (
