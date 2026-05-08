@@ -60,9 +60,11 @@ interface SystemEntity {
   integrationMechanisms?: IntegrationMechanism[];
   integrationFrequency?: IntegrationFrequency;
   ownerPersonId?: string | null;
+  deputyOwnerId?: string | null;
   custodianIds?: string[];
   /** Resolved by the backend so the table can render names without a per-row join. */
   ownerName?: string | null;
+  deputyOwnerName?: string | null;
   custodianNames?: string[];
   connectivity?: Connectivity;
   /** Rolled-up status from backend: profile health if connectivity is
@@ -139,6 +141,7 @@ interface FormData {
   integrationMechanisms: IntegrationMechanism[];
   integrationFrequency: IntegrationFrequency | '';
   ownerPersonId: string;
+  deputyOwnerId: string;
   custodianIds: string[];
   connectivity: Connectivity;
   /** Connections the user wants this system linked to. Diffed against
@@ -151,7 +154,7 @@ const emptyForm: FormData = {
   name: '', description: '', systemType: '', businessCriticality: '',
   vendor: '', integrationPoints: '',
   integrationMechanisms: [], integrationFrequency: '',
-  ownerPersonId: '', custodianIds: [],
+  ownerPersonId: '', deputyOwnerId: '', custodianIds: [],
   connectivity: 'INTEGRATED',
   connectionIds: [],
 };
@@ -481,6 +484,7 @@ export default function SystemsPage() {
       integrationMechanisms: sys.integrationMechanisms || [],
       integrationFrequency: sys.integrationFrequency || '',
       ownerPersonId: sys.ownerPersonId || '',
+      deputyOwnerId: sys.deputyOwnerId || '',
       custodianIds: sys.custodianIds || [],
       connectivity: sys.connectivity || 'INTEGRATED',
       connectionIds: linkedConnIds,
@@ -560,6 +564,7 @@ export default function SystemsPage() {
               integrationMechanisms: sys.integrationMechanisms,
               integrationFrequency: sys.integrationFrequency,
               ownerPersonId: sys.ownerPersonId,
+              deputyOwnerId: sys.deputyOwnerId,
               custodianIds: sys.custodianIds,
               connectivity: sys.connectivity,
               ...(activeOrgId ? { orgId: activeOrgId } : {}),
@@ -916,6 +921,34 @@ export default function SystemsPage() {
                 {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                Deputy Owner
+                <HelpPopover id="sys-deputy" title="Deputy Owner">
+                  Optional backup for the primary Owner. Same authority when the primary is unavailable — for coverage, succession, or matrix-org co-ownership. Must be a different person from the primary; only one is in charge at a time.
+                </HelpPopover>
+              </label>
+              <select
+                style={{
+                  ...selectStyle,
+                  ...(form.deputyOwnerId && form.deputyOwnerId === form.ownerPersonId
+                    ? { borderColor: '#ef4444', background: '#fef2f2' }
+                    : {}),
+                }}
+                value={form.deputyOwnerId}
+                onChange={(e) => setFormDirty({ ...form, deputyOwnerId: e.target.value })}
+              >
+                <option value="">-- None --</option>
+                {peopleList
+                  .filter((p) => p.id !== form.ownerPersonId)
+                  .map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+              </select>
+              {form.deputyOwnerId && form.deputyOwnerId === form.ownerPersonId && (
+                <span style={{ fontSize: 11, color: '#991b1b', display: 'block', marginTop: 4 }}>
+                  Deputy must differ from the primary Owner.
+                </span>
+              )}
+            </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                 Custodians
@@ -1242,7 +1275,14 @@ export default function SystemsPage() {
                     </td>
                     <td style={tdStyle}>
                       {sys.ownerName ? (
-                        <span>{sys.ownerName}</span>
+                        <div>
+                          <div>{sys.ownerName}</div>
+                          {sys.deputyOwnerName && (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }} title="Deputy owner — backup when the primary is unavailable">
+                              Deputy: {sys.deputyOwnerName}
+                            </div>
+                          )}
+                        </div>
                       ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
                         <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
                           Unassigned

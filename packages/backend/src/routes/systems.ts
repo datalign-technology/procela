@@ -39,6 +39,11 @@ interface StoredSystem {
    *  systems (surfaced as a gap when missing); optional for
    *  MANUAL/EXTERNAL systems where the lifecycle sits outside Procela. */
   ownerPersonId?: string | null;
+  /** Designated backup owner — same authority when the primary is
+   *  unavailable, never both at once. Captures coverage / succession
+   *  without breaking the "one accountable person" property the gap
+   *  report and audit log rely on. */
+  deputyOwnerId?: string | null;
   /** Technical caretakers — SREs, app admins, DBAs. Multiple is the
    *  norm for shared infrastructure. */
   custodianIds?: string[];
@@ -112,26 +117,34 @@ function rollupConnectionStatus(
  *  require to avoid a systems → people → data-assets → systems
  *  circular import; the people store is fully initialised by the
  *  time any HTTP request lands on this handler. */
-function resolveOwnership(sys: StoredSystem): { ownerName: string | null; custodianNames: string[] } {
+function resolveOwnership(sys: StoredSystem): {
+  ownerName: string | null;
+  deputyOwnerName: string | null;
+  custodianNames: string[];
+} {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { people } = require('./people') as { people: { id: string; name: string }[] };
   const ownerName = sys.ownerPersonId
     ? people.find((p) => p.id === sys.ownerPersonId)?.name || null
     : null;
+  const deputyOwnerName = sys.deputyOwnerId
+    ? people.find((p) => p.id === sys.deputyOwnerId)?.name || null
+    : null;
   const custodianNames = (sys.custodianIds || [])
     .map((id) => people.find((p) => p.id === id)?.name)
     .filter((n): n is string => !!n);
-  return { ownerName, custodianNames };
+  return { ownerName, deputyOwnerName, custodianNames };
 }
 
 function decorate(sys: StoredSystem) {
-  const { ownerName, custodianNames } = resolveOwnership(sys);
+  const { ownerName, deputyOwnerName, custodianNames } = resolveOwnership(sys);
   return {
     ...sys,
     connectivity: sys.connectivity || 'INTEGRATED',
     connectionCount: profilesForSystem(sys.id).length,
     connectionStatus: rollupConnectionStatus(sys),
     ownerName,
+    deputyOwnerName,
     custodianNames,
   };
 }
@@ -183,7 +196,7 @@ function validateMechanisms(value: unknown): { ok: true; value: string[] } | { o
 
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency, ownerPersonId, custodianIds } = req.body;
+  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (connectivity && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
@@ -198,6 +211,15 @@ router.post('/', (req: Request, res: Response) => {
   const cleanedCustodians = Array.isArray(custodianIds)
     ? Array.from(new Set(custodianIds.filter((c) => typeof c === 'string' && c.trim())))
     : [];
+  // Deputy must be a different person from the primary; otherwise the
+  // backup-coverage semantics break and audit logs see two identical
+  // accountabilities.
+  if (typeof ownerPersonId === 'string' && ownerPersonId
+      && typeof deputyOwnerId === 'string' && deputyOwnerId
+      && ownerPersonId === deputyOwnerId) {
+    res.status(400).json({ success: false, error: 'deputyOwnerId must be a different person from ownerPersonId' });
+    return;
+  }
   const now = new Date().toISOString();
   const sys: StoredSystem = {
     id: uuid(), orgId: orgId || DEV_ORG_ID, name,
@@ -209,6 +231,7 @@ router.post('/', (req: Request, res: Response) => {
     ...(mech.value.length > 0 ? { integrationMechanisms: mech.value } : {}),
     ...(integrationFrequency ? { integrationFrequency } : {}),
     ...(typeof ownerPersonId === 'string' && ownerPersonId ? { ownerPersonId } : {}),
+    ...(typeof deputyOwnerId === 'string' && deputyOwnerId ? { deputyOwnerId } : {}),
     ...(cleanedCustodians.length > 0 ? { custodianIds: cleanedCustodians } : {}),
     createdAt: now, updatedAt: now,
   };
@@ -222,7 +245,7 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency, ownerPersonId, custodianIds } = req.body;
+  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (connectivity !== undefined && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
     return;
@@ -253,6 +276,15 @@ router.put('/:id', (req: Request, res: Response) => {
     // Empty string clears the assignment so the system shows as
     // ownerless (and surfaces in the gap report).
     sys.ownerPersonId = ownerPersonId === '' || ownerPersonId === null ? null : String(ownerPersonId);
+  }
+  if (deputyOwnerId !== undefined) {
+    sys.deputyOwnerId = deputyOwnerId === '' || deputyOwnerId === null ? null : String(deputyOwnerId);
+  }
+  // After applying the patches above, re-check the same-person rule
+  // so a partial PUT (just deputy, owner already set) is still caught.
+  if (sys.ownerPersonId && sys.deputyOwnerId && sys.ownerPersonId === sys.deputyOwnerId) {
+    res.status(400).json({ success: false, error: 'deputyOwnerId must be a different person from ownerPersonId' });
+    return;
   }
   if (custodianIds !== undefined) {
     if (!Array.isArray(custodianIds)) {
