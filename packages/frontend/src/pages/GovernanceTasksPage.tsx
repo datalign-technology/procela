@@ -11,6 +11,8 @@ import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceTasksPage — full CRUD list page for governance tasks. Supports
@@ -138,6 +140,17 @@ function badge(_text: string, colors: { bg: string; color: string }): React.CSSP
   };
 }
 
+type TaskColId = 'title' | 'type' | 'status' | 'priority' | 'assignee' | 'dueDate' | 'mode';
+const TASK_COLUMN_DEFS: Array<{ id: TaskColId; label: string; defaultVisible: boolean }> = [
+  { id: 'title',    label: 'Title',    defaultVisible: true  },
+  { id: 'type',     label: 'Type',     defaultVisible: false },
+  { id: 'status',   label: 'Status',   defaultVisible: true  },
+  { id: 'priority', label: 'Priority', defaultVisible: true  },
+  { id: 'assignee', label: 'Assignee', defaultVisible: true  },
+  { id: 'dueDate',  label: 'Due Date', defaultVisible: true  },
+  { id: 'mode',     label: 'Mode',     defaultVisible: false },
+];
+
 // ── Component ──
 
 export default function GovernanceTasksPage() {
@@ -145,6 +158,7 @@ export default function GovernanceTasksPage() {
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
+  const taskCols = useColumnPicker<TaskColId>('procela.governanceTasks.visibleCols.v1', TASK_COLUMN_DEFS);
   const [tasks, setTasks] = useState<GovernanceTask[]>([]);
   const [summary, setSummary] = useState<TaskSummary | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
@@ -344,6 +358,7 @@ export default function GovernanceTasksPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={taskCols} />
           {canWrite && (
             <IconButton icon="plus" label="Add task" variant="primary" onClick={openAdd} />
           )}
@@ -547,13 +562,13 @@ export default function GovernanceTasksPage() {
                     checked={sorted.length > 0 && selectedIds.size === sorted.length}
                     onChange={toggleSelectAll} />
                 </th>
-                <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
-                <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
-                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                <SortableTh sortKey="priority" active={sortKey} dir={sortDir} onClick={toggleSort}>Priority</SortableTh>
-                <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assignee</SortableTh>
-                <SortableTh sortKey="dueDate" active={sortKey} dir={sortDir} onClick={toggleSort}>Due Date</SortableTh>
-                <th style={thStyle}>Mode</th>
+                {taskCols.isVisible('title') && <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>}
+                {taskCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
+                {taskCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
+                {taskCols.isVisible('priority') && <SortableTh sortKey="priority" active={sortKey} dir={sortDir} onClick={toggleSort}>Priority</SortableTh>}
+                {taskCols.isVisible('assignee') && <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assignee</SortableTh>}
+                {taskCols.isVisible('dueDate') && <SortableTh sortKey="dueDate" active={sortKey} dir={sortDir} onClick={toggleSort}>Due Date</SortableTh>}
+                {taskCols.isVisible('mode') && <th style={thStyle}>Mode</th>}
                 <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -575,34 +590,48 @@ export default function GovernanceTasksPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(task.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      <span style={{ color: 'var(--color-primary)' }}>{task.title}</span>
-                      {overdue && <span style={{ marginLeft: 6, fontSize: 10, color: '#dc2626', fontWeight: 600 }}>OVERDUE</span>}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{task.taskType.replace(/_/g, ' ')}</span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badge(task.status.replace(/_/g, ' '), STATUS_COLORS[task.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                        {task.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badge(task.priority, PRIORITY_COLORS[task.priority] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                        {task.priority}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      {task.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                    </td>
-                    <td style={{ ...tdStyle, color: overdue ? '#dc2626' : undefined, fontWeight: overdue ? 600 : undefined }}>
-                      {formatDate(task.dueDate)}
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badge(task.automationMode, MODE_COLORS[task.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                        {task.automationMode}
-                      </span>
-                    </td>
+                    {taskCols.isVisible('title') && (
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>
+                        <span style={{ color: 'var(--color-primary)' }}>{task.title}</span>
+                        {overdue && <span style={{ marginLeft: 6, fontSize: 10, color: '#dc2626', fontWeight: 600 }}>OVERDUE</span>}
+                      </td>
+                    )}
+                    {taskCols.isVisible('type') && (
+                      <td style={tdStyle}>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{task.taskType.replace(/_/g, ' ')}</span>
+                      </td>
+                    )}
+                    {taskCols.isVisible('status') && (
+                      <td style={tdStyle}>
+                        <span style={badge(task.status.replace(/_/g, ' '), STATUS_COLORS[task.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                          {task.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    )}
+                    {taskCols.isVisible('priority') && (
+                      <td style={tdStyle}>
+                        <span style={badge(task.priority, PRIORITY_COLORS[task.priority] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                          {task.priority}
+                        </span>
+                      </td>
+                    )}
+                    {taskCols.isVisible('assignee') && (
+                      <td style={tdStyle}>
+                        {task.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
+                      </td>
+                    )}
+                    {taskCols.isVisible('dueDate') && (
+                      <td style={{ ...tdStyle, color: overdue ? '#dc2626' : undefined, fontWeight: overdue ? 600 : undefined }}>
+                        {formatDate(task.dueDate)}
+                      </td>
+                    )}
+                    {taskCols.isVisible('mode') && (
+                      <td style={tdStyle}>
+                        <span style={badge(task.automationMode, MODE_COLORS[task.automationMode] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                          {task.automationMode}
+                        </span>
+                      </td>
+                    )}
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
                         {transitions.map((tr) => (

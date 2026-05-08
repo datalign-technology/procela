@@ -7,6 +7,8 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ── Types ──
 
@@ -114,9 +116,21 @@ const badge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   background: colors.bg, color: colors.color,
 });
 
+type SopColId = 'code' | 'title' | 'category' | 'roles' | 'steps' | 'status' | 'owner';
+const SOP_COLUMN_DEFS: Array<{ id: SopColId; label: string; defaultVisible: boolean }> = [
+  { id: 'code',     label: 'Code',     defaultVisible: true  },
+  { id: 'title',    label: 'Title',    defaultVisible: true  },
+  { id: 'category', label: 'Category', defaultVisible: true  },
+  { id: 'roles',    label: 'Roles',    defaultVisible: false },
+  { id: 'steps',    label: 'Steps',    defaultVisible: true  },
+  { id: 'status',   label: 'Status',   defaultVisible: true  },
+  { id: 'owner',    label: 'Owner',    defaultVisible: true  },
+];
+
 export default function SopsPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
+  const sopCols = useColumnPicker<SopColId>('procela.sops.visibleCols.v1', SOP_COLUMN_DEFS);
   const { addToast } = useToastStore();
   const [sops, setSops] = useState<Sop[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -301,6 +315,7 @@ export default function SopsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={sopCols} />
           {canWrite && <IconButton icon="plus" label="Add SOP" variant="primary" onClick={openAdd} />}
         </div>
       </div>
@@ -473,13 +488,13 @@ export default function SopsPage() {
                 <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={sops.length > 0 && selectedIds.size === sops.length} onChange={toggleSelectAll} />
                 </th>
-                <th style={{ ...thStyle, width: 80 }}>Code</th>
-                <th style={thStyle}>Title</th>
-                <th style={thStyle}>Category</th>
-                <th style={thStyle}>Roles</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>Steps</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Owner</th>
+                {sopCols.isVisible('code') && <th style={{ ...thStyle, width: 80 }}>Code</th>}
+                {sopCols.isVisible('title') && <th style={thStyle}>Title</th>}
+                {sopCols.isVisible('category') && <th style={thStyle}>Category</th>}
+                {sopCols.isVisible('roles') && <th style={thStyle}>Roles</th>}
+                {sopCols.isVisible('steps') && <th style={{ ...thStyle, textAlign: 'center' }}>Steps</th>}
+                {sopCols.isVisible('status') && <th style={thStyle}>Status</th>}
+                {sopCols.isVisible('owner') && <th style={thStyle}>Owner</th>}
                 <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -492,23 +507,31 @@ export default function SopsPage() {
                       <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selectedIds.has(sop.id)} onChange={() => toggleSelect(sop.id)} />
                       </td>
-                      <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.code}</td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>
-                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginRight: 6 }}>{isExpanded ? '▼' : '▶'}</span>
-                        {sop.title}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badge(CATEGORY_COLORS[sop.category] || CATEGORY_COLORS.OTHER)}>{CATEGORY_LABELS[sop.category] || sop.category}</span>
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        {(sop.applicableRoles || []).slice(0, 3).map((r) => ROLE_LABELS[r] || r).join(', ')}
-                        {sop.applicableRoles && sop.applicableRoles.length > 3 && ` +${sop.applicableRoles.length - 3}`}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>{sop.steps?.length || 0}</td>
-                      <td style={tdStyle}>
-                        <span style={badge(STATUS_COLORS[sop.status] || STATUS_COLORS.DRAFT)}>{sop.status}</span>
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 12 }}>{sop.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</td>
+                      {sopCols.isVisible('code') && <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{sop.code}</td>}
+                      {sopCols.isVisible('title') && (
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>
+                          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginRight: 6 }}>{isExpanded ? '▼' : '▶'}</span>
+                          {sop.title}
+                        </td>
+                      )}
+                      {sopCols.isVisible('category') && (
+                        <td style={tdStyle}>
+                          <span style={badge(CATEGORY_COLORS[sop.category] || CATEGORY_COLORS.OTHER)}>{CATEGORY_LABELS[sop.category] || sop.category}</span>
+                        </td>
+                      )}
+                      {sopCols.isVisible('roles') && (
+                        <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                          {(sop.applicableRoles || []).slice(0, 3).map((r) => ROLE_LABELS[r] || r).join(', ')}
+                          {sop.applicableRoles && sop.applicableRoles.length > 3 && ` +${sop.applicableRoles.length - 3}`}
+                        </td>
+                      )}
+                      {sopCols.isVisible('steps') && <td style={{ ...tdStyle, textAlign: 'center' }}>{sop.steps?.length || 0}</td>}
+                      {sopCols.isVisible('status') && (
+                        <td style={tdStyle}>
+                          <span style={badge(STATUS_COLORS[sop.status] || STATUS_COLORS.DRAFT)}>{sop.status}</span>
+                        </td>
+                      )}
+                      {sopCols.isVisible('owner') && <td style={{ ...tdStyle, fontSize: 12 }}>{sop.ownerName || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</td>}
                       <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
                           {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sop)} />}

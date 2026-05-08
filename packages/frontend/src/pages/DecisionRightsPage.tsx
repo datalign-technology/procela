@@ -7,6 +7,8 @@ import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ── Types ──
 
@@ -218,6 +220,17 @@ function MultiSelect({
   );
 }
 
+type DecisionColId = 'decision' | 'category' | 'decides' | 'recommends' | 'approves' | 'informed' | 'escalation';
+const DECISION_COLUMN_DEFS: Array<{ id: DecisionColId; label: string; defaultVisible: boolean }> = [
+  { id: 'decision',   label: 'Decision',    defaultVisible: true  },
+  { id: 'category',   label: 'Category',    defaultVisible: true  },
+  { id: 'decides',    label: 'Decides',     defaultVisible: true  },
+  { id: 'recommends', label: 'Recommends',  defaultVisible: false },
+  { id: 'approves',   label: 'Approves',    defaultVisible: true  },
+  { id: 'informed',   label: 'Informed',    defaultVisible: false },
+  { id: 'escalation', label: 'Escalation',  defaultVisible: false },
+];
+
 // ── Component ──
 
 export default function DecisionRightsPage() {
@@ -225,6 +238,7 @@ export default function DecisionRightsPage() {
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
+  const decisionCols = useColumnPicker<DecisionColId>('procela.decisionRights.visibleCols.v1', DECISION_COLUMN_DEFS);
   const [rows, setRows] = useState<DecisionRight[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [groups, setGroups] = useState<GovernanceGroup[]>([]);
@@ -386,6 +400,7 @@ export default function DecisionRightsPage() {
               {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
             </button>
           )}
+          <ColumnPicker state={decisionCols} />
           {canWrite && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
         </div>
       </div>
@@ -577,13 +592,13 @@ export default function DecisionRightsPage() {
                   <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                     <input type="checkbox" checked={rows.length > 0 && selectedIds.size === rows.length} onChange={toggleSelectAll} />
                   </th>
-                  <th style={thStyle}>Decision</th>
-                  <th style={thStyle}>Category</th>
-                  <th style={thStyle}>Decides</th>
-                  <th style={thStyle}>Recommends</th>
-                  <th style={thStyle}>Approves</th>
-                  <th style={thStyle}>Informed</th>
-                  <th style={thStyle}>Escalation</th>
+                  {decisionCols.isVisible('decision') && <th style={thStyle}>Decision</th>}
+                  {decisionCols.isVisible('category') && <th style={thStyle}>Category</th>}
+                  {decisionCols.isVisible('decides') && <th style={thStyle}>Decides</th>}
+                  {decisionCols.isVisible('recommends') && <th style={thStyle}>Recommends</th>}
+                  {decisionCols.isVisible('approves') && <th style={thStyle}>Approves</th>}
+                  {decisionCols.isVisible('informed') && <th style={thStyle}>Informed</th>}
+                  {decisionCols.isVisible('escalation') && <th style={thStyle}>Escalation</th>}
                   <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
@@ -596,43 +611,57 @@ export default function DecisionRightsPage() {
                       <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
                         <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
                       </td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>
-                        <div style={{ color: 'var(--color-text)' }}>{r.decision}</div>
-                        {r.description && (
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 320 }}>
-                            {r.description}
-                          </div>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={badgeStyle(CATEGORY_COLORS[r.category] || CATEGORY_COLORS.OTHER)}>
-                          {CATEGORY_LABELS[r.category]}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        {decidesLabel ? (
-                          <div>
-                            <span style={chipStyle}>{decidesLabel}</span>
-                            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {r.deciderType.toLowerCase()}
+                      {decisionCols.isVisible('decision') && (
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>
+                          <div style={{ color: 'var(--color-text)' }}>{r.decision}</div>
+                          {r.description && (
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 320 }}>
+                              {r.description}
                             </div>
-                          </div>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        <Chips values={r.recommends} people={people} groups={groups} />
-                      </td>
-                      <td style={tdStyle}>
-                        <Chips values={r.approves} people={people} groups={groups} />
-                      </td>
-                      <td style={tdStyle}>
-                        <Chips values={r.informed} people={people} groups={groups} />
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 12, maxWidth: 200, color: 'var(--color-text-secondary)' }}>
-                        {r.escalationPath || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
-                      </td>
+                          )}
+                        </td>
+                      )}
+                      {decisionCols.isVisible('category') && (
+                        <td style={tdStyle}>
+                          <span style={badgeStyle(CATEGORY_COLORS[r.category] || CATEGORY_COLORS.OTHER)}>
+                            {CATEGORY_LABELS[r.category]}
+                          </span>
+                        </td>
+                      )}
+                      {decisionCols.isVisible('decides') && (
+                        <td style={tdStyle}>
+                          {decidesLabel ? (
+                            <div>
+                              <span style={chipStyle}>{decidesLabel}</span>
+                              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                                {r.deciderType.toLowerCase()}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>
+                          )}
+                        </td>
+                      )}
+                      {decisionCols.isVisible('recommends') && (
+                        <td style={tdStyle}>
+                          <Chips values={r.recommends} people={people} groups={groups} />
+                        </td>
+                      )}
+                      {decisionCols.isVisible('approves') && (
+                        <td style={tdStyle}>
+                          <Chips values={r.approves} people={people} groups={groups} />
+                        </td>
+                      )}
+                      {decisionCols.isVisible('informed') && (
+                        <td style={tdStyle}>
+                          <Chips values={r.informed} people={people} groups={groups} />
+                        </td>
+                      )}
+                      {decisionCols.isVisible('escalation') && (
+                        <td style={{ ...tdStyle, fontSize: 12, maxWidth: 200, color: 'var(--color-text-secondary)' }}>
+                          {r.escalationPath || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
+                        </td>
+                      )}
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>
                           {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}

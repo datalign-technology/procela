@@ -11,6 +11,8 @@ import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceIssuesPage — full CRUD list page for governance issues. Supports
@@ -135,6 +137,17 @@ function badge(_text: string, colors: { bg: string; color: string }): React.CSSP
   };
 }
 
+type IssueColId = 'title' | 'type' | 'severity' | 'status' | 'domain' | 'assignee' | 'created';
+const ISSUE_COLUMN_DEFS: Array<{ id: IssueColId; label: string; defaultVisible: boolean }> = [
+  { id: 'title',    label: 'Title',       defaultVisible: true  },
+  { id: 'type',     label: 'Type',        defaultVisible: true  },
+  { id: 'severity', label: 'Severity',    defaultVisible: true  },
+  { id: 'status',   label: 'Status',      defaultVisible: true  },
+  { id: 'domain',   label: 'Domain',      defaultVisible: true  },
+  { id: 'assignee', label: 'Assigned To', defaultVisible: true  },
+  { id: 'created',  label: 'Created',     defaultVisible: false },
+];
+
 // ── Component ──
 
 export default function GovernanceIssuesPage() {
@@ -142,6 +155,7 @@ export default function GovernanceIssuesPage() {
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
+  const issueCols = useColumnPicker<IssueColId>('procela.governanceIssues.visibleCols.v1', ISSUE_COLUMN_DEFS);
   const [issues, setIssues] = useState<GovernanceIssue[]>([]);
   const [summary, setSummary] = useState<IssueSummary | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
@@ -327,6 +341,7 @@ export default function GovernanceIssuesPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={issueCols} />
           {canWrite && (
             <IconButton icon="plus" label="Add issue" variant="primary" onClick={openAdd} />
           )}
@@ -509,13 +524,13 @@ export default function GovernanceIssuesPage() {
                     checked={sorted.length > 0 && selectedIds.size === sorted.length}
                     onChange={toggleSelectAll} />
                 </th>
-                <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
-                <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
-                <SortableTh sortKey="severity" active={sortKey} dir={sortDir} onClick={toggleSort}>Severity</SortableTh>
-                <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>
-                <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>
-                <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assigned To</SortableTh>
-                <SortableTh sortKey="created" active={sortKey} dir={sortDir} onClick={toggleSort}>Created</SortableTh>
+                {issueCols.isVisible('title') && <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>}
+                {issueCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
+                {issueCols.isVisible('severity') && <SortableTh sortKey="severity" active={sortKey} dir={sortDir} onClick={toggleSort}>Severity</SortableTh>}
+                {issueCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
+                {issueCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
+                {issueCols.isVisible('assignee') && <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assigned To</SortableTh>}
+                {issueCols.isVisible('created') && <SortableTh sortKey="created" active={sortKey} dir={sortDir} onClick={toggleSort}>Created</SortableTh>}
                 <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -535,33 +550,47 @@ export default function GovernanceIssuesPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(issue.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      <span style={{ color: 'var(--color-primary)' }}>{issue.title}</span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badge(issue.issueType.replace(/_/g, ' '), ISSUE_TYPE_COLORS[issue.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                        {issue.issueType.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badge(issue.severity, SEVERITY_COLORS[issue.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                        {issue.severity}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={badge(issue.status.replace(/_/g, ' '), STATUS_COLORS[issue.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
-                        {issue.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      {issue.domainName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
-                    </td>
-                    <td style={tdStyle}>
-                      {issue.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
-                    </td>
-                    <td style={tdStyle}>
-                      {formatDate(issue.createdAt)}
-                    </td>
+                    {issueCols.isVisible('title') && (
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>
+                        <span style={{ color: 'var(--color-primary)' }}>{issue.title}</span>
+                      </td>
+                    )}
+                    {issueCols.isVisible('type') && (
+                      <td style={tdStyle}>
+                        <span style={badge(issue.issueType.replace(/_/g, ' '), ISSUE_TYPE_COLORS[issue.issueType] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                          {issue.issueType.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    )}
+                    {issueCols.isVisible('severity') && (
+                      <td style={tdStyle}>
+                        <span style={badge(issue.severity, SEVERITY_COLORS[issue.severity] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                          {issue.severity}
+                        </span>
+                      </td>
+                    )}
+                    {issueCols.isVisible('status') && (
+                      <td style={tdStyle}>
+                        <span style={badge(issue.status.replace(/_/g, ' '), STATUS_COLORS[issue.status] || { bg: '#f3f4f6', color: '#6b7280' })}>
+                          {issue.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                    )}
+                    {issueCols.isVisible('domain') && (
+                      <td style={tdStyle}>
+                        {issue.domainName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
+                      </td>
+                    )}
+                    {issueCols.isVisible('assignee') && (
+                      <td style={tdStyle}>
+                        {issue.assigneeName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}
+                      </td>
+                    )}
+                    {issueCols.isVisible('created') && (
+                      <td style={tdStyle}>
+                        {formatDate(issue.createdAt)}
+                      </td>
+                    )}
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
                         {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(issue)} />}

@@ -10,6 +10,8 @@ import { SkeletonRows } from '../components/Skeleton';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 
 // ── Types ──
 
@@ -104,6 +106,17 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
+type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'reviewDue' | 'controls';
+const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible: boolean }> = [
+  { id: 'code',      label: 'Code',       defaultVisible: true  },
+  { id: 'name',      label: 'Name',       defaultVisible: true  },
+  { id: 'category',  label: 'Category',   defaultVisible: true  },
+  { id: 'status',    label: 'Status',     defaultVisible: true  },
+  { id: 'owner',     label: 'Owner',      defaultVisible: true  },
+  { id: 'reviewDue', label: 'Review Due', defaultVisible: false },
+  { id: 'controls',  label: 'Controls',   defaultVisible: true  },
+];
+
 // ── Component ──
 
 export default function GovernancePoliciesPage() {
@@ -112,6 +125,7 @@ export default function GovernancePoliciesPage() {
   const deps = useDependencyChecks();
   const { addToast } = useToastStore();
 
+  const policyCols = useColumnPicker<PolicyColId>('procela.governancePolicies.visibleCols.v1', POLICY_COLUMN_DEFS);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -259,7 +273,10 @@ export default function GovernancePoliciesPage() {
             Define governance policies and the controls that enforce them.
           </p>
         </div>
-        {canWrite && <IconButton icon="plus" label="Add policy" variant="primary" onClick={openAdd} />}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <ColumnPicker state={policyCols} />
+          {canWrite && <IconButton icon="plus" label="Add policy" variant="primary" onClick={openAdd} />}
+        </div>
       </div>
 
       <ConfirmDialog open={confirmDelete !== null} title="Delete Policy?"
@@ -366,13 +383,13 @@ export default function GovernancePoliciesPage() {
                 <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={policies.length > 0 && selectedIds.size === policies.length} onChange={toggleSelectAll} />
                 </th>
-                <th style={thStyle}>Code</th>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Category</th>
-                <th style={thStyle}>Status</th>
-                <th style={thStyle}>Owner</th>
-                <th style={thStyle}>Review Due</th>
-                <th style={thStyle}>Controls</th>
+                {policyCols.isVisible('code') && <th style={thStyle}>Code</th>}
+                {policyCols.isVisible('name') && <th style={thStyle}>Name</th>}
+                {policyCols.isVisible('category') && <th style={thStyle}>Category</th>}
+                {policyCols.isVisible('status') && <th style={thStyle}>Status</th>}
+                {policyCols.isVisible('owner') && <th style={thStyle}>Owner</th>}
+                {policyCols.isVisible('reviewDue') && <th style={thStyle}>Review Due</th>}
+                {policyCols.isVisible('controls') && <th style={thStyle}>Controls</th>}
                 <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -388,13 +405,13 @@ export default function GovernancePoliciesPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selectedIds.has(pol.id)} onChange={() => toggleSelect(pol.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'monospace', fontSize: 12 }}>{pol.code}</td>
-                    <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>{pol.name}</td>
-                    <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>
-                    <td style={tdStyle}><span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span></td>
-                    <td style={tdStyle}>{pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</td>
-                    <td style={tdStyle}>{formatDate(pol.nextReviewDate)}</td>
-                    <td style={tdStyle}><span style={{ fontSize: 12, fontWeight: 600 }}>{policyControls.length}</span></td>
+                    {policyCols.isVisible('code') && <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'monospace', fontSize: 12 }}>{pol.code}</td>}
+                    {policyCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>{pol.name}</td>}
+                    {policyCols.isVisible('category') && <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>}
+                    {policyCols.isVisible('status') && <td style={tdStyle}><span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span></td>}
+                    {policyCols.isVisible('owner') && <td style={tdStyle}>{pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</td>}
+                    {policyCols.isVisible('reviewDue') && <td style={tdStyle}>{formatDate(pol.nextReviewDate)}</td>}
+                    {policyCols.isVisible('controls') && <td style={tdStyle}><span style={{ fontSize: 12, fontWeight: 600 }}>{policyControls.length}</span></td>}
                     <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'inline-flex', gap: 4 }}>
                         {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(pol)} />}
