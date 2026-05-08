@@ -4,6 +4,8 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
 import { formatPersonLabel } from '../lib/personLabel';
+import { useColumnPicker } from '../hooks/useColumnPicker';
+import ColumnPicker from '../components/ColumnPicker';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -399,12 +401,21 @@ function ConnectPickerModal({
   );
 }
 
+type SystemColId = 'type' | 'description' | 'owner' | 'connections';
+const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible: boolean }> = [
+  { id: 'type',        label: 'Type',        defaultVisible: true  },
+  { id: 'description', label: 'Description', defaultVisible: true  },
+  { id: 'owner',       label: 'Owner',       defaultVisible: true  },
+  { id: 'connections', label: 'Connections', defaultVisible: true  },
+];
+
 export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
+  const systemCols = useColumnPicker<SystemColId>('procela.systems.visibleCols.v1', SYSTEM_COLUMN_DEFS);
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
@@ -727,6 +738,7 @@ export default function SystemsPage() {
           )}
           <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
           <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
+          <ColumnPicker state={systemCols} />
           <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
         </div>
       </div>
@@ -1242,10 +1254,10 @@ export default function SystemsPage() {
                   <input type="checkbox" checked={systems.length > 0 && selectedIds.size === systems.length} onChange={toggleSelectAll} aria-label="Select all systems" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
-                <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
-                <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
-                <th style={{ ...thStyle, width: 140 }}>Connections</th>
+                {systemCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
+                {systemCols.isVisible('description') && <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>}
+                {systemCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
+                {systemCols.isVisible('connections') && <th style={{ ...thStyle, width: 140 }}>Connections</th>}
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
@@ -1266,42 +1278,50 @@ export default function SystemsPage() {
                         onSave={(v) => inlineSaveField(sys.id, 'name', v)}
                       />
                     </td>
-                    <td style={tdStyle}>
-                      {systemTypes.length > 0 ? (
-                        <InlineCellEdit
-                          value={sys.systemType || ''}
-                          onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
-                          type="select"
-                          options={systemTypes}
-                        />
-                      ) : (
-                        sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
-                      )}
-                    </td>
-                    <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
-                      {sys.description || '--'}
-                    </td>
-                    <td style={tdStyle}>
-                      {sys.ownerName ? (
-                        <div>
-                          <div>{sys.ownerName}</div>
-                          {sys.deputyOwnerName && (
-                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }} title="Deputy owner — backup when the primary is unavailable">
-                              Deputy: {sys.deputyOwnerName}
-                            </div>
-                          )}
-                        </div>
-                      ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
-                        <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
-                          Unassigned
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem)}
-                    </td>
+                    {systemCols.isVisible('type') && (
+                      <td style={tdStyle}>
+                        {systemTypes.length > 0 ? (
+                          <InlineCellEdit
+                            value={sys.systemType || ''}
+                            onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
+                            type="select"
+                            options={systemTypes}
+                          />
+                        ) : (
+                          sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
+                        )}
+                      </td>
+                    )}
+                    {systemCols.isVisible('description') && (
+                      <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
+                        {sys.description || '--'}
+                      </td>
+                    )}
+                    {systemCols.isVisible('owner') && (
+                      <td style={tdStyle}>
+                        {sys.ownerName ? (
+                          <div>
+                            <div>{sys.ownerName}</div>
+                            {sys.deputyOwnerName && (
+                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }} title="Deputy owner — backup when the primary is unavailable">
+                                Deputy: {sys.deputyOwnerName}
+                              </div>
+                            )}
+                          </div>
+                        ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
+                          <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
+                            Unassigned
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                        )}
+                      </td>
+                    )}
+                    {systemCols.isVisible('connections') && (
+                      <td style={tdStyle}>
+                        {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem)}
+                      </td>
+                    )}
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sys)} />
