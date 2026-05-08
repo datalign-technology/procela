@@ -11,7 +11,6 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
-import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
@@ -846,7 +845,6 @@ export default function DataAssetsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
-            <InfoTip term="Data Asset" />
             <HelpPopover id="data-assets-overview" title="Data assets">
               Define your data in business terms first ("Customer accounts",
               "Billing records") — then link each one to where it actually

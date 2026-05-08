@@ -10,7 +10,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
-import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
@@ -313,7 +312,6 @@ export default function DataDomainsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Domains</h1>
-            <InfoTip term="Data Domain" />
             <HelpPopover id="domains-intro" title="Data Domains">
               Domains group related data assets into governed categories (e.g. Customer Data, Financial Data).
               Each domain has an owner, stewards, and a scope definition.
