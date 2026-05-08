@@ -397,6 +397,50 @@ export default function DataAssetsPage() {
   const [connectionsList, setConnectionsList] = useState<Array<{ id: string; name: string; connectionType: string }>>([]);
   const [linkModalAsset, setLinkModalAsset] = useState<DataAssetEntity | null>(null);
   const [linkModalMode, setLinkModalMode] = useState<'new' | 'change'>('new');
+  // Asset-rooted "Suggest source" — opens a small modal with ranked
+  // candidate bindings drawn from existing connections in the org.
+  const [suggestAsset, setSuggestAsset] = useState<DataAssetEntity | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<{
+    connectionId: string; connectionName: string; connectionType: string;
+    sourceAsset: string; sourceColumn: string | null; score: number; reason: string;
+  }>>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestBusyId, setSuggestBusyId] = useState<string | null>(null);
+
+  const openSuggestSource = async (asset: DataAssetEntity) => {
+    setSuggestAsset(asset);
+    setSuggestions([]);
+    setSuggestLoading(true);
+    try {
+      const res = await apiClient.get<{ success: boolean; data: typeof suggestions }>(`/data-assets/${asset.id}/suggest-source`);
+      setSuggestions(res.data || []);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Could not load suggestions');
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  const acceptSuggestion = async (s: typeof suggestions[number]) => {
+    if (!suggestAsset) return;
+    const key = `${s.connectionId}::${s.sourceAsset}::${s.sourceColumn || ''}`;
+    setSuggestBusyId(key);
+    try {
+      await apiClient.post(`/data-assets/${suggestAsset.id}/bindings`, {
+        connectionId: s.connectionId,
+        sourceAsset: s.sourceAsset,
+        ...(s.sourceColumn ? { sourceColumn: s.sourceColumn } : {}),
+        isPrimary: true,
+      });
+      addToast('success', `Bound "${suggestAsset.name}" to ${s.sourceAsset}${s.sourceColumn ? '.' + s.sourceColumn : ''}`);
+      setSuggestAsset(null);
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Could not create binding');
+    } finally {
+      setSuggestBusyId(null);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -1554,7 +1598,10 @@ export default function DataAssetsPage() {
                             <IconButton size="sm" icon="unlink" label="Unlink" onClick={() => unlinkPrimary(asset)} />
                           </>
                         ) : (
-                          <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
+                          <>
+                            <IconButton size="sm" icon="link" label="Link to connection" variant="primary" onClick={() => { setLinkModalAsset(asset); setLinkModalMode('new'); }} />
+                            <IconButton size="sm" icon="search" label="Suggest source" onClick={() => openSuggestSource(asset)} />
+                          </>
                         )}
                         {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(asset)} />}
                         {canWrite && <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(asset)} />}
@@ -1887,6 +1934,70 @@ export default function DataAssetsPage() {
           onClose={() => setLinkModalAsset(null)}
           onLinked={fetchData}
         />
+      )}
+
+      {suggestAsset && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', width: '100%', maxWidth: 560, maxHeight: '85vh', overflow: 'auto', padding: 20, boxShadow: 'var(--shadow-lg)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Suggest source</h2>
+                <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                  Candidate bindings for <strong>{suggestAsset.name}</strong>, ranked by name match against connections in this org.
+                </span>
+              </div>
+              <button onClick={() => setSuggestAsset(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+            </div>
+
+            {suggestLoading ? (
+              <div style={{ padding: 16, fontSize: 12, color: 'var(--color-text-muted)' }}>Searching connections…</div>
+            ) : suggestions.length === 0 ? (
+              <div style={{ padding: 16, fontSize: 12, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+                No candidate sources found. Either no connection in this org has been crawled yet, or none have file/column names that overlap with the asset name. Try the <strong>Discover assets</strong> button on the Connections page first, or use <strong>Link to connection</strong> to bind manually.
+              </div>
+            ) : (
+              <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                {suggestions.map((s) => {
+                  const key = `${s.connectionId}::${s.sourceAsset}::${s.sourceColumn || ''}`;
+                  const busy = suggestBusyId === key;
+                  return (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderTop: '1px solid var(--color-border)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                          {s.sourceAsset}{s.sourceColumn ? <span style={{ color: 'var(--color-primary)' }}>{` . ${s.sourceColumn}`}</span> : ''}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                          {s.connectionName} · {s.connectionType} · {s.reason}
+                        </div>
+                      </div>
+                      <span title="Match score" style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 999, background: '#dbeafe', color: '#1e40af' }}>
+                        {Math.round(s.score * 100)}%
+                      </span>
+                      <button
+                        onClick={() => acceptSuggestion(s)}
+                        disabled={busy}
+                        style={{
+                          padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                          background: 'var(--color-primary)', color: '#fff', border: 'none',
+                          borderRadius: 'var(--radius-md)', cursor: busy ? 'not-allowed' : 'pointer',
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        {busy ? 'Binding…' : 'Bind'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+              <button onClick={() => setSuggestAsset(null)} style={{ padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, cursor: 'pointer' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

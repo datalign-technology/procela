@@ -933,4 +933,117 @@ router.post('/:id/columns/auto-discover', async (req: Request, res: Response) =>
   }
 });
 
+// ── Suggest source ────────────────────────────────────────────────────────
+//
+// Given a Data Asset (a business concept like "Customer Accounts"), score
+// the existing connections in the same org and surface the candidates
+// whose names are likely to back this asset. Asset-rooted complement to
+// the connection-rooted "Discover assets" button on the Connections page.
+//
+// We score against names already known to the connection — file names
+// and column lists for LOCAL files. Database/API connections that
+// haven't been live-discovered have no pre-populated candidate list so
+// they're skipped here; the user can still reach them from the
+// connection-rooted Discover flow.
+
+function tokenize(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+}
+
+function similarity(a: string, b: string): number {
+  const ta = new Set(tokenize(a));
+  const tb = new Set(tokenize(b));
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let intersection = 0;
+  for (const t of ta) if (tb.has(t)) intersection++;
+  const union = ta.size + tb.size - intersection;
+  const jaccard = intersection / union;
+  // Substring boost — "customer" appearing in "customers.csv" should
+  // outrank a same-jaccard candidate without the substring overlap.
+  const aLow = a.toLowerCase();
+  const bLow = b.toLowerCase();
+  const sub = aLow.includes(bLow) || bLow.includes(aLow) ? 0.15 : 0;
+  return Math.min(1, jaccard + sub);
+}
+
+router.get('/:id/suggest-source', (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { connections } = require('./connections') as typeof import('./connections');
+  const orgConnections = connections.filter((c) => c.orgId === asset.orgId);
+
+  // Don't suggest sources already bound to *some* asset — those have a
+  // claim on them. Bound-to-this-asset is also excluded since the user
+  // is looking for a missing or additional binding.
+  const claimed = new Set(
+    dataAssetBindings.map((b) =>
+      `${b.connectionId}::${b.sourceAsset || ''}::${b.sourceColumn || ''}`,
+    ),
+  );
+
+  type Candidate = {
+    connectionId: string;
+    connectionName: string;
+    connectionType: string;
+    sourceAsset: string;
+    sourceColumn: string | null;
+    score: number;
+    /** A short human-readable reason the candidate ranked. Helps the
+     *  UI explain "why this match" without re-running the scorer. */
+    reason: string;
+  };
+
+  const candidates: Candidate[] = [];
+  const assetText = `${asset.name} ${asset.description || ''}`;
+
+  for (const conn of orgConnections) {
+    const cfg: any = conn.config || {};
+    const file: string | undefined = cfg.originalFileName;
+    const cols: string[] = Array.isArray(cfg.columns) ? cfg.columns : [];
+    if (!file && cols.length === 0) continue; // nothing observable to match
+
+    if (file) {
+      const score = similarity(assetText, file);
+      const key = `${conn.id}::${file}::`;
+      if (score > 0 && !claimed.has(key)) {
+        candidates.push({
+          connectionId: conn.id,
+          connectionName: conn.name,
+          connectionType: conn.connectionType,
+          sourceAsset: file,
+          sourceColumn: null,
+          score,
+          reason: `File name "${file}" overlaps with asset name`,
+        });
+      }
+    }
+    for (const col of cols) {
+      const score = similarity(assetText, col);
+      const key = `${conn.id}::${file || ''}::${col}`;
+      if (score > 0 && !claimed.has(key)) {
+        candidates.push({
+          connectionId: conn.id,
+          connectionName: conn.name,
+          connectionType: conn.connectionType,
+          sourceAsset: file || conn.name,
+          sourceColumn: col,
+          score,
+          reason: `Column "${col}" overlaps with asset name`,
+        });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  // Cap at 10 — beyond that the user is better off using the
+  // connection-rooted Discover flow with full filtering.
+  res.json({ success: true, data: candidates.slice(0, 10) });
+});
+
 export default router;
