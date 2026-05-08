@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import { formatPersonLabel } from '../lib/personLabel';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -58,6 +59,11 @@ interface SystemEntity {
   integrationPoints?: string;
   integrationMechanisms?: IntegrationMechanism[];
   integrationFrequency?: IntegrationFrequency;
+  ownerPersonId?: string | null;
+  custodianIds?: string[];
+  /** Resolved by the backend so the table can render names without a per-row join. */
+  ownerName?: string | null;
+  custodianNames?: string[];
   connectivity?: Connectivity;
   /** Rolled-up status from backend: profile health if connectivity is
    *  INTEGRATED, otherwise mirrors the connectivity intent. */
@@ -132,6 +138,8 @@ interface FormData {
   integrationPoints: string;
   integrationMechanisms: IntegrationMechanism[];
   integrationFrequency: IntegrationFrequency | '';
+  ownerPersonId: string;
+  custodianIds: string[];
   connectivity: Connectivity;
   /** Connections the user wants this system linked to. Diffed against
    *  the system's existing links on save and reconciled via
@@ -143,6 +151,7 @@ const emptyForm: FormData = {
   name: '', description: '', systemType: '', businessCriticality: '',
   vendor: '', integrationPoints: '',
   integrationMechanisms: [], integrationFrequency: '',
+  ownerPersonId: '', custodianIds: [],
   connectivity: 'INTEGRATED',
   connectionIds: [],
 };
@@ -397,6 +406,7 @@ export default function SystemsPage() {
   const [systems, setSystems] = useState<SystemEntity[]>([]);
   const [connections, setConnections] = useState<ConnectionSummary[]>([]);
   const [systemTypes, setSystemTypes] = useState<string[]>([]);
+  const [peopleList, setPeopleList] = useState<{ id: string; name: string; title?: string; orgPaths?: string[]; orgNames?: string[] }[]>([]);
   const [filterType, setFilterType] = useState('');
   const [filterCriticality, setFilterCriticality] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -418,15 +428,17 @@ export default function SystemsPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [sysRes, connRes] = await Promise.all([
+      const [sysRes, connRes, peopleRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: SystemEntity[]; systemTypes: string[] }>(`/systems${query}`),
         // Connections power the per-row count + shortcut; this fetch is
         // best-effort — a failure here must not block the systems list.
         apiClient.get<{ success: boolean; data: ConnectionSummary[] }>(`/connections${query}`).catch(() => ({ data: [] as ConnectionSummary[] })),
+        apiClient.get<{ success: boolean; data: typeof peopleList }>(`/people${query}`).catch(() => ({ data: [] as typeof peopleList })),
       ]);
       setSystems(sysRes.data || []);
       setSystemTypes(sysRes.systemTypes || []);
       setConnections(connRes.data || []);
+      setPeopleList(peopleRes.data || []);
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -468,6 +480,8 @@ export default function SystemsPage() {
       integrationPoints: sys.integrationPoints || '',
       integrationMechanisms: sys.integrationMechanisms || [],
       integrationFrequency: sys.integrationFrequency || '',
+      ownerPersonId: sys.ownerPersonId || '',
+      custodianIds: sys.custodianIds || [],
       connectivity: sys.connectivity || 'INTEGRATED',
       connectionIds: linkedConnIds,
     });
@@ -545,6 +559,8 @@ export default function SystemsPage() {
               integrationPoints: sys.integrationPoints,
               integrationMechanisms: sys.integrationMechanisms,
               integrationFrequency: sys.integrationFrequency,
+              ownerPersonId: sys.ownerPersonId,
+              custodianIds: sys.custodianIds,
               connectivity: sys.connectivity,
               ...(activeOrgId ? { orgId: activeOrgId } : {}),
             });
@@ -666,6 +682,7 @@ export default function SystemsPage() {
       name: (a, b) => a.name.localeCompare(b.name),
       type: (a, b) => (a.systemType || '').localeCompare(b.systemType || ''),
       description: (a, b) => (a.description || '').localeCompare(b.description || ''),
+      owner: (a, b) => (a.ownerName || '').localeCompare(b.ownerName || ''),
       updated: (a, b) => +new Date(a.updatedAt) - +new Date(b.updatedAt),
     },
     'name',
@@ -882,6 +899,75 @@ export default function SystemsPage() {
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Vendor / Platform</label>
               <input style={inputStyle} value={form.vendor} onChange={(e) => setFormDirty({ ...form, vendor: e.target.value })} placeholder="e.g. SAP, Salesforce, Custom" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                Owner
+                <HelpPopover id="sys-owner" title="System Owner">
+                  Single accountable business owner — the CDO of this system. Drives the roadmap, signs off on changes and decommissioning, escalation point when it breaks. Required for Integrated systems; optional for Manual/Vendor-managed.
+                </HelpPopover>
+              </label>
+              <select
+                style={selectStyle}
+                value={form.ownerPersonId}
+                onChange={(e) => setFormDirty({ ...form, ownerPersonId: e.target.value })}
+              >
+                <option value="">-- Unassigned --</option>
+                {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                Custodians
+                <HelpPopover id="sys-custodians" title="Technical Custodians">
+                  Day-to-day technical caretakers — SREs, application admins, DBAs. Multiple is the rule for shared infrastructure. Distinct from the business Owner.
+                </HelpPopover>
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
+                  one or more — leave empty if unassigned
+                </span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
+                {form.custodianIds.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                    No custodians assigned yet.
+                  </span>
+                )}
+                {form.custodianIds.map((cid) => {
+                  const p = peopleList.find((pp) => pp.id === cid);
+                  return (
+                    <span key={cid} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
+                      background: '#dbeafe', color: '#1e40af',
+                    }}>
+                      {p ? formatPersonLabel(p) : cid}
+                      <button
+                        type="button"
+                        onClick={() => setFormDirty({ ...form, custodianIds: form.custodianIds.filter((id) => id !== cid) })}
+                        aria-label={`Remove custodian ${p?.name || cid}`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 14, lineHeight: 1 }}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              <select
+                style={selectStyle}
+                value=""
+                onChange={(e) => {
+                  const cid = e.target.value;
+                  if (cid && !form.custodianIds.includes(cid)) {
+                    setFormDirty({ ...form, custodianIds: [...form.custodianIds, cid] });
+                  }
+                }}
+              >
+                <option value="">-- Add a custodian --</option>
+                {peopleList
+                  .filter((p) => !form.custodianIds.includes(p.id))
+                  .map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
+              </select>
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
@@ -1117,6 +1203,7 @@ export default function SystemsPage() {
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>
                 <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
+                <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>
                 <th style={{ ...thStyle, width: 140 }}>Connections</th>
                 <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
@@ -1152,6 +1239,17 @@ export default function SystemsPage() {
                     </td>
                     <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
                       {sys.description || '--'}
+                    </td>
+                    <td style={tdStyle}>
+                      {sys.ownerName ? (
+                        <span>{sys.ownerName}</span>
+                      ) : (sys.connectivity || 'INTEGRATED') === 'INTEGRATED' ? (
+                        <span style={{ color: '#b45309', fontStyle: 'italic' }} title="No business owner assigned — surfaces in gap detection">
+                          Unassigned
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                      )}
                     </td>
                     <td style={tdStyle}>
                       {renderConnectivityCell(sys, sysConnections.length, connectedCount, navigate, setConnectingSystem)}

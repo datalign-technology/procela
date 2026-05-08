@@ -4,6 +4,7 @@ import { dataAssets } from './data-assets';
 import { dataDomains } from './data-domains';
 import { people } from './people';
 import { connections, systemIdsForConnection } from './connections';
+import { systems } from './systems';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
@@ -157,6 +158,16 @@ router.get('/', (req: Request, res: Response) => {
     .filter((c) => systemIdsForConnection(c.id).length === 0 && !c.systemId)
     .map((c) => ({ id: c.id, name: c.name, connectionType: c.connectionType, status: c.status }));
 
+  // 10. Ownerless systems — INTEGRATED systems with no business owner
+  // assigned. MANUAL/EXTERNAL systems often live outside Procela's
+  // ownership model so we don't penalise them here.
+  const orgScopedSystems = orgId
+    ? filterByOrgScope(systems, orgId as string)
+    : systems;
+  const ownerlessSystems = orgScopedSystems
+    .filter((s) => (s.connectivity || 'INTEGRATED') === 'INTEGRATED' && !s.ownerPersonId)
+    .map((s) => ({ id: s.id, name: s.name, systemType: s.systemType, businessCriticality: s.businessCriticality }));
+
   const summary = {
     unmappedSteps: unmappedSteps.length,
     ungovernedAssets: ungovernedAssets.length,
@@ -167,9 +178,10 @@ router.get('/', (req: Request, res: Response) => {
     unlinkedAssets: unlinkedAssets.length,
     unassignedPeople: unassignedPeople.length,
     unassignedConnections: unassignedConnections.length,
+    ownerlessSystems: ownerlessSystems.length,
     totalGaps: unmappedSteps.length + ungovernedAssets.length + ownerlessProcesses.length
       + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length
-      + unassignedConnections.length,
+      + unassignedConnections.length + ownerlessSystems.length,
   };
 
   res.json({
@@ -184,6 +196,7 @@ router.get('/', (req: Request, res: Response) => {
       unlinkedAssets,
       unassignedPeople,
       unassignedConnections,
+      ownerlessSystems,
     },
     summary,
   });
