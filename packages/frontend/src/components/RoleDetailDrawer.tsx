@@ -35,6 +35,13 @@ interface Assignment {
   scopeId: string;
 }
 
+interface SkillRecord {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+}
+
 export default function RoleDetailDrawer() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
@@ -44,19 +51,29 @@ export default function RoleDetailDrawer() {
 
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+  // Skills catalog for the org - used to enrich requiredSkills (names)
+  // with the matching skill record (id, category, description). Names
+  // that don't match anything in the catalog are still shown, tagged as
+  // "not seeded yet" so users know what they're missing.
+  const [orgSkills, setOrgSkills] = useState<SkillRecord[]>([]);
 
   useEffect(() => {
     if (!roleType || !activeOrgId) return;
     let cancelled = false;
     setLoadingAssignments(true);
-    apiClient
-      .get<{ success: boolean; data: Assignment[] }>(`/dama-roles?orgId=${activeOrgId}`)
-      .then((res) => {
+    Promise.all([
+      apiClient.get<{ success: boolean; data: Assignment[] }>(`/dama-roles?orgId=${activeOrgId}`),
+      apiClient.get<{ success: boolean; data: SkillRecord[] }>(`/skills?orgId=${activeOrgId}`),
+    ])
+      .then(([rolesRes, skillsRes]) => {
         if (cancelled) return;
-        setAssignments((res.data || []).filter((a) => a.roleType === roleType));
+        setAssignments((rolesRes.data || []).filter((a) => a.roleType === roleType));
+        setOrgSkills(skillsRes.data || []);
       })
       .catch(() => {
-        if (!cancelled) setAssignments([]);
+        if (cancelled) return;
+        setAssignments([]);
+        setOrgSkills([]);
       })
       .finally(() => {
         if (!cancelled) setLoadingAssignments(false);
@@ -221,6 +238,36 @@ export default function RoleDetailDrawer() {
                     </div>
                   </button>
                 ))}
+              </div>
+            </Section>
+          )}
+
+          {ref && ref.requiredSkills.length > 0 && (
+            <Section title="Skills typically needed">
+              <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Reference list - your org's actual hiring profile may differ.
+                Manage your catalog on the <button onClick={() => { close(); navigate('/skills'); }} style={linkBtnStyle}>Skills</button> page.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {ref.requiredSkills.map((name) => {
+                  const match = orgSkills.find((s) => s.name.toLowerCase() === name.toLowerCase());
+                  const inCatalog = !!match;
+                  return (
+                    <span
+                      key={name}
+                      title={match?.description || (inCatalog ? '' : 'This skill is not in your catalog yet — seed standard skills to add it.')}
+                      style={{
+                        fontSize: 11, padding: '3px 8px', borderRadius: 12,
+                        background: inCatalog ? '#eef2ff' : 'var(--color-bg)',
+                        color: inCatalog ? '#3730a3' : 'var(--color-text-muted)',
+                        border: inCatalog ? 'none' : '1px dashed var(--color-border)',
+                        fontStyle: inCatalog ? 'normal' : 'italic',
+                      }}
+                    >
+                      {name}
+                    </span>
+                  );
+                })}
               </div>
             </Section>
           )}

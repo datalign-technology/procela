@@ -76,6 +76,7 @@ const navSections: NavSection[] = [
       { to: '/people', label: 'People', icon: '\u263A' },
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
+      { to: '/skills', label: 'Skills', icon: '\u2605' },
       { to: '/agents', label: 'Agents', icon: '\u2699' },
     ],
   },

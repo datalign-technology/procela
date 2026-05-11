@@ -59,6 +59,11 @@ export interface RoleReference {
   responsibilities: string[];
   /** Decisions this role typically owns or contributes to. */
   typicalDecisions: TypicalDecision[];
+  /** Skill names the role typically needs. Matched at render time
+   *  against the org's seeded skill catalog (/skills) - names are stable
+   *  across orgs but IDs are not, so names are the join key. Unmatched
+   *  names are still rendered, marked as "Not in your catalog yet". */
+  requiredSkills: string[];
 }
 
 const REFERENCE: Record<string, RoleReference> = {
@@ -78,6 +83,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Enterprise data policies', raci: 'A' },
       { decision: 'Regulatory and audit response', raci: 'C' },
     ],
+    requiredSkills: ['Stakeholder Management', 'Executive Reporting', 'Compliance Monitoring'],
   },
   DATA_GOVERNANCE_LEAD: {
     summary: 'Runs the governance program day to day. Translates the CDO\'s strategy into a working operating model that stewards and owners actually use.',
@@ -95,6 +101,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'New governance tooling and platforms', raci: 'R' },
       { decision: 'Data strategy', raci: 'C' },
     ],
+    requiredSkills: ['Policy Development', 'Stakeholder Management', 'Change Management', 'Standards Enforcement', 'Issue Resolution'],
   },
   DATA_OWNER: {
     summary: 'Accountable for a specific data domain - the business of customer data, finance data, employee data, etc. The single throat to choke when something goes wrong in their domain.',
@@ -112,6 +119,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Access requests to domain data', raci: 'A' },
       { decision: 'Cross-domain integrations', raci: 'C' },
     ],
+    requiredSkills: ['Stakeholder Management', 'Business Translation', 'Issue Resolution', 'Compliance Monitoring'],
   },
   BUSINESS_DATA_STEWARD: {
     summary: 'The domain expert who manages data definitions and quality from a business perspective. The person who knows what the data is supposed to mean.',
@@ -129,6 +137,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Reference data values and code lists', raci: 'A' },
       { decision: 'Changes to upstream sources', raci: 'C' },
     ],
+    requiredSkills: ['Data Cataloging', 'Business Translation', 'Issue Resolution', 'Documentation', 'Metadata Management'],
   },
   TECHNICAL_DATA_STEWARD: {
     summary: 'The technical counterpart to the business steward. Translates business definitions into the actual systems, pipelines, and quality checks that produce trustworthy data.',
@@ -146,6 +155,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Schema change approval for governed assets', raci: 'C' },
       { decision: 'Business term definitions', raci: 'C' },
     ],
+    requiredSkills: ['Lineage Mapping', 'Schema Validation', 'Metadata Management', 'Standards Enforcement', 'Tag Management'],
   },
   DATA_QUALITY_ANALYST: {
     summary: 'Measures data quality, reports trends, and drives the improvement work. The voice of "is this getting better or worse?"',
@@ -163,6 +173,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Domain DQ thresholds and SLAs', raci: 'C' },
       { decision: 'Quality measurement framework', raci: 'C' },
     ],
+    requiredSkills: ['Data Profiling', 'Anomaly Detection', 'Quality Monitoring', 'Rule Authoring', 'Data Cleansing'],
   },
   DATA_ARCHITECT: {
     summary: 'Sets the technical direction for how data is structured, integrated, and modeled across the enterprise. Makes sure today\'s decisions don\'t become tomorrow\'s technical debt.',
@@ -180,6 +191,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Data platform and tooling selection', raci: 'C' },
       { decision: 'Cross-domain data definitions', raci: 'C' },
     ],
+    requiredSkills: ['Data Modeling', 'Integration Design', 'Cloud Architecture', 'Performance Tuning', 'API Management'],
   },
   DATA_CUSTODIAN: {
     summary: 'Manages the physical storage, security, and operational care of the systems that hold data. Custody is about safekeeping, not ownership.',
@@ -197,6 +209,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Encryption standards', raci: 'C' },
       { decision: 'Data classification', raci: 'I' },
     ],
+    requiredSkills: ['Access Control', 'Encryption Management', 'Audit Trail Management', 'Data Classification'],
   },
   DATA_ENGINEER: {
     summary: 'Builds and operates the pipelines, transformations, and integrations that move and shape data across systems.',
@@ -214,6 +227,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Schema changes in pipeline-owned tables', raci: 'C' },
       { decision: 'Data platform tooling', raci: 'C' },
     ],
+    requiredSkills: ['ETL Development', 'API Integration', 'Real-time Streaming', 'Performance Tuning', 'Data Replication'],
   },
   DATABASE_ADMINISTRATOR: {
     summary: 'Keeps the databases healthy, performant, and available. Focused on the engine, not on what\'s inside the tables.',
@@ -231,6 +245,7 @@ const REFERENCE: Record<string, RoleReference> = {
       { decision: 'Database-level security policies', raci: 'R' },
       { decision: 'Schema design', raci: 'C' },
     ],
+    requiredSkills: ['Performance Tuning', 'Access Control', 'Audit Trail Management', 'Encryption Management'],
   },
 };
 
