@@ -737,8 +737,9 @@ export default function SystemsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {systems.length > 0 && (
-            <ExportMenu build={() => ({
+          <ExportMenu
+            disabled={systems.length === 0}
+            build={() => ({
               filenameBase: 'systems',
               sheetName: 'Systems',
               headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
@@ -754,8 +755,8 @@ export default function SystemsPage() {
                 (s.custodianNames || []).join('; '),
                 s.description,
               ]),
-            })} />
-          )}
+            })}
+          />
           <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
           <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
           <ColumnPicker state={systemCols} />

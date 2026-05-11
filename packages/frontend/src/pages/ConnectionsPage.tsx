@@ -756,8 +756,9 @@ export default function ConnectionsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {visibleConnections.length > 0 && (
-            <ExportMenu build={() => ({
+          <ExportMenu
+            disabled={visibleConnections.length === 0}
+            build={() => ({
               filenameBase: 'connections',
               sheetName: 'Connections',
               headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
@@ -773,8 +774,8 @@ export default function ConnectionsPage() {
                   c.lastTestResult || '',
                 ];
               }),
-            })} />
-          )}
+            })}
+          />
           <ColumnPicker state={connCols} />
           <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
         </div>
