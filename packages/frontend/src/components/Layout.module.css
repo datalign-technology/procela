@@ -137,6 +137,11 @@
   width: 20px;
   text-align: center;
   font-size: 16px;
+  /* Force text-style rendering for symbol glyphs. Without this, Windows
+   * substitutes Segoe UI Emoji for codepoints like U+2638 (Wheel of
+   * Dharma, used by Settings) and paints them as coloured pictographs. */
+  font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Symbola', sans-serif;
+  font-variant-emoji: text;
 }
 
 /* ── Flyout panel (collapsed sidebar) ── */
