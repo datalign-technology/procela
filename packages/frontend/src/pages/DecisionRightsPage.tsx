@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { Fragment, useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -140,6 +140,12 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
   };
 }
 
+const textBtnStyle: React.CSSProperties = {
+  background: 'none', border: 'none', padding: '2px 4px',
+  color: 'var(--color-primary)', cursor: 'pointer',
+  fontSize: 12, fontFamily: 'inherit',
+};
+
 const chipStyle: React.CSSProperties = {
   display: 'inline-block',
   padding: '2px 6px',
@@ -173,6 +179,68 @@ function Chips({ values, people, groups }: { values: string[]; people: Person[];
       {values.map((v) => (
         <span key={v} style={chipStyle}>{labelFor(v, people, groups)}</span>
       ))}
+    </div>
+  );
+}
+
+// Single sidebar entry — All Categories or one named category, with count
+// and active-state highlighting. Mirrors the sidebar items on /data-assets
+// and /systems so the scan pattern is consistent across the app.
+function SidebarItem({ label, count, active, onClick }: {
+  label: string; count: number; active: boolean; onClick: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+        fontWeight: active ? 600 : 400,
+        background: active ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+        color: active ? 'var(--color-primary)' : 'var(--color-text)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+    >
+      <span>{label}</span>
+      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
+    </div>
+  );
+}
+
+// Expanded RACI panel - the recommends/approves/informed/escalation
+// detail revealed when a row is expanded. ColumnPicker toggles still
+// control which of the four sections render, so users who hide one
+// permanently won't see it even when expanded.
+function ExpandedRaciDetails({ row, people, groups, showRecommends, showApproves, showInformed, showEscalation }: {
+  row: DecisionRight;
+  people: Person[];
+  groups: GovernanceGroup[];
+  showRecommends: boolean;
+  showApproves: boolean;
+  showInformed: boolean;
+  showEscalation: boolean;
+}) {
+  const Item = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 12 }}>{children}</div>
+    </div>
+  );
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+      {showRecommends && <Item label="Recommends">  <Chips values={row.recommends} people={people} groups={groups} /></Item>}
+      {showApproves   && <Item label="Approves">    <Chips values={row.approves}   people={people} groups={groups} /></Item>}
+      {showInformed   && <Item label="Informed">    <Chips values={row.informed}   people={people} groups={groups} /></Item>}
+      {showEscalation && (
+        <Item label="Escalation Path">
+          {row.escalationPath
+            ? <span style={{ color: 'var(--color-text-secondary)' }}>{row.escalationPath}</span>
+            : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
+        </Item>
+      )}
     </div>
   );
 }
@@ -245,6 +313,8 @@ export default function DecisionRightsPage() {
   const [loading, setLoading] = useState(true);
 
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | DecisionCategory>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<DecisionForm>(emptyForm);
@@ -358,7 +428,29 @@ export default function DecisionRightsPage() {
     fetchData();
   };
 
-  const filteredRows = rows.filter((r) => categoryFilter === 'ALL' || r.category === categoryFilter);
+  const filteredRows = rows.filter((r) => {
+    if (categoryFilter !== 'ALL' && r.category !== categoryFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const hay = `${r.decision} ${r.description} ${r.deciderName || ''} ${r.escalationPath || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const expandAll = () => setExpandedIds(new Set(filteredRows.map((r) => r.id)));
+  const collapseAll = () => setExpandedIds(new Set());
+
+  const categoryCounts: Record<DecisionCategory | 'ALL', number> = { ALL: rows.length } as any;
+  for (const c of CATEGORIES) categoryCounts[c] = 0;
+  for (const r of rows) categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
 
   // Build multi-select option list based on decider type (for recommends/approves/informed we allow any)
   const allParticipantOptions: { value: string; label: string }[] = [
@@ -405,23 +497,34 @@ export default function DecisionRightsPage() {
         </div>
       </div>
 
-      {/* Filter row */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-        <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Category:</label>
-        <select
-          style={{ ...selectStyle, width: 'auto', minWidth: 160 }}
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value as any)}
-        >
-          <option value="ALL">All Categories</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-          ))}
-        </select>
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-          {filteredRows.length} of {rows.length} decisions
+      {/* Search + row-expansion controls. Category filter moved into the
+       *  sidebar; expand/collapse-all replaces the visual noise of always
+       *  rendering every RACI column. */}
+      {rows.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="search"
+            placeholder="Search decisions, decider, escalation..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: '1 1 280px', maxWidth: 420,
+              fontSize: 13, padding: '6px 10px',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              background: 'var(--color-surface)',
+            }}
+          />
+          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', fontSize: 12 }}>
+            <button onClick={expandAll}  style={textBtnStyle}>Expand all</button>
+            <span style={{ color: 'var(--color-border)' }}>·</span>
+            <button onClick={collapseAll} style={textBtnStyle}>Collapse all</button>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+            {filteredRows.length} of {rows.length} decisions
+            {categoryFilter !== 'ALL' && ` · ${CATEGORY_LABELS[categoryFilter]}`}
+          </div>
         </div>
-      </div>
+      )}
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -569,112 +672,183 @@ export default function DecisionRightsPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
-        {loading ? (
-          <SkeletonRows rows={5} columns={7} />
-        ) : rows.length === 0 && !showForm ? (
-          <EmptyState
-            icon={'⚖️'}
-            title="No decision rights defined yet"
-            description="Decision rights document who has authority to decide, recommend, approve, and be informed for governance decisions. Start by seeding the standard set or add your own."
-            action={canWrite ? { label: 'Seed Standard Decisions', onClick: handleSeed } : undefined}
-          />
-        ) : filteredRows.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
-            No decisions match the selected category.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--color-bg)' }}>
-                  <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
-                    <input type="checkbox" checked={rows.length > 0 && selectedIds.size === rows.length} onChange={toggleSelectAll} />
-                  </th>
-                  {decisionCols.isVisible('decision') && <th style={thStyle}>Decision</th>}
-                  {decisionCols.isVisible('category') && <th style={thStyle}>Category</th>}
-                  {decisionCols.isVisible('decides') && <th style={thStyle}>Decides</th>}
-                  {decisionCols.isVisible('recommends') && <th style={thStyle}>Recommends</th>}
-                  {decisionCols.isVisible('approves') && <th style={thStyle}>Approves</th>}
-                  {decisionCols.isVisible('informed') && <th style={thStyle}>Informed</th>}
-                  {decisionCols.isVisible('escalation') && <th style={thStyle}>Escalation</th>}
-                  <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((r) => {
-                  const decidesLabel = r.deciderName
-                    || (r.decider ? labelFor(r.decider, people, groups) : null);
-                  return (
-                    <tr key={r.id}>
-                      <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                        <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
-                      </td>
-                      {decisionCols.isVisible('decision') && (
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>
-                          <div style={{ color: 'var(--color-text)' }}>{r.decision}</div>
-                          {r.description && (
-                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 320 }}>
-                              {r.description}
-                            </div>
-                          )}
-                        </td>
-                      )}
-                      {decisionCols.isVisible('category') && (
-                        <td style={tdStyle}>
-                          <span style={badgeStyle(CATEGORY_COLORS[r.category] || CATEGORY_COLORS.OTHER)}>
-                            {CATEGORY_LABELS[r.category]}
-                          </span>
-                        </td>
-                      )}
-                      {decisionCols.isVisible('decides') && (
-                        <td style={tdStyle}>
-                          {decidesLabel ? (
-                            <div>
-                              <span style={chipStyle}>{decidesLabel}</span>
-                              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                                {r.deciderType.toLowerCase()}
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>
-                          )}
-                        </td>
-                      )}
-                      {decisionCols.isVisible('recommends') && (
-                        <td style={tdStyle}>
-                          <Chips values={r.recommends} people={people} groups={groups} />
-                        </td>
-                      )}
-                      {decisionCols.isVisible('approves') && (
-                        <td style={tdStyle}>
-                          <Chips values={r.approves} people={people} groups={groups} />
-                        </td>
-                      )}
-                      {decisionCols.isVisible('informed') && (
-                        <td style={tdStyle}>
-                          <Chips values={r.informed} people={people} groups={groups} />
-                        </td>
-                      )}
-                      {decisionCols.isVisible('escalation') && (
-                        <td style={{ ...tdStyle, fontSize: 12, maxWidth: 200, color: 'var(--color-text-secondary)' }}>
-                          {r.escalationPath || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
-                        </td>
-                      )}
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', gap: 4 }}>
-                          {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}
-                          {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Two-column layout: Categories sidebar + content. Mirrors
+       *  DataAssetsPage / SystemsPage so users get the same scan pattern
+       *  across the app. */}
+      <div style={{ display: 'grid', gridTemplateColumns: rows.length > 0 ? '220px 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
+        {rows.length > 0 && (
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            padding: 10,
+            position: 'sticky', top: 12,
+            maxHeight: 'calc(100vh - 180px)',
+            overflowY: 'auto',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
+              Categories
+            </div>
+            <SidebarItem
+              label="All Categories"
+              count={rows.length}
+              active={categoryFilter === 'ALL'}
+              onClick={() => setCategoryFilter('ALL')}
+            />
+            {CATEGORIES.map((c) => {
+              const n = categoryCounts[c] || 0;
+              if (n === 0) return null;
+              return (
+                <SidebarItem
+                  key={c}
+                  label={CATEGORY_LABELS[c]}
+                  count={n}
+                  active={categoryFilter === c}
+                  onClick={() => setCategoryFilter(categoryFilter === c ? 'ALL' : c)}
+                />
+              );
+            })}
           </div>
         )}
+
+        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+          {loading ? (
+            <SkeletonRows rows={5} columns={5} />
+          ) : rows.length === 0 && !showForm ? (
+            <EmptyState
+              icon={'⚖️'}
+              title="No decision rights defined yet"
+              description="Decision rights document who has authority to decide, recommend, approve, and be informed for governance decisions. Start by seeding the standard set or add your own."
+              action={canWrite ? { label: 'Seed Standard Decisions', onClick: handleSeed } : undefined}
+            />
+          ) : filteredRows.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+              {searchQuery.trim() ? 'No decisions match your search.' : 'No decisions match the selected category.'}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                      <input type="checkbox" checked={rows.length > 0 && selectedIds.size === rows.length} onChange={toggleSelectAll} />
+                    </th>
+                    <th style={{ ...thStyle, width: 32 }} />
+                    {decisionCols.isVisible('decision') && <th style={thStyle}>Decision</th>}
+                    {decisionCols.isVisible('category') && <th style={thStyle}>Category</th>}
+                    {decisionCols.isVisible('decides') && <th style={thStyle}>Decides</th>}
+                    <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((r) => {
+                    const decidesLabel = r.deciderName
+                      || (r.decider ? labelFor(r.decider, people, groups) : null);
+                    const isExpanded = expandedIds.has(r.id);
+                    // 4 always-rendered columns (select, chevron, actions) + the
+                    // 3 toggleable ones - keep the expanded row spanning them all.
+                    const colSpan =
+                      3 +
+                      (decisionCols.isVisible('decision') ? 1 : 0) +
+                      (decisionCols.isVisible('category') ? 1 : 0) +
+                      (decisionCols.isVisible('decides') ? 1 : 0);
+                    return (
+                      <Fragment key={r.id}>
+                        <tr>
+                          <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
+                            <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
+                          </td>
+                          <td style={{ ...tdStyle, width: 32, padding: '4px 0' }}>
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(r.id)}
+                              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                              title={isExpanded ? 'Hide RACI details' : 'Show RACI details'}
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontSize: 11, color: 'var(--color-text-muted)',
+                                padding: '4px 6px', borderRadius: 4,
+                                transform: isExpanded ? 'rotate(90deg)' : 'none',
+                                transition: 'transform 0.1s',
+                              }}
+                            >
+                              {'▶'}
+                            </button>
+                          </td>
+                          {decisionCols.isVisible('decision') && (
+                            <td style={{ ...tdStyle, fontWeight: 500 }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(r.id)}
+                                style={{
+                                  background: 'none', border: 'none', padding: 0,
+                                  color: 'var(--color-text)', cursor: 'pointer',
+                                  font: 'inherit', textAlign: 'left',
+                                }}
+                              >
+                                {r.decision}
+                              </button>
+                              {r.description && (
+                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, maxWidth: 480 }}>
+                                  {r.description}
+                                </div>
+                              )}
+                            </td>
+                          )}
+                          {decisionCols.isVisible('category') && (
+                            <td style={tdStyle}>
+                              <span style={badgeStyle(CATEGORY_COLORS[r.category] || CATEGORY_COLORS.OTHER)}>
+                                {CATEGORY_LABELS[r.category]}
+                              </span>
+                            </td>
+                          )}
+                          {decisionCols.isVisible('decides') && (
+                            <td style={tdStyle}>
+                              {decidesLabel ? (
+                                <div>
+                                  <span style={chipStyle}>{decidesLabel}</span>
+                                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                                    {r.deciderType.toLowerCase()}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>Unassigned</span>
+                              )}
+                            </td>
+                          )}
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', gap: 4 }}>
+                              {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(r)} />}
+                              {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={colSpan} style={{
+                              padding: '12px 18px 16px', background: 'var(--color-bg)',
+                              borderBottom: '1px solid var(--color-border)',
+                            }}>
+                              <ExpandedRaciDetails
+                                row={r}
+                                people={people}
+                                groups={groups}
+                                showRecommends={decisionCols.isVisible('recommends')}
+                                showApproves={decisionCols.isVisible('approves')}
+                                showInformed={decisionCols.isVisible('informed')}
+                                showEscalation={decisionCols.isVisible('escalation')}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
