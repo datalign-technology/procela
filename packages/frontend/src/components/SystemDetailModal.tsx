@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
-import { tierLabel } from '../lib/governanceTier';
+import { useTierLabel } from '../lib/governanceTier';
+import { useTerm } from '../lib/terminology';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SystemDetailModal — the cross-layer view for a single System.
@@ -43,6 +44,8 @@ interface Props {
 
 export default function SystemDetailModal({ systemId, onClose }: Props) {
   const navigate = useNavigate();
+  const custodianLabel = useTerm('custodian');
+  const tierLabel = useTierLabel();
   const [data, setData] = useState<SystemThreeSixty | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +131,7 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
           id: `cust-${c.id}`,
           label: c.name,
           sublabel: c.title || undefined,
-          badge: 'Custodian',
+          badge: custodianLabel,
           onClick: () => goto(`/people/${c.id}`),
         })),
       ],

@@ -1,7 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
-import { tierLabel } from '../lib/governanceTier';
+import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import HelpPopover from '../components/HelpPopover';
@@ -102,6 +102,7 @@ const VIEW_PRESETS: Record<string, ViewPreset> = {
 
 export default function EnterpriseViewPage() {
   const { activeOrgId } = useOrgContext();
+  const tierLabel = useTierLabel();
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);

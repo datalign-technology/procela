@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { apiClient } from '../api/client';
-import { tierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
+import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
@@ -313,6 +313,7 @@ export default function DataAssetsPage() {
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
+  const tierLabel = useTierLabel();
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);

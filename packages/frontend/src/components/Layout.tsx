@@ -12,6 +12,7 @@ import OnboardingWizard from './OnboardingWizard';
 import CommandPalette from './CommandPalette';
 
 import DensityToggle from './DensityToggle';
+import TerminologyToggle from './TerminologyToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
@@ -752,6 +753,7 @@ export default function Layout() {
                 </div>
               )}
             </div>
+            <TerminologyToggle />
             <DensityToggle />
             <div className={styles.userMenu}>
               <div className={styles.userAvatar}>{userInitial}</div>

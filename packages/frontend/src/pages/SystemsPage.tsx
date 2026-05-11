@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import { useTerm } from '../lib/terminology';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -439,6 +440,8 @@ export default function SystemsPage() {
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [viewingSystemId, setViewingSystemId] = useState<string | null>(null);
+  const custodiansLabel = useTerm('custodians');
+  const custodianLabel = useTerm('custodian');
 
   const fetchData = useCallback(async () => {
     try {
@@ -964,8 +967,8 @@ export default function SystemsPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                Custodians
-                <HelpPopover id="sys-custodians" title="Technical Custodians">
+                {custodiansLabel}
+                <HelpPopover id="sys-custodians" title={`Technical ${custodiansLabel}`}>
                   Day-to-day technical caretakers — SREs, application admins, DBAs. Multiple is the rule for shared infrastructure. Distinct from the business Owner.
                 </HelpPopover>
                 <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
@@ -975,7 +978,7 @@ export default function SystemsPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
                 {form.custodianIds.length === 0 && (
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                    No custodians assigned yet.
+                    No {custodiansLabel.toLowerCase()} assigned yet.
                   </span>
                 )}
                 {form.custodianIds.map((cid) => {
@@ -990,7 +993,7 @@ export default function SystemsPage() {
                       <button
                         type="button"
                         onClick={() => setFormDirty({ ...form, custodianIds: form.custodianIds.filter((id) => id !== cid) })}
-                        aria-label={`Remove custodian ${p?.name || cid}`}
+                        aria-label={`Remove ${custodianLabel.toLowerCase()} ${p?.name || cid}`}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 14, lineHeight: 1 }}
                       >
                         &times;
