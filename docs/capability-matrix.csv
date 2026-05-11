@@ -1,0 +1,77 @@
+Category,Feature,Procela_Status,Procela_Notes,Priority,Collibra,Alation,Atlan,Ataccama,Gap_To_Close
+Catalog,Business value stream / process model,Built,"Value Stream > Process > Sub-Process > Activity hierarchy, with industry templates",P0,Partial (workflow only),None,None,Partial,—
+Catalog,Process step ownership,Built,Owner per node from IdP-backed people store,P0,Yes,No,No,No,—
+Catalog,Process status lifecycle,Built,"Draft/Active/Under Review/Deprecated states",P1,Yes,No,No,Partial,—
+Catalog,Industry templates (AI-generated),Built,"8 industries (Utilities, Defense, Healthcare, etc.) seeded via Claude API",P0,No,No,No,No,—
+Catalog,Process mapping to data assets,Built,Mappings entity with AI-suggested + user-overridden flag,P0,Partial,No,No,No,—
+Catalog,Process catalog versioning,Built,Version field on nodes,P2,Yes,Partial,No,Partial,—
+Data assets,Asset registry (business terms),Built,"Name, description, system, governance tier, health, owner, steward",P0,Yes,Yes,Yes,Yes,—
+Data assets,Asset bindings (M:N to physical),Built,DataAssetBinding entity with primary/alternate marker,P0,Yes,Yes,Yes,Yes,—
+Data assets,Asset origin tracking,Built,"MANUAL/GOVERNANCE_TEMPLATE/DISCOVERED/IMPORTED/SYNCED provenance",P1,Limited,Limited,Limited,Limited,—
+Data assets,Suggested-source flow,Built,"Asset-rooted: ""Suggest source"" picks candidates from existing connections via name similarity",P1,No,No,Limited,No,—
+Data assets,Tier promotion suggestions,Built,Auto-derived tier eligibility shown as soft prompt; promotion stays manual,P1,No,No,No,Limited,—
+Data assets,Data quality / health score,Built,Manual + rule-derived,P1,Add-on,Add-on,Partner,Best-in-class,Need automated rules engine
+Data assets,Classification / sensitivity,Built,PUBLIC/INTERNAL/CONFIDENTIAL/RESTRICTED,P0,Yes,Yes,Yes,Yes,—
+Data assets,Asset retention policy,Built,Duration + reason fields,P1,Yes,Partial,Partial,Yes,—
+Data assets,Column-level catalog,Built,DataAssetColumns sub-entity,P1,Yes,Yes,Yes,Yes,—
+Data assets,Column auto-discovery,Partial,"Works for uploaded CSVs; needs DB/API connectors",P1,Yes,Yes,Yes,Yes,Build real database connectors
+Data assets,Asset 360 view,Built,Linked mappings + bindings + health + owner roll-up,P1,Yes,Yes,Yes,Yes,—
+Glossary,Business glossary terms,Built,"Term, definition, category, status, domain, owner, source-of-truth",P0,Yes,Yes,Yes,Yes,—
+Glossary,Glossary import / generation,Built,CSV import + AI-generated industry terms,P1,Yes,Limited,Limited,Yes,—
+Glossary,Term-to-asset linking,Built,Through domain or direct assignment,P1,Yes,Yes,Yes,Yes,—
+Systems,Systems registry,Built,"Name, type, vendor, criticality, connectivity, integration mechanisms, frequency",P0,Yes,Limited,Limited,Yes,—
+Systems,System ownership model,Built,"Single owner + deputy + multiple custodians (DAMA-aligned)",P0,Yes,No,No,Partial,—
+Systems,Integration mechanism taxonomy,Built,"REST/SOAP/GraphQL/MQ/Stream/File/ETL/DBRepl/ManualExport multi-select + frequency",P1,No,No,No,Limited,—
+Systems,System-to-system integration graph,Not Started,"Would be a separate SystemIntegration entity with direction + mechanism per edge",P2,Partial,Yes,Partial,Yes,Build SystemIntegration edges
+Connections,Connection profiles,Built,"DATABASE/FILE_STORAGE/API/DATA_WAREHOUSE/SPREADSHEET with credentials",P0,Yes,Yes,Yes,Yes,—
+Connections,Many-to-many connection ↔ system,Built,ConnectionSystemLink join table,P1,Yes,Partial,Yes,Yes,—
+Connections,Real database connectors,Stubbed,"Tested with CSV-via-LOCAL uploads; PostgreSQL/MySQL/Snowflake etc. need real drivers",P0,200+ native,200+ native,200+ native,Many,Wire actual JDBC/driver code
+Connections,Connection testing,Built,Tests reachability; live test for staged file before save,P1,Yes,Yes,Yes,Yes,—
+Connections,Connection discovery (browse contents),Stubbed,Connection-rooted discover endpoint; needs real backends,P0,Yes,Yes,Yes,Yes,Same as connectors above
+Lineage,Manual lineage links,Built,System-to-system + asset-level Data Lineage page,P1,Yes,Yes,Yes,Yes,—
+Lineage,Auto-extracted lineage (SQL/dbt),Not Started,Need query-log parsers and/or dbt manifest ingestion,P0,Yes,Best-in-class,Best-in-class (dbt),Yes,Build extraction pipelines
+Lineage,Column-level lineage,Not Started,Schema supports it; no extraction,P1,Yes,Yes,Yes,Yes,Build extraction
+Lineage,Impact analysis from lineage,Partial,Gap detection sees process impact; not yet from technical lineage,P1,Yes,Yes,Yes,Yes,Bridge gap-detection to lineage
+Data quality,Quality rules engine,Built,Rule types (NOT_NULL/UNIQUE/REGEX/...) with thresholds and scheduling,P1,Add-on,Add-on,Partner,Best-in-class,Expand rule library + ML-based anomaly detection
+Data quality,Quality dimensions,Built,COMPLETENESS/UNIQUENESS/VALIDITY/etc.,P1,Yes,Yes,Yes,Yes,—
+Data quality,Profiling (auto-stats),Not Started,Needs column-level statistics extraction,P1,Yes,Yes,Yes,Yes,Build profiler service
+Data quality,DQ scorecards / dashboards,Built,Health roll-up to asset; portfolio dashboard,P1,Yes,Yes,Yes,Yes,—
+Governance,Issues tracking,Built,Title/type/severity/status/domain/assignee,P1,Strong workflow engine,Functional,Functional,Yes,—
+Governance,Tasks,Built,Type/status/priority/assignee/due/automation mode,P1,Yes,Yes,Yes,Yes,—
+Governance,Policies + controls,Built,Policy entity with attached Controls + evidence flag,P1,Yes,Limited,Limited,Yes,—
+Governance,RACI / decision rights,Built,Dedicated Decision Rights entity,P1,Add-on,No,No,No,—
+Governance,SOPs / runbooks,Built,Code/title/category/roles/steps/status/owner,P1,Add-on,No,No,Limited,—
+Governance,Operations manuals,Built,Free-form long-form docs,P2,Yes,No,No,No,—
+Governance,Governance calendar / cadence,Built,Recurring events with auto-create tasks,P1,Yes,No,Limited,Yes,—
+Governance,Governance program / structure,Built,Governance group + DAMA role assignments,P1,Yes,No,Limited,Yes,—
+Governance,Maturity scoring,Built,Scorecard + maturity trends,P1,Yes,Limited,Limited,Yes,—
+Governance,Approval workflows (BPMN-style),Not Started,Would route tasks through state machines with approvers,P2,Best-in-class,Limited,Limited,Yes,Build workflow engine OR integrate (Camunda/Temporal)
+Domains,Data domain entity,Built,Domain with owner + stewards + asset assignment,P0,Yes,Yes,Yes,Yes,—
+Domains,Domain coverage gaps,Built,Gap detection includes orphan assets + unowned domains,P1,Yes,Yes,Yes,Yes,—
+Discovery,Asset search,Built,Name/description/system/type search,P0,Yes,Best-in-class (behavioral),Yes,Yes,—
+Discovery,Behavioral / usage-based ranking,Not Started,Need query log + access pattern capture,P2,Partial,Yes,Partial,Partial,Defer
+Discovery,Gap detection,Built,9 gap types (unassigned connections/owners/etc.) with totals,P1,Yes,Limited,Limited,Yes,—
+AI,Conversational AI assistant,Built,Server-side Claude API with catalog context,P0,Add-on,Add-on (Anywhere),Built-in (Atlan AI),Limited,—
+AI,AI-suggested mappings,Built,Process step → asset suggestions with override tracking,P1,Limited,Limited,Limited,Limited,—
+AI,AI-generated industry templates,Built,Procela's distinctive feature,P0,No,No,No,No,—
+AI,AI-suggested data source matching,Built,Asset-rooted Suggest Source via name similarity,P1,Limited,Limited,Limited,No,—
+AI,Anomaly detection on DQ,Not Started,Statistical drift / outlier detection,P2,Partner,Partner,Partner,Best-in-class,Add ML-based DQ
+Auth,SSO (SAML/OIDC),Not Started,JWT middleware exists; identity provider integration is next,P0,Yes,Yes,Yes,Yes,Wire Cognito/Azure AD/Okta
+Auth,Role-based access control,Built,SUPER_ADMIN/ORG_ADMIN/EDITOR/CONTRIBUTOR/VIEWER,P0,Yes,Yes,Yes,Yes,—
+Auth,Org hierarchy + scoped access,Built,Department/team scoping with descendant resolution,P1,Yes,Limited,Limited,Yes,—
+Auth,Active policy enforcement (row/column),Not Started,No masking/redaction at query time,P3,Yes,Yes,Yes,Yes,Defer; this is governance-tool table-stakes long-term
+Audit,Audit log,Built,Every entity change captured with before/after,P0,Yes,Yes,Yes,Yes,—
+Audit,Audit export / compliance reports,Partial,Export possible via API; no canned regulatory reports,P1,Yes,Yes,Limited,Yes,Build report templates (SOX/GDPR/HIPAA)
+Infrastructure,Multi-tenant SaaS,Designed,org_id on every table; not yet hosted,P0,Yes,Yes,Native,Yes,Stand up production environment
+Infrastructure,On-prem deployment option,Designed,Container-first; AWS-specific services abstracted,P1,Yes,Yes,Partial,Yes,Validate with on-prem deploy
+Infrastructure,Real database backing,Not Started,Currently JSON-file persistence,P0,Postgres,Postgres,Postgres,Postgres,Migrate to Postgres + Prisma
+Infrastructure,Integration with BI tools,Not Started,No Tableau/Power BI/Looker certifications,P2,Yes,Yes,Yes,Yes,Defer
+Infrastructure,API completeness,Built,REST endpoints for every entity,P0,Yes,Yes,Yes,Yes,—
+Infrastructure,OpenAPI spec,Not Started,Endpoints exist but no spec generated,P1,Yes,Yes,Yes,Yes,Generate from routes
+UX,Column picker on table pages,Built,13 pages,P2,Limited,Limited,Yes,Limited,—
+UX,Org-context aware person pickers,Built,Format: "Name — Title · Org Path",P2,Yes,Limited,Yes,Limited,—
+UX,Focus-refresh on tab return,Built,All polling pages,P2,Yes,Yes,Yes,Yes,—
+UX,Distinct icon per action,Built,Recent audit + fixes,P3,Yes,Yes,Yes,Yes,—
+Misc,Marketplace / data product catalog,Not Started,"Browse + request access + certification badges",P2,Partial,Yes,Yes,Limited,Build data product entity + access workflow
+Misc,Data contracts,Not Started,Schema + SLA + owner contracts between producer/consumer,P3,Limited,Limited,Yes,Limited,Defer
+Misc,Cost / spend tracking,Not Started,Tie data asset usage to cloud spend,P3,Limited,Limited,Yes,Limited,Defer
