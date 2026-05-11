@@ -22,6 +22,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 type NavItem = { to: string; label: string; icon: string };
 type NavSection = { label: string | null; items: NavItem[]; adminOnly?: boolean };
 
+// Five plain-noun buckets so users can find things by what they ARE,
+// not by which DAMA phase they belong to. Order maps to Procela's
+// three layers (Business / Data / Systems / People) with Governance
+// last as the cross-cutting program that ties them together.
 const navSections: NavSection[] = [
   {
     label: null,
@@ -30,38 +34,47 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    label: 'Define',
+    label: 'Processes',
     items: [
       { to: '/processes', label: 'Processes', icon: '\u26C1' },
+      { to: '/mappings', label: 'Mappings', icon: '\u21C4' },
+    ],
+  },
+  {
+    label: 'Data',
+    items: [
       { to: '/data-assets', label: 'Data Assets', icon: '\u2B22' },
-      { to: '/systems', label: 'Systems', icon: '\u2338' },
       { to: '/business-glossary', label: 'Glossary', icon: '\u2261' },
       { to: '/data-dictionary', label: 'Data Dictionary', icon: '\u2263' },
-    ],
-  },
-  {
-    label: 'Connect',
-    items: [
-      { to: '/mappings', label: 'Mappings', icon: '\u21C4' },
       { to: '/data-lineage', label: 'Lineage', icon: '\u2192' },
+      { to: '/data-domains', label: 'Domains', icon: '\u229E' },
+      { to: '/data-quality', label: 'Data Quality', icon: '\u2714' },
     ],
   },
   {
-    label: 'Govern',
+    label: 'Systems',
+    items: [
+      { to: '/systems', label: 'Systems', icon: '\u2338' },
+      { to: '/connections', label: 'Connections', icon: '\u26A1' },
+    ],
+  },
+  {
+    label: 'People',
+    items: [
+      { to: '/people', label: 'People', icon: '\u263A' },
+      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+      { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
+      { to: '/agents', label: 'Agents', icon: '\u2699' },
+    ],
+  },
+  {
+    label: 'Governance',
     items: [
       { to: '/governance-program', label: 'Program', icon: '\u2637' },
       { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
-      { to: '/data-domains', label: 'Domains', icon: '\u229E' },
-      { to: '/data-quality', label: 'Data Quality', icon: '\u2714' },
-      { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
+      { to: '/governance-policies', label: 'Policies', icon: '\uD83D\uDCCB' },
       { to: '/decision-rights', label: 'Decision Rights', icon: '\u2696' },
       { to: '/raci', label: 'RACI Matrix', icon: '\u25A6' },
-      { to: '/governance-policies', label: 'Policies', icon: '\uD83D\uDCCB' },
-    ],
-  },
-  {
-    label: 'Operate',
-    items: [
       { to: '/operations-manual', label: 'Manuals', icon: '\u2611' },
       { to: '/sops', label: 'Procedures', icon: '\u2610' },
       { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },
@@ -70,20 +83,10 @@ const navSections: NavSection[] = [
       { to: '/reports', label: 'Reports', icon: '\u2630' },
     ],
   },
-  {
-    label: 'Admin',
-    adminOnly: true,
-    items: [
-      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
-      { to: '/people', label: 'People', icon: '\u263A' },
-      { to: '/connections', label: 'Connections', icon: '\u26A1' },
-      { to: '/agents', label: 'Agents', icon: '\u2699' },
-      { to: '/settings', label: 'Settings', icon: '\u2638' },
-    ],
-  },
 ];
 
 const bottomNavItems: NavItem[] = [
+  { to: '/settings', label: 'Settings', icon: '\u2638' },
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
 
