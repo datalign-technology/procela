@@ -18,6 +18,7 @@ import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
+import SystemDetailModal from '../components/SystemDetailModal';
 
 type Connectivity = 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
 
@@ -437,6 +438,7 @@ export default function SystemsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<{ assets: number; connections: number; mappings: number } | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [viewingSystemId, setViewingSystemId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -1324,6 +1326,7 @@ export default function SystemsPage() {
                     )}
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
                         <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sys)} />
                         <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
                           try {
@@ -1344,6 +1347,12 @@ export default function SystemsPage() {
         </div>
       </div>
       <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
+      {viewingSystemId && (
+        <SystemDetailModal
+          systemId={viewingSystemId}
+          onClose={() => setViewingSystemId(null)}
+        />
+      )}
       {connectingSystem && (
         <ConnectPickerModal
           sys={connectingSystem}

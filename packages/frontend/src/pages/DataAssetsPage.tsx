@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { apiClient } from '../api/client';
 import { tierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -311,6 +312,7 @@ export default function DataAssetsPage() {
   const { activeOrgId } = useOrgContext();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
@@ -1772,6 +1774,77 @@ export default function DataAssetsPage() {
                       Source: {viewing360.asset.sourceAsset}{viewing360.asset.sourceColumn ? `.${viewing360.asset.sourceColumn}` : ''}
                     </span>
                   )}
+                </div>
+
+                {/* Cross-layer view — same WhereUsed shape used on Systems,
+                    Activities, and People so users learn one navigation
+                    pattern. Detail sections below stay for now and will be
+                    deduplicated as part of the visual density pass. */}
+                <div style={{ marginBottom: 20 }}>
+                  {(() => {
+                    const groups: WhereUsedGroup[] = [
+                      {
+                        title: 'Lives in',
+                        hint: 'The system of record for this asset.',
+                        emptyText: 'No system set.',
+                        items: viewing360.system ? [{
+                          id: viewing360.system.id,
+                          label: viewing360.system.name,
+                          sublabel: viewing360.system.systemType || undefined,
+                          onClick: () => { setViewing360(null); navigate(`/systems?highlight=${encodeURIComponent(viewing360.system!.id)}`); },
+                        }] : [],
+                      },
+                      {
+                        title: 'Supports activities',
+                        hint: 'Process steps that consume or produce this asset.',
+                        emptyText: 'Not mapped to any process step yet.',
+                        items: viewing360.mappings.map((m) => ({
+                          id: m.id,
+                          label: m.processPath,
+                          sublabel: m.linkType,
+                          onClick: () => { setViewing360(null); navigate(`/processes?highlight=${encodeURIComponent(m.processStepId)}`); },
+                        })),
+                      },
+                      {
+                        title: 'Belongs to domain',
+                        hint: 'The data domain this asset is grouped under.',
+                        emptyText: 'Not assigned to any domain.',
+                        items: viewing360.domain ? [{
+                          id: viewing360.domain.id,
+                          label: viewing360.domain.name,
+                          sublabel: viewing360.domain.ownerName ? `Owner: ${viewing360.domain.ownerName}` : undefined,
+                          onClick: () => { setViewing360(null); navigate(`/data-domains?highlight=${encodeURIComponent(viewing360.domain!.id)}`); },
+                        }] : [],
+                      },
+                      {
+                        title: 'Ownership',
+                        hint: 'Who is accountable for this asset.',
+                        emptyText: 'No owner or steward assigned.',
+                        items: [
+                          ...(viewing360.ownerInfo ? [{
+                            id: `owner-${viewing360.ownerInfo.id || viewing360.ownerInfo.name}`,
+                            label: viewing360.ownerInfo.name,
+                            badge: 'Owner',
+                            onClick: viewing360.ownerInfo.id
+                              ? () => { setViewing360(null); navigate(`/people/${viewing360.ownerInfo!.id}`); }
+                              : undefined,
+                          }] : []),
+                          ...viewing360.stewardInfos.map((s) => ({
+                            id: `steward-${s.id}`,
+                            label: s.name,
+                            badge: 'Steward',
+                            onClick: () => { setViewing360(null); navigate(`/people/${s.id}`); },
+                          })),
+                        ],
+                      },
+                    ];
+                    return (
+                      <WhereUsed
+                        hint="Where this asset sits across the business, data, and people layers."
+                        groups={groups}
+                      />
+                    );
+                  })()}
                 </div>
 
                 {/* Data Domain */}

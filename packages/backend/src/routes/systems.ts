@@ -194,6 +194,90 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: decorate(sys) });
 });
 
+/** GET /api/v1/systems/:id/360 — full cross-layer view of a System.
+ *
+ *  Resolves the connections that serve this system, the data assets
+ *  that live here, the activities that depend on those assets (one
+ *  more join through the mappings table), and the people accountable
+ *  (owner, deputy, custodians). Used by the System detail modal's
+ *  WhereUsed panel so all three layers are visible from one page. */
+router.get('/:id/360', (req: Request, res: Response) => {
+  const sys = systems.find((s) => s.id === req.params.id);
+  if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
+
+  // Lazy require to avoid systems → people → data-assets → systems cycle.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { people } = require('./people') as { people: { id: string; name: string; title?: string }[] };
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { mappings } = require('./mappings') as typeof import('./mappings');
+
+  const linkedConnections = profilesForSystem(sys.id).map((c) => ({
+    id: c.id,
+    name: c.name,
+    connectionType: c.connectionType,
+    status: c.status,
+  }));
+
+  const assetsHere = dataAssets
+    .filter((a) => a.systemId === sys.id)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      governanceTier: a.governanceTier,
+      healthScore: a.healthScore,
+    }));
+
+  // Activities that depend on any of the assets here — one hop through
+  // mappings. Dedup by activity id since multiple assets may share one.
+  const assetIdSet = new Set(assetsHere.map((a) => a.id));
+  const seenActivity = new Set<string>();
+  const dependentActivities: Array<{ id: string; name: string; path: string }> = [];
+  for (const m of mappings) {
+    if (!assetIdSet.has(m.dataAssetId)) continue;
+    if (seenActivity.has(m.processStepId)) continue;
+    seenActivity.add(m.processStepId);
+    const node = processNodes.find((n) => n.id === m.processStepId);
+    if (!node) continue;
+    const parts: string[] = [node.name];
+    let current = node;
+    while (current.parentId) {
+      const parent = processNodes.find((n) => n.id === current.parentId);
+      if (!parent) break;
+      parts.unshift(parent.name);
+      current = parent;
+    }
+    dependentActivities.push({ id: node.id, name: node.name, path: parts.join(' > ') });
+  }
+
+  const ownerName = sys.ownerPersonId
+    ? people.find((p) => p.id === sys.ownerPersonId)?.name || null
+    : null;
+  const deputyOwnerName = sys.deputyOwnerId
+    ? people.find((p) => p.id === sys.deputyOwnerId)?.name || null
+    : null;
+  const custodianRefs = (sys.custodianIds || [])
+    .map((id) => people.find((p) => p.id === id))
+    .filter((p): p is { id: string; name: string; title?: string } => !!p)
+    .map((p) => ({ id: p.id, name: p.name, title: p.title || null }));
+
+  res.json({
+    success: true,
+    data: {
+      system: decorate(sys),
+      linkedConnections,
+      assetsHere,
+      dependentActivities,
+      ownership: {
+        owner: sys.ownerPersonId ? { id: sys.ownerPersonId, name: ownerName } : null,
+        deputy: sys.deputyOwnerId ? { id: sys.deputyOwnerId, name: deputyOwnerName } : null,
+        custodians: custodianRefs,
+      },
+    },
+  });
+});
+
 function validateMechanisms(value: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
   if (value === undefined) return { ok: true, value: [] };
   if (!Array.isArray(value)) return { ok: false, error: 'integrationMechanisms must be an array' };
