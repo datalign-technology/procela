@@ -77,9 +77,9 @@ ol {
   --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, 'DejaVu Sans Mono',
     Menlo, Consolas, monospace;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
@@ -198,9 +198,15 @@ textarea:focus-visible {
 
 
 /* ─────────────────────────────────────────────────────────────────────────
- * Row density — `body[data-density="compact"]` reduces table row padding
- * and IconButton row so power users can see more at once. Cozy (default)
- * leaves everything at its design size.
+ * Visual density — `body[data-density="compact"]` is Procela's "see more
+ * at once" mode. Cozy (default) is already moderately tight after the
+ * v2 density pass; compact pushes it further for power users who live
+ * in the catalog all day.
+ *
+ * The compact rules deliberately target shared chrome (content padding,
+ * page H1, form controls, table rows) — they cannot easily reach into
+ * the many inline-styled cards across the app, but the visible chrome
+ * tightening already produces a noticeable density boost.
  * ─────────────────────────────────────────────────────────────────────── */
 body[data-density="compact"] table td {
   padding-top: 5px !important;
@@ -209,6 +215,29 @@ body[data-density="compact"] table td {
 body[data-density="compact"] table th {
   padding-top: 6px !important;
   padding-bottom: 6px !important;
+}
+
+/* Content area — squeeze the outer page padding. */
+body[data-density="compact"] [class*="content"] {
+  padding: 12px 14px !important;
+}
+
+/* Page titles — typical inline-styled h1s at 1.5rem / 24px. */
+body[data-density="compact"] h1 {
+  font-size: 1.25rem !important;
+}
+body[data-density="compact"] h2 {
+  font-size: 1.05rem !important;
+}
+
+/* Form controls — Procela uses native inputs with inline styling.
+ * Tightening at the element level catches the bulk of them. */
+body[data-density="compact"] input:not([type="checkbox"]):not([type="radio"]),
+body[data-density="compact"] select,
+body[data-density="compact"] textarea {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+  font-size: 12px !important;
 }
 
 /* ── Responsive breakpoints ──
