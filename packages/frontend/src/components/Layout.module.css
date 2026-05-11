@@ -268,10 +268,10 @@
 }
 
 .searchIcon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  /* Sits as a flex child of the search trigger button — earlier
+   * versions positioned this absolutely over an <input>, which left
+   * the icon escaping to the viewport when the input was replaced
+   * with a flex button and showing up overlapping the sidebar. */
   font-size: 13px;
   color: var(--color-text-muted);
   pointer-events: none;
