@@ -36,6 +36,136 @@ const cardStyle: React.CSSProperties = {
   boxShadow: 'var(--shadow-sm)',
 };
 
+// ──────────────────────────────────────────────────────────────────────────
+// GettingStartedCard — shown on the Dashboard when an org exists but
+// hasn't been populated yet. Dropping the full stat-heavy dashboard onto
+// a brand-new tenant produces a wall of zeros and no signal about what
+// to do first; this card gives a guided four-step path through the
+// three layers (Business / Data / Systems / People).
+// ──────────────────────────────────────────────────────────────────────────
+
+function GettingStartedCard({ stats }: { stats: DashboardStats }) {
+  const steps = [
+    {
+      icon: '⛁',
+      title: 'Define your business processes',
+      description: 'Map how your organization works — value streams, processes, sub-processes, and steps. Plain business language, no technical knowledge required.',
+      done: stats.processes > 0,
+      ctaLabel: 'Add processes',
+      ctaTo: '/processes',
+      doneLabel: `${stats.processes} ${stats.processes === 1 ? 'process' : 'processes'}`,
+    },
+    {
+      icon: '⌸',
+      title: 'Register your systems',
+      description: 'Tell Procela about the applications and platforms your data lives in — ERP, CRM, data warehouses, file stores.',
+      done: stats.systems > 0,
+      ctaLabel: 'Add systems',
+      ctaTo: '/systems',
+      doneLabel: `${stats.systems} ${stats.systems === 1 ? 'system' : 'systems'}`,
+    },
+    {
+      icon: '⬢',
+      title: 'Add your data assets',
+      description: 'Describe the data you care about in business terms — customer records, transactions, reports — so it can be tied back to processes.',
+      done: stats.dataAssets > 0,
+      ctaLabel: 'Add data assets',
+      ctaTo: '/data-assets',
+      doneLabel: `${stats.dataAssets} ${stats.dataAssets === 1 ? 'asset' : 'assets'}`,
+    },
+    {
+      icon: '☺',
+      title: 'Invite your people',
+      description: 'Set up owners and stewards so accountability is clear. Procela tracks who is responsible for each process, system, and asset.',
+      done: stats.people > 0,
+      ctaLabel: 'Add people',
+      ctaTo: '/people',
+      doneLabel: `${stats.people} ${stats.people === 1 ? 'person' : 'people'}`,
+    },
+  ];
+
+  const doneCount = steps.filter((s) => s.done).length;
+  const percent = Math.round((doneCount / steps.length) * 100);
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      padding: 24,
+      marginBottom: 24,
+      boxShadow: 'var(--shadow-sm)',
+    }}>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Welcome to Procela</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
+          A few short steps to get your governance program off the ground.{' '}
+          {doneCount > 0 && (
+            <span style={{ color: 'var(--color-text)' }}>
+              {doneCount} of {steps.length} done.
+            </span>
+          )}
+        </p>
+      </div>
+      <div style={{ height: 4, background: 'var(--color-bg)', borderRadius: 2, marginBottom: 20, overflow: 'hidden' }}>
+        <div style={{
+          width: `${percent}%`, height: '100%',
+          background: 'var(--color-primary)', transition: 'width 0.3s',
+        }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {steps.map((s, i) => (
+          <div key={s.title} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 14,
+            padding: 14,
+            background: s.done ? 'var(--color-bg)' : 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+          }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 14, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: s.done ? '#dcfce7' : 'var(--color-bg)',
+              color: s.done ? '#166534' : 'var(--color-text)',
+              fontSize: 13, fontWeight: 600,
+              border: s.done ? '1px solid #86efac' : '1px solid var(--color-border)',
+            }}>
+              {s.done ? '✓' : i + 1}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14 }}>{s.icon}</span>
+                <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{s.title}</h3>
+                {s.done && (
+                  <span style={{ fontSize: 11, color: '#166534', marginLeft: 'auto', fontWeight: 500 }}>
+                    {s.doneLabel}
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                {s.description}
+              </p>
+              {!s.done && (
+                <Link
+                  to={s.ctaTo}
+                  style={{
+                    display: 'inline-block', marginTop: 10,
+                    padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                    background: 'var(--color-primary)', color: '#fff',
+                    borderRadius: 'var(--radius-md)', textDecoration: 'none',
+                  }}
+                >
+                  {s.ctaLabel}
+                </Link>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 
 
@@ -823,6 +953,14 @@ export default function DashboardPage() {
   }
 
 
+  // Brand-new orgs see a guided four-step setup card instead of a wall
+  // of zeros. Once anything's been added, the regular dashboard takes
+  // over (and the user can find any unfinished step in its bucket).
+  const isEmptyOrg = stats.processes === 0
+    && stats.dataAssets === 0
+    && stats.systems === 0
+    && stats.people === 0;
+
   const sectionMap: Record<SectionKey, React.ReactNode> = {
     myDashboard: <MyDashboard />,
     overview: <StatsOverview stats={stats} />,
@@ -841,18 +979,20 @@ export default function DashboardPage() {
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
           <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
         </div>
-        <button
-          onClick={() => setShowCustomize((v) => !v)}
-          style={{
-            padding: '5px 12px', fontSize: 11, fontWeight: 500,
-            background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
-            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-            cursor: 'pointer', transition: 'all 0.15s',
-          }}
-        >
-          {showCustomize ? 'Done' : 'Customize'}
-        </button>
+        {!isEmptyOrg && (
+          <button
+            onClick={() => setShowCustomize((v) => !v)}
+            style={{
+              padding: '5px 12px', fontSize: 11, fontWeight: 500,
+              background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: showCustomize ? '#fff' : 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {showCustomize ? 'Done' : 'Customize'}
+          </button>
+        )}
       </div>
 
       {showCustomize && (
@@ -904,11 +1044,15 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
-        <React.Fragment key={key}>
-          {sectionMap[key]}
-        </React.Fragment>
-      ))}
+      {isEmptyOrg ? (
+        <GettingStartedCard stats={stats} />
+      ) : (
+        layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
+          <React.Fragment key={key}>
+            {sectionMap[key]}
+          </React.Fragment>
+        ))
+      )}
     </div>
   );
 }
