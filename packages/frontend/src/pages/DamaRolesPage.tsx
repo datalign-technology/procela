@@ -125,7 +125,11 @@ export default function DamaRolesPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
   const [, setDomains] = useState<DomainOption[]>([]);
-  const [summary, setSummary] = useState<Record<string, number>>({});
+  // Counts come from the local `roles` list now (see roleCounts below);
+  // the /summary endpoint is still fetched so future per-role analytics
+  // have a single source of truth, but the result is intentionally
+  // unused at the moment.
+  const [, setSummary] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
@@ -138,6 +142,12 @@ export default function DamaRolesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterRoleType, setFilterRoleType] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  // Layout: 'none' = original flat assignments table, 'person' = one row
+  // per person with their roles as chips, 'role' = sections grouped by
+  // role type. Person is the default because that's the most common
+  // "what is X on the hook for?" question.
+  const [groupBy, setGroupBy] = useState<'none' | 'person' | 'role'>('person');
 
   const fetchData = useCallback(async () => {
     try {
@@ -213,8 +223,26 @@ export default function DamaRolesPage() {
 
   const handleCancel = () => { setShowForm(false); setError(''); setForm(emptyForm); };
 
-  // Apply the card-click filter to the table.
-  const filteredRoles = filterRoleType ? roles.filter((r) => r.roleType === filterRoleType) : roles;
+  const scopeNameForFilter = useCallback((scopeId: string) => {
+    return orgs.find((o) => o.id === scopeId)?.name || '';
+  }, [orgs]);
+
+  // Apply role filter and free-text search against person name + org name.
+  const filteredRoles = roles.filter((r) => {
+    if (filterRoleType && r.roleType !== filterRoleType) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const hay = `${r.personName} ${scopeNameForFilter(r.scopeId)} ${ROLE_TYPE_LABELS[r.roleType] || r.roleType}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Per-role counts for the sidebar - based on the unfiltered roles list
+  // so sidebar always shows the full distribution, not what's left after
+  // a search filters things out.
+  const roleCounts: Record<string, number> = {};
+  for (const r of roles) roleCounts[r.roleType] = (roleCounts[r.roleType] || 0) + 1;
 
   const scopeName = (scopeId: string) => {
     return orgs.find((o) => o.id === scopeId)?.name || scopeId;
@@ -264,36 +292,53 @@ export default function DamaRolesPage() {
         <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
       </PageHeader>
 
-      {/* Role type filter chips */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        {Object.keys(ROLE_TYPE_LABELS).map((rt) => {
-          const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
-          const count = summary[rt] || 0;
-          const isActive = filterRoleType === rt;
-          return (
-            <button key={rt}
-              onClick={() => setFilterRoleType(isActive ? null : rt)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
-                background: isActive ? c.color : c.bg, color: isActive ? '#fff' : c.color,
-                border: 'none', cursor: 'pointer',
-                opacity: count === 0 && !isActive ? 0.45 : 1,
-                transition: 'background 0.12s, color 0.12s',
-              }}
-              title={`${ROLE_TYPE_LABELS[rt]}: ${count} assigned`}
-            >
-              {ROLE_CATEGORIES[rt] === 'Executive' ? ROLE_TYPE_LABELS[rt] : ROLE_TYPE_LABELS[rt].replace('Data ', '').replace('Database ', 'DB ')}
-              {count > 0 && <span style={{ fontWeight: 700 }}>{count}</span>}
-            </button>
-          );
-        })}
-        {filterRoleType && (
-          <button onClick={() => setFilterRoleType(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-primary)', padding: '3px 6px' }}>
-            Clear
-          </button>
-        )}
-      </div>
+      {/* Search + Group-by toggle. The role-type filter moved out of this
+       *  row into the sidebar; the sidebar is the durable navigator and
+       *  the search box is the quick lookup. */}
+      {roles.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="search"
+            placeholder="Search by person, organization, or role..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: '1 1 280px', maxWidth: 420,
+              fontSize: 13, padding: '6px 10px',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              background: 'var(--color-surface)',
+            }}
+          />
+          <div role="group" aria-label="Group by" style={{
+            display: 'inline-flex', alignItems: 'center',
+            background: 'var(--color-bg)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6, padding: 2,
+          }}>
+            {(['person', 'role', 'none'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setGroupBy(mode)}
+                aria-pressed={groupBy === mode}
+                title={mode === 'person' ? 'One row per person' : mode === 'role' ? 'One section per role' : 'Flat list of assignments'}
+                style={{
+                  padding: '4px 10px', fontSize: 11, fontWeight: 500,
+                  background: groupBy === mode ? 'var(--color-surface)' : 'transparent',
+                  color: groupBy === mode ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  border: 'none', borderRadius: 4, cursor: 'pointer',
+                  boxShadow: groupBy === mode ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                {mode === 'person' ? 'By Person' : mode === 'role' ? 'By Role' : 'Flat'}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+            {filteredRoles.length} of {roles.length} assignments
+            {filterRoleType && ` · ${ROLE_TYPE_LABELS[filterRoleType]}`}
+          </div>
+        </div>
+      )}
 
       {/* Assign Form */}
       {showForm && (
@@ -383,94 +428,295 @@ export default function DamaRolesPage() {
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      {/* Bulk Action Bar */}
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
-          background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Delete Selected
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            Clear Selection
-          </button>
-        </div>
-      )}
-
-      {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-        {loading ? (
-          <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
-        ) : roles.length === 0 && !showForm ? (
-          <EmptyState
-            icon="👤"
-            title="No governance roles yet"
-            description="Assign data management roles like CDO, Data Owner, and Data Steward to people across your organization."
-            action={{ label: 'Assign Role', onClick: openAdd }}
-          />
-        ) : filteredRoles.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
-            No assignments for {ROLE_TYPE_LABELS[filterRoleType || ''] || filterRoleType}.
+      {/* Two-column layout: role-type sidebar on the left, content area
+       *  on the right. Same scan pattern as /data-assets, /systems, and
+       *  /decision-rights. The sidebar is hidden on the empty-state path
+       *  so the empty state isn't crowded into a narrow content column. */}
+      <div style={{ display: 'grid', gridTemplateColumns: roles.length > 0 ? '220px 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
+        {roles.length > 0 && (
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            padding: 10,
+            position: 'sticky', top: 12,
+            maxHeight: 'calc(100vh - 180px)',
+            overflowY: 'auto',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
+              Roles
+            </div>
+            <SidebarItem label="All Roles" count={roles.length} active={!filterRoleType} onClick={() => setFilterRoleType(null)} />
+            {Object.keys(ROLE_TYPE_LABELS).map((rt) => {
+              const count = roleCounts[rt] || 0;
+              if (count === 0) return null;
+              const isActive = filterRoleType === rt;
+              const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
+              return (
+                <SidebarItem
+                  key={rt}
+                  label={ROLE_TYPE_LABELS[rt]}
+                  count={count}
+                  active={isActive}
+                  onClick={() => setFilterRoleType(isActive ? null : rt)}
+                  accent={c.color}
+                />
+              );
+            })}
           </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
-                  <input type="checkbox"
-                    checked={filteredRoles.length > 0 && selectedIds.size === filteredRoles.length}
-                    onChange={toggleSelectAll} />
-                </th>
-                <SortableTh sortKey="personName" active={sortKey} dir={sortDir} onClick={toggleSort}>Person</SortableTh>
-                <SortableTh sortKey="roleType" active={sortKey} dir={sortDir} onClick={toggleSort}>Governance Role</SortableTh>
-                <SortableTh sortKey="scopeName" active={sortKey} dir={sortDir} onClick={toggleSort}>Organization</SortableTh>
-                <th style={thStyle}>Since</th>
-                <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRoles.map((role) => {
-                const isSelected = selectedIds.has(role.id);
-                return (
-                <tr key={role.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
-                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
-                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
-                  <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                    <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(role.id)} />
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>{role.personName}</td>
-                  <td style={tdStyle}>
+        )}
+
+        <div>
+          {/* Bulk action bar only makes sense in flat mode where each row
+           *  is a single assignment with a checkbox. */}
+          {groupBy === 'none' && selectedIds.size > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginBottom: 12,
+              background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 'var(--radius-md)',
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>{selectedIds.size} selected</span>
+              <button
+                onClick={() => setConfirmBulkDelete(true)}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Delete Selected
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              >
+                Clear Selection
+              </button>
+            </div>
+          )}
+
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+            {loading ? (
+              <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+            ) : roles.length === 0 && !showForm ? (
+              <EmptyState
+                icon="👤"
+                title="No governance roles yet"
+                description="Assign data management roles like CDO, Data Owner, and Data Steward to people across your organization."
+                action={{ label: 'Assign Role', onClick: openAdd }}
+              />
+            ) : filteredRoles.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                {searchQuery.trim()
+                  ? 'No assignments match your search.'
+                  : `No assignments for ${ROLE_TYPE_LABELS[filterRoleType || ''] || filterRoleType}.`}
+              </div>
+            ) : groupBy === 'person' ? (
+              <ByPersonView
+                roles={filteredRoles}
+                roleBadge={roleBadge}
+                scopeName={scopeName}
+                openRoleDrawer={openRoleDrawer}
+                setConfirmDelete={setConfirmDelete}
+              />
+            ) : groupBy === 'role' ? (
+              <ByRoleView
+                roles={filteredRoles}
+                roleBadge={roleBadge}
+                scopeName={scopeName}
+                openRoleDrawer={openRoleDrawer}
+                setConfirmDelete={setConfirmDelete}
+              />
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--color-bg)' }}>
+                    <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={filteredRoles.length > 0 && selectedIds.size === filteredRoles.length}
+                        onChange={toggleSelectAll} />
+                    </th>
+                    <SortableTh sortKey="personName" active={sortKey} dir={sortDir} onClick={toggleSort}>Person</SortableTh>
+                    <SortableTh sortKey="roleType" active={sortKey} dir={sortDir} onClick={toggleSort}>Governance Role</SortableTh>
+                    <SortableTh sortKey="scopeName" active={sortKey} dir={sortDir} onClick={toggleSort}>Organization</SortableTh>
+                    <th style={thStyle}>Since</th>
+                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRoles.map((role) => {
+                    const isSelected = selectedIds.has(role.id);
+                    return (
+                    <tr key={role.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
+                      onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
+                      onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
+                      <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(role.id)} />
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: 500 }}>{role.personName}</td>
+                      <td style={tdStyle}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openRoleDrawer(role.roleType); }}
+                          title="Learn about this role"
+                          style={{ ...roleBadge(role.roleType), border: 'none', cursor: 'pointer', font: 'inherit' }}
+                        >
+                          {ROLE_TYPE_LABELS[role.roleType] || role.roleType}
+                        </button>
+                      </td>
+                      <td style={tdStyle}>{scopeName(role.scopeId)}</td>
+                      <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
+                        {new Date(role.since).toLocaleDateString()}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(role.id)} />
+                      </td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sidebar entry ─────────────────────────────────────────────────────────
+// Single role-type item in the left sidebar. Active state mirrors the
+// other sidebar-based pages so the pattern is identical visually.
+function SidebarItem({ label, count, active, onClick, accent }: {
+  label: string; count: number; active: boolean; onClick: () => void; accent?: string;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+        fontWeight: active ? 600 : 400,
+        background: active ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
+        color: active ? 'var(--color-primary)' : 'var(--color-text)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        borderLeft: accent ? `3px solid ${accent}` : '3px solid transparent',
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--color-bg)'; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+    >
+      <span>{label}</span>
+      <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: 'var(--color-bg)', padding: '0 5px', borderRadius: 8, fontWeight: 500 }}>{count}</span>
+    </div>
+  );
+}
+
+// ── By-Person view ────────────────────────────────────────────────────────
+// One row per person, with all their role assignments as clickable chips.
+// Answers "what is X on the hook for?" at a glance.
+function ByPersonView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmDelete }: {
+  roles: DamaRoleAssignment[];
+  roleBadge: (rt: string) => React.CSSProperties;
+  scopeName: (id: string) => string;
+  openRoleDrawer: (rt: string) => void;
+  setConfirmDelete: (id: string) => void;
+}) {
+  const byPerson = new Map<string, { personName: string; orgs: Set<string>; assignments: DamaRoleAssignment[] }>();
+  for (const r of roles) {
+    if (!byPerson.has(r.personId)) {
+      byPerson.set(r.personId, { personName: r.personName, orgs: new Set(), assignments: [] });
+    }
+    const e = byPerson.get(r.personId)!;
+    e.orgs.add(scopeName(r.scopeId));
+    e.assignments.push(r);
+  }
+  const sorted = Array.from(byPerson.entries()).sort(([, a], [, b]) => a.personName.localeCompare(b.personName));
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr style={{ background: 'var(--color-bg)' }}>
+          <th style={thStyle}>Person</th>
+          <th style={thStyle}>Governance Roles</th>
+          <th style={thStyle}>Organization{sorted.some(([, e]) => e.orgs.size > 1) ? 's' : ''}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map(([personId, e]) => (
+          <tr key={personId}>
+            <td style={{ ...tdStyle, fontWeight: 500, verticalAlign: 'top' }}>{e.personName}</td>
+            <td style={{ ...tdStyle, verticalAlign: 'top' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {e.assignments.map((r) => (
+                  <span key={r.id} style={{ ...roleBadge(r.roleType), display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 4px 2px 8px' }}>
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); openRoleDrawer(role.roleType); }}
+                      onClick={(ev) => { ev.stopPropagation(); openRoleDrawer(r.roleType); }}
                       title="Learn about this role"
-                      style={{ ...roleBadge(role.roleType), border: 'none', cursor: 'pointer', font: 'inherit' }}
+                      style={{ background: 'none', border: 'none', padding: 0, color: 'inherit', cursor: 'pointer', font: 'inherit' }}
                     >
-                      {ROLE_TYPE_LABELS[role.roleType] || role.roleType}
+                      {ROLE_TYPE_LABELS[r.roleType] || r.roleType}
                     </button>
-                  </td>
-                  <td style={tdStyle}>{scopeName(role.scopeId)}</td>
-                  <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>
-                    {new Date(role.since).toLocaleDateString()}
-                  </td>
-                  <td style={{ ...tdStyle, textAlign: 'center' }}>
-                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(role.id)} />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+                    <button
+                      onClick={() => setConfirmDelete(r.id)}
+                      title="Remove this role"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.6, fontSize: 13, padding: '0 4px', lineHeight: 1 }}
+                    >&times;</button>
+                  </span>
+                ))}
+              </div>
+            </td>
+            <td style={{ ...tdStyle, color: 'var(--color-text-secondary)', verticalAlign: 'top' }}>
+              {Array.from(e.orgs).join(', ')}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// ── By-Role view ──────────────────────────────────────────────────────────
+// One section per role type, showing the people who hold that role. The
+// section header is clickable to open the Role Detail drawer.
+function ByRoleView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmDelete }: {
+  roles: DamaRoleAssignment[];
+  roleBadge: (rt: string) => React.CSSProperties;
+  scopeName: (id: string) => string;
+  openRoleDrawer: (rt: string) => void;
+  setConfirmDelete: (id: string) => void;
+}) {
+  const byRole = new Map<string, DamaRoleAssignment[]>();
+  for (const r of roles) {
+    if (!byRole.has(r.roleType)) byRole.set(r.roleType, []);
+    byRole.get(r.roleType)!.push(r);
+  }
+  // Render in the canonical ROLE_TYPE_LABELS order so executive roles
+  // come first regardless of insertion order.
+  const ordered = Object.keys(ROLE_TYPE_LABELS).filter((rt) => byRole.has(rt));
+  return (
+    <div>
+      {ordered.map((rt) => {
+        const list = byRole.get(rt)!.sort((a, b) => a.personName.localeCompare(b.personName));
+        return (
+          <div key={rt} style={{ borderBottom: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--color-bg)' }}>
+              <button
+                type="button"
+                onClick={() => openRoleDrawer(rt)}
+                title="Learn about this role"
+                style={{ ...roleBadge(rt), border: 'none', cursor: 'pointer', font: 'inherit', padding: '3px 10px' }}
+              >
+                {ROLE_TYPE_LABELS[rt] || rt}
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{list.length} held</span>
+            </div>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {list.map((r) => (
+                <li key={r.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
+                  <span style={{ fontWeight: 500 }}>{r.personName}</span>
+                  <span style={{ color: 'var(--color-text-secondary)' }}>{scopeName(r.scopeId)}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
+                  <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
