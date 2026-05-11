@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -361,8 +361,11 @@ export default function DataLineagePage() {
         <div style={{ display: 'flex', gap: 6 }}>
           <ColumnPicker state={lineageCols} />
           {links.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('data-lineage.csv', ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'], links.map((l) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'data-lineage',
+              sheetName: 'Lineage',
+              headers: ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'],
+              rows: links.map((l) => [
                 l.sourceSystemName,
                 l.targetSystemName,
                 l.dataAssetName,
@@ -370,7 +373,8 @@ export default function DataLineagePage() {
                 l.frequency,
                 l.status,
                 l.description,
-              ]))} />
+              ]),
+            })} />
           )}
           <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
             onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />

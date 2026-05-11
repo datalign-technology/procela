@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import EmptyState from '../components/EmptyState';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -884,10 +884,14 @@ export default function PeoplePage() {
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {filteredPeople.length > 0 && (
-                    <IconButton icon="download" label="Export CSV"
-                      onClick={() => exportCsv('people.csv', ['Name', 'Email', 'Role', 'Title'], filteredPeople.map((p) => [
+                    <ExportMenu build={() => ({
+                      filenameBase: 'people',
+                      sheetName: 'People',
+                      headers: ['Name', 'Email', 'Role', 'Title'],
+                      rows: filteredPeople.map((p) => [
                         p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
-                      ]))} />
+                      ]),
+                    })} />
                   )}
                   <IconButton icon="upload" label="Import people"
                     onClick={() => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); }} />

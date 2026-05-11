@@ -3,7 +3,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { errorToast } from '../lib/errorToast';
 import { getStatusColor } from '../lib/statusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -323,8 +323,19 @@ export default function DataDomainsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {domains.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('data-domains.csv', ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'], domains.map((d) => [d.name, d.description, d.ownerName || '', d.stewards.map((s) => s.name).join('; '), d.assets.map((a) => a.name).join('; '), d.status]))} />
+            <ExportMenu build={() => ({
+              filenameBase: 'data-domains',
+              sheetName: 'Data Domains',
+              headers: ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'],
+              rows: domains.map((d) => [
+                d.name,
+                d.description,
+                d.ownerName || '',
+                d.stewards.map((s) => s.name).join('; '),
+                d.assets.map((a) => a.name).join('; '),
+                d.status,
+              ]),
+            })} />
           )}
           {canWrite && domains.length === 0 && (
             <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
@@ -244,13 +244,17 @@ export default function DamaRolesPage() {
         subtitle="Assign data management governance roles to people across organizations and data domains."
         actions={<>
           {roles.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('governance-roles.csv', ['Person', 'Governance Role', 'Organization', 'Since'], roles.map((r) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'governance-roles',
+              sheetName: 'Governance Roles',
+              headers: ['Person', 'Governance Role', 'Organization', 'Since'],
+              rows: roles.map((r) => [
                 r.personName,
                 ROLE_TYPE_LABELS[r.roleType] || r.roleType,
                 scopeName(r.scopeId),
                 new Date(r.since).toLocaleDateString(),
-              ]))} />
+              ]),
+            })} />
           )}
           <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
         </>}

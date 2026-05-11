@@ -5,7 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { useToastStore } from '../stores/toastStore';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import IconButton from '../components/IconButton';
@@ -691,15 +691,19 @@ export default function GovernanceGroupsPage() {
               onClick={() => navigate('/governance/visualization')} />
           )}
           {flatGroups.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('governance-groups.csv', ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'], flatGroups.map((g) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'governance-groups',
+              sheetName: 'Governance Groups',
+              headers: ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'],
+              rows: flatGroups.map((g) => [
                 g.name,
                 GROUP_TYPE_LABELS[g.type] || g.type,
                 flatGroups.find((p) => p.id === g.parentId)?.name || '',
                 g.description,
-                String(g.members.length),
+                g.members.length,
                 g.status,
-              ]))} />
+              ]),
+            })} />
           )}
           {canWrite && (
             <IconButton icon="wand"

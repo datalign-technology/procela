@@ -2,9 +2,9 @@ import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
+import { ExportPayload } from '../lib/export';
 import EmptyState from '../components/EmptyState';
-import IconButton from '../components/IconButton';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
@@ -270,11 +270,11 @@ export default function DataDictionaryPage() {
     );
   }
 
-  const handleExportCsv = () => {
-    exportCsv(
-      'data-dictionary.csv',
-      ['Asset', 'Description', 'System', 'Domain', 'Tier', 'Health', 'Owner', 'Steward', 'Data Type', 'Classification', 'Refresh', 'Retention', 'Retention Reason', 'Source', 'Columns'],
-      sorted.map((a) => {
+  const buildDictionaryExport = (): ExportPayload => ({
+    filenameBase: 'data-dictionary',
+    sheetName: 'Data Dictionary',
+    headers: ['Asset', 'Description', 'System', 'Domain', 'Tier', 'Health', 'Owner', 'Steward', 'Data Type', 'Classification', 'Refresh', 'Retention', 'Retention Reason', 'Source', 'Columns'],
+    rows: sorted.map((a) => {
         const sys = systemMap.get(a.systemId);
         const did = assetDomainMap.get(a.id);
         const dom = did ? domainMap.get(did) : null;
@@ -306,8 +306,7 @@ export default function DataDictionaryPage() {
           cols.length > 0 ? cols.map((c) => `${c.columnName}${c.dataType ? ':' + c.dataType : ''}`).join('; ') : '',
         ];
       }),
-    );
-  };
+  });
 
   return (
     <div>
@@ -335,7 +334,7 @@ export default function DataDictionaryPage() {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <ColumnPicker state={dictCols} />
           {assets.length > 0 && (
-            <IconButton icon="download" label="Export CSV" onClick={handleExportCsv} />
+            <ExportMenu build={buildDictionaryExport} />
           )}
         </div>
       </div>

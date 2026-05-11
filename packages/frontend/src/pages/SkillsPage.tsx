@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
+import { ExportPayload } from '../lib/export';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
@@ -213,13 +214,12 @@ export default function SkillsPage() {
 
   // ── Export ──
 
-  const handleExport = () => {
-    exportCsv(
-      'skills.csv',
-      ['Name', 'Category', 'Description'],
-      filtered.map((s) => [s.name, formatCategory(s.category), s.description]),
-    );
-  };
+  const buildSkillsExport = (): ExportPayload => ({
+    filenameBase: 'skills',
+    sheetName: 'Skills',
+    headers: ['Name', 'Category', 'Description'],
+    rows: filtered.map((s) => [s.name, formatCategory(s.category), s.description]),
+  });
 
   if (loading) return (
     <div>
@@ -248,7 +248,7 @@ export default function SkillsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {filtered.length > 0 && (
-            <IconButton icon="download" label="Export CSV" onClick={handleExport} />
+            <ExportMenu build={buildSkillsExport} />
           )}
           <button
             style={{

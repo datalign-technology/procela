@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import OrgDeleteCleanupDialog, { CleanupActions } from '../components/OrgDeleteCleanupDialog';
 import IconButton from '../components/IconButton';
@@ -453,15 +453,19 @@ export default function OrganizationsPage() {
             />
           )}
           {flatOrgs.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('organizations.csv', ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'], flatOrgs.map((o) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'organizations',
+              sheetName: 'Organizations',
+              headers: ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'],
+              rows: flatOrgs.map((o) => [
                 o.name,
                 o.type,
                 flatOrgs.find((p) => p.id === o.parentId)?.name || '',
                 o.industry,
                 o.description,
-                String(peopleCounts[o.id] || 0),
-              ]))} />
+                peopleCounts[o.id] || 0,
+              ]),
+            })} />
           )}
           <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
           <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />

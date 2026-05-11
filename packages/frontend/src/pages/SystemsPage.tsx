@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { useTerm } from '../lib/terminology';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -738,8 +738,12 @@ export default function SystemsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {systems.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('systems.csv', ['Name', 'Type', 'Description'], systems.map((s) => [s.name, s.systemType, s.description]))} />
+            <ExportMenu build={() => ({
+              filenameBase: 'systems',
+              sheetName: 'Systems',
+              headers: ['Name', 'Type', 'Description'],
+              rows: systems.map((s) => [s.name, s.systemType, s.description]),
+            })} />
           )}
           <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
           <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />

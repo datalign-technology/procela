@@ -10,7 +10,8 @@ import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import { useToastStore } from '../stores/toastStore';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
+import { ExportPayload } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
 import SkillPicker from '../components/SkillPicker';
 import VersionHistoryModal from '../components/VersionHistoryModal';
@@ -1322,7 +1323,7 @@ export default function ProcessCatalogPage() {
     return { total, withOwners, active };
   })();
 
-  const handleExportExcel = () => {
+  const buildProcessExport = (): ExportPayload => {
     const rows: string[][] = [];
     const walk = (nodes: ProcessNode[], ancestors: string[]) => {
       for (const node of nodes) {
@@ -1336,12 +1337,13 @@ export default function ProcessCatalogPage() {
       }
     };
     walk(tree, []);
-    exportCsv(
-      'process-hierarchy.csv',
-      ['Value Stream', 'Process', 'Sub-Process', 'Activity', 'Task', 'Level', 'Status', 'Description', 'Responsible Role', 'Frequency'],
-      rows,
-    );
     addToast('success', `Exported ${rows.length} process nodes`);
+    return {
+      filenameBase: 'process-hierarchy',
+      sheetName: 'Process Hierarchy',
+      headers: ['Value Stream', 'Process', 'Sub-Process', 'Activity', 'Task', 'Level', 'Status', 'Description', 'Responsible Role', 'Frequency'],
+      rows,
+    };
   };
 
   return (
@@ -1365,8 +1367,7 @@ export default function ProcessCatalogPage() {
         {canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 6 }}>
             {totalNodes > 0 && (
-              <IconButton icon="download" label="Export to Excel (CSV)"
-                onClick={handleExportExcel} />
+              <ExportMenu build={buildProcessExport} label="Export process hierarchy" />
             )}
             {totalNodes > 0 && (
               <IconButton icon="eye" label="Visualize"

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -307,14 +307,18 @@ export default function MappingsPage() {
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           {mappings.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('mappings.csv', ['Process Step', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'], mappings.map((m) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'mappings',
+              sheetName: 'Mappings',
+              headers: ['Process Step', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'],
+              rows: mappings.map((m) => [
                 m.stepInfo ? formatStepPath(m.stepInfo) : m.processStepId,
                 m.assetInfo ? m.assetInfo.assetName : m.dataAssetId,
                 m.linkType,
                 m.aiSuggested ? 'Yes' : 'No',
                 m.notes,
-              ]))} />
+              ]),
+            })} />
           )}
           {canWrite && (
             <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />

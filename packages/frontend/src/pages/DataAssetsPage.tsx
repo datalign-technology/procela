@@ -6,7 +6,7 @@ import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -900,8 +900,11 @@ export default function DataAssetsPage() {
         <div style={{ display: 'flex', gap: 6 }}>
           <ColumnPicker state={colPicker} />
           {assets.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('data-assets.csv', ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'], assets.map((a) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'data-assets',
+              sheetName: 'Data Assets',
+              headers: ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'],
+              rows: assets.map((a) => [
                 a.name,
                 a.description,
                 systemName(a.systemId),
@@ -909,7 +912,8 @@ export default function DataAssetsPage() {
                 a.domainName || '',
                 a.ownerName || '',
                 a.stewardName || '',
-              ]))} />
+              ]),
+            })} />
           )}
           {canWrite && (
             <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />

@@ -2,7 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import React, { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -536,18 +536,22 @@ export default function DataQualityPage() {
         <div style={{ display: 'flex', gap: 6 }}>
           <ColumnPicker state={dqCols} />
           {rules.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('data-quality-rules.csv', ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'], rules.map((r) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'data-quality-rules',
+              sheetName: 'Rules',
+              headers: ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'],
+              rows: rules.map((r) => [
                 r.dataAssetName,
                 (r as any).columnName || '',
                 r.name,
                 r.dimension,
-                String(r.threshold),
-                String(r.currentScore),
-                String(r.weight),
+                r.threshold,
+                r.currentScore,
+                r.weight,
                 r.status,
                 r.lastMeasured || '',
-              ]))} />
+              ]),
+            })} />
           )}
           {canWrite && (
             <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />

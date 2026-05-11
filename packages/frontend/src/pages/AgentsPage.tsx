@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
 import { DAMA_ROLE_LABELS } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -331,8 +331,11 @@ export default function AgentsPage() {
             {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
           {filtered.length > 0 && (
-            <IconButton icon="download" label="Export CSV"
-              onClick={() => exportCsv('agents.csv', ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'], filtered.map((a) => [
+            <ExportMenu build={() => ({
+              filenameBase: 'agents',
+              sheetName: 'Agents',
+              headers: ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'],
+              rows: filtered.map((a) => [
                 a.name,
                 a.agentType,
                 a.provider,
@@ -340,7 +343,8 @@ export default function AgentsPage() {
                 a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join('; '),
                 personNameById[a.ownerPersonId] || '',
                 a.description,
-              ]))} />
+              ]),
+            })} />
           )}
           <IconButton icon="upload" label="Import agents"
             onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />

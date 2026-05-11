@@ -2,7 +2,8 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import { exportCsv } from '../lib/exportCsv';
+import ExportMenu from '../components/ExportMenu';
+import { ExportPayload } from '../lib/export';
 import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
@@ -147,14 +148,19 @@ export default function RaciMatrixPage() {
     return getColumnLabel(a).localeCompare(getColumnLabel(b));
   }) : [];
 
-  const handleExportCsv = () => {
-    if (!data) return;
+  const buildExport = (): ExportPayload | null => {
+    if (!data) return null;
     const headers = ['Process', 'Level', 'Parent', ...sortedColumns.map((c) => `${c.name} (${getColumnLabel(c)})`)];
     const rows = data.rows.map((row) => {
       const cells = activeColumns.map((col) => data.matrix[row.id]?.[col.personId] || '-');
       return [row.name, row.level, row.parentName || '-', ...cells];
     });
-    exportCsv(`raci-matrix-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+    return {
+      filenameBase: `raci-matrix-${new Date().toISOString().split('T')[0]}`,
+      sheetName: 'RACI',
+      headers,
+      rows,
+    };
   };
 
   // Determine if a row belongs to a governance value stream
@@ -273,7 +279,7 @@ export default function RaciMatrixPage() {
         <>
           {/* Controls */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <IconButton icon="download" label="Export CSV" onClick={handleExportCsv} />
+            <ExportMenu build={buildExport} disabled={!data} />
             <IconButton icon="download" label="Print / PDF" variant="primary" onClick={() => window.print()} />
             <div style={{ width: 1, height: 20, background: 'var(--color-border)', margin: '0 4px' }} />
             <button onClick={expandAll} style={{ fontSize: 11, padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', color: 'var(--color-primary)' }}>Expand All</button>
