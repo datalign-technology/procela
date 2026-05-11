@@ -9,6 +9,7 @@ import ToastContainer from './ToastContainer';
 import ShortcutsModal from './ShortcutsModal';
 import ShortcutsHint from './ShortcutsHint';
 import OnboardingWizard from './OnboardingWizard';
+import CommandPalette from './CommandPalette';
 
 import DensityToggle from './DensityToggle';
 import { useAuthStore } from '@/stores/authStore';
@@ -115,25 +116,6 @@ const ROUTE_GROUPS: Record<string, string[]> = {
   '/settings': ['/settings'],
 };
 
-interface SearchResult {
-  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person' | 'data-domain' | 'governance-group' | 'mapping';
-  id: string;
-  name: string;
-  description: string;
-  meta: Record<string, string>;
-}
-
-const typeRouteMap: Record<string, string> = {
-  process: '/processes',
-  system: '/systems',
-  'data-asset': '/data-assets',
-  organization: '/organizations',
-  person: '/people',
-  'data-domain': '/data-domains',
-  'governance-group': '/governance',
-  mapping: '/mappings',
-};
-
 interface Notification {
   id: string;
   orgId: string;
@@ -205,22 +187,16 @@ export default function Layout() {
   const notifWrapperRef = useRef<HTMLDivElement>(null);
 
   // Search state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchWrapperRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Shortcuts modal state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
-  // Global keyboard shortcuts. Cmd/Ctrl+K and `/` both focus the search.
-  // `?` opens the shortcuts modal. `g` followed by a letter goes somewhere
-  // (handled separately so the second key isn't a chord).
-  useKeyboardShortcut('k', () => searchInputRef.current?.focus(), { mod: true });
-  useKeyboardShortcut('/', () => searchInputRef.current?.focus());
+  // Global keyboard shortcuts. Cmd/Ctrl+K and `/` both open the command
+  // palette. `?` opens the shortcuts modal. `g` followed by a letter goes
+  // somewhere (handled separately so the second key isn't a chord).
+  useKeyboardShortcut('k', () => setPaletteOpen(true), { mod: true });
+  useKeyboardShortcut('/', () => setPaletteOpen(true));
   useKeyboardShortcut('?', () => setShortcutsOpen(true), { shift: true });
 
   // Two-key "go to" sequences. Track the timestamp of the last `g` press;
@@ -253,51 +229,6 @@ export default function Layout() {
     return () => document.removeEventListener('keydown', onKey);
   }, [navigate]);
 
-  // Search debounce
-  useEffect(() => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults([]);
-      setSearchOpen(false);
-      return;
-    }
-    searchTimerRef.current = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const res = await apiClient.get<{ success: boolean; data: { results: SearchResult[] } }>(
-          `/search?q=${encodeURIComponent(q)}`
-        );
-        setSearchResults(res.data.results);
-        setSearchOpen(true);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearchLoading(false);
-      }
-    }, 300);
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    };
-  }, [searchQuery]);
-
-  // Close search dropdown on click outside or Escape
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) {
-        setSearchOpen(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setSearchOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
 
   // Notification: fetch unread count on mount and route change
   const fetchNotifCount = useCallback(async () => {
@@ -372,13 +303,6 @@ export default function Layout() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
-
-  const handleSearchResultClick = (result: SearchResult) => {
-    setSearchOpen(false);
-    setSearchQuery('');
-    const route = typeRouteMap[result.type] || '/';
-    navigate(`${route}?highlight=${result.id}`);
-  };
 
   const fetchOrgs = useCallback(async () => {
     try {
@@ -621,79 +545,32 @@ export default function Layout() {
       <div className={styles.main}>
         <header className={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
-            {/* Global Search */}
-            <div className={styles.searchWrapper} ref={searchWrapperRef}>
+            {/* Command palette trigger — full search lives in the Cmd-K modal. */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 'var(--radius-md)',
+                background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                cursor: 'pointer', color: 'var(--color-text-muted)',
+                fontSize: 13, width: 'min(280px, 40vw)', textAlign: 'left',
+              }}
+              title="Search (press / or Ctrl+K)"
+            >
               <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
-              <input
-                ref={searchInputRef}
-                type="text"
-                className={styles.searchInput}
-                placeholder="Search... (press / or Ctrl+K)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => { if (searchResults.length > 0) setSearchOpen(true); }}
-                onKeyDown={(e) => {
-                  // Escape clears the query AND closes the dropdown — common
-                  // expectation for search inputs and mirrors the X button.
-                  if (e.key === 'Escape' && searchQuery) {
-                    e.preventDefault();
-                    setSearchQuery('');
-                    setSearchResults([]);
-                    setSearchOpen(false);
-                  }
-                }}
-                style={{ maxWidth: 'min(220px, 40vw)', paddingRight: searchQuery ? 28 : undefined }}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSearchResults([]);
-                    setSearchOpen(false);
-                  }}
-                  aria-label="Clear search"
-                  title="Clear search (Esc)"
-                  style={{
-                    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-                    width: 18, height: 18, padding: 0,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    color: 'var(--color-text-muted)', fontSize: 14, lineHeight: 1,
-                    borderRadius: 4,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
-                >
-                  &times;
-                </button>
-              )}
-              {searchOpen && (
-                <div className={styles.searchDropdown}>
-                  {searchLoading && (
-                    <div className={styles.searchEmpty}>Searching...</div>
-                  )}
-                  {!searchLoading && searchResults.length === 0 && (
-                    <div className={styles.searchEmpty}>No results found</div>
-                  )}
-                  {!searchLoading && searchResults.map((r) => (
-                    <div
-                      key={`${r.type}-${r.id}`}
-                      className={styles.searchResult}
-                      onClick={() => handleSearchResultClick(r)}
-                    >
-                      <span className={styles.searchBadge}>{r.type}</span>
-                      <div className={styles.searchResultText}>
-                        <div className={styles.searchResultName}>{r.name}</div>
-                        {r.description && (
-                          <div className={styles.searchResultDesc}>{r.description}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Search anything...
+              </span>
+              <span style={{
+                display: 'inline-block', padding: '1px 5px', fontSize: 10,
+                fontFamily: 'var(--font-mono, monospace)',
+                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                borderRadius: 3,
+              }}>
+                {navigator.platform.toUpperCase().includes('MAC') ? '⌘K' : 'Ctrl+K'}
+              </span>
+            </button>
             {(() => {
               const companies = orgOptions.filter((o) => o.type === 'company');
               if (companies.length === 0) return (
@@ -944,6 +821,7 @@ export default function Layout() {
         <SessionTimeout />
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
         {!activeOrgId && !localStorage.getItem('procela:onboarding-complete') && (
           <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/'); }} />
