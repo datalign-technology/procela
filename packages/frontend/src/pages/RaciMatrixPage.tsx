@@ -150,9 +150,15 @@ export default function RaciMatrixPage() {
 
   const buildExport = (): ExportPayload | null => {
     if (!data) return null;
-    const headers = ['Process', 'Level', 'Parent', ...sortedColumns.map((c) => `${c.name} (${getColumnLabel(c)})`)];
-    const rows = data.rows.map((row) => {
-      const cells = activeColumns.map((col) => data.matrix[row.id]?.[col.personId] || '-');
+    // Export respects the user's explicit filters (section filter,
+    // Hide-Empty columns) but ignores tree-collapse, which is incidental
+    // navigation rather than intent. Headers and cells now use the same
+    // column set so the two never drift apart.
+    const exportRows = sectionFilteredRows;
+    const exportCols = activeColumns;
+    const headers = ['Process', 'Level', 'Parent', ...exportCols.map((c) => `${c.name} (${getColumnLabel(c)})`)];
+    const rows = exportRows.map((row) => {
+      const cells = exportCols.map((col) => data.matrix[row.id]?.[col.personId] || '-');
       return [row.name, row.level, row.parentName || '-', ...cells];
     });
     return {
