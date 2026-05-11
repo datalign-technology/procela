@@ -247,9 +247,6 @@ export default function SkillsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {filtered.length > 0 && (
-            <ExportMenu build={buildSkillsExport} />
-          )}
           <button
             style={{
               ...btnSecondary,
@@ -262,6 +259,9 @@ export default function SkillsPage() {
           >
             {seeding ? 'Seeding...' : 'Seed Standard Skills'}
           </button>
+          {filtered.length > 0 && (
+            <ExportMenu build={buildSkillsExport} />
+          )}
           <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} />
         </div>
       </div>

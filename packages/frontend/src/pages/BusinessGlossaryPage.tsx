@@ -495,12 +495,12 @@ export default function BusinessGlossaryPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
-          {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
-          {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
           {canWrite && terms.length === 0 && (
             <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
           )}
+          {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
+          {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
+          {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
           <ColumnPicker state={glossaryCols} />
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>

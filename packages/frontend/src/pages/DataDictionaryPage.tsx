@@ -332,10 +332,10 @@ export default function DataDictionaryPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <ColumnPicker state={dictCols} />
           {assets.length > 0 && (
             <ExportMenu build={buildDictionaryExport} />
           )}
+          <ColumnPicker state={dictCols} />
         </div>
       </div>
 

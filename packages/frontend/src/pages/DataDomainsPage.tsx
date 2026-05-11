@@ -322,6 +322,9 @@ export default function DataDomainsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {canWrite && domains.length === 0 && (
+            <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
+          )}
           {domains.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'data-domains',
@@ -336,9 +339,6 @@ export default function DataDomainsPage() {
                 d.status,
               ]),
             })} />
-          )}
-          {canWrite && domains.length === 0 && (
-            <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
           )}
           {canWrite && <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />}
         </div>

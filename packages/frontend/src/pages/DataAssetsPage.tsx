@@ -898,7 +898,6 @@ export default function DataAssetsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={colPicker} />
           {assets.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'data-assets',
@@ -915,6 +914,7 @@ export default function DataAssetsPage() {
               ]),
             })} />
           )}
+          <ColumnPicker state={colPicker} />
           {canWrite && (
             <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
           )}

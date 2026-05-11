@@ -534,7 +534,6 @@ export default function DataQualityPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={dqCols} />
           {rules.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'data-quality-rules',
@@ -553,6 +552,7 @@ export default function DataQualityPage() {
               ]),
             })} />
           )}
+          <ColumnPicker state={dqCols} />
           {canWrite && (
             <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
           )}

@@ -1367,9 +1367,6 @@ export default function ProcessCatalogPage() {
         {canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 6 }}>
             {totalNodes > 0 && (
-              <ExportMenu build={buildProcessExport} label="Export process hierarchy" />
-            )}
-            {totalNodes > 0 && (
               <IconButton icon="eye" label="Visualize"
                 onClick={() => navigate('/processes/visualization')} />
             )}
@@ -1393,6 +1390,9 @@ export default function ProcessCatalogPage() {
                 disabled={tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))}
                 onClick={() => setConfirmGovTemplate(true)}
               />
+            )}
+            {totalNodes > 0 && (
+              <ExportMenu build={buildProcessExport} label="Export process hierarchy" />
             )}
             {canContribute && (
               <IconButton icon="plus" label="Add value stream" variant="primary"

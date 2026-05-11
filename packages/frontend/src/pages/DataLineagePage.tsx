@@ -359,7 +359,8 @@ export default function DataLineagePage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={lineageCols} />
+          <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
+            onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
           {links.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'data-lineage',
@@ -376,8 +377,7 @@ export default function DataLineagePage() {
               ]),
             })} />
           )}
-          <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
-            onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
+          <ColumnPicker state={lineageCols} />
           <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />
         </div>
       </div>

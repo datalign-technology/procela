@@ -306,6 +306,9 @@ export default function MappingsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {canWrite && (
+            <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
+          )}
           {mappings.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'mappings',
@@ -319,9 +322,6 @@ export default function MappingsPage() {
                 m.notes,
               ]),
             })} />
-          )}
-          {canWrite && (
-            <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
           )}
           {canWrite && (
             <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
