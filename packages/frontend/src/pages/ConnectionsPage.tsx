@@ -6,6 +6,7 @@ import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from './../components/IconButton';
+import ExportMenu from '../components/ExportMenu';
 import EmptyState from './../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
@@ -755,6 +756,25 @@ export default function ConnectionsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {visibleConnections.length > 0 && (
+            <ExportMenu build={() => ({
+              filenameBase: 'connections',
+              sheetName: 'Connections',
+              headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
+              rows: visibleConnections.map((c) => {
+                const ids = c.systemIds && c.systemIds.length > 0 ? c.systemIds : (c.systemId ? [c.systemId] : []);
+                const sysNames = ids.map((id) => systemNameMap[id]).filter(Boolean).join('; ');
+                return [
+                  c.name,
+                  c.connectionType,
+                  c.status,
+                  sysNames,
+                  c.lastTestedAt ? new Date(c.lastTestedAt).toLocaleString() : '',
+                  c.lastTestResult || '',
+                ];
+              }),
+            })} />
+          )}
           <ColumnPicker state={connCols} />
           <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
         </div>

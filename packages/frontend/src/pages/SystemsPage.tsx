@@ -741,8 +741,19 @@ export default function SystemsPage() {
             <ExportMenu build={() => ({
               filenameBase: 'systems',
               sheetName: 'Systems',
-              headers: ['Name', 'Type', 'Description'],
-              rows: systems.map((s) => [s.name, s.systemType, s.description]),
+              headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
+              rows: systems.map((s) => [
+                s.name,
+                s.systemType,
+                s.vendor || '',
+                s.businessCriticality || '',
+                s.connectivity ? CONNECTIVITY_LABEL[s.connectivity] : '',
+                s.connectionStatus || '',
+                s.ownerName || '',
+                s.deputyOwnerName || '',
+                (s.custodianNames || []).join('; '),
+                s.description,
+              ]),
             })} />
           )}
           <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
