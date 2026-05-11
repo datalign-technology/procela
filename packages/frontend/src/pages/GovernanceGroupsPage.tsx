@@ -974,6 +974,9 @@ export default function GovernanceGroupsPage() {
                                   <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: expected.multiAssign ? '#f5f3ff' : '#f0f9ff', color: expected.multiAssign ? '#6d28d9' : '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     {expected.multiAssign ? 'Multiple' : 'Single'}
                                   </span>
+                                  {!expected.multiAssign && assigned.length > 0 && (
+                                    <span style={{ fontSize: 11, color: '#16a34a', marginLeft: 'auto' }}>✓ Filled</span>
+                                  )}
                                 </div>
                                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>
                                 {assigned.length > 0 && (
@@ -991,48 +994,46 @@ export default function GovernanceGroupsPage() {
                                     })}
                                   </div>
                                 )}
+                                {canAddMore && (
+                                  <div style={{ marginTop: 8, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <select
+                                      style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
+                                      value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
+                                      onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
+                                    >
+                                      <option value="">Person...</option>
+                                      {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
+                                        <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
+                                      disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
+                                      onClick={() => handleAssignDamaRole('person')}
+                                    >
+                                      Assign
+                                    </button>
+                                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
+                                    <select
+                                      style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
+                                      value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
+                                      onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
+                                    >
+                                      <option value="">{'⚙'} Agent...</option>
+                                      {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
+                                        <option key={a.id} value={a.id}>{a.name}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
+                                      disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
+                                      onClick={() => handleAssignDamaRole('agent')}
+                                    >
+                                      Assign
+                                    </button>
+                                  </div>
+                                )}
                               </div>
-                              {canAddMore ? (
-                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                                  <select
-                                    style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
-                                    value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
-                                    onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
-                                  >
-                                    <option value="">Person...</option>
-                                    {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
-                                      <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
-                                    disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
-                                    onClick={() => handleAssignDamaRole('person')}
-                                  >
-                                    Assign
-                                  </button>
-                                  <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
-                                  <select
-                                    style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
-                                    value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
-                                    onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
-                                  >
-                                    <option value="">{'⚙'} Agent...</option>
-                                    {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
-                                      <option key={a.id} value={a.id}>{a.name}</option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
-                                    disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
-                                    onClick={() => handleAssignDamaRole('agent')}
-                                  >
-                                    Assign
-                                  </button>
-                                </div>
-                              ) : !expected.multiAssign && assigned.length > 0 ? (
-                                <span style={{ fontSize: 11, color: '#16a34a', flexShrink: 0 }}>✓ Filled</span>
-                              ) : null}
                             </div>
                           </div>
                         );
