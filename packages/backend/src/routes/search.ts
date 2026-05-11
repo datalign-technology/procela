@@ -2,175 +2,243 @@ import { Router, Request, Response } from 'express';
 import { processNodes } from './process-catalog';
 import { systems } from './systems';
 import { dataAssets } from './data-assets';
-import { organizations } from './organizations';
 import { people } from './people';
 import { dataDomains } from './data-domains';
 import { governanceGroups } from './governance-groups';
 import { mappings } from './mappings';
+import { connections } from './connections';
+import { glossaryTerms } from './business-glossary';
+import { filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
 
+// ──────────────────────────────────────────────────────────────────────────
+// Global search — backs the Cmd-K palette.
+//
+// Procela's growth has produced many surface areas (Systems, Data Assets,
+// Activities, Connections, People, Domains, Glossary…); without a single
+// search front door, users hunt through the nav. This endpoint fans out
+// across the catalog and returns ranked, navigable matches.
+//
+// Org-scoping is mandatory: every searchable entity has an org_id and is
+// filtered through `filterByOrgScope` so cross-tenant leaks aren't
+// possible.
+//
+// Ranking favours name-exact > name-prefix > name-substring >
+// subtitle/description substring. Per-type results are capped so a single
+// noisy entity type can't crowd out the rest.
+// ──────────────────────────────────────────────────────────────────────────
+
+type SearchType =
+  | 'system'
+  | 'data-asset'
+  | 'activity'
+  | 'connection'
+  | 'person'
+  | 'data-domain'
+  | 'governance-group'
+  | 'glossary-term'
+  | 'mapping';
+
 interface SearchResult {
-  type: 'process' | 'system' | 'data-asset' | 'organization' | 'person' | 'data-domain' | 'governance-group' | 'mapping';
+  type: SearchType;
+  /** Stable label shown as the primary text in the palette row. */
+  label: string;
+  /** Optional secondary text (system type, governance tier, role, etc.). */
+  subtitle?: string;
+  /** Where to navigate when the user picks this row. Always uses the
+   *  ?highlight=<id> pattern so pages can scroll to and pulse the row. */
+  path: string;
+  /** Internal ID — included so the frontend can dedup recents. */
   id: string;
-  name: string;
-  description: string;
-  meta: Record<string, string>;
+  /** Internal score — exposed for debugging; frontend hides it. */
+  _score: number;
 }
 
-/** GET /api/v1/search?q=query */
+const PER_TYPE_CAP = 5;
+const GLOBAL_CAP = 30;
+
+/** Score a candidate against the query. Higher is better.
+ *  Returns -1 if neither field matches at all. */
+function scoreMatch(query: string, primary: string, secondary?: string): number {
+  const q = query.toLowerCase();
+  const p = primary.toLowerCase();
+  const s = (secondary || '').toLowerCase();
+  if (p === q) return 1000;
+  if (p.startsWith(q)) return 800;
+  // Word-boundary match — e.g. "ord" finds "Order Management".
+  if (new RegExp(`(^|\\s|-|_|/)${escapeRegex(q)}`).test(p)) return 600;
+  if (p.includes(q)) return 400;
+  if (s.includes(q)) return 200;
+  return -1;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** GET /api/v1/search?q=query[&orgId=]
+ *
+ *  Returns up to GLOBAL_CAP ranked matches across the catalog. Each row
+ *  carries a `path` the frontend can navigate to directly. */
 router.get('/', (req: Request, res: Response) => {
-  const q = (req.query.q as string || '').trim().toLowerCase();
+  const q = (req.query.q as string || '').trim();
+  const orgId = (req.query.orgId as string) || null;
 
   if (!q) {
-    res.json({ success: true, data: { results: [] } });
+    res.json({ success: true, data: { results: [], query: '' } });
     return;
   }
 
-  const results: SearchResult[] = [];
+  const out: SearchResult[] = [];
+  const push = (candidates: SearchResult[]) => {
+    candidates
+      .sort((a, b) => b._score - a._score)
+      .slice(0, PER_TYPE_CAP)
+      .forEach((c) => out.push(c));
+  };
 
-  // Search process nodes
-  for (const node of processNodes) {
-    if (results.length >= 20) break;
-    if (
-      node.name.toLowerCase().includes(q) ||
-      node.description.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'process',
-        id: node.id,
-        name: node.name,
-        description: node.description,
-        meta: { level: node.level, status: node.status },
-      });
-    }
-  }
+  // Systems
+  push(filterByOrgScope(systems, orgId).flatMap((sys) => {
+    const score = scoreMatch(q, sys.name, sys.description);
+    if (score < 0) return [];
+    return [{
+      type: 'system' as const,
+      id: sys.id,
+      label: sys.name,
+      subtitle: [sys.systemType, sys.vendor].filter(Boolean).join(' · ') || undefined,
+      path: `/systems?highlight=${encodeURIComponent(sys.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Search systems
-  for (const sys of systems) {
-    if (results.length >= 20) break;
-    if (
-      sys.name.toLowerCase().includes(q) ||
-      sys.description.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'system',
-        id: sys.id,
-        name: sys.name,
-        description: sys.description,
-        meta: { systemType: sys.systemType },
-      });
-    }
-  }
+  // Data assets
+  push(filterByOrgScope(dataAssets, orgId).flatMap((a) => {
+    const score = scoreMatch(q, a.name, a.description);
+    if (score < 0) return [];
+    return [{
+      type: 'data-asset' as const,
+      id: a.id,
+      label: a.name,
+      subtitle: a.governanceTier ? `${a.governanceTier} tier` : undefined,
+      path: `/data-assets?highlight=${encodeURIComponent(a.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Search data assets
-  for (const asset of dataAssets) {
-    if (results.length >= 20) break;
-    if (
-      asset.name.toLowerCase().includes(q) ||
-      asset.description.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'data-asset',
-        id: asset.id,
-        name: asset.name,
-        description: asset.description,
-        meta: { governanceTier: asset.governanceTier },
-      });
-    }
-  }
+  // Activities (process nodes) — score includes parent path so
+  // "Billing > Invoice > Issue" can be found by typing "issue".
+  push(filterByOrgScope(processNodes, orgId).flatMap((n) => {
+    const score = scoreMatch(q, n.name, n.description);
+    if (score < 0) return [];
+    const parent = n.parentId ? processNodes.find((p) => p.id === n.parentId) : null;
+    return [{
+      type: 'activity' as const,
+      id: n.id,
+      label: n.name,
+      subtitle: [n.level, parent?.name].filter(Boolean).join(' · ') || undefined,
+      path: `/processes?highlight=${encodeURIComponent(n.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Search organizations
-  for (const org of organizations) {
-    if (results.length >= 20) break;
-    if (
-      org.name.toLowerCase().includes(q) ||
-      org.description.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'organization',
-        id: org.id,
-        name: org.name,
-        description: org.description,
-        meta: { type: org.type, industry: org.industry },
-      });
-    }
-  }
+  // Connections
+  push(filterByOrgScope(connections, orgId).flatMap((c) => {
+    const score = scoreMatch(q, c.name);
+    if (score < 0) return [];
+    return [{
+      type: 'connection' as const,
+      id: c.id,
+      label: c.name,
+      subtitle: [c.connectionType, c.status].filter(Boolean).join(' · ') || undefined,
+      path: `/connections?highlight=${encodeURIComponent(c.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Search people
-  for (const person of people) {
-    if (results.length >= 20) break;
-    if (
-      person.name.toLowerCase().includes(q) ||
-      person.email.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'person',
-        id: person.id,
-        name: person.name,
-        description: person.email,
-        meta: { role: person.role, title: person.title },
-      });
-    }
-  }
+  // People
+  push(filterByOrgScope(people, orgId).flatMap((p) => {
+    const score = scoreMatch(q, p.name, p.email);
+    if (score < 0) return [];
+    return [{
+      type: 'person' as const,
+      id: p.id,
+      label: p.name,
+      subtitle: [p.title, p.role].filter(Boolean).join(' · ') || undefined,
+      path: `/people/${p.id}`,
+      _score: score,
+    }];
+  }));
 
-  // Search data domains
-  for (const domain of dataDomains) {
-    if (results.length >= 20) break;
-    if (
-      domain.name.toLowerCase().includes(q) ||
-      domain.description.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'data-domain',
-        id: domain.id,
-        name: domain.name,
-        description: domain.description,
-        meta: { status: domain.status },
-      });
-    }
-  }
+  // Data domains
+  push(filterByOrgScope(dataDomains, orgId).flatMap((d) => {
+    const score = scoreMatch(q, d.name, d.description);
+    if (score < 0) return [];
+    return [{
+      type: 'data-domain' as const,
+      id: d.id,
+      label: d.name,
+      subtitle: d.status || undefined,
+      path: `/data-domains?highlight=${encodeURIComponent(d.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Search governance groups
-  for (const group of governanceGroups) {
-    if (results.length >= 20) break;
-    if (
-      group.name.toLowerCase().includes(q) ||
-      group.description.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'governance-group',
-        id: group.id,
-        name: group.name,
-        description: group.description,
-        meta: { type: group.type, status: group.status },
-      });
-    }
-  }
+  // Governance groups
+  push(filterByOrgScope(governanceGroups, orgId).flatMap((g) => {
+    const score = scoreMatch(q, g.name, g.description);
+    if (score < 0) return [];
+    return [{
+      type: 'governance-group' as const,
+      id: g.id,
+      label: g.name,
+      subtitle: [g.type, g.status].filter(Boolean).join(' · ') || undefined,
+      path: `/governance-groups?highlight=${encodeURIComponent(g.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Search mappings
-  for (const mapping of mappings) {
-    if (results.length >= 20) break;
-    const step = processNodes.find((n) => n.id === mapping.processStepId);
-    const asset = dataAssets.find((a) => a.id === mapping.dataAssetId);
-    const mappingName = `${step?.name || 'Unknown Step'} ↔ ${asset?.name || 'Unknown Asset'}`;
-    const mappingDesc = mapping.notes || `${mapping.linkType} link`;
-    if (
-      mappingName.toLowerCase().includes(q) ||
-      mappingDesc.toLowerCase().includes(q)
-    ) {
-      results.push({
-        type: 'mapping',
-        id: mapping.id,
-        name: mappingName,
-        description: mappingDesc,
-        meta: { linkType: mapping.linkType },
-      });
-    }
-  }
+  // Glossary terms
+  push(filterByOrgScope(glossaryTerms, orgId).flatMap((t) => {
+    const score = scoreMatch(q, t.term, t.definition);
+    if (score < 0) return [];
+    return [{
+      type: 'glossary-term' as const,
+      id: t.id,
+      label: t.term,
+      subtitle: t.definition ? t.definition.slice(0, 80) + (t.definition.length > 80 ? '…' : '') : undefined,
+      path: `/business-glossary?highlight=${encodeURIComponent(t.id)}`,
+      _score: score,
+    }];
+  }));
 
-  // Trim to 20 in case we went over
-  res.json({ success: true, data: { results: results.slice(0, 20) } });
+  // Mappings — useful for "where does X feed Y" searches. Subtitle
+  // shows both ends so the row carries enough context.
+  push(filterByOrgScope(mappings, orgId).flatMap((m) => {
+    const step = processNodes.find((n) => n.id === m.processStepId);
+    const asset = dataAssets.find((a) => a.id === m.dataAssetId);
+    if (!step && !asset) return [];
+    const label = `${step?.name || 'Unknown step'} ↔ ${asset?.name || 'Unknown asset'}`;
+    const score = scoreMatch(q, label, m.notes);
+    if (score < 0) return [];
+    return [{
+      type: 'mapping' as const,
+      id: m.id,
+      label,
+      subtitle: m.linkType,
+      path: `/mappings?highlight=${encodeURIComponent(m.id)}`,
+      _score: score,
+    }];
+  }));
+
+  out.sort((a, b) => b._score - a._score);
+  res.json({
+    success: true,
+    data: {
+      query: q,
+      results: out.slice(0, GLOBAL_CAP),
+    },
+  });
 });
 
 export default router;
