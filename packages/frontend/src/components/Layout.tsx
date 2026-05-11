@@ -23,6 +23,16 @@ import { usePermissions } from '@/hooks/usePermissions';
 type NavItem = { to: string; label: string; icon: string };
 type NavSection = { label: string | null; items: NavItem[]; adminOnly?: boolean };
 
+// Append U+FE0E (VARIATION SELECTOR-15) to single-codepoint symbol
+// icons so the OS renders them as text glyphs, not coloured emoji.
+// Without this, Windows substitutes Segoe UI Emoji for codepoints
+// like U+2638 (Wheel of Dharma, the Settings icon) and paints them
+// in colour. Surrogate-pair icons (e.g. the 📋 clipboard used for
+// Policies) are intentional emoji and are passed through unchanged.
+function textIcon(s: string): string {
+  return [...s].length === 1 && s.charCodeAt(0) < 0xD800 ? s + '︎' : s;
+}
+
 // Five plain-noun buckets so users can find things by what they ARE,
 // not by which DAMA phase they belong to. Order maps to Procela's
 // three layers (Business / Data / Systems / People) with Governance
@@ -436,7 +446,7 @@ export default function Layout() {
                     style={{ cursor: 'pointer', userSelect: 'none' }}
                     title={sidebarCollapsed ? section.label : undefined}
                   >
-                    <span className={styles.navIcon}>{section.items[0]?.icon}</span>
+                    <span className={styles.navIcon}>{textIcon(section.items[0]?.icon || '')}</span>
                     {!sidebarCollapsed && (
                       <>
                         <span style={{ flex: 1 }}>{section.label}</span>
@@ -458,7 +468,7 @@ export default function Layout() {
                         end={item.to === '/'}
                         className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
                       >
-                        <span className={styles.navIcon}>{item.icon}</span>
+                        <span className={styles.navIcon}>{textIcon(item.icon)}</span>
                         {item.label}
                       </NavLink>
                     );
@@ -486,7 +496,7 @@ export default function Layout() {
                             className={() => clsx(styles.navFlyoutLink, isGroupActive && styles.navFlyoutLinkActive)}
                             onClick={() => setFlyoutSection(null)}
                           >
-                            <span className={styles.navIcon}>{item.icon}</span>
+                            <span className={styles.navIcon}>{textIcon(item.icon)}</span>
                             {item.label}
                           </NavLink>
                         );
@@ -509,7 +519,7 @@ export default function Layout() {
                       className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
                       title={sidebarCollapsed ? item.label : undefined}
                     >
-                      <span className={styles.navIcon}>{item.icon}</span>
+                      <span className={styles.navIcon}>{textIcon(item.icon)}</span>
                       {!sidebarCollapsed && item.label}
                     </NavLink>
                   );
@@ -531,7 +541,7 @@ export default function Layout() {
               }
               title={sidebarCollapsed ? item.label : undefined}
             >
-              <span className={styles.navIcon}>{item.icon}</span>
+              <span className={styles.navIcon}>{textIcon(item.icon)}</span>
               {!sidebarCollapsed && item.label}
             </NavLink>
           ))}
