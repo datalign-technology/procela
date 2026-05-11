@@ -645,6 +645,21 @@ export default function DataAssetsPage() {
 
   const handleSave = async (keepOpen: boolean = false) => {
     if (!formValidation.validateAll(form)) return;
+    // Soft-warn on duplicate names within the same org. Case-insensitive,
+    // trim-tolerant. Skipped when editing the same asset back onto itself.
+    // Sometimes legitimate (different divisions both have "Customer
+    // Accounts") so we confirm rather than block.
+    const normalized = form.name.trim().toLowerCase();
+    const collision = assets.find((a) =>
+      a.id !== editingId &&
+      (a.name || '').trim().toLowerCase() === normalized,
+    );
+    if (collision) {
+      const proceed = window.confirm(
+        `An asset called "${collision.name}" already exists in this organization. Save anyway?\n\nClick Cancel if this is a duplicate, or OK if it's a legitimate same-name asset in a different context.`,
+      );
+      if (!proceed) return;
+    }
     const { domainId, retentionDurationValue, retentionDurationUnit, ...rest } = form;
     // Translate the split duration inputs into the structured shape the
     // backend expects. Empty value clears the field.

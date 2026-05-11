@@ -63,6 +63,11 @@ interface UnassignedPerson {
   role: string;
 }
 
+interface DuplicateAssetGroup {
+  name: string;
+  assets: Array<{ id: string; name: string }>;
+}
+
 interface GapData {
   unmappedSteps: UnmappedStep[];
   ungovernedAssets: UngovervedAsset[];
@@ -72,6 +77,7 @@ interface GapData {
   orphanedAssets: OrphanedAsset[];
   unlinkedAssets: UnlinkedAsset[];
   unassignedPeople: UnassignedPerson[];
+  duplicateAssetNames: DuplicateAssetGroup[];
 }
 
 interface GapSummary {
@@ -83,6 +89,7 @@ interface GapSummary {
   orphanedAssets: number;
   unlinkedAssets: number;
   unassignedPeople: number;
+  duplicateAssetNames: number;
   totalGaps: number;
 }
 
@@ -152,6 +159,13 @@ const GAP_SECTIONS: GapSection[] = [
     description: 'People in the organization with no ownership or stewardship assignments.',
     severity: 'info',
     icon: '\u263B',
+  },
+  {
+    key: 'duplicateAssetNames',
+    title: 'Duplicate Asset Names',
+    description: 'Multiple data assets share the same name (case-insensitive). Sometimes legitimate \u2014 e.g., two divisions both have "Customer Accounts" \u2014 but worth a look to decide whether to merge or rename for clarity.',
+    severity: 'info',
+    icon: '\u29C4',
   },
 ];
 
@@ -417,6 +431,18 @@ function renderItems(key: string, items: any[]) {
         <div key={p.id} style={rowStyle}>
           <span style={{ fontWeight: 500, flex: 1 }}>{p.name}</span>
           <span style={mutedStyle}>{p.role.replace('_', ' ')}</span>
+        </div>
+      ));
+
+    case 'duplicateAssetNames':
+      return items.map((g: DuplicateAssetGroup) => (
+        <div key={g.name} style={{ ...rowStyle, alignItems: 'flex-start' }}>
+          <span style={{ fontWeight: 500, flex: 1 }}>
+            {g.name}
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400 }}>
+              ({g.assets.length} assets share this name)
+            </span>
+          </span>
         </div>
       ));
 

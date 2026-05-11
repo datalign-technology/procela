@@ -168,6 +168,24 @@ router.get('/', (req: Request, res: Response) => {
     .filter((s) => (s.connectivity || 'INTEGRATED') === 'INTEGRATED' && !s.ownerPersonId)
     .map((s) => ({ id: s.id, name: s.name, systemType: s.systemType, businessCriticality: s.businessCriticality }));
 
+  // 11. Duplicate-named data assets — same name (case-insensitive, trim)
+  // appears on >1 asset in the same org. Sometimes legitimate (two
+  // divisions both have "Customer Accounts") but worth surfacing so
+  // the user can decide to merge or rename.
+  const duplicateAssetNames: Array<{ name: string; assets: Array<{ id: string; name: string }> }> = [];
+  const nameGroups = new Map<string, Array<{ id: string; name: string }>>();
+  for (const a of assets) {
+    const key = (a.name || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!nameGroups.has(key)) nameGroups.set(key, []);
+    nameGroups.get(key)!.push({ id: a.id, name: a.name });
+  }
+  for (const [, members] of nameGroups) {
+    if (members.length > 1) {
+      duplicateAssetNames.push({ name: members[0].name, assets: members });
+    }
+  }
+
   const summary = {
     unmappedSteps: unmappedSteps.length,
     ungovernedAssets: ungovernedAssets.length,
@@ -179,9 +197,11 @@ router.get('/', (req: Request, res: Response) => {
     unassignedPeople: unassignedPeople.length,
     unassignedConnections: unassignedConnections.length,
     ownerlessSystems: ownerlessSystems.length,
+    duplicateAssetNames: duplicateAssetNames.length,
     totalGaps: unmappedSteps.length + ungovernedAssets.length + ownerlessProcesses.length
       + unownedDomains.length + orphanedAssets.length + unlinkedAssets.length
-      + unassignedConnections.length + ownerlessSystems.length,
+      + unassignedConnections.length + ownerlessSystems.length
+      + duplicateAssetNames.length,
   };
 
   res.json({
@@ -197,6 +217,7 @@ router.get('/', (req: Request, res: Response) => {
       unassignedPeople,
       unassignedConnections,
       ownerlessSystems,
+      duplicateAssetNames,
     },
     summary,
   });
