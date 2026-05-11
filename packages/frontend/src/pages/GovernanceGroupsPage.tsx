@@ -372,6 +372,7 @@ export default function GovernanceGroupsPage() {
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{ personId: string; personName: string } | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
@@ -792,6 +793,18 @@ export default function GovernanceGroupsPage() {
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
+      <ConfirmDialog
+        open={confirmRemoveMember !== null}
+        title={`Remove ${confirmRemoveMember?.personName || 'member'} from this group?`}
+        message="They will no longer be a member of this group. Their governance role assignments (Data Owner, Steward, etc.) are NOT deleted — they keep those roles at the organization level and can be re-added to the group later. To remove a governance role specifically, click the × next to the role chip instead."
+        confirmLabel="Remove from group"
+        onConfirm={async () => {
+          const m = confirmRemoveMember;
+          setConfirmRemoveMember(null);
+          if (m) await handleRemoveMember(m.personId);
+        }}
+        onCancel={() => setConfirmRemoveMember(null)}
+      />
 
       {/* Governance Hierarchy Guidance */}
       {flatGroups.length === 0 ? (
@@ -1176,7 +1189,13 @@ export default function GovernanceGroupsPage() {
                               {new Date(member.since).toLocaleDateString()}
                             </td>
                             <td style={{ ...tdStyle, textAlign: 'center' }}>
-                              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }} onClick={() => handleRemoveMember(member.personId)}>Remove</button>
+                              <button
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-error)', fontSize: 11, padding: '2px 6px' }}
+                                onClick={() => setConfirmRemoveMember({ personId: member.personId, personName: member.personName || 'this member' })}
+                                title="Remove this person from the group (their governance role assignments stay)"
+                              >
+                                Remove from group
+                              </button>
                             </td>
                           </tr>
                         );
