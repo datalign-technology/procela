@@ -75,7 +75,6 @@ const navSections: NavSection[] = [
     items: [
       { to: '/people', label: 'People', icon: '\u263A' },
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
-      { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
       { to: '/skills', label: 'Skills', icon: '\u2605' },
       { to: '/agents', label: 'Agents', icon: '\u2699' },
     ],
@@ -85,6 +84,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/governance-program', label: 'Program', icon: '\u2637' },
       { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
+      { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
       { to: '/governance-policies', label: 'Policies', icon: '\uD83D\uDCCB' },
       { to: '/decision-rights', label: 'Decision Rights', icon: '\u2696' },
       { to: '/raci', label: 'RACI Matrix', icon: '\u25A6' },
