@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { useToastStore } from '../stores/toastStore';
+import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -318,6 +319,7 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
 export default function GovernanceGroupsPage() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
+  const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
 
@@ -961,9 +963,20 @@ export default function GovernanceGroupsPage() {
                               </span>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                  <span style={{ fontSize: 13, fontWeight: 600, color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => openRoleDrawer(expected.roleType)}
+                                    title="Learn about this role"
+                                    style={{
+                                      background: 'none', border: 'none', padding: 0,
+                                      fontSize: 13, fontWeight: 600,
+                                      color: isFilled ? 'var(--color-text)' : 'var(--color-text-muted)',
+                                      cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted',
+                                      textUnderlineOffset: 3, fontFamily: 'inherit',
+                                    }}
+                                  >
                                     {expected.label}
-                                  </span>
+                                  </button>
                                   <span style={{
                                     fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.04em',
                                     background: expected.required ? '#fef2f2' : '#f0f9ff',

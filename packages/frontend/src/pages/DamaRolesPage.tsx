@@ -6,6 +6,7 @@ import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
+import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
@@ -118,6 +119,7 @@ const emptyForm: FormData = { personId: '', roleType: 'CDO', scopeType: 'ORG', s
 export default function DamaRolesPage() {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
+  const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const [roles, setRoles] = useState<DamaRoleAssignment[]>([]);
   const [roleTypes, setRoleTypes] = useState<string[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -446,9 +448,14 @@ export default function DamaRolesPage() {
                   </td>
                   <td style={{ ...tdStyle, fontWeight: 500 }}>{role.personName}</td>
                   <td style={tdStyle}>
-                    <span style={roleBadge(role.roleType)}>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openRoleDrawer(role.roleType); }}
+                      title="Learn about this role"
+                      style={{ ...roleBadge(role.roleType), border: 'none', cursor: 'pointer', font: 'inherit' }}
+                    >
                       {ROLE_TYPE_LABELS[role.roleType] || role.roleType}
-                    </span>
+                    </button>
                   </td>
                   <td style={tdStyle}>{scopeName(role.scopeId)}</td>
                   <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>

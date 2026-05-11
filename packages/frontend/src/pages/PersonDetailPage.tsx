@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { errorToast, successToast } from '../lib/errorToast';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
@@ -107,6 +108,7 @@ function InlineField({ label, value, field, personId, onSaved }: {
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { activeOrgId } = useOrgContext();
   const [data, setData] = useState<Person360Data | null>(null);
   const [allOrgs, setAllOrgs] = useState<FlatOrg[]>([]);
@@ -417,7 +419,19 @@ export default function PersonDetailPage() {
                 padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 6,
               }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType}</div>
+                  <button
+                    type="button"
+                    onClick={() => openRoleDrawer(r.roleType)}
+                    title="Learn about this role"
+                    style={{
+                      background: 'none', border: 'none', padding: 0,
+                      fontSize: 13, fontWeight: 500, color: 'var(--color-text)',
+                      cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted',
+                      textUnderlineOffset: 3, fontFamily: 'inherit',
+                    }}
+                  >
+                    {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
+                  </button>
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                     Organization: {r.scopeName}
                   </div>

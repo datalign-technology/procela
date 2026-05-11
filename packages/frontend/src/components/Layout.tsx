@@ -6,6 +6,7 @@ import Breadcrumbs from './Breadcrumbs';
 import ChatPanel from './ChatPanel';
 import SessionTimeout from './SessionTimeout';
 import ToastContainer from './ToastContainer';
+import RoleDetailDrawer from './RoleDetailDrawer';
 import ShortcutsModal from './ShortcutsModal';
 import ShortcutsHint from './ShortcutsHint';
 import OnboardingWizard from './OnboardingWizard';
@@ -837,6 +838,7 @@ export default function Layout() {
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <RoleDetailDrawer />
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
         {!activeOrgId && !localStorage.getItem('procela:onboarding-complete') && (
           <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/'); }} />
