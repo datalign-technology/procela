@@ -582,6 +582,26 @@ export default function GovernanceGroupsPage() {
       if (assignType === 'person') payload.personId = candidateId;
       else payload.agentId = candidateId;
 
+      // Optimistic update so the chip and counter both move instantly
+      // instead of waiting on the round-trip. Reconciled below by
+      // fetchGroupDetail using server-authoritative data.
+      const optimisticRole: DamaRoleAssignment = {
+        id: `optimistic-${Date.now()}`,
+        personId: assignType === 'person' ? candidateId : null,
+        agentId: assignType === 'agent' ? candidateId : null,
+        personName: assignType === 'person'
+          ? (people.find((p) => p.id === candidateId)?.name || 'Unknown')
+          : null,
+        agentName: assignType === 'agent'
+          ? (agentsList.find((a) => a.id === candidateId)?.name || 'Agent')
+          : null,
+        roleType: assignRoleType,
+        scopeType: 'ORG',
+        scopeId: activeOrgId,
+        since: new Date().toISOString(),
+      } as DamaRoleAssignment;
+      setMemberDamaRoles((prev) => [...prev, optimisticRole]);
+
       await apiClient.post('/dama-roles', payload);
       // Auto-add as group member if person and not already a member
       if (assignType === 'person' && selectedGroupId && selectedGroupDetail) {
@@ -599,20 +619,33 @@ export default function GovernanceGroupsPage() {
       setAssignRolePersonId('');
       setAssignRoleAgentId('');
       setAssignRoleType('');
-      if (selectedGroupId) fetchGroupDetail(selectedGroupId);
+      // Reconcile right panel (memberDamaRoles + selectedGroupDetail) AND
+      // the left tree (member counts) - both got stale before because the
+      // assign path only refreshed the right panel.
+      if (selectedGroupId) await fetchGroupDetail(selectedGroupId);
+      fetchGroups();
     } catch (e: any) {
       const msg = e?.response?.data?.error || 'Failed to assign role';
       addToast('error', msg);
+      // Roll back the optimistic insert by reconciling with the server.
+      if (selectedGroupId) await fetchGroupDetail(selectedGroupId);
     }
   };
 
   const handleRemoveDamaRole = async (roleId: string) => {
+    // Optimistically strip the role so chip + counter update without
+    // waiting on the network. Reconciled below.
+    const prevRoles = memberDamaRoles;
+    setMemberDamaRoles((rs) => rs.filter((r) => r.id !== roleId));
     try {
       await apiClient.delete(`/dama-roles/${roleId}`);
       addToast('success', 'Role removed');
-      if (selectedGroupId) fetchGroupDetail(selectedGroupId);
+      if (selectedGroupId) await fetchGroupDetail(selectedGroupId);
+      fetchGroups();
     } catch {
       addToast('error', 'Failed to remove role');
+      // Server rejected the delete - put the role back so the UI matches.
+      setMemberDamaRoles(prevRoles);
     }
   };
 
