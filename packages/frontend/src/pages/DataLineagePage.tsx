@@ -10,6 +10,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
+import EmptyState from '../components/EmptyState';
 
 interface LineageLink {
   id: string;
@@ -502,17 +503,12 @@ export default function DataLineagePage() {
         <>
           {/* Table */}
           {links.length === 0 ? (
-            <div style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              padding: 40,
-              textAlign: 'center',
-              color: 'var(--color-text-muted)',
-            }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u21C4'}</div>
-              <div>No lineage flows defined yet. Click "+ Add Flow" to get started.</div>
-            </div>
+            <EmptyState
+              icon={'\u21C4'}
+              title="No lineage flows defined yet"
+              description="Lineage flows track how data moves between systems \u2014 which system feeds which. Define the first flow to start building the picture."
+              action={{ label: '+ Add Flow', onClick: openAdd }}
+            />
           ) : (
             <div style={{
               background: 'var(--color-surface)',

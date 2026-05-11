@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
@@ -135,6 +136,7 @@ const DICT_COLUMN_DEFS: Array<{ id: DictColId; label: string; defaultVisible: bo
 
 export default function DataDictionaryPage() {
   const { activeOrgId } = useOrgContext();
+  const navigate = useNavigate();
 
   const dictCols = useColumnPicker<DictColId>('procela.dataDictionary.visibleCols.v1', DICT_COLUMN_DEFS);
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
@@ -447,8 +449,12 @@ export default function DataDictionaryPage() {
             {loading ? (
               <SkeletonRows rows={5} columns={7} />
             ) : assets.length === 0 ? (
-              <EmptyState icon={'📚'} title="No data assets yet"
-                description="Create data assets on the Data Assets page to populate this dictionary." />
+              <EmptyState
+                icon={'📚'}
+                title="No data assets yet"
+                description="The data dictionary mirrors what's in your Data Assets catalog. Add your first asset there and it'll show up here automatically."
+                action={{ label: 'Go to Data Assets', onClick: () => navigate('/data-assets') }}
+              />
             ) : sorted.length === 0 ? (
               <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
                 No assets match your filters.

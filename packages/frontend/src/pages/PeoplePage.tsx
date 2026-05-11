@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { exportCsv } from '../lib/exportCsv';
+import EmptyState from '../components/EmptyState';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -1166,9 +1167,19 @@ export default function PeoplePage() {
               {/* People Table */}
               <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
                 {filteredPeople.length === 0 && !selectedOrgId ? (
-                  <div style={{ textAlign: 'center', padding: '2rem' }}>
-                    <p style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>Select an organization on the left to see and add people.</p>
-                  </div>
+                  <EmptyState
+                    icon={'☻'}
+                    title="Pick an organization"
+                    description="Select an organization on the left to see who's in it and add new people."
+                  />
+                ) : filteredPeople.length === 0 ? (
+                  <EmptyState
+                    icon={'☻'}
+                    title="No people in this organization yet"
+                    description="Add the first person — their email, role, and any DAMA accountabilities. They'll be available across Procela as an owner, steward, or custodian."
+                    action={{ label: '+ Add Person', onClick: openAddPerson }}
+                    secondaryAction={{ label: 'Import from CSV', onClick: () => { setPeopleImportOrgId(selectedOrgId || activeOrgId || ''); setShowPeopleImport(true); } }}
+                  />
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
