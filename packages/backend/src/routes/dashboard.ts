@@ -256,6 +256,7 @@ router.get('/raci', (req: Request, res: Response) => {
   // Build lookup sets for DAMA role types -> person IDs
   const rolePersonMap: Record<string, Set<string>> = {};
   for (const r of filteredRoles) {
+    if (!r.personId) continue;  // agent-held roles have null personId and don't belong in a *person* map
     if (!rolePersonMap[r.roleType]) rolePersonMap[r.roleType] = new Set();
     rolePersonMap[r.roleType].add(r.personId);
   }
