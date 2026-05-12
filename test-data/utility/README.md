@@ -14,7 +14,8 @@ subsidiaries, sized to exercise most of Procela's entity model:
 |---|---|---|
 | `organizations.csv` | Org hierarchy | Import first — everything else references orgs by name. |
 | `systems.csv` | Electric + water operational systems (SCADA, GIS, CIS, AMI, hydraulic modeling) + shared corporate systems. | Import second. |
-| `people-executives.csv` | C-suite and division presidents. | Assign to **Tidewater Utilities** on import. |
+| `people-executives.csv` | C-suite and division presidents, plus the enterprise Data Governance Lead. | Assign to **Tidewater Utilities** on import. |
+| `people-data-owners.csv` | Division-level Data Owners (Electric / Water / Shared Services). | Assign to **Tidewater Utilities** on import. Once imported, assign each person a `DATA_OWNER` governance role scoped to their respective division. |
 | `people-electric-generation.csv` | Generation operations department. | Assign to **Power Generation**. |
 | `people-electric-td.csv` | Transmission & Distribution. | Assign to **Transmission & Distribution**. |
 | `people-electric-customer.csv` | Electric customer ops. | Assign to **Electric Customer Service**. |
@@ -51,6 +52,32 @@ The backend CSV parser uses a naive comma split — it does **not**
 understand quoted commas. Descriptions and titles here avoid commas
 for that reason. If you edit the files, keep that in mind or the row
 will silently skip or land in the wrong column.
+
+## Governance role coverage
+
+The data is seeded so that every governance role in Procela maps to at
+least one real person with a matching job title. Useful when
+demonstrating the Role Detail drawer, RACI matrix, and governance
+group memberships.
+
+| Role | Person | File | Scope it's normally assigned at |
+|---|---|---|---|
+| Chief Data Officer | Susan Chen | `people-executives.csv` | Enterprise (Tidewater Utilities) |
+| Data Governance Lead | Marisol Hadid | `people-executives.csv` | Enterprise |
+| Data Owner | Devon Kershaw / Yusuf Bashir / Camille Petersen | `people-data-owners.csv` | Division (one each for Electric / Water / Shared Services) |
+| Business Data Steward | one per department (titled `Data Steward [Domain]`) | the `people-<dept>.csv` files | Department |
+| Technical Data Steward | Linnea Forsberg | `people-it.csv` | Enterprise / IT |
+| Data Quality Analyst | Rashid Banerjee | `people-it.csv` | Enterprise / IT |
+| Data Architect | Jocelyn Mercer | `people-it.csv` | Enterprise |
+| Data Custodian | Marisa Vega | `people-it.csv` | Enterprise / IT |
+| Data Engineer | Kwame Osei | `people-it.csv` | Enterprise / IT |
+| Database Administrator | Ezra Bloom | `people-it.csv` | Enterprise / IT |
+
+Data Owner is the only role where the test data deliberately includes
+multiple people — one per division — because that role is normally
+held at the division (or domain) level rather than the enterprise.
+Other roles are scoped to a single person here just so the demo data
+stays small; nothing prevents you from adding more.
 
 ## Why this data exists
 
