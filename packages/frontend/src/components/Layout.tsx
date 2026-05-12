@@ -73,7 +73,7 @@ const navSections: NavSection[] = [
   {
     label: 'People',
     items: [
-      { to: '/people', label: 'People', icon: '\u263A' },
+      { to: '/people', label: 'People', icon: '\uD83D\uDC65' },
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/skills', label: 'Skills', icon: '\u2605' },
       { to: '/agents', label: 'Agents', icon: '\u2699' },
