@@ -68,19 +68,24 @@ export default function HelpPage() {
       {/* 2. Navigation */}
       <div style={sectionStyle}>
         <h2 style={h2Style}>2. Navigation</h2>
-        <p style={pStyle}>The sidebar has 6 sections. Each page shows a tab strip for switching between related pages.</p>
+        <p style={pStyle}>The sidebar is organized into Dashboard plus five plain-noun buckets, so you can find pages by what they ARE rather than which DAMA phase they belong to.</p>
         <ul style={listStyle}>
-          <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs</li>
-          <li><strong>Catalog</strong> &mdash; Processes, Data Assets, Systems, Mappings, Glossary, Data Dictionary</li>
-          <li><strong>Govern</strong> &mdash; Program, Data Domains, Groups, Decision Rights, RACI, Policies</li>
-          <li><strong>Operate</strong> &mdash; Operations Manual, Procedures (SOPs), Calendar, Work (tasks/issues)</li>
-          <li><strong>Analyze</strong> &mdash; Control Tower, Enterprise View, Gap Detection, Data Quality, Lineage, Reports</li>
-          <li><strong>Administer</strong> &mdash; Organizations, People, Connections, Agents, Settings</li>
+          <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
+          <li><strong>Processes</strong> &mdash; Processes, Mappings. Define the work; link it to data.</li>
+          <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
+          <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
+          <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
+          <li><strong>Governance</strong> &mdash; Program, Groups, Roles, Policies, Decision Rights, RACI Matrix, Manuals, Procedures, Calendar, Tasks &amp; Issues, Control Tower, Reports.</li>
         </ul>
-        <h3 style={h3Style}>Search</h3>
-        <p style={pStyle}>Press <strong>Cmd/Ctrl+K</strong> or <strong>/</strong> to open global search. Results link directly to the matching item.</p>
-        <h3 style={h3Style}>Organization Selector</h3>
-        <p style={pStyle}>The "Working in" dropdown in the header scopes all data to the selected organization.</p>
+        <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
+
+        <h3 style={h3Style}>Header controls</h3>
+        <ul style={listStyle}>
+          <li><strong>Search box (Cmd/Ctrl + K or /)</strong> &mdash; Universal command palette. Searches processes, data assets, systems, people, domains, and groups in your active org. Results are ranked and link directly to the matching item.</li>
+          <li><strong>Working in &hellip;</strong> &mdash; Organization selector. Scopes every page to the selected org.</li>
+          <li><strong>Plain / DAMA toggle</strong> &mdash; Flips jargon-heavy labels (Custodian &harr; Operator, Governance Tier &harr; Trust Level, Uncertified/Managed/Certified &harr; Untrusted/Managed/Trusted). Plain is the default; preference persists in your browser.</li>
+          <li><strong>Cozy / Compact toggle</strong> &mdash; Row density. Compact halves vertical padding for power-user table scanning. Persists in your browser.</li>
+        </ul>
       </div>
 
       {/* 3. Dashboard */}
@@ -100,153 +105,188 @@ export default function HelpPage() {
         <p style={pStyle}>Click <strong>Customize</strong> to reorder or hide dashboard sections. Layout is saved automatically.</p>
       </div>
 
-      {/* 4. Catalog */}
+      {/* 4. Processes */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>4. Catalog</h2>
-        <h3 style={h3Style}>Processes</h3>
+        <h2 style={h2Style}>4. Processes</h2>
+        <h3 style={h3Style}>Process Catalog</h3>
         <ul style={listStyle}>
-          <li>Hierarchical process catalog: Value Stream &rarr; Process &rarr; Activity</li>
-          <li>AI-powered Value Stream Wizard generates industry-specific process hierarchies</li>
-          <li>Clone value streams across divisions with one click</li>
-          <li>Level-specific attributes: frequency, risk level, responsible role, automation level</li>
-          <li>Status lifecycle: Draft &rarr; Active &rarr; Deprecated</li>
-        </ul>
-        <h3 style={h3Style}>Data Assets</h3>
-        <ul style={listStyle}>
-          <li>Register data assets in business terms with governance tier (Uncertified/Managed/Certified)</li>
-          <li>Category filter: Operational, Governance, Reference, Analytical, Master</li>
-          <li>Inline editing for governance tier and health score directly in the table</li>
-          <li><strong>Link to Source</strong>: connect assets to database tables, files, or APIs in the add/edit form</li>
-          <li>Expandable columns with data types and quality rules per column</li>
-          <li>Bulk operations: set tier, assign owner for multiple assets at once</li>
-        </ul>
-        <h3 style={h3Style}>Systems</h3>
-        <ul style={listStyle}>
-          <li>Register applications and platforms with type sidebar (ERP, CRM, GIS, etc.)</li>
-          <li>Business criticality rating (High/Medium/Low) with filter</li>
-          <li>Inline editing for name and system type</li>
+          <li>Hierarchical process catalog: Value Stream &rarr; Process &rarr; Activity (with optional Sub-Process and Task levels for detail).</li>
+          <li>AI-powered Value Stream Wizard generates industry-specific process hierarchies; one-click clone across divisions.</li>
+          <li>Level-specific attributes: frequency, risk level, responsible role, automation level.</li>
+          <li>Status lifecycle: Draft &rarr; Active &rarr; Deprecated.</li>
         </ul>
         <h3 style={h3Style}>Mappings</h3>
         <ul style={listStyle}>
-          <li>Link data assets to process activities to track dependencies</li>
-          <li>Batch Mapping Wizard: matrix interface for creating multiple mappings at once</li>
+          <li>Link data assets to process activities to track which data supports which process step.</li>
+          <li>Batch Mapping Wizard: matrix interface for creating multiple mappings at once.</li>
+          <li>Mappings can be AI-suggested or user-defined; the page tracks which is which so suggestion overrides are auditable.</li>
+        </ul>
+      </div>
+
+      {/* 5. Data */}
+      <div style={sectionStyle}>
+        <h2 style={h2Style}>5. Data</h2>
+        <h3 style={h3Style}>Data Assets</h3>
+        <ul style={listStyle}>
+          <li>Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted &mdash; DAMA mode calls these Uncertified / Managed / Certified).</li>
+          <li>Sidebar filter by data type: Operational, Governance, Reference, Analytical, Master.</li>
+          <li>Inline editing for Trust Level and health score directly in the table.</li>
+          <li><strong>Link to Source</strong> connects an asset to a database table, file, or API in the add/edit form.</li>
+          <li>Expandable columns show data types and quality rules per column.</li>
+          <li>Bulk set Trust Level / owner / steward.</li>
+          <li><strong>Where Used</strong> in the detail modal shows every process, mapping, and policy referencing the asset.</li>
         </ul>
         <h3 style={h3Style}>Business Glossary</h3>
         <ul style={listStyle}>
-          <li>Searchable dictionary of agreed-upon business terms</li>
-          <li>Group by Category (Business, Technical, Regulatory, Metric) or Alphabetical</li>
-          <li>Industry-specific seed terms based on your organization&apos;s industry</li>
-          <li>Approval workflow: Draft &rarr; Proposed &rarr; Approved &rarr; Deprecated</li>
+          <li>Searchable dictionary of agreed-upon business terms.</li>
+          <li>Group by category (Business, Technical, Regulatory, Metric) or alphabetically.</li>
+          <li>Industry-specific seed terms based on your organization's industry.</li>
+          <li>Approval workflow: Draft &rarr; Proposed &rarr; Approved &rarr; Deprecated.</li>
         </ul>
         <h3 style={h3Style}>Data Dictionary</h3>
         <ul style={listStyle}>
-          <li>Publishable technical catalog of all data assets organized by domain</li>
-          <li>Shows columns, data types, ownership, source connections, health scores</li>
-          <li><strong>Print / Export PDF</strong> button for sharing with stakeholders and auditors</li>
+          <li>Publishable technical catalog of all data assets organized by domain.</li>
+          <li>Shows columns, data types, ownership, source connections, health scores.</li>
+          <li>Export to CSV, Excel, JSON, or clipboard via the Export button.</li>
         </ul>
-      </div>
-
-      {/* 5. Govern */}
-      <div style={sectionStyle}>
-        <h2 style={h2Style}>5. Govern</h2>
-        <h3 style={h3Style}>Governance Program</h3>
+        <h3 style={h3Style}>Data Lineage</h3>
         <ul style={listStyle}>
-          <li>4-phase setup journey with progress tracking per phase</li>
-          <li>Define governance scope (what&apos;s in/out), guiding principles, and operating model</li>
-          <li>Phase completion is computed automatically from your actual data</li>
-          <li>Next-action recommendations guide you to the right page</li>
+          <li>Upstream / downstream data flow visualization across systems.</li>
+          <li>Toggle between table and graph views.</li>
         </ul>
         <h3 style={h3Style}>Data Domains</h3>
         <ul style={listStyle}>
-          <li>Logical groupings of data assets (e.g., Customer Data, Financial Data)</li>
-          <li>Assign owners and stewards per domain</li>
-          <li>Option to auto-create a Data Stewardship Team when creating a domain</li>
-          <li>AI-generated domain suggestions based on your industry</li>
+          <li>Logical groupings of data assets (e.g., Customer Data, Financial Data).</li>
+          <li>Assign owner and stewards per domain.</li>
+          <li>Option to auto-create a Data Stewardship Team when creating a domain.</li>
+          <li>AI-generated domain suggestions based on your industry.</li>
+        </ul>
+        <h3 style={h3Style}>Data Quality</h3>
+        <ul style={listStyle}>
+          <li>Quality rules per asset / column with dimensions (completeness, accuracy, timeliness, etc.).</li>
+          <li>Weighted scoring rolls up to an asset-level health score.</li>
+        </ul>
+      </div>
+
+      {/* 6. Systems */}
+      <div style={sectionStyle}>
+        <h2 style={h2Style}>6. Systems</h2>
+        <h3 style={h3Style}>Systems</h3>
+        <ul style={listStyle}>
+          <li>Register applications and platforms. Sidebar filter by type (ERP, CRM, GIS, etc.).</li>
+          <li>Business criticality rating (High / Medium / Low) with filter.</li>
+          <li>Inline editing for name and system type.</li>
+          <li>Owner, Deputy Owner, and Operators (DAMA: Custodians) per system &mdash; the people on the hook day-to-day.</li>
+          <li>Where Used panel shows every data asset, connection, and process touching the system.</li>
+        </ul>
+        <h3 style={h3Style}>Connections</h3>
+        <ul style={listStyle}>
+          <li>Database, File Storage, API, Data Warehouse, and Spreadsheet connections.</li>
+          <li>Test connection (TCP / HTTP probe) and Discover (list assets reachable through the connection).</li>
+          <li>Many-to-many: a connection can serve multiple systems.</li>
+        </ul>
+      </div>
+
+      {/* 7. People */}
+      <div style={sectionStyle}>
+        <h2 style={h2Style}>7. People</h2>
+        <h3 style={h3Style}>People</h3>
+        <ul style={listStyle}>
+          <li>Team members with app roles (Super Admin, Org Admin, Editor, Contributor, Viewer).</li>
+          <li>Import from CSV (per organization). Each row needs name, email, role, title.</li>
+          <li>Click any role chip on a person's profile to open the Role Detail drawer.</li>
+        </ul>
+        <h3 style={h3Style}>Organizations</h3>
+        <ul style={listStyle}>
+          <li>Hierarchical structure (company &rarr; division &rarr; department &rarr; team).</li>
+          <li>Import from CSV / JSON, tree visualization, "Working in" selector scopes the rest of the app.</li>
+        </ul>
+        <h3 style={h3Style}>Skills</h3>
+        <ul style={listStyle}>
+          <li>Catalog of competencies attached to people. Seed standard DAMA-aligned skills with one click.</li>
+          <li>The Role Detail drawer reads from this catalog to show "Skills typically needed" for each governance role &mdash; chips appear solid when the skill is in your org's catalog, dashed if not yet seeded.</li>
+        </ul>
+        <h3 style={h3Style}>Agents</h3>
+        <ul style={listStyle}>
+          <li>AI agent registry for governance execution &mdash; pipelines, bots, service accounts.</li>
+          <li>Agents can hold governance roles too (e.g., an automated DQ agent as Data Quality Analyst).</li>
+        </ul>
+      </div>
+
+      {/* 8. Governance */}
+      <div style={sectionStyle}>
+        <h2 style={h2Style}>8. Governance</h2>
+        <h3 style={h3Style}>Governance Program</h3>
+        <ul style={listStyle}>
+          <li>4-phase setup journey with progress tracking per phase.</li>
+          <li>Define governance scope (what's in / out), guiding principles, operating model.</li>
+          <li>Phase completion is computed automatically from your actual data; next-action recommendations link to the right page.</li>
         </ul>
         <h3 style={h3Style}>Governance Groups</h3>
         <ul style={listStyle}>
-          <li>Hierarchical governance bodies: Council &rarr; Office &rarr; Committee &rarr; Stewardship Teams</li>
-          <li>Generate standard DAMA structure with one click</li>
-          <li>Recommended groups based on your data domains (Explore Recommendations)</li>
-          <li>Inline DAMA role assignment per group member</li>
+          <li>Hierarchical governance bodies: Council &rarr; Office &rarr; Committee &rarr; Stewardship Teams &rarr; Working Groups &rarr; Communities of Practice.</li>
+          <li>Generate the standard DAMA structure with one click. Explore Recommendations suggests additional groups based on your data domains.</li>
+          <li>Per group: an Expected Roles panel lists the governance roles the group should have, the required vs optional split, and current fill status. Click any role label to open the Role Detail drawer.</li>
+          <li>Two remove actions are distinct: the <strong>x on a role chip</strong> removes that specific role assignment; <strong>Remove from group</strong> in the members table removes the person from the group entirely (their role assignments survive at the org level).</li>
+        </ul>
+        <h3 style={h3Style}>Governance Roles</h3>
+        <ul style={listStyle}>
+          <li>DAMA governance role assignments (CDO, Data Governance Lead, Data Owner, Stewards, etc.).</li>
+          <li>Sidebar filter by role type with live counts; search box matches person, organization, or role label.</li>
+          <li><strong>Group by</strong> toggle: By Person (one row per person with their roles as chips), By Role (one section per role listing the people who hold it), or Flat (legacy assignment-per-row with bulk select).</li>
+          <li>Click any role chip anywhere in the app to open the <strong>Role Detail drawer</strong> &mdash; plain-language summary, day-to-day responsibilities, typical RACI authority, groups that need the role, current assignees in your org, and required skills.</li>
         </ul>
         <h3 style={h3Style}>Decision Rights</h3>
         <ul style={listStyle}>
-          <li>Document who Decides, Recommends, Approves, and is Informed for each governance decision</li>
-          <li>10 standard seed decisions (approve policy, grant exception, close issue, etc.)</li>
+          <li>Document who Decides, Recommends, Approves, and is Informed for each governance decision.</li>
+          <li>Sidebar of categories with counts; search box matches decision name, description, decider, or escalation path.</li>
+          <li>Rows are collapsible: default view shows decision + category + decider, click a row to reveal the full R / A / C / I and escalation panel.</li>
+          <li>10 seed decisions (approve policy, grant exception, close issue, etc.) ship out of the box.</li>
         </ul>
         <h3 style={h3Style}>RACI Matrix</h3>
         <ul style={listStyle}>
-          <li>Responsibility assignments per process: Responsible, Accountable, Consulted, Informed</li>
-          <li>Auto-derived from ownership data and governance group membership</li>
+          <li>Responsibility assignments per process step: Responsible, Accountable, Consulted, Informed.</li>
+          <li>Auto-derived from process / asset ownership and governance group membership; click a cell to cycle R &rarr; A &rarr; C &rarr; I &rarr; clear as a manual override.</li>
+          <li>Validation warnings surface RACI rule violations (no R, no A, multiple A's).</li>
+          <li>Export to CSV / Excel / JSON respects your active filters and hide-empty-columns setting.</li>
         </ul>
-        <h3 style={h3Style}>Policies &amp; Controls</h3>
+        <h3 style={h3Style}>Policies</h3>
         <ul style={listStyle}>
-          <li>Create governance policies with auto-generated codes (POL-001)</li>
-          <li>Review cycles: quarterly, semi-annual, annual, biennial</li>
-          <li>Controls linked to policies with type (Preventive/Detective/Corrective)</li>
-          <li>Automation mode per control: Human, Agent, or Hybrid</li>
+          <li>Governance policies with auto-generated codes (POL-001), review cycles (quarterly &hellip; biennial), and linked controls.</li>
+          <li>Controls have a type (Preventive / Detective / Corrective) and an automation mode (Human / Agent / Hybrid).</li>
         </ul>
-        <h3 style={h3Style}>Dependency Enforcement</h3>
-        <p style={pStyle}>
-          Governance pages show prerequisite banners when prior steps haven&apos;t been completed.
-          For example, the RACI page shows "Create domains and governance groups first" until those exist.
-        </p>
-      </div>
-
-      {/* 6. Operate */}
-      <div style={sectionStyle}>
-        <h2 style={h2Style}>6. Operate</h2>
         <h3 style={h3Style}>Operations Manual</h3>
         <ul style={listStyle}>
-          <li>Role-specific runbooks for 7 DAMA roles (CDO, Governance Lead, Data Owner, etc.)</li>
-          <li>Daily, weekly, monthly, and quarterly activities for each role</li>
-          <li>Escalation paths with clear guidance on when and how to escalate</li>
+          <li>Role-specific runbooks for the 10 governance roles, with daily / weekly / monthly / quarterly activities and escalation paths.</li>
         </ul>
         <h3 style={h3Style}>Procedures (SOPs)</h3>
         <ul style={listStyle}>
-          <li>Step-by-step procedures for common governance activities</li>
-          <li>5 seed SOPs: onboard data asset, quality incident, access request, escalation, quarterly review</li>
-          <li>Each step has a title, description, and estimated time</li>
+          <li>Step-by-step procedures for common governance activities. 5 seed SOPs (onboard data asset, quality incident, access request, escalation, quarterly review).</li>
         </ul>
         <h3 style={h3Style}>Governance Calendar</h3>
         <ul style={listStyle}>
-          <li>Recurring governance events: Council meetings, Committee syncs, stewardship huddles</li>
-          <li>Cadence options: weekly, biweekly, monthly, quarterly, semi-annual, annual</li>
-          <li>Auto-generate governance tasks per attendee when an event occurs</li>
-          <li>Seed 4 standard events with one click</li>
+          <li>Recurring events (Council meetings, Committee syncs, stewardship huddles) with cadence options weekly through annual.</li>
+          <li>Auto-generates governance tasks per attendee when an event occurs.</li>
         </ul>
-        <h3 style={h3Style}>Governance Work</h3>
+        <h3 style={h3Style}>Tasks &amp; Issues</h3>
         <ul style={listStyle}>
-          <li><strong>Tasks</strong>: workflow states (Draft &rarr; Open &rarr; In Progress &rarr; Pending Review &rarr; Completed), priority, assignee, due dates</li>
-          <li><strong>Issues</strong>: 9 types (Metadata, Data Quality, Classification, Ownership, Policy, Access, Lineage, Compliance, Workflow), severity levels</li>
-          <li>Steward onboarding: auto-creates 4 tasks when a steward role is assigned (7/14/21/90-day milestones)</li>
+          <li><strong>Tasks</strong> &mdash; workflow states (Draft &rarr; Open &rarr; In Progress &rarr; Pending Review &rarr; Completed), priority, assignee, due dates.</li>
+          <li><strong>Issues</strong> &mdash; 9 types (Metadata, Data Quality, Classification, Ownership, Policy, Access, Lineage, Compliance, Workflow), severity levels.</li>
+          <li>Steward onboarding: auto-creates 4 tasks when a steward role is assigned (7 / 14 / 21 / 90-day milestones).</li>
         </ul>
-      </div>
-
-      {/* 7. Analyze */}
-      <div style={sectionStyle}>
-        <h2 style={h2Style}>7. Analyze</h2>
+        <h3 style={h3Style}>Control Tower</h3>
         <ul style={listStyle}>
-          <li><strong>Control Tower</strong> &mdash; Operational dashboard: open issues/tasks, policy coverage, automation rate, coverage gaps</li>
-          <li><strong>Enterprise View</strong> &mdash; Full cross-entity graph: processes, systems, assets, domains, people and their connections</li>
-          <li><strong>Gap Detection</strong> &mdash; Unmapped process steps and ungoverned data assets</li>
-          <li><strong>Data Quality</strong> &mdash; Quality rules per asset/column, dimensions (completeness, accuracy, timeliness), health score computation</li>
-          <li><strong>Data Lineage</strong> &mdash; Upstream/downstream data flow visualization</li>
-          <li><strong>Reports</strong> &mdash; Executive Report (printable/PDF) and Scorecard with governance health dimensions</li>
+          <li>Operational dashboard: open issues / tasks, policy coverage, automation rate, coverage gaps by domain / asset / process.</li>
         </ul>
-      </div>
-
-      {/* 8. Administer */}
-      <div style={sectionStyle}>
-        <h2 style={h2Style}>8. Administer</h2>
+        <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>
-          <li><strong>Organizations</strong> &mdash; Hierarchical structure (company &rarr; division &rarr; department &rarr; team), import from CSV/JSON, tree visualization</li>
-          <li><strong>People</strong> &mdash; Team members with app roles (Super Admin, Org Admin, Editor, Contributor, Viewer), governance role assignments, org/role filters</li>
-          <li><strong>Connections</strong> &mdash; Database, File Storage, API, Data Warehouse, Spreadsheet connections with test and discover capabilities</li>
-          <li><strong>Agents</strong> &mdash; AI agent registry for future agent-enabled governance execution</li>
-          <li><strong>Settings</strong> &mdash; Authentication (Dev Mode, Microsoft Entra ID, Okta), API configuration, backup and restore</li>
+          <li>Executive Report (printable / PDF) and Scorecard with governance health dimensions, plus Enterprise View (full cross-entity graph) and Gap Detection.</li>
         </ul>
+        <h3 style={h3Style}>Dependency Enforcement</h3>
+        <p style={pStyle}>
+          Governance pages show prerequisite banners when prior steps haven't been completed.
+          For example, the RACI page shows "Create domains and governance groups first" until those exist.
+        </p>
       </div>
 
       {/* 9. Key Concepts */}
@@ -255,44 +295,59 @@ export default function HelpPage() {
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
-          structure, roles, and processes are aligned with DAMA best practices.
+          structure, roles, and processes align with DAMA best practices.
         </p>
-        <h3 style={h3Style}>Governance Tiers</h3>
+        <h3 style={h3Style}>Plain English vs. DAMA terminology</h3>
+        <p style={pStyle}>
+          The header has a <strong>Plain / DAMA</strong> toggle that flips jargon-heavy labels between business-friendly and canonical DAMA wording. Plain is the default so business users aren't met with unfamiliar terms; data professionals can switch to DAMA mode for the formal vocabulary.
+        </p>
         <ul style={listStyle}>
-          <li><strong>Uncertified</strong> &mdash; Catalogued but not yet governed. No formal ownership or quality rules.</li>
-          <li><strong>Managed</strong> &mdash; Owner and steward assigned, basic quality rules in place.</li>
-          <li><strong>Certified</strong> &mdash; Fully governed, audit-ready data with complete documentation.</li>
+          <li><strong>Custodian</strong> (DAMA) &harr; <strong>Operator</strong> (Plain)</li>
+          <li><strong>Governance Tier</strong> (DAMA) &harr; <strong>Trust Level</strong> (Plain)</li>
+          <li><strong>Uncertified / Managed / Certified</strong> &harr; <strong>Untrusted / Managed / Trusted</strong></li>
         </ul>
-        <h3 style={h3Style}>DAMA Roles</h3>
+        <h3 style={h3Style}>Trust Level (Governance Tier)</h3>
         <ul style={listStyle}>
-          <li>Chief Data Officer (CDO), Data Governance Lead, Data Owner, Business Data Steward</li>
-          <li>Technical Data Steward, Data Quality Analyst, Data Custodian</li>
-          <li>Data Architect, Data Engineer, Database Administrator</li>
+          <li><strong>Untrusted (Uncertified)</strong> &mdash; Catalogued but not yet governed. No formal ownership or quality rules.</li>
+          <li><strong>Managed</strong> &mdash; Owner and steward assigned, basic quality rules in place.</li>
+          <li><strong>Trusted (Certified)</strong> &mdash; Fully governed, audit-ready data with complete documentation.</li>
+        </ul>
+        <h3 style={h3Style}>Governance Roles</h3>
+        <p style={pStyle}>Click any role chip anywhere in the app to open the Role Detail drawer for a full breakdown of what each role does.</p>
+        <ul style={listStyle}>
+          <li><strong>Strategic / Executive</strong>: Chief Data Officer (CDO), Data Governance Lead</li>
+          <li><strong>Business accountability</strong>: Data Owner, Business Data Steward</li>
+          <li><strong>Technical</strong>: Technical Data Steward, Data Architect, Data Engineer, Database Administrator</li>
+          <li><strong>Specialty</strong>: Data Quality Analyst, Data Custodian (Operator)</li>
         </ul>
         <h3 style={h3Style}>Automation Modes</h3>
         <ul style={listStyle}>
-          <li><strong>Human</strong> &mdash; Task performed entirely by a person</li>
-          <li><strong>Agent</strong> &mdash; Task performed by an AI agent</li>
-          <li><strong>Hybrid</strong> &mdash; Agent recommends, human approves</li>
+          <li><strong>Human</strong> &mdash; Task performed entirely by a person.</li>
+          <li><strong>Agent</strong> &mdash; Task performed by an AI agent.</li>
+          <li><strong>Hybrid</strong> &mdash; Agent recommends, human approves.</li>
         </ul>
+        <h3 style={h3Style}>Export formats</h3>
+        <p style={pStyle}>
+          Every list page has an Export button with format choices: CSV (open in any spreadsheet), Excel (.xlsx with proper types and sheet names), JSON (re-import or feed to the AI assistant), and Copy to clipboard (paste straight into Sheets / Numbers / a doc).
+        </p>
       </div>
 
       {/* 10. Keyboard Shortcuts */}
       <div style={sectionStyle}>
         <h2 style={h2Style}>10. Keyboard Shortcuts</h2>
         <ul style={listStyle}>
-          <li><strong>Cmd/Ctrl + K</strong> or <strong>/</strong> &mdash; Focus search</li>
-          <li><strong>Shift + ?</strong> &mdash; Open shortcuts reference</li>
+          <li><strong>Cmd / Ctrl + K</strong> or <strong>/</strong> &mdash; Open the command palette (universal search).</li>
+          <li><strong>Shift + ?</strong> &mdash; Open the shortcuts reference modal.</li>
           <li><strong>g then d</strong> &mdash; Go to Dashboard</li>
-          <li><strong>g then o</strong> &mdash; Go to Organizations</li>
-          <li><strong>g then p</strong> &mdash; Go to People</li>
           <li><strong>g then c</strong> &mdash; Go to Processes</li>
-          <li><strong>g then a</strong> &mdash; Go to Data Assets</li>
-          <li><strong>g then s</strong> &mdash; Go to Systems</li>
           <li><strong>g then m</strong> &mdash; Go to Mappings</li>
+          <li><strong>g then a</strong> &mdash; Go to Data Assets</li>
           <li><strong>g then q</strong> &mdash; Go to Data Quality</li>
           <li><strong>g then l</strong> &mdash; Go to Data Lineage</li>
-          <li><strong>Escape</strong> &mdash; Close search, modals, and dropdowns</li>
+          <li><strong>g then s</strong> &mdash; Go to Systems</li>
+          <li><strong>g then p</strong> &mdash; Go to People</li>
+          <li><strong>g then o</strong> &mdash; Go to Organizations</li>
+          <li><strong>Escape</strong> &mdash; Close the palette, drawers, modals, and dropdowns.</li>
         </ul>
       </div>
 
@@ -326,8 +381,22 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>How do I publish a Data Dictionary?</h3>
         <p style={pStyle}>
-          Go to Catalog &rarr; Data Dictionary. Filter by domain, classification, or tier if needed, then click
-          "Print / Export PDF" to generate a clean document for sharing with stakeholders.
+          Go to Data &rarr; Data Dictionary. Filter by domain, classification, or trust level if needed, then click the Export button and choose Excel, CSV, JSON, or copy to clipboard.
+        </p>
+
+        <h3 style={h3Style}>How do I learn what a governance role does?</h3>
+        <p style={pStyle}>
+          Click any role chip or label anywhere in the app &mdash; on Governance Groups, on the Governance Roles page, on a person's profile. A side drawer opens with the role's plain-language summary, day-to-day responsibilities, typical RACI decision authority, the governance groups that need it, who currently holds it in your org, and the skills typically needed.
+        </p>
+
+        <h3 style={h3Style}>How do I switch between plain English and DAMA terminology?</h3>
+        <p style={pStyle}>
+          Use the Plain / DAMA toggle in the header next to the density toggle. Plain is the default; the choice persists in your browser. It flips labels like Custodian / Operator, Governance Tier / Trust Level, and Uncertified / Untrusted across the app.
+        </p>
+
+        <h3 style={h3Style}>Why are there two ways to remove someone from a governance group?</h3>
+        <p style={pStyle}>
+          The <strong>x</strong> next to a role chip removes one role assignment (the person stays in the group). <strong>Remove from group</strong> in the members table is the destructive option &mdash; the person leaves the group entirely, but their governance role assignments at the org level survive.
         </p>
 
         <h3 style={h3Style}>Can I undo a delete?</h3>
