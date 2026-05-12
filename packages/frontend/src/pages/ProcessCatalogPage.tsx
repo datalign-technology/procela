@@ -10,6 +10,7 @@ import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import CommentsPanel from '../components/CommentsPanel';
+import ActivityFeed from '../components/ActivityFeed';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
@@ -819,6 +820,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 entityId={node.id}
                 entityLabel={`${LEVEL_CONFIG[node.level].label}: ${node.name}`}
               />
+            </div>
+          )}
+          {isExpanded && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                Activity
+              </div>
+              <ActivityFeed entityType="ProcessNode" entityId={node.id} inline initialRows={5} />
             </div>
           )}
           {/* Guided prompt for missing required children */}

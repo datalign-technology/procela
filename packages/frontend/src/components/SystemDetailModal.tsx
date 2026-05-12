@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
 import CommentsPanel from './CommentsPanel';
+import ActivityFeed from './ActivityFeed';
 import { useTierLabel } from '../lib/governanceTier';
 import { useTerm } from '../lib/terminology';
 
@@ -216,6 +217,12 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
                 entityId={systemId}
                 entityLabel={`System: ${data.system.name}`}
               />
+            </div>
+            <div style={{ marginTop: 20 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                Activity
+              </h3>
+              <ActivityFeed entityType="System" entityId={systemId} inline initialRows={5} />
             </div>
           </>
         )}

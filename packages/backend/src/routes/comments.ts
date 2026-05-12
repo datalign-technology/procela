@@ -4,6 +4,7 @@ import { loadStore, saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { people } from './people';
 import { createNotification } from './notifications';
+import { auditService } from '../services/audit.service';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMENTS
@@ -191,6 +192,19 @@ router.post('/', (req: Request, res: Response) => {
     'Comment created',
   );
 
+  // Comments emit audit events so the per-entity activity feed has a
+  // single source of truth - the feed reads from /audit only and never
+  // needs to know about the comments store.
+  auditService.log(
+    effectiveOrgId,
+    comment.userId,
+    'Comment',
+    comment.id,
+    'CREATE',
+    null,
+    { entityType, entityId, parentId: resolvedParentId, snippet: comment.content.slice(0, 120) },
+  );
+
   if (comment.mentions.length > 0) {
     dispatchMentionNotifications(comment, comment.mentions, entityLabel || `${entityType} ${entityId}`);
   }
@@ -225,6 +239,11 @@ router.patch('/:id', (req: Request, res: Response) => {
   if (addedMentions.length > 0) {
     dispatchMentionNotifications(c, addedMentions, entityLabel || `${c.entityType} ${c.entityId}`);
   }
+  auditService.log(
+    c.orgId, c.userId, 'Comment', c.id, 'UPDATE',
+    null,
+    { entityType: c.entityType, entityId: c.entityId, snippet: c.content.slice(0, 120) },
+  );
   res.json({ success: true, data: c });
 });
 
@@ -238,6 +257,11 @@ router.delete('/:id', (req: Request, res: Response) => {
   c.updatedAt = c.deletedAt;
   saveStore('comments', comments);
   logger.info({ id: req.params.id }, 'Comment soft-deleted');
+  auditService.log(
+    c.orgId, c.userId, 'Comment', c.id, 'DELETE',
+    { entityType: c.entityType, entityId: c.entityId },
+    null,
+  );
   res.status(204).send();
 });
 

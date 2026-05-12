@@ -8,6 +8,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import CommentsPanel from '../components/CommentsPanel';
+import ActivityFeed from '../components/ActivityFeed';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -1855,6 +1856,12 @@ export default function DataAssetsPage() {
                     entityId={viewing360.asset.id}
                     entityLabel={`Data Asset: ${viewing360.asset.name}`}
                   />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Activity
+                  </h3>
+                  <ActivityFeed entityType="DataAsset" entityId={viewing360.asset.id} inline initialRows={5} />
                 </div>
                 {/* Footer Close — keyboard / mobile users may not discover
                     the header X or backdrop click; an explicit button is

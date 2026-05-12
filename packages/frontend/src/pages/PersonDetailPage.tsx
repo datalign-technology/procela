@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
 import SkillPicker from '../components/SkillPicker';
 import CommentsPanel from '../components/CommentsPanel';
+import ActivityFeed from '../components/ActivityFeed';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -526,6 +527,14 @@ export default function PersonDetailPage() {
           entityId={p.id}
           entityLabel={`${p.name}'s profile`}
         />
+      </div>
+
+      {/* Activity by this person across the org. The userId variant of
+        *  the feed answers "what is X working on lately?", complementing
+        *  the Discussion thread on the same page. */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>Activity</div>
+        <ActivityFeed userId={p.id} inline initialRows={5} limit={50} />
       </div>
     </div>
   );
