@@ -1423,21 +1423,25 @@ export default function DataAssetsPage() {
                           {isExpanded ? '\u25BC' : '\u25B6'}
                         </button>
                         <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          {canWrite ? (
-                            <InlineCellEdit
-                              value={asset.name}
-                              onSave={(v) => inlineSaveField(asset.id, 'name', v)}
-                            />
-                          ) : (
-                            <span style={{ color: 'var(--color-primary)', cursor: 'pointer' }}
-                              onClick={() => open360(asset.id)}
-                              title="Click to view details"
-                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; }}
-                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = 'none'; }}
-                            >
-                              {asset.name}
-                            </span>
-                          )}
+                          {/* Name is a link to the detail modal for everyone -
+                            *  editors and viewers both. Renaming happens via
+                            *  the row's Edit pencil so the click target on the
+                            *  most natural column does the most expected thing
+                            *  (open detail), not the least (start editing). */}
+                          <button
+                            type="button"
+                            onClick={() => open360(asset.id)}
+                            title="Click to view details"
+                            style={{
+                              background: 'none', border: 'none', padding: 0,
+                              color: 'var(--color-primary)', cursor: 'pointer',
+                              font: 'inherit', fontWeight: 500, textAlign: 'left',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                          >
+                            {asset.name}
+                          </button>
                           <OriginBadge origin={asset.origin} />
                         </div>
                       </div>

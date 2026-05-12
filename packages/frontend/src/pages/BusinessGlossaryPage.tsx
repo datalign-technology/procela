@@ -914,8 +914,26 @@ export default function BusinessGlossaryPage() {
                         </td>
                         {glossaryCols.isVisible('term') && (
                           <td style={{ ...tdStyle, fontWeight: 500 }}>
+                            {/* Click opens the edit form so the term gets a
+                             *  proper modal with definition / classification /
+                             *  related-terms - the inline editor only let users
+                             *  change the headword, missing the rest. Viewers
+                             *  get a plain label since they can't edit. */}
                             {canWrite ? (
-                              <InlineCellEdit value={t.term} onSave={(v) => inlineSaveField(t.id, 'term', v)} />
+                              <button
+                                type="button"
+                                onClick={() => openEdit(t)}
+                                title="Click to edit term"
+                                style={{
+                                  background: 'none', border: 'none', padding: 0,
+                                  color: 'var(--color-primary)', cursor: 'pointer',
+                                  font: 'inherit', fontWeight: 500, textAlign: 'left',
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                              >
+                                {t.term}
+                              </button>
                             ) : (
                               t.term
                             )}
