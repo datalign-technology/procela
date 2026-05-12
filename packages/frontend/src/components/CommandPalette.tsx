@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -88,8 +89,13 @@ export default function CommandPalette({ open, onClose }: Props) {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
   const orgKey = activeOrgId || '_';
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // The palette has its own arrow-key navigation, so we use focus trap
+  // just for Tab containment and focus restoration on close; the input
+  // is focused explicitly when the palette opens (see the effect below).
+  useFocusTrap(dialogRef, open);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PaletteResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -226,6 +232,10 @@ export default function CommandPalette({ open, onClose }: Props) {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
@@ -248,6 +258,12 @@ export default function CommandPalette({ open, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search anything…"
+            role="combobox"
+            aria-expanded={items.length > 0}
+            aria-controls="cmd-palette-results"
+            aria-autocomplete="list"
+            aria-activedescendant={items[activeIndex] ? `cmd-palette-opt-${activeIndex}` : undefined}
+            aria-label="Search across systems, data assets, activities, people, and more"
             style={{
               flex: 1, border: 'none', outline: 'none',
               fontSize: 15, background: 'transparent', color: 'var(--color-text)',
@@ -259,9 +275,15 @@ export default function CommandPalette({ open, onClose }: Props) {
           <kbd style={kbdStyle}>Esc</kbd>
         </div>
 
-        <div ref={listRef} style={{ overflowY: 'auto', flex: 1 }}>
+        <div
+          ref={listRef}
+          id="cmd-palette-results"
+          role="listbox"
+          aria-label="Search results"
+          style={{ overflowY: 'auto', flex: 1 }}
+        >
           {items.length === 0 ? (
-            <div style={{ padding: 28, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>
+            <div role="status" aria-live="polite" style={{ padding: 28, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>
               {emptyHint}
             </div>
           ) : (
@@ -288,6 +310,9 @@ export default function CommandPalette({ open, onClose }: Props) {
                     return (
                       <div
                         key={`${r.type}-${r.id}`}
+                        id={`cmd-palette-opt-${idx}`}
+                        role="option"
+                        aria-selected={isActive}
                         data-row-index={idx}
                         onMouseEnter={() => setActiveIndex(idx)}
                         onClick={() => pick(r)}

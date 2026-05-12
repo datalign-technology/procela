@@ -392,6 +392,10 @@ export default function Layout() {
 
   return (
     <div className={styles.shell}>
+      {/* Skip-to-content - first focusable element so Tab from the
+        * URL bar lands here. Lets keyboard users jump past the sidebar
+        * and header straight to the page body. */}
+      <a href="#main-content" className="skip-to-content">Skip to main content</a>
       {/* Sidebar */}
       <aside className={clsx(styles.sidebar, sidebarCollapsed && styles.sidebarCollapsed)}>
         <div className={styles.sidebarBrand}>
@@ -435,8 +439,12 @@ export default function Layout() {
             >
               {section.label ? (
                 <>
-                  {/* Section header — clickable accordion toggle */}
-                  <div
+                  {/* Section header — clickable accordion toggle. Rendered
+                    * as a real button so it's in the tab order and
+                    * Enter/Space activate it. aria-expanded announces
+                    * the open/closed state to screen readers. */}
+                  <button
+                    type="button"
                     className={clsx(styles.navLink, sectionHasActive && !isExpanded && styles.navLinkActive)}
                     onClick={() => {
                       if (sidebarCollapsed) {
@@ -445,17 +453,19 @@ export default function Layout() {
                         setExpandedNavSection(isExpanded ? null : section.label!);
                       }
                     }}
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                    aria-expanded={!sidebarCollapsed ? isExpanded : isFlyoutOpen}
+                    aria-label={sidebarCollapsed ? section.label || undefined : undefined}
+                    style={{ cursor: 'pointer', userSelect: 'none', width: '100%', textAlign: 'left', background: 'transparent', font: 'inherit', color: 'inherit', border: 'none' }}
                     title={sidebarCollapsed ? section.label : undefined}
                   >
                     <span className={styles.navIcon}>{textIcon(section.items[0]?.icon || '')}</span>
                     {!sidebarCollapsed && (
                       <>
                         <span style={{ flex: 1 }}>{section.label}</span>
-                        <span style={{ fontSize: 10, opacity: 0.5, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>{'▶'}</span>
+                        <span aria-hidden style={{ fontSize: 10, opacity: 0.5, transition: 'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}>{'▶'}</span>
                       </>
                     )}
-                  </div>
+                  </button>
 
                   {/* Expanded children (accordion — only when sidebar is open) */}
                   {!sidebarCollapsed && isExpanded && section.items.map((item) => {

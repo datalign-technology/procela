@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { useOrgContext } from '../stores/orgContext';
 import { useTerm } from '../lib/terminology';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import {
   getRoleDef,
   getRoleReference,
@@ -47,6 +48,8 @@ export default function RoleDetailDrawer() {
   const { activeOrgId } = useOrgContext();
   const roleType = useRoleDrawerStore((s) => s.roleType);
   const close = useRoleDrawerStore((s) => s.close);
+  const dialogRef = useRef<HTMLElement>(null);
+  useFocusTrap(dialogRef, !!roleType);
   const custodianLabel = useTerm('custodian');
 
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
@@ -115,7 +118,9 @@ export default function RoleDetailDrawer() {
         }}
       />
       <aside
+        ref={dialogRef}
         role="dialog"
+        aria-modal="true"
         aria-label={`${displayLabel} role details`}
         style={{
           position: 'fixed', top: 0, right: 0, bottom: 0,

@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
@@ -45,6 +46,8 @@ interface Props {
 }
 
 export default function SystemDetailModal({ systemId, onClose }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, !!systemId);
   const navigate = useNavigate();
   const custodianLabel = useTerm('custodian');
   const tierLabel = useTierLabel();
@@ -150,6 +153,10 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={data ? `System: ${data.system.name}` : 'System details'}
         style={{
           background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
           padding: 24, maxWidth: 720, width: '90vw', maxHeight: '85vh', overflowY: 'auto',

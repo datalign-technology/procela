@@ -1,5 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -236,6 +237,8 @@ export default function DataLineagePage() {
   // dbt manifest import state. The modal is closed by default; once a
   // file is dropped/selected it parses client-side and POSTs the JSON.
   const [showDbtImport, setShowDbtImport] = useState(false);
+  const dbtModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dbtModalRef, showDbtImport);
   const [dbtImporting, setDbtImporting] = useState(false);
   const [dbtImportSummary, setDbtImportSummary] = useState<DbtImportSummary | null>(null);
   const [dbtImportError, setDbtImportError] = useState<string | null>(null);
@@ -705,6 +708,10 @@ export default function DataLineagePage() {
           }}
         >
           <div
+            ref={dbtModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dbt-modal-title"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 'min(560px, 90vw)',
@@ -715,7 +722,7 @@ export default function DataLineagePage() {
               padding: 20,
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Import dbt manifest</h3>
+            <h3 id="dbt-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Import dbt manifest</h3>
             <p style={{ marginTop: 6, marginBottom: 14, fontSize: 12, color: 'var(--color-text-muted)' }}>
               Drop or pick a dbt-generated <code>manifest.json</code>. Procela will create or match data
               assets for each model, source, seed, and snapshot, then derive asset-to-asset lineage edges
@@ -767,7 +774,14 @@ function FileDropZone({ onFile, disabled }: { onFile: (f: File) => void; disable
   const inputRef = useRef<HTMLInputElement>(null);
   const [hover, setHover] = useState(false);
   return (
-    <div
+    // Rendered as a button so it's in the tab order and Enter/Space
+    // activate the file picker the way Space activates a checkbox. The
+    // drag-and-drop handlers are still on the same element since drag
+    // events fire on whichever element the user drops onto.
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label="Drop a dbt manifest.json file here or press Enter to pick a file"
       onClick={() => { if (!disabled) inputRef.current?.click(); }}
       onDragOver={(e) => { e.preventDefault(); if (!disabled) setHover(true); }}
       onDragLeave={() => setHover(false)}
@@ -778,6 +792,7 @@ function FileDropZone({ onFile, disabled }: { onFile: (f: File) => void; disable
         if (f) onFile(f);
       }}
       style={{
+        display: 'block', width: '100%', font: 'inherit', color: 'var(--color-text)',
         padding: '24px', textAlign: 'center', borderRadius: 'var(--radius-md)',
         border: `2px dashed ${hover ? 'var(--color-primary)' : 'var(--color-border)'}`,
         background: hover ? 'var(--color-bg)' : 'transparent',
@@ -803,7 +818,7 @@ function FileDropZone({ onFile, disabled }: { onFile: (f: File) => void; disable
           e.target.value = '';
         }}
       />
-    </div>
+    </button>
   );
 }
 

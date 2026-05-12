@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { apiClient } from '../api/client';
@@ -337,6 +338,8 @@ export default function DataAssetsPage() {
   const isVisible = colPicker.isVisible;
   const visibleColCount = colPicker.visibleCount;
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
+  const asset360DialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(asset360DialogRef, !!viewing360);
   const [loading360, setLoading360] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -1705,7 +1708,12 @@ export default function DataAssetsPage() {
           background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000,
         }} onClick={() => { if (!loading360) setViewing360(null); }}>
-          <div style={{
+          <div
+            ref={asset360DialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={viewing360 ? `Data Asset: ${viewing360.asset.name}` : 'Data Asset details'}
+            style={{
             background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
             padding: 24, maxWidth: 700, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
             boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
