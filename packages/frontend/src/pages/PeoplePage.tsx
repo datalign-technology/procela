@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from '../components/EmptyState';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -883,6 +884,16 @@ export default function PeoplePage() {
                   {selectedOrgId && selectedOrg?.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedOrg.description}</p>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <SavedViewsMenu
+                    pageKey="people"
+                    currentFilters={{ selectedOrgId, filterAppRole, filterGovRole, searchQuery }}
+                    onApply={(f) => {
+                      setSelectedOrgId((f.selectedOrgId as string) || '');
+                      setFilterAppRole((f.filterAppRole as string) || '');
+                      setFilterGovRole((f.filterGovRole as string) || '');
+                      setSearchQuery((f.searchQuery as string) || '');
+                    }}
+                  />
                   {filteredPeople.length > 0 && (
                     <ExportMenu build={() => ({
                       filenameBase: 'people',

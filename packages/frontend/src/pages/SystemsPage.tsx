@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import { useTerm } from '../lib/terminology';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -737,6 +738,15 @@ export default function SystemsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <SavedViewsMenu
+            pageKey="systems"
+            currentFilters={{ filterType, filterCriticality, searchQuery }}
+            onApply={(f) => {
+              setFilterType((f.filterType as string) || '');
+              setFilterCriticality((f.filterCriticality as string) || '');
+              setSearchQuery((f.searchQuery as string) || '');
+            }}
+          />
           <ExportMenu
             disabled={systems.length === 0}
             build={() => ({

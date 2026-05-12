@@ -7,6 +7,7 @@ import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from './../components/IconButton';
 import ExportMenu from '../components/ExportMenu';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from './../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
@@ -756,6 +757,14 @@ export default function ConnectionsPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <SavedViewsMenu
+            pageKey="connections"
+            currentFilters={{ filterConnType, searchQuery }}
+            onApply={(f) => {
+              setFilterConnType((f.filterConnType as string) || '');
+              setSearchQuery((f.searchQuery as string) || '');
+            }}
+          />
           <ExportMenu
             disabled={visibleConnections.length === 0}
             build={() => ({

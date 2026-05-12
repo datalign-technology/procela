@@ -14,6 +14,7 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 
 // ── Types ──
 
@@ -501,6 +502,15 @@ export default function BusinessGlossaryPage() {
           {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
           {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
           {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
+          <SavedViewsMenu
+            pageKey="business-glossary"
+            currentFilters={{ searchQuery, filterStatus, filterCategory }}
+            onApply={(f) => {
+              setSearchQuery((f.searchQuery as string) || '');
+              setFilterStatus((f.filterStatus as string) || '');
+              setFilterCategory((f.filterCategory as string) || '');
+            }}
+          />
           <ColumnPicker state={glossaryCols} />
           {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
         </div>

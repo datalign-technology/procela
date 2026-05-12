@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 
 // ── Types ──
 
@@ -492,6 +493,14 @@ export default function DecisionRightsPage() {
               {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
             </button>
           )}
+          <SavedViewsMenu
+            pageKey="decision-rights"
+            currentFilters={{ categoryFilter, searchQuery }}
+            onApply={(f) => {
+              setCategoryFilter(((f.categoryFilter as 'ALL' | DecisionCategory) || 'ALL'));
+              setSearchQuery((f.searchQuery as string) || '');
+            }}
+          />
           <ColumnPicker state={decisionCols} />
           {canWrite && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
         </div>

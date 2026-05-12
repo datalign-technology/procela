@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
@@ -273,6 +274,15 @@ export default function DamaRolesPage() {
         title="Governance Roles"
         subtitle="Assign data management governance roles to people across organizations and data domains."
         actions={<>
+          <SavedViewsMenu
+            pageKey="dama-roles"
+            currentFilters={{ filterRoleType, searchQuery, groupBy }}
+            onApply={(f) => {
+              setFilterRoleType((f.filterRoleType as string | null) ?? null);
+              setSearchQuery((f.searchQuery as string) || '');
+              setGroupBy(((f.groupBy as 'none' | 'person' | 'role') || 'person'));
+            }}
+          />
           {roles.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'governance-roles',
