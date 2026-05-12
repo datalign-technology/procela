@@ -65,6 +65,11 @@ interface DbtImportSummary {
   edgesCreated: number;
   edgesTouched: number;
   edgesRemoved: number;
+  /** dbt tests surfaced as Data Quality rules. Optional because older
+   *  backends responded without these fields. */
+  dqRulesCreated?: number;
+  dqRulesTouched?: number;
+  dqRulesRemoved?: number;
 }
 
 interface AssetLineageEdgeRow {
@@ -228,6 +233,7 @@ export default function DataLineagePage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
+  const [vizMode, setVizMode] = useState<'systems' | 'assets' | 'both'>('systems');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
@@ -692,8 +698,50 @@ export default function DataLineagePage() {
           )}
         </>
       ) : (
-        /* Visualization View */
-        <LineageVisualization nodes={visNodes} links={visLinks} />
+        /* Visualization View - three lenses sharing the toolbar:
+         *   systems = the existing flow graph
+         *   assets  = the auto-derived asset edges (from dbt etc.)
+         *   both    = stacked, systems on top, assets below
+         */
+        <div>
+          <div role="group" aria-label="Visualization mode" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 2,
+            background: 'var(--color-bg)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6, padding: 2, marginBottom: 12,
+          }}>
+            {(['systems', 'assets', 'both'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setVizMode(mode)}
+                aria-pressed={vizMode === mode}
+                style={{
+                  padding: '4px 10px', fontSize: 11, fontWeight: 500,
+                  background: vizMode === mode ? 'var(--color-surface)' : 'transparent',
+                  color: vizMode === mode ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  border: 'none', borderRadius: 4, cursor: 'pointer',
+                  boxShadow: vizMode === mode ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                {mode === 'systems' ? 'Systems' : mode === 'assets' ? 'Assets' : 'Both'}
+              </button>
+            ))}
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+              {vizMode === 'systems' && `${visNodes.length} systems`}
+              {vizMode === 'assets' && `${assetEdges.length} edges`}
+              {vizMode === 'both' && `${visNodes.length} systems · ${assetEdges.length} asset edges`}
+            </span>
+          </div>
+          {(vizMode === 'systems' || vizMode === 'both') && (
+            <LineageVisualization nodes={visNodes} links={visLinks} />
+          )}
+          {(vizMode === 'assets' || vizMode === 'both') && (
+            <div style={{ marginTop: vizMode === 'both' ? 16 : 0 }}>
+              <AssetLineageVisualization edges={assetEdges} />
+            </div>
+          )}
+        </div>
       )}
 
       {/* dbt manifest import modal. Lives at the page root so the
@@ -739,10 +787,23 @@ export default function DataLineagePage() {
             )}
             {dbtImportSummary && (
               <div style={{ marginTop: 10, padding: '8px 12px', background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 4, color: '#065f46', fontSize: 12 }}>
-                Imported manifest. Created {dbtImportSummary.assetsCreated} new assets,
-                matched {dbtImportSummary.assetsMatched} existing.
-                {' '}{dbtImportSummary.edgesCreated} new edges, {dbtImportSummary.edgesTouched} refreshed,
-                {' '}{dbtImportSummary.edgesRemoved} stale edges removed.
+                <div>
+                  Imported manifest. Created {dbtImportSummary.assetsCreated} new assets,
+                  matched {dbtImportSummary.assetsMatched} existing.
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  {dbtImportSummary.edgesCreated} new edges, {dbtImportSummary.edgesTouched} refreshed,
+                  {' '}{dbtImportSummary.edgesRemoved} stale edges removed.
+                </div>
+                {(dbtImportSummary.dqRulesCreated !== undefined
+                  || dbtImportSummary.dqRulesTouched !== undefined
+                  || dbtImportSummary.dqRulesRemoved !== undefined) && (
+                  <div style={{ marginTop: 4 }}>
+                    {dbtImportSummary.dqRulesCreated || 0} Data Quality rules created from dbt tests,
+                    {' '}{dbtImportSummary.dqRulesTouched || 0} refreshed,
+                    {' '}{dbtImportSummary.dqRulesRemoved || 0} removed.
+                  </div>
+                )}
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
@@ -999,6 +1060,154 @@ function LineageVisualization({ nodes, links }: { nodes: VisNode[]; links: VisLi
                 fill="#94a3b8"
               >
                 {'\u2193'}{node.inboundCount} in / {'\u2191'}{node.outboundCount} out
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// AssetLineageVisualization - same grid-based SVG layout as the system
+// lineage view, but rendered from asset edges. Auto-derived edges (dbt,
+// future SQL log sources) populate this view; manual asset edges share
+// the same shape so a future "draw an asset edge" feature would slot in
+// without a render change.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface AssetVizNode {
+  id: string;
+  name: string;
+  /** Total edges this node participates in (in or out). Drives size so
+   *  hubs stand out a bit in dense graphs. */
+  degree: number;
+}
+
+function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) {
+  if (edges.length === 0) {
+    return (
+      <div style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        padding: 40, textAlign: 'center',
+        color: 'var(--color-text-muted)',
+      }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>{'⇄'}</div>
+        <div>No asset-level lineage yet. Import a dbt manifest to populate this view.</div>
+      </div>
+    );
+  }
+
+  // Build the unique node list from the edge endpoints. We tally degree
+  // here so the renderer can scale hub nodes proportionally without a
+  // second pass over the edge list.
+  const nodeMap = new Map<string, AssetVizNode>();
+  for (const e of edges) {
+    if (!nodeMap.has(e.sourceAssetId)) {
+      nodeMap.set(e.sourceAssetId, { id: e.sourceAssetId, name: e.sourceAssetName || '(deleted)', degree: 0 });
+    }
+    if (!nodeMap.has(e.targetAssetId)) {
+      nodeMap.set(e.targetAssetId, { id: e.targetAssetId, name: e.targetAssetName || '(deleted)', degree: 0 });
+    }
+    nodeMap.get(e.sourceAssetId)!.degree++;
+    nodeMap.get(e.targetAssetId)!.degree++;
+  }
+  const nodes = Array.from(nodeMap.values()).sort((a, b) => b.degree - a.degree);
+
+  const BOX_W = 140;
+  const BOX_H = 50;
+  const PADDING = 70;
+
+  // Same grid arrangement as LineageVisualization. Sorting by descending
+  // degree puts the busiest assets in the top-left where the eye lands
+  // first.
+  const cols = Math.ceil(Math.sqrt(nodes.length));
+  const svgW = cols * (BOX_W + PADDING) + PADDING;
+  const rows = Math.ceil(nodes.length / cols);
+  const svgH = rows * (BOX_H + PADDING) + PADDING + 40;
+
+  const nodePositions: Record<string, { x: number; y: number }> = {};
+  nodes.forEach((node, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    nodePositions[node.id] = {
+      x: PADDING + col * (BOX_W + PADDING),
+      y: PADDING + row * (BOX_H + PADDING),
+    };
+  });
+
+  // Colour by edge source. Asset edges almost always come from dbt for
+  // now; the conditional keeps the door open for snowflake / manual etc.
+  const colourFor = (source: string) =>
+    source === 'dbt' ? '#0ea5e9' : source === 'manual' ? '#22c55e' : '#94a3b8';
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      overflow: 'auto',
+      boxShadow: 'var(--shadow-sm)',
+    }}>
+      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-muted)', padding: '8px 12px', borderBottom: '1px solid var(--color-border)' }}>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#0ea5e9', borderRadius: 2, marginRight: 4 }} />dbt</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#22c55e', borderRadius: 2, marginRight: 4 }} />manual</span>
+      </div>
+      <svg width={svgW} height={svgH} style={{ display: 'block' }}>
+        <defs>
+          <marker id="asset-arrow-dbt" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 3 L 0 6 z" fill="#0ea5e9" />
+          </marker>
+          <marker id="asset-arrow-manual" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="10" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 3 L 0 6 z" fill="#22c55e" />
+          </marker>
+        </defs>
+
+        {/* Edges first so node rectangles sit on top of arrow tails. */}
+        {edges.map((e) => {
+          const from = nodePositions[e.sourceAssetId];
+          const to = nodePositions[e.targetAssetId];
+          if (!from || !to) return null;
+          const x1 = from.x + BOX_W / 2;
+          const y1 = from.y + BOX_H / 2;
+          const x2 = to.x + BOX_W / 2;
+          const y2 = to.y + BOX_H / 2;
+          const marker = e.source === 'manual' ? 'asset-arrow-manual' : 'asset-arrow-dbt';
+          return (
+            <line
+              key={e.id}
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke={colourFor(e.source)} strokeWidth={1.5}
+              opacity={0.65}
+              markerEnd={`url(#${marker})`}
+            />
+          );
+        })}
+
+        {nodes.map((node) => {
+          const pos = nodePositions[node.id];
+          return (
+            <g key={node.id} transform={`translate(${pos.x},${pos.y})`}>
+              <rect width={BOX_W} height={BOX_H} rx={6} ry={6}
+                fill="var(--color-bg)"
+                stroke="var(--color-border)"
+                strokeWidth={1}
+              />
+              <text x={BOX_W / 2} y={BOX_H / 2 - 4} textAnchor="middle"
+                fontSize={12} fontWeight={500}
+                fill="var(--color-text)"
+                style={{ pointerEvents: 'none' }}
+              >
+                {node.name.length > 22 ? node.name.slice(0, 21) + '…' : node.name}
+              </text>
+              <text x={BOX_W / 2} y={BOX_H / 2 + 12} textAnchor="middle"
+                fontSize={10} fill="var(--color-text-muted)"
+                style={{ pointerEvents: 'none' }}
+              >
+                {node.degree} edge{node.degree === 1 ? '' : 's'}
               </text>
             </g>
           );

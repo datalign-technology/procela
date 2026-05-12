@@ -5,6 +5,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { systems } from './systems';
 import { dataAssets } from './data-assets';
+import { dataQualityRules } from './data-quality';
 
 interface DataLineageLink {
   id: string;
@@ -65,6 +66,20 @@ interface DbtAssetMapping {
 
 export const dbtAssetMappings: DbtAssetMapping[] =
   loadStore<DbtAssetMapping>('dbtAssetMappings');
+
+// ── dbt test mapping ────────────────────────────────────────────────────
+// Parallel to dbtAssetMappings but for test nodes. Each dbt test creates
+// (or updates) a Data Quality rule; re-imports reuse the same rule via
+// this mapping so user edits to a derived rule survive a refresh.
+
+interface DbtTestMapping {
+  dbtUniqueId: string;
+  ruleId: string;
+  orgId: string;
+}
+
+export const dbtTestMappings: DbtTestMapping[] =
+  loadStore<DbtTestMapping>('dbtTestMappings');
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
@@ -283,7 +298,24 @@ interface DbtNode {
   depends_on?: { nodes?: string[] };
   source_name?: string;            // sources only
   identifier?: string;             // sources only — the physical table name
+  // Test-only fields - dbt populates these for resource_type === 'test'.
+  column_name?: string;
+  test_metadata?: {
+    name?: string;                 // 'not_null' | 'unique' | 'accepted_values' | 'relationships' | ...
+    kwargs?: Record<string, unknown>;
+  };
 }
+
+// Map dbt's built-in test names to Procela's DQ rule shape.
+// dbt has hundreds of community packages; we map the four canonical
+// built-ins. Anything else lands as a CUSTOM rule with the test name
+// preserved in the description so users can see what dbt found.
+const DBT_TEST_TO_DQ: Record<string, { dimension: 'COMPLETENESS' | 'ACCURACY' | 'TIMELINESS' | 'CONSISTENCY' | 'UNIQUENESS' | 'VALIDITY'; ruleType: 'NOT_NULL' | 'UNIQUE' | 'IN_SET' | 'CUSTOM' }> = {
+  not_null:        { dimension: 'COMPLETENESS', ruleType: 'NOT_NULL' },
+  unique:          { dimension: 'UNIQUENESS',   ruleType: 'UNIQUE'   },
+  accepted_values: { dimension: 'VALIDITY',     ruleType: 'IN_SET'   },
+  relationships:   { dimension: 'CONSISTENCY',  ruleType: 'CUSTOM'   },
+};
 
 interface DbtManifest {
   nodes?: Record<string, DbtNode>;
@@ -459,9 +491,102 @@ router.post('/import-dbt', (req: Request, res: Response) => {
     }
   }
 
+  // ── 3. Reconcile dbt tests as Data Quality rules ─────────────────────
+  // Each dbt test (resource_type === 'test') becomes (or matches) a DQ
+  // rule on the target asset. dbtTestMappings keeps the dbt unique_id
+  // bound to the Procela rule id so user edits to a derived rule survive
+  // a refresh. Tests that vanish from the manifest get their rule
+  // deleted - same lifecycle as the edges above.
+
+  const declaredTestUids = new Set<string>();
+  let dqRulesCreated = 0;
+  let dqRulesTouched = 0;
+
+  const allNodes = manifest.nodes ? Object.entries(manifest.nodes) : [];
+  for (const [uid, node] of allNodes) {
+    if (!node || node.resource_type !== 'test') continue;
+    const deps = node.depends_on?.nodes || [];
+    // A test usually has multiple deps (the model + macro packages). We
+    // attach the rule to the first one that maps to a Procela asset.
+    const targetAssetId = deps.map((d) => uidToAssetId.get(d)).find((x): x is string => !!x);
+    if (!targetAssetId) continue;
+    declaredTestUids.add(uid);
+
+    const testName = node.test_metadata?.name || 'custom';
+    const mapping = DBT_TEST_TO_DQ[testName] || { dimension: 'ACCURACY' as const, ruleType: 'CUSTOM' as const };
+    const columnName = node.column_name
+      || (node.test_metadata?.kwargs?.column_name as string | undefined)
+      || undefined;
+
+    // Build a stable rule name and human-readable description from the
+    // test metadata. We don't try to fully translate dbt's kwargs into
+    // Procela rule parameters - that's column-level lineage's job. For
+    // now the description preserves the dbt context so users see WHY
+    // the rule was created.
+    const friendlyTestName = `${testName.replace(/_/g, ' ')}${columnName ? ` on ${columnName}` : ''}`;
+    const ruleName = `${friendlyTestName} (dbt)`;
+    const description = `Auto-derived from dbt test \`${node.name || uid}\`. Edit to refine.`;
+
+    const existing = dbtTestMappings.find(
+      (m) => m.dbtUniqueId === uid && m.orgId === effectiveOrgId,
+    );
+    let rule = existing
+      ? dataQualityRules.find((r) => r.id === existing.ruleId)
+      : undefined;
+
+    if (rule) {
+      // Refresh derived fields but leave user-edited ones alone (we
+      // touch only name + description + assetId mapping).
+      rule.dataAssetId = targetAssetId;
+      rule.columnName = columnName ?? rule.columnName;
+      rule.updatedAt = now;
+      dqRulesTouched++;
+    } else {
+      const ruleId = uuid();
+      dataQualityRules.push({
+        id: ruleId,
+        orgId: effectiveOrgId,
+        dataAssetId: targetAssetId,
+        columnName,
+        dimension: mapping.dimension,
+        name: ruleName,
+        description,
+        threshold: 100,
+        currentScore: 0,
+        weight: 1,
+        status: 'NOT_MEASURED',
+        lastMeasured: null,
+        ruleType: mapping.ruleType,
+        templateId: `dbt:${testName}`,
+        createdAt: now,
+        updatedAt: now,
+      });
+      dbtTestMappings.push({ dbtUniqueId: uid, ruleId, orgId: effectiveOrgId });
+      dqRulesCreated++;
+    }
+  }
+
+  // Drop prior dbt-derived rules whose tests aren't in this manifest.
+  // Only rules tied to a mapping in dbtTestMappings (so user-created
+  // rules are never touched).
+  let dqRulesRemoved = 0;
+  for (let i = dbtTestMappings.length - 1; i >= 0; i--) {
+    const m = dbtTestMappings[i];
+    if (m.orgId !== effectiveOrgId) continue;
+    if (declaredTestUids.has(m.dbtUniqueId)) continue;
+    const ruleIdx = dataQualityRules.findIndex((r) => r.id === m.ruleId);
+    if (ruleIdx >= 0) {
+      dataQualityRules.splice(ruleIdx, 1);
+      dqRulesRemoved++;
+    }
+    dbtTestMappings.splice(i, 1);
+  }
+
   saveStore('dataAssets', dataAssets);
   saveStore('dbtAssetMappings', dbtAssetMappings);
   saveStore('assetLineageEdges', assetLineageEdges);
+  saveStore('dataQualityRules', dataQualityRules);
+  saveStore('dbtTestMappings', dbtTestMappings);
 
   auditService.log(
     effectiveOrgId,
@@ -470,16 +595,16 @@ router.post('/import-dbt', (req: Request, res: Response) => {
     '*',
     'IMPORT_DBT',
     null,
-    { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved },
+    { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved, dqRulesCreated, dqRulesTouched, dqRulesRemoved },
   );
   logger.info(
-    { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved },
+    { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved, dqRulesCreated, dqRulesTouched, dqRulesRemoved },
     'dbt manifest imported',
   );
 
   res.json({
     success: true,
-    summary: { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved },
+    summary: { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved, dqRulesCreated, dqRulesTouched, dqRulesRemoved },
   });
 });
 
