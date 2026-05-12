@@ -270,17 +270,33 @@ router.delete('/:id', (req: Request, res: Response) => {
 // Asset-level lineage (auto-derived from dbt + future SQL log sources)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** GET /api/v1/data-lineage/asset-edges?orgId= - enriched with asset names */
+/** How long an edge can go without being re-seen by an importer before
+ *  the API marks it stale. dbt Cloud refreshes should normally run
+ *  daily, so 30 days catches "the dbt project moved" or "no one's
+ *  refreshed in a month" without producing noise from a missed weekly
+ *  schedule. Configurable per-org in a future PR. */
+const STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** GET /api/v1/data-lineage/asset-edges?orgId= - enriched with asset
+ *  names and an isStale flag (true when lastSeenAt is older than the
+ *  STALE_AFTER threshold). Manual edges are never marked stale: the
+ *  threshold only applies to edges whose source carries a freshness
+ *  expectation (today: just 'dbt'). */
 router.get('/asset-edges', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId ? assetLineageEdges.filter((e) => e.orgId === orgId) : assetLineageEdges;
+  const now = Date.now();
   const enriched = filtered.map((e) => {
     const src = dataAssets.find((a) => a.id === e.sourceAssetId);
     const tgt = dataAssets.find((a) => a.id === e.targetAssetId);
+    const ageMs = now - new Date(e.lastSeenAt).getTime();
+    const isStale = e.source === 'dbt' && ageMs > STALE_AFTER_MS;
     return {
       ...e,
       sourceAssetName: src?.name || null,
       targetAssetName: tgt?.name || null,
+      isStale,
+      staleAfterDays: STALE_AFTER_MS / (24 * 60 * 60 * 1000),
     };
   });
   res.json({ success: true, data: enriched });
@@ -343,14 +359,59 @@ function friendlyAssetName(node: DbtNode): string {
  *
  *  Body: { orgId?: string, manifest: DbtManifest }
  */
+export interface DbtImportSummary {
+  assetsCreated: number;
+  assetsMatched: number;
+  edgesCreated: number;
+  edgesTouched: number;
+  edgesRemoved: number;
+  dqRulesCreated: number;
+  dqRulesTouched: number;
+  dqRulesRemoved: number;
+}
+
+/** Shared manifest-reconciliation core. Called by the HTTP import-dbt
+ *  endpoint *and* by the dbt Cloud refresh job - keeps a single source
+ *  of truth for upsert + edge + test reconciliation, so any future
+ *  manifest source (dbt Core CLI uploads, dbt Cloud, S3 path) plugs in
+ *  without re-implementing the lifecycle.
+ *
+ *  Throws on a structurally-invalid manifest; otherwise returns a
+ *  summary the caller can surface as a toast or persist as an
+ *  audit trail. */
+export function reconcileDbtManifest(
+  manifest: DbtManifest,
+  orgIdInput: string | undefined,
+  actorUserId: string | null,
+): DbtImportSummary {
+  const effectiveOrgId = orgIdInput || DEV_ORG_ID;
+
+  if (!manifest || typeof manifest !== 'object') {
+    throw new Error('manifest is required and must be an object');
+  }
+
+  return reconcileManifestInner(manifest, effectiveOrgId, actorUserId);
+}
+
 router.post('/import-dbt', (req: Request, res: Response) => {
   const { orgId, manifest } = req.body as { orgId?: string; manifest?: DbtManifest };
-  if (!manifest || typeof manifest !== 'object') {
-    res.status(400).json({ success: false, error: 'manifest is required and must be an object' });
-    return;
+  try {
+    const summary = reconcileDbtManifest(
+      manifest as DbtManifest,
+      orgId,
+      (req as any).user?.sub || null,
+    );
+    res.json({ success: true, summary });
+  } catch (e: any) {
+    res.status(400).json({ success: false, error: e?.message || 'manifest reconciliation failed' });
   }
-  const effectiveOrgId = orgId || DEV_ORG_ID;
+});
 
+function reconcileManifestInner(
+  manifest: DbtManifest,
+  effectiveOrgId: string,
+  actorUserId: string | null,
+): DbtImportSummary {
   // Flat list of all asset-bearing dbt nodes from both nodes and sources.
   const flat: DbtNode[] = [];
   for (const m of [manifest.nodes, manifest.sources]) {
@@ -362,8 +423,7 @@ router.post('/import-dbt', (req: Request, res: Response) => {
     }
   }
   if (flat.length === 0) {
-    res.status(400).json({ success: false, error: 'No model/source/seed/snapshot nodes found in manifest.' });
-    return;
+    throw new Error('No model/source/seed/snapshot nodes found in manifest.');
   }
 
   // ── 1. Upsert assets ─────────────────────────────────────────────────
@@ -590,7 +650,7 @@ router.post('/import-dbt', (req: Request, res: Response) => {
 
   auditService.log(
     effectiveOrgId,
-    (req as any).user?.sub || null,
+    actorUserId,
     'AssetLineageEdge',
     '*',
     'IMPORT_DBT',
@@ -602,10 +662,11 @@ router.post('/import-dbt', (req: Request, res: Response) => {
     'dbt manifest imported',
   );
 
-  res.json({
-    success: true,
-    summary: { assetsCreated, assetsMatched, edgesCreated, edgesTouched, edgesRemoved, dqRulesCreated, dqRulesTouched, dqRulesRemoved },
-  });
-});
+  return {
+    assetsCreated, assetsMatched,
+    edgesCreated, edgesTouched, edgesRemoved,
+    dqRulesCreated, dqRulesTouched, dqRulesRemoved,
+  };
+}
 
 export default router;

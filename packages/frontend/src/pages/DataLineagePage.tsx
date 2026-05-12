@@ -83,6 +83,25 @@ interface AssetLineageEdgeRow {
   targetAssetName: string | null;
   lastSeenAt: string;
   createdAt: string;
+  /** Server-derived: true when lastSeenAt is older than staleAfterDays. */
+  isStale?: boolean;
+  staleAfterDays?: number;
+}
+
+interface DbtCloudConnectionRow {
+  id: string;
+  orgId: string;
+  name: string;
+  host: string;
+  accountId: string;
+  jobId: string;
+  hasToken: boolean;
+  lastRunAt: string | null;
+  lastStatus: 'NEVER' | 'SUCCESS' | 'ERROR';
+  lastError: string | null;
+  lastSummary: DbtImportSummary | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface FormData {
@@ -243,6 +262,10 @@ export default function DataLineagePage() {
   // dbt manifest import state. The modal is closed by default; once a
   // file is dropped/selected it parses client-side and POSTs the JSON.
   const [showDbtImport, setShowDbtImport] = useState(false);
+  const [dbtConnections, setDbtConnections] = useState<DbtCloudConnectionRow[]>([]);
+  const [editingDbtConn, setEditingDbtConn] = useState<DbtCloudConnectionRow | null>(null);
+  const [showDbtConnForm, setShowDbtConnForm] = useState(false);
+  const [refreshingConnId, setRefreshingConnId] = useState<string | null>(null);
   const dbtModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dbtModalRef, showDbtImport);
   const [dbtImporting, setDbtImporting] = useState(false);
@@ -294,6 +317,33 @@ export default function DataLineagePage() {
     } finally {
       setDbtImporting(false);
     }
+  };
+
+  const fetchDbtConnections = useCallback(async () => {
+    const q = activeOrgId ? `?orgId=${activeOrgId}` : '';
+    try {
+      const res = await apiClient.get<{ success: boolean; data: DbtCloudConnectionRow[] }>(`/dbt-cloud-connections${q}`);
+      setDbtConnections(res.data || []);
+    } catch { /* */ }
+  }, [activeOrgId]);
+
+  useEffect(() => { void fetchDbtConnections(); }, [fetchDbtConnections]);
+
+  const refreshDbtConnection = async (id: string) => {
+    setRefreshingConnId(id);
+    try {
+      await apiClient.post(`/dbt-cloud-connections/${id}/refresh`);
+    } catch { /* error is recorded on the connection's lastError; we just re-fetch */ }
+    finally {
+      setRefreshingConnId(null);
+      await fetchDbtConnections();
+      await fetchData();
+    }
+  };
+
+  const deleteDbtConnection = async (id: string) => {
+    try { await apiClient.delete(`/dbt-cloud-connections/${id}`); } catch { /* */ }
+    fetchDbtConnections();
   };
 
   const fetchVisualization = useCallback(async () => {
@@ -664,38 +714,85 @@ export default function DataLineagePage() {
           {/* Asset-level lineage edges (auto-derived from dbt manifest
             *  imports). Hidden when there are no edges yet so the page
             *  doesn't lead with an empty placeholder. */}
-          {assetEdges.length > 0 && (
-            <div style={{ marginTop: 32 }}>
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
-                Asset-level lineage <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>({assetEdges.length} edges)</span>
-              </h2>
-              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 12 }}>
-                Auto-derived from imported source manifests (dbt). Re-importing the same manifest updates these in place.
-              </p>
-              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--color-bg)' }}>
-                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source asset</th>
-                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Target asset</th>
-                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source</th>
-                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Last seen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assetEdges.map((e) => (
-                      <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                        <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.sourceAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
-                        <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.targetAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
-                        <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source}</td>
-                        <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{new Date(e.lastSeenAt).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* dbt Cloud connections - listed above the asset edges so
+            *  users can refresh and see the resulting edge changes in
+            *  the same scroll. Hidden when no connections are configured
+            *  (the "Import dbt manifest" button still works for one-off
+            *  uploads from dbt Core or other sources). */}
+          {(dbtConnections.length > 0 || showDbtConnForm) && (
+            <DbtCloudConnectionsPanel
+              connections={dbtConnections}
+              refreshingId={refreshingConnId}
+              onRefresh={refreshDbtConnection}
+              onEdit={(c) => { setEditingDbtConn(c); setShowDbtConnForm(true); }}
+              onDelete={deleteDbtConnection}
+              onAdd={() => { setEditingDbtConn(null); setShowDbtConnForm(true); }}
+            />
+          )}
+          {!dbtConnections.length && !showDbtConnForm && (
+            <div style={{ marginTop: 24, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              <button
+                type="button"
+                onClick={() => { setEditingDbtConn(null); setShowDbtConnForm(true); }}
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+              >+ Connect a dbt Cloud job</button>
+              {' '}to skip the manual upload step.
             </div>
           )}
+          {assetEdges.length > 0 && (() => {
+            const staleCount = assetEdges.filter((e) => e.isStale).length;
+            const staleAfterDays = assetEdges[0]?.staleAfterDays ?? 30;
+            return (
+              <div style={{ marginTop: 32 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
+                  Asset-level lineage <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>({assetEdges.length} edges)</span>
+                  {staleCount > 0 && (
+                    <span style={{
+                      marginLeft: 10, fontSize: 10, fontWeight: 700, padding: '2px 6px',
+                      borderRadius: 3, background: '#fef3c7', color: '#92400e',
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>
+                      {staleCount} stale
+                    </span>
+                  )}
+                </h2>
+                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 12 }}>
+                  Auto-derived from imported source manifests (dbt). Re-importing the same manifest updates these in place. Edges not re-seen in {staleAfterDays} days are flagged stale.
+                </p>
+                <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-bg)' }}>
+                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source asset</th>
+                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Target asset</th>
+                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source</th>
+                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Last seen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assetEdges.map((e) => (
+                        <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)', opacity: e.isStale ? 0.7 : 1 }}>
+                          <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.sourceAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.targetAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                            {new Date(e.lastSeenAt).toLocaleString()}
+                            {e.isStale && (
+                              <span style={{
+                                marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                                borderRadius: 3, background: '#fef3c7', color: '#92400e',
+                                textTransform: 'uppercase', letterSpacing: '0.04em',
+                              }}>stale</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </>
       ) : (
         /* Visualization View - three lenses sharing the toolbar:
@@ -742,6 +839,16 @@ export default function DataLineagePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* dbt Cloud connection form modal */}
+      {showDbtConnForm && (
+        <DbtCloudConnectionForm
+          existing={editingDbtConn}
+          orgId={activeOrgId}
+          onClose={() => { setShowDbtConnForm(false); setEditingDbtConn(null); }}
+          onSaved={() => { setShowDbtConnForm(false); setEditingDbtConn(null); fetchDbtConnections(); }}
+        />
       )}
 
       {/* dbt manifest import modal. Lives at the page root so the
@@ -826,6 +933,228 @@ export default function DataLineagePage() {
     </div>
   );
 }
+
+// ── dbt Cloud connection panel ─────────────────────────────────────────
+// A small table of configured dbt Cloud jobs with a per-row "Refresh now"
+// button and the last-run status. Eliminates the manual manifest upload
+// step that the parent page also supports.
+
+function DbtCloudConnectionsPanel({
+  connections, refreshingId, onRefresh, onEdit, onDelete, onAdd,
+}: {
+  connections: DbtCloudConnectionRow[];
+  refreshingId: string | null;
+  onRefresh: (id: string) => void;
+  onEdit: (c: DbtCloudConnectionRow) => void;
+  onDelete: (id: string) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
+          dbt Cloud connections <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>({connections.length})</span>
+        </h2>
+        <button
+          type="button"
+          onClick={onAdd}
+          style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', cursor: 'pointer', fontSize: 12 }}
+        >
+          + Add connection
+        </button>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 8 }}>
+        Each refresh pulls the manifest from the most recent successful run of the configured job and reconciles it like the manual upload would.
+      </p>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--color-bg)' }}>
+              <th style={connThStyle}>Name</th>
+              <th style={connThStyle}>Account / Job</th>
+              <th style={connThStyle}>Last refresh</th>
+              <th style={connThStyle}>Status</th>
+              <th style={{ ...connThStyle, textAlign: 'right' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {connections.map((c) => (
+              <tr key={c.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                <td style={connTdStyle}><strong>{c.name}</strong><div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{c.host}</div></td>
+                <td style={connTdStyle}>{c.accountId} / {c.jobId}</td>
+                <td style={connTdStyle}>{c.lastRunAt ? new Date(c.lastRunAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)' }}>never</span>}</td>
+                <td style={connTdStyle}>
+                  {c.lastStatus === 'SUCCESS' && (
+                    <span style={statusBadge('#dcfce7', '#166534')}>Success</span>
+                  )}
+                  {c.lastStatus === 'ERROR' && (
+                    <span title={c.lastError || ''} style={statusBadge('#fef2f2', '#b91c1c')}>Error</span>
+                  )}
+                  {c.lastStatus === 'NEVER' && (
+                    <span style={statusBadge('var(--color-bg)', 'var(--color-text-muted)')}>Not yet run</span>
+                  )}
+                </td>
+                <td style={{ ...connTdStyle, textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => onRefresh(c.id)}
+                    disabled={refreshingId === c.id}
+                    style={connBtnStyle}
+                  >
+                    {refreshingId === c.id ? 'Refreshing…' : 'Refresh now'}
+                  </button>
+                  <button type="button" onClick={() => onEdit(c)} style={connBtnStyle}>Edit</button>
+                  <button type="button" onClick={() => { if (confirm(`Delete dbt Cloud connection "${c.name}"?`)) onDelete(c.id); }} style={{ ...connBtnStyle, color: 'var(--color-error)' }}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const connThStyle: React.CSSProperties = {
+  padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)',
+  textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'left',
+};
+const connTdStyle: React.CSSProperties = { padding: '6px 12px', fontSize: 12, color: 'var(--color-text)', verticalAlign: 'top' };
+const connBtnStyle: React.CSSProperties = {
+  background: 'none', border: 'none', padding: '2px 6px', marginLeft: 4,
+  color: 'var(--color-primary)', cursor: 'pointer', fontSize: 12,
+};
+const statusBadge = (bg: string, color: string): React.CSSProperties => ({
+  display: 'inline-block', padding: '2px 8px', borderRadius: 12,
+  fontSize: 10, fontWeight: 600, background: bg, color,
+});
+
+// ── dbt Cloud connection form ──────────────────────────────────────────
+// Edits both new and existing connections. For existing connections the
+// token field is left empty by default and only sent if the user types
+// a replacement; the backend treats empty-token-on-PATCH as "keep the
+// current token" so users never need to paste it again just to edit a
+// label.
+
+function DbtCloudConnectionForm({
+  existing, orgId, onClose, onSaved,
+}: {
+  existing: DbtCloudConnectionRow | null;
+  orgId: string | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(existing?.name ?? '');
+  const [host, setHost] = useState(existing?.host ?? 'cloud.getdbt.com');
+  const [accountId, setAccountId] = useState(existing?.accountId ?? '');
+  const [jobId, setJobId] = useState(existing?.jobId ?? '');
+  const [token, setToken] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSave = name.trim() && accountId.trim() && jobId.trim() && (existing ? true : token.trim());
+
+  const save = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, string | undefined> = {
+        orgId: orgId || undefined,
+        name: name.trim(),
+        host: host.trim(),
+        accountId: accountId.trim(),
+        jobId: jobId.trim(),
+      };
+      if (token.trim()) body.token = token.trim();
+      if (existing) {
+        await apiClient.patch(`/dbt-cloud-connections/${existing.id}`, body);
+      } else {
+        await apiClient.post('/dbt-cloud-connections', body);
+      }
+      onSaved();
+    } catch (e: any) {
+      setError(e?.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={() => { if (!saving) onClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={existing ? 'Edit dbt Cloud connection' : 'Add dbt Cloud connection'}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(520px, 90vw)', background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-md)', padding: 20,
+        }}
+      >
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{existing ? 'Edit dbt Cloud connection' : 'Add dbt Cloud connection'}</h3>
+        <p style={{ marginTop: 6, marginBottom: 14, fontSize: 12, color: 'var(--color-text-muted)' }}>
+          Procela polls the manifest for the most recent successful run of the configured job. Find <strong>Account ID</strong> in the dbt Cloud URL (<code>cloud.getdbt.com/accounts/&lt;id&gt;</code>) and <strong>Job ID</strong> on the job's settings page.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <FormRow label="Name">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="My dbt project" style={connInputStyle} autoFocus />
+          </FormRow>
+          <FormRow label="Host">
+            <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="cloud.getdbt.com" style={connInputStyle} />
+          </FormRow>
+          <FormRow label="Account ID">
+            <input value={accountId} onChange={(e) => setAccountId(e.target.value)} placeholder="12345" style={connInputStyle} />
+          </FormRow>
+          <FormRow label="Job ID">
+            <input value={jobId} onChange={(e) => setJobId(e.target.value)} placeholder="98765" style={connInputStyle} />
+          </FormRow>
+          <FormRow label={existing ? 'API token (leave blank to keep current)' : 'API token'}>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={existing?.hasToken ? '••••••••' : 'dbtc_xxx...'}
+              style={connInputStyle}
+            />
+          </FormRow>
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            ⚠ Tokens are stored in plaintext in the prototype. Replace with secret-manager refs for production.
+          </div>
+          {error && (
+            <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#b91c1c', fontSize: 12 }}>{error}</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <button type="button" onClick={onClose} disabled={saving}
+            style={{ padding: '6px 14px', fontSize: 13, background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: saving ? 'default' : 'pointer' }}
+          >Cancel</button>
+          <button type="button" onClick={save} disabled={!canSave || saving}
+            style={{ padding: '6px 14px', fontSize: 13, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: !canSave || saving ? 'default' : 'pointer', opacity: !canSave || saving ? 0.6 : 1 }}
+          >{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const connInputStyle: React.CSSProperties = {
+  padding: '6px 10px', fontSize: 13, border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', color: 'var(--color-text)',
+};
 
 // ── File drop zone ──────────────────────────────────────────────────────
 // Small inline component (instead of pulling in a new shared one) since
@@ -1176,12 +1505,16 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
           const x2 = to.x + BOX_W / 2;
           const y2 = to.y + BOX_H / 2;
           const marker = e.source === 'manual' ? 'asset-arrow-manual' : 'asset-arrow-dbt';
+          // Stale edges render dashed and faded so they're visually
+          // distinct without losing colour-coding by source.
+          const isStale = !!e.isStale;
           return (
             <line
               key={e.id}
               x1={x1} y1={y1} x2={x2} y2={y2}
               stroke={colourFor(e.source)} strokeWidth={1.5}
-              opacity={0.65}
+              strokeDasharray={isStale ? '4 3' : undefined}
+              opacity={isStale ? 0.35 : 0.65}
               markerEnd={`url(#${marker})`}
             />
           );
