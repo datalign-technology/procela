@@ -1294,10 +1294,25 @@ export default function SystemsPage() {
                       <input type="checkbox" checked={selectedIds.has(sys.id)} onChange={() => toggleSelect(sys.id)} />
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
-                      <InlineCellEdit
-                        value={sys.name}
-                        onSave={(v) => inlineSaveField(sys.id, 'name', v)}
-                      />
+                      {/* Clicking the name opens the detail modal, matching
+                       *  Data Assets / People / DAMA Roles. Editing the name
+                       *  is still possible via the row's Edit pencil button -
+                       *  but it's no longer a tap-target hazard on a column
+                       *  users naturally want to click. */}
+                      <button
+                        type="button"
+                        onClick={() => setViewingSystemId(sys.id)}
+                        title="Click to view details"
+                        style={{
+                          background: 'none', border: 'none', padding: 0,
+                          color: 'var(--color-primary)', cursor: 'pointer',
+                          font: 'inherit', fontWeight: 500, textAlign: 'left',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                      >
+                        {sys.name}
+                      </button>
                     </td>
                     {systemCols.isVisible('type') && (
                       <td style={tdStyle}>
