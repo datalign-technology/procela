@@ -217,6 +217,56 @@ textarea:focus-visible {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * High-contrast support.
+ *
+ * The default theme uses subtle borders and muted greys that look clean
+ * but disappear for users with prefers-contrast: more (Windows High
+ * Contrast Mode, macOS Increase Contrast). Bump borders to full text
+ * colour, force underlines on links so colour-coding alone isn't load-
+ * bearing, and tighten the focus ring so it always stands out.
+ *
+ * Uses CSS variable overrides so individual components don't have to
+ * media-query themselves - tokens like --color-border just become more
+ * contrasty under the preference.
+ * ───────────────────────────────────────────────────────────────────── */
+@media (prefers-contrast: more) {
+  :root {
+    /* Force borders to the same colour as text so 1px lines remain
+     * visible. The original value was a low-contrast neutral grey. */
+    --color-border: var(--color-text);
+    --color-text-muted: var(--color-text);
+    --color-text-secondary: var(--color-text);
+  }
+  a {
+    text-decoration: underline;
+  }
+  /* Thicker focus ring so it's always discernible from a thicker
+   * default border. */
+  *:focus-visible {
+    outline-width: 3px !important;
+    outline-offset: 2px !important;
+  }
+}
+
+/* forced-colors media query (Windows High Contrast Mode) - the system
+ * overrides our colours entirely. Ensure interactive surfaces remain
+ * obvious by mapping the focus ring to the system Highlight colour. */
+@media (forced-colors: active) {
+  *:focus-visible {
+    outline-color: Highlight;
+  }
+  /* Override any inline background-only "active" states so a Button or
+   * Tab that uses background to indicate selection also gets a border. */
+  [aria-selected="true"],
+  [aria-pressed="true"],
+  [aria-current="true"],
+  [aria-current="page"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
 
 /* ── Animated connector keyframes ── */
 

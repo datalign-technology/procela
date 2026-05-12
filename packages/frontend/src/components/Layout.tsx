@@ -673,7 +673,10 @@ export default function Layout() {
                 )}
               </button>
               {notifOpen && (
-                <div style={{
+                <div
+                  role="dialog"
+                  aria-label="Notifications"
+                  style={{
                   position: 'absolute', top: '100%', right: 0, marginTop: 4,
                   width: 380, maxHeight: 440, overflowY: 'auto',
                   background: 'var(--color-surface)',
@@ -725,9 +728,23 @@ export default function Layout() {
                       return `${Math.floor(hrs / 24)}d ago`;
                     })();
                     return (
+                      // role="button" + tabIndex + key handler instead of
+                      // wrapping in <button>, because the dismiss control
+                      // nested inside is already a button and we can't
+                      // nest interactive elements. Enter/Space activate
+                      // the notification the same as a click.
                       <div
                         key={n.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${n.title}. ${n.read ? 'Read.' : 'Unread.'}`}
                         onClick={() => handleNotifClick(n)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleNotifClick(n);
+                          }
+                        }}
                         style={{
                           display: 'flex', gap: 10, padding: '10px 14px',
                           cursor: 'pointer', borderBottom: '1px solid var(--color-border)',

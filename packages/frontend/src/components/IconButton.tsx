@@ -85,33 +85,25 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
       onMouseDown={(e) => { if (!disabled) e.currentTarget.style.transform = 'scale(0.96)'; }}
       onMouseUp={(e) => { e.currentTarget.style.transform = ''; }}
       onMouseLeave={(e) => { e.currentTarget.style.transform = ''; }}
-      // Reveal the floating label as a sibling element via a child class
-      // toggled by the wrapper's :hover. We can't use CSS modules here
-      // (component is self-contained), so use inline styles + a data
-      // attribute the tooltip element listens to.
-      onMouseEnter={(e) => {
-        const tip = e.currentTarget.querySelector<HTMLElement>('[data-tooltip]');
-        if (!tip) return;
-        // Position the tooltip using `fixed` coordinates derived from the
-        // button's viewport rect. This escapes any parent `overflow: hidden`
-        // (table wrapper cards, tree containers) so the tooltip is never
-        // clipped.
-        const rect = e.currentTarget.getBoundingClientRect();
-        tip.style.position = 'fixed';
-        tip.style.top = `${rect.bottom + 6}px`;
-        tip.style.left = `${rect.left + rect.width / 2}px`;
-        tip.style.transform = 'translateX(-50%)';
-        tip.style.opacity = '1';
-        tip.style.visibility = 'visible';
-      }}
-      onPointerLeave={(e) => {
-        const tip = e.currentTarget.querySelector<HTMLElement>('[data-tooltip]');
-        if (tip) { tip.style.opacity = '0'; tip.style.visibility = 'hidden'; }
-      }}
+      // Reveal the floating label as a sibling element. The same code path
+      // runs for mouse hover (onMouseEnter), keyboard focus (onFocus), and
+      // touch (the long-press emits a pointerenter on most browsers), so
+      // keyboard and assistive-technology users see the verb the mouse
+      // tooltip describes. Escape dismisses early.
+      onMouseEnter={(e) => showTip(e.currentTarget)}
+      onFocus={(e) => showTip(e.currentTarget)}
+      onPointerLeave={(e) => hideTip(e.currentTarget)}
+      onBlur={(e) => hideTip(e.currentTarget)}
+      onKeyDown={(e) => { if (e.key === 'Escape') hideTip(e.currentTarget); }}
     >
       <Icon name={icon} size={iconSize} />
       <span
         data-tooltip
+        // The aria-label on the button is the accessible name; this
+        // visible tooltip duplicates that text for sighted keyboard
+        // users. Mark it presentational so screen readers don't
+        // announce it a second time.
+        aria-hidden="true"
         style={{
           position: 'fixed', top: 0, left: 0,
           background: '#1e293b', color: '#fff',
@@ -127,6 +119,30 @@ export default function IconButton({ icon, label, onClick, variant = 'secondary'
       </span>
     </button>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Tooltip show / hide. Pulled out of the JSX so onMouseEnter, onFocus,
+// onPointerLeave, onBlur, and Escape can all share a single code path -
+// keyboard and mouse interactions now end up with the same tooltip
+// state without duplicating positioning logic.
+// ──────────────────────────────────────────────────────────────────────────
+
+function showTip(button: HTMLElement) {
+  const tip = button.querySelector<HTMLElement>('[data-tooltip]');
+  if (!tip) return;
+  const rect = button.getBoundingClientRect();
+  tip.style.position = 'fixed';
+  tip.style.top = `${rect.bottom + 6}px`;
+  tip.style.left = `${rect.left + rect.width / 2}px`;
+  tip.style.transform = 'translateX(-50%)';
+  tip.style.opacity = '1';
+  tip.style.visibility = 'visible';
+}
+
+function hideTip(button: HTMLElement) {
+  const tip = button.querySelector<HTMLElement>('[data-tooltip]');
+  if (tip) { tip.style.opacity = '0'; tip.style.visibility = 'hidden'; }
 }
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -396,6 +396,19 @@ function Composer({ value, onChange, people, onSubmit, submitting, submitLabel =
           onSelect={(e) => recomputeMentionState(value, (e.target as HTMLTextAreaElement).selectionStart)}
           rows={3}
           placeholder={placeholder}
+          /* combobox semantics so screen readers describe the @-mention
+           * popover as an associated suggestion list. The textarea drives
+           * navigation via arrow keys; aria-activedescendant points at the
+           * highlighted option's id. */
+          role="combobox"
+          aria-expanded={mentionStart !== null && matches.length > 0}
+          aria-autocomplete="list"
+          aria-controls={mentionStart !== null && matches.length > 0 ? 'comment-mentions' : undefined}
+          aria-activedescendant={
+            mentionStart !== null && matches.length > 0
+              ? `comment-mention-opt-${hoverIdx}`
+              : undefined
+          }
           style={{
             width: '100%', boxSizing: 'border-box',
             fontSize: 13, padding: '6px 10px', fontFamily: 'inherit',
@@ -404,15 +417,23 @@ function Composer({ value, onChange, people, onSubmit, submitting, submitLabel =
           }}
         />
         {mentionStart !== null && matches.length > 0 && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 2,
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
-            minWidth: 180, maxWidth: 260, zIndex: 10, padding: 4,
-          }}>
+          <div
+            id="comment-mentions"
+            role="listbox"
+            aria-label="People to mention"
+            style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: 2,
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
+              minWidth: 180, maxWidth: 260, zIndex: 10, padding: 4,
+            }}
+          >
             {matches.map((p, idx) => (
               <div
                 key={p.id}
+                id={`comment-mention-opt-${idx}`}
+                role="option"
+                aria-selected={idx === hoverIdx}
                 onMouseDown={(e) => { e.preventDefault(); insertMention(p); }}
                 onMouseEnter={() => setHoverIdx(idx)}
                 style={{
