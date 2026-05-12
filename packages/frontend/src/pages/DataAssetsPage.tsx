@@ -9,6 +9,7 @@ import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
+import SavedViewsMenu from '../components/SavedViewsMenu';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -853,6 +854,17 @@ export default function DataAssetsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <SavedViewsMenu
+            pageKey="data-assets"
+            currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, searchQuery }}
+            onApply={(f) => {
+              setFilterCategory((f.filterCategory as string) || '');
+              setFilterTier((f.filterTier as string) || '');
+              setFilterSystemId((f.filterSystemId as string) || '');
+              setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
+              setSearchQuery((f.searchQuery as string) || '');
+            }}
+          />
           {assets.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'data-assets',
