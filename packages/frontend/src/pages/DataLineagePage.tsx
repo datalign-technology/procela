@@ -1,5 +1,5 @@
 import { SkeletonRows } from '../components/Skeleton';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -56,6 +56,27 @@ interface VisLink {
   frequency: string;
   status: string;
   dataAssetName: string;
+}
+
+interface DbtImportSummary {
+  assetsCreated: number;
+  assetsMatched: number;
+  edgesCreated: number;
+  edgesTouched: number;
+  edgesRemoved: number;
+}
+
+interface AssetLineageEdgeRow {
+  id: string;
+  orgId: string;
+  sourceAssetId: string;
+  targetAssetId: string;
+  source: 'dbt' | 'manual';
+  sourceRef?: string;
+  sourceAssetName: string | null;
+  targetAssetName: string | null;
+  lastSeenAt: string;
+  createdAt: string;
 }
 
 interface FormData {
@@ -212,21 +233,59 @@ export default function DataLineagePage() {
   // Visualization data
   const [visNodes, setVisNodes] = useState<VisNode[]>([]);
   const [visLinks, setVisLinks] = useState<VisLink[]>([]);
+  // dbt manifest import state. The modal is closed by default; once a
+  // file is dropped/selected it parses client-side and POSTs the JSON.
+  const [showDbtImport, setShowDbtImport] = useState(false);
+  const [dbtImporting, setDbtImporting] = useState(false);
+  const [dbtImportSummary, setDbtImportSummary] = useState<DbtImportSummary | null>(null);
+  const [dbtImportError, setDbtImportError] = useState<string | null>(null);
+  // Asset-level edges derived from imports. Shown in a tabbed section
+  // beneath the existing system-lineage table.
+  const [assetEdges, setAssetEdges] = useState<AssetLineageEdgeRow[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [linksRes, systemsRes, assetsRes] = await Promise.all([
+      const [linksRes, systemsRes, assetsRes, edgesRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: LineageLink[] }>(`/data-lineage${query}`),
         apiClient.get<{ success: boolean; data: SystemRef[] }>(`/systems${query}`),
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${query}`),
+        apiClient.get<{ success: boolean; data: AssetLineageEdgeRow[] }>(`/data-lineage/asset-edges${query}`),
       ]);
       setLinks(linksRes.data || []);
       setSystemsList(systemsRes.data || []);
       setAssetsList(assetsRes.data || []);
+      setAssetEdges(edgesRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
+
+  // Parse the dropped/picked manifest file client-side (manifests can be
+  // many MB so we don't want them in a multipart upload), then POST the
+  // parsed JSON to the import endpoint.
+  const handleDbtFile = async (file: File) => {
+    setDbtImporting(true);
+    setDbtImportError(null);
+    setDbtImportSummary(null);
+    try {
+      const text = await file.text();
+      let manifest: unknown;
+      try { manifest = JSON.parse(text); }
+      catch { throw new Error('That file isn\'t valid JSON.'); }
+      const res = await apiClient.post<{ success: boolean; summary: DbtImportSummary; error?: string }>(
+        '/data-lineage/import-dbt',
+        { orgId: activeOrgId, manifest },
+      );
+      if (!res.success) throw new Error(res.error || 'Import failed');
+      setDbtImportSummary(res.summary);
+      // Refresh the catalog so new assets and edges show up.
+      await fetchData();
+    } catch (e: any) {
+      setDbtImportError(e?.message || 'Import failed');
+    } finally {
+      setDbtImporting(false);
+    }
+  };
 
   const fetchVisualization = useCallback(async () => {
     try {
@@ -361,6 +420,7 @@ export default function DataLineagePage() {
         <div style={{ display: 'flex', gap: 6 }}>
           <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
             onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
+          <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />
           {links.length > 0 && (
             <ExportMenu build={() => ({
               filenameBase: 'data-lineage',
@@ -591,11 +651,158 @@ export default function DataLineagePage() {
               </table>
             </div>
           )}
+
+          {/* Asset-level lineage edges (auto-derived from dbt manifest
+            *  imports). Hidden when there are no edges yet so the page
+            *  doesn't lead with an empty placeholder. */}
+          {assetEdges.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', marginBottom: 4 }}>
+                Asset-level lineage <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>({assetEdges.length} edges)</span>
+              </h2>
+              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 12 }}>
+                Auto-derived from imported source manifests (dbt). Re-importing the same manifest updates these in place.
+              </p>
+              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-bg)' }}>
+                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source asset</th>
+                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Target asset</th>
+                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source</th>
+                      <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Last seen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assetEdges.map((e) => (
+                      <tr key={e.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.sourceAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
+                        <td style={{ padding: '6px 12px', fontSize: 13 }}>{e.targetAssetName || <span style={{ color: 'var(--color-text-muted)' }}>(deleted)</span>}</td>
+                        <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{e.source}</td>
+                        <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)' }}>{new Date(e.lastSeenAt).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         /* Visualization View */
         <LineageVisualization nodes={visNodes} links={visLinks} />
       )}
+
+      {/* dbt manifest import modal. Lives at the page root so the
+        *  backdrop can cover the whole viewport regardless of where the
+        *  page's main content scrolls. */}
+      {showDbtImport && (
+        <div
+          onClick={() => { if (!dbtImporting) { setShowDbtImport(false); setDbtImportSummary(null); setDbtImportError(null); } }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)',
+            zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(560px, 90vw)',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-md)',
+              padding: 20,
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Import dbt manifest</h3>
+            <p style={{ marginTop: 6, marginBottom: 14, fontSize: 12, color: 'var(--color-text-muted)' }}>
+              Drop or pick a dbt-generated <code>manifest.json</code>. Procela will create or match data
+              assets for each model, source, seed, and snapshot, then derive asset-to-asset lineage edges
+              from the <code>depends_on</code> graph. Re-imports update the same assets and edges in place.
+            </p>
+            <FileDropZone disabled={dbtImporting} onFile={handleDbtFile} />
+            {dbtImporting && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>Importing…</div>
+            )}
+            {dbtImportError && (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#b91c1c', fontSize: 12 }}>
+                {dbtImportError}
+              </div>
+            )}
+            {dbtImportSummary && (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 4, color: '#065f46', fontSize: 12 }}>
+                Imported manifest. Created {dbtImportSummary.assetsCreated} new assets,
+                matched {dbtImportSummary.assetsMatched} existing.
+                {' '}{dbtImportSummary.edgesCreated} new edges, {dbtImportSummary.edgesTouched} refreshed,
+                {' '}{dbtImportSummary.edgesRemoved} stale edges removed.
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => { setShowDbtImport(false); setDbtImportSummary(null); setDbtImportError(null); }}
+                disabled={dbtImporting}
+                style={{
+                  padding: '6px 14px', fontSize: 13,
+                  background: 'var(--color-bg)', color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  cursor: dbtImporting ? 'default' : 'pointer',
+                }}
+              >
+                {dbtImportSummary ? 'Done' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── File drop zone ──────────────────────────────────────────────────────
+// Small inline component (instead of pulling in a new shared one) since
+// dbt manifest is the only file-drop case on this page so far. Click
+// anywhere to open the file picker; drag-and-drop is also supported.
+function FileDropZone({ onFile, disabled }: { onFile: (f: File) => void; disabled?: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={() => { if (!disabled) inputRef.current?.click(); }}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setHover(true); }}
+      onDragLeave={() => setHover(false)}
+      onDrop={(e) => {
+        e.preventDefault(); setHover(false);
+        if (disabled) return;
+        const f = e.dataTransfer.files?.[0];
+        if (f) onFile(f);
+      }}
+      style={{
+        padding: '24px', textAlign: 'center', borderRadius: 'var(--radius-md)',
+        border: `2px dashed ${hover ? 'var(--color-primary)' : 'var(--color-border)'}`,
+        background: hover ? 'var(--color-bg)' : 'transparent',
+        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
+        transition: 'background 0.1s, border-color 0.1s',
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>
+        Drop a manifest.json here
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+        or click to pick a file
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".json,application/json"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          // Reset so picking the same file twice still fires onChange.
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 }
