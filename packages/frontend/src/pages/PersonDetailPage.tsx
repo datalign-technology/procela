@@ -8,6 +8,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
 import SkillPicker from '../components/SkillPicker';
+import CommentsPanel from '../components/CommentsPanel';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -515,6 +516,17 @@ export default function PersonDetailPage() {
           </ul>
         </div>
       )}
+
+      {/* Discussion — threaded comments + @mentions about this person.
+        *  Useful for notes about onboarding, handoffs, escalations. */}
+      <div style={cardStyle}>
+        <div style={sectionTitleStyle}>Discussion</div>
+        <CommentsPanel
+          entityType="Person"
+          entityId={p.id}
+          entityLabel={`${p.name}'s profile`}
+        />
+      </div>
     </div>
   );
 }

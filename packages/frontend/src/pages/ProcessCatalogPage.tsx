@@ -9,6 +9,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
+import CommentsPanel from '../components/CommentsPanel';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
@@ -804,6 +805,21 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               orgId={node.orgIds?.[0]}
               disabled={isLocked}
             />
+          )}
+          {/* Discussion — threaded comments + @mentions for this node.
+            *  Process-level conversations stay attached to the node rather
+            *  than living in someone's email. */}
+          {isExpanded && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                Discussion
+              </div>
+              <CommentsPanel
+                entityType="ProcessNode"
+                entityId={node.id}
+                entityLabel={`${LEVEL_CONFIG[node.level].label}: ${node.name}`}
+              />
+            </div>
           )}
           {/* Guided prompt for missing required children */}
           {warning && (

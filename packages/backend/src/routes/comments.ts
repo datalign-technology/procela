@@ -88,11 +88,13 @@ function parseMentions(body: string, orgId: string): string[] {
 }
 
 function entityLinkFor(entityType: string, entityId: string): string {
-  switch (entityType) {
+  // Convention across the app is PascalCase (DataAsset, ProcessNode),
+  // but be lenient so older camelCase callers still get a working link.
+  switch (entityType.toLowerCase()) {
     case 'system':       return `/systems?detail=${entityId}`;
-    case 'dataAsset':    return `/data-assets?detail=${entityId}`;
+    case 'dataasset':    return `/data-assets?detail=${entityId}`;
     case 'person':       return `/people/${entityId}`;
-    case 'processNode':  return `/processes?node=${entityId}`;
+    case 'processnode':  return `/processes?node=${entityId}`;
     default:             return '/';
   }
 }

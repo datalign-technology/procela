@@ -7,6 +7,7 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
+import CommentsPanel from '../components/CommentsPanel';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -141,17 +142,6 @@ interface Asset360Data {
   mappings: { id: string; processStepId: string; linkType: string; notes: string; processPath: string }[];
   ownerInfo: { id: string | null; name: string } | null;
   stewardInfos: { id: string; name: string }[];
-}
-
-interface CommentEntry {
-  id: string;
-  orgId: string;
-  entityType: string;
-  entityId: string;
-  userId: string | null;
-  userName: string;
-  content: string;
-  createdAt: string;
 }
 
 interface FormData {
@@ -360,9 +350,9 @@ export default function DataAssetsPage() {
     if (next.has(colId)) next.delete(colId); else next.add(colId);
     return next;
   });
-  const [assetComments, setAssetComments] = useState<CommentEntry[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [commentUserName, setCommentUserName] = useState('');
+  // Inline comments state previously lived here. Now replaced by the
+  // shared CommentsPanel component, which handles threading, mentions,
+  // and notifications consistently with the rest of the app.
 
   // Binding state: one primary binding per asset is the common case. We
   // fetch them in one roundtrip keyed by asset id and expose tiny bits
@@ -835,47 +825,11 @@ export default function DataAssetsPage() {
 
   const open360 = async (id: string) => {
     setLoading360(true);
-    setAssetComments([]);
-    setNewComment('');
     try {
-      const [res, commentsRes] = await Promise.all([
-        apiClient.get<{ success: boolean; data: Asset360Data }>(`/data-assets/${id}/360`),
-        apiClient.get<{ success: boolean; data: CommentEntry[] }>(`/comments?entityType=DataAsset&entityId=${id}`),
-      ]);
+      const res = await apiClient.get<{ success: boolean; data: Asset360Data }>(`/data-assets/${id}/360`);
       setViewing360(res.data || null);
-      setAssetComments(commentsRes.data || []);
     } catch { /* */ }
     finally { setLoading360(false); }
-  };
-
-  const fetchComments = async (entityId: string) => {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: CommentEntry[] }>(`/comments?entityType=DataAsset&entityId=${entityId}`);
-      setAssetComments(res.data || []);
-    } catch { /* */ }
-  };
-
-  const addComment = async () => {
-    if (!newComment.trim() || !viewing360) return;
-    try {
-      await apiClient.post('/comments', {
-        entityType: 'DataAsset',
-        entityId: viewing360.asset.id,
-        content: newComment.trim(),
-        userName: commentUserName.trim() || 'Anonymous',
-        orgId: activeOrgId,
-      });
-      setNewComment('');
-      fetchComments(viewing360.asset.id);
-    } catch { /* */ }
-  };
-
-  const deleteComment = async (commentId: string) => {
-    if (!viewing360) return;
-    try {
-      await apiClient.delete(`/comments/${commentId}`);
-      fetchComments(viewing360.asset.id);
-    } catch { /* */ }
   };
 
   return (
@@ -1890,61 +1844,17 @@ export default function DataAssetsPage() {
                   )}
                 </div>
 
-                {/* Comments */}
+                {/* Comments — uses the shared threaded panel with @mention
+                  *  autocomplete and notifications. */}
                 <div style={{ marginBottom: 16 }}>
                   <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Comments ({assetComments.length})
+                    Discussion
                   </h3>
-                  {assetComments.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>No comments yet</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                      {assetComments.map((c) => (
-                        <div key={c.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>{c.userName}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{new Date(c.createdAt).toLocaleString()}</span>
-                              <button onClick={() => deleteComment(c.id)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--color-error)', padding: '0 2px' }}
-                                title="Delete comment">x</button>
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap' }}>{c.content}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        style={{ ...inputStyle, width: 140 }}
-                        placeholder="Your name"
-                        value={commentUserName}
-                        onChange={(e) => setCommentUserName(e.target.value)}
-                      />
-                    </div>
-                    <textarea
-                      style={{ ...inputStyle, minHeight: 80, resize: 'vertical', fontFamily: 'inherit' }}
-                      placeholder="Add a comment..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addComment(); } }}
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button
-                        onClick={addComment}
-                        disabled={!newComment.trim()}
-                        style={{
-                          ...btnPrimary,
-                          opacity: !newComment.trim() ? 0.5 : 1,
-                          cursor: !newComment.trim() ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Add Comment
-                      </button>
-                    </div>
-                  </div>
+                  <CommentsPanel
+                    entityType="DataAsset"
+                    entityId={viewing360.asset.id}
+                    entityLabel={`Data Asset: ${viewing360.asset.name}`}
+                  />
                 </div>
                 {/* Footer Close — keyboard / mobile users may not discover
                     the header X or backdrop click; an explicit button is

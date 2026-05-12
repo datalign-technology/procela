@@ -212,7 +212,7 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
                 Discussion
               </h3>
               <CommentsPanel
-                entityType="system"
+                entityType="System"
                 entityId={systemId}
                 entityLabel={`System: ${data.system.name}`}
               />
