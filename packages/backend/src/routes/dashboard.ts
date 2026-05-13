@@ -241,9 +241,14 @@ router.get('/raci', (req: Request, res: Response) => {
     ? governanceGroups.filter((g) => g.orgId === oid)
     : governanceGroups;
 
-  // Rows: all process hierarchy levels with parent info for tree building
+  // Rows: every planning-level node in the hierarchy. EXECUTION is a
+  // run-time logging level (instances of a TASK), not something you
+  // assign responsibility for, so it's the only level intentionally
+  // dropped here. DOMAIN, CAPABILITY, and TASK were previously
+  // silently filtered out as well; bring them back so processes with
+  // task-level detail aren't invisible in the matrix.
   const rows = filteredNodes
-    .filter((n) => ['VALUE_STREAM', 'PROCESS', 'SUBPROCESS', 'ACTIVITY'].includes(n.level))
+    .filter((n) => n.level !== 'EXECUTION')
     .map((n) => ({
       id: n.id,
       name: n.name,
@@ -377,10 +382,19 @@ router.get('/raci', (req: Request, res: Response) => {
       const processName = row.level === 'VALUE_STREAM' ? null : (getGovProcessName(row.id) || row.name);
 
       for (const group of filteredGroups) {
-        // Check if this group type maps to this governance process
+        // Check if this group type maps to this governance process.
+        // Previously this used substring match (.includes), so e.g.
+        // "Data Domain Management" matched any process containing the
+        // phrase - including unrelated names with that substring.
+        // Switch to case-insensitive equality on a trimmed name so a
+        // typo in the process name cleanly breaks the mapping rather
+        // than silently pulling in wrong members.
         const mappedProcesses = GOV_GROUP_PROCESS_MAP[group.type] || [];
         const isVs = row.level === 'VALUE_STREAM';
-        const matches = isVs ? mappedProcesses.length > 0 : mappedProcesses.some((p) => processName?.includes(p));
+        const normalizedProcess = processName?.trim().toLowerCase() || '';
+        const matches = isVs
+          ? mappedProcesses.length > 0
+          : mappedProcesses.some((p) => p.trim().toLowerCase() === normalizedProcess);
 
         if (matches) {
           for (const member of group.members) {
@@ -497,6 +511,35 @@ router.get('/raci', (req: Request, res: Response) => {
       cellMap[ov.personId] = ov.value;
       reasonMap[ov.personId] = ov.reason || 'Manual override';
       allRelevantIds.add(ov.personId);
+    }
+
+    // ── Enforce one A per row ────────────────────────────────────────
+    // RACI's first rule is exactly one Accountable. Auto-derivation can
+    // produce multiple (e.g. domain owner + asset owner are different
+    // people; multiple CDOs with no domain owner; the governance branch
+    // matching two groups whose chairs are different people). Without
+    // demotion the matrix violates RACI on every row that does.
+    //
+    // Manual overrides are sacrosanct: if a user explicitly set someone
+    // to A we keep that. Otherwise we pick a deterministic winner
+    // (lexicographic by name) and demote the rest to R - they were the
+    // next-tightest relationship in the auto-derived chain and stay
+    // visible in the cell.
+    const aPersons = Object.keys(cellMap).filter((id) => cellMap[id] === 'A');
+    if (aPersons.length > 1) {
+      const overrideA = aPersons.find((pid) =>
+        nodeOverrides.some((o) => o.personId === pid && o.value === 'A'),
+      );
+      const sortByName = (a: string, b: string) =>
+        (filteredPeople.find((p) => p.id === a)?.name || a)
+          .localeCompare(filteredPeople.find((p) => p.id === b)?.name || b);
+      const winner = overrideA || aPersons.sort(sortByName)[0];
+      for (const pid of aPersons) {
+        if (pid === winner) continue;
+        cellMap[pid] = 'R';
+        reasonMap[pid] = (reasonMap[pid] || 'Accountable candidate')
+          + ' (demoted to Responsible — RACI allows only one Accountable per row)';
+      }
     }
 
     matrix[row.id] = cellMap;

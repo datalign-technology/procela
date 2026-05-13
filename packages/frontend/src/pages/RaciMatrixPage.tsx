@@ -211,13 +211,28 @@ export default function RaciMatrixPage() {
     const isGov = isGovernanceRow(r);
     return sectionFilter === 'governance' ? isGov : !isGov;
   }) : [];
-  const visibleRows = sectionFilteredRows.filter(isRowVisible);
+  const treeFilteredRows = sectionFilteredRows.filter(isRowVisible);
 
-  // Hide empty columns: only show people with at least one assignment in visible rows
+  // Hide empty columns: only show people with at least one assignment in
+  // currently-visible rows (before the row-empty pass, otherwise the two
+  // filters loop on each other).
   const activeColumns = sortedColumns.filter((col) => {
     if (!hideEmpty || !data) return true;
-    return visibleRows.some((row) => data.matrix[row.id]?.[col.personId]);
+    return treeFilteredRows.some((row) => data.matrix[row.id]?.[col.personId]);
   });
+
+  // Hide empty rows: when Hide-Empty is on, drop rows that have no
+  // assignment in any active column. Parents are kept either way so
+  // the tree structure remains navigable even when intermediate nodes
+  // are blank - hiding a parent would orphan its visible children.
+  const visibleRows = !hideEmpty || !data
+    ? treeFilteredRows
+    : treeFilteredRows.filter((row) => {
+        const hasChildren = data.rows.some((r) => r.parentId === row.id);
+        if (hasChildren) return true;
+        const cells = data.matrix[row.id] || {};
+        return activeColumns.some((col) => cells[col.personId]);
+      });
 
   // Validation warnings per row
   const rowWarnings = data ? visibleRows.map((row) => {
