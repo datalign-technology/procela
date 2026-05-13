@@ -124,12 +124,14 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
           id: `owner-${data.ownership.owner.id}`,
           label: data.ownership.owner.name,
           badge: 'Owner',
+          badgeRoleType: 'SYSTEM_OWNER',
           onClick: () => goto(`/people/${data.ownership.owner!.id}`),
         }] : []),
         ...(data.ownership.deputy && data.ownership.deputy.name ? [{
           id: `deputy-${data.ownership.deputy.id}`,
           label: data.ownership.deputy.name,
           badge: 'Deputy',
+          badgeRoleType: 'SYSTEM_DEPUTY_OWNER',
           onClick: () => goto(`/people/${data.ownership.deputy!.id}`),
         }] : []),
         ...data.ownership.custodians.map((c) => ({
@@ -137,6 +139,7 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
           label: c.name,
           sublabel: c.title || undefined,
           badge: custodianLabel,
+          badgeRoleType: 'SYSTEM_CUSTODIAN',
           onClick: () => goto(`/people/${c.id}`),
         })),
       ],

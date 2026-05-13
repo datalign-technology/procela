@@ -1809,6 +1809,7 @@ export default function DataAssetsPage() {
                             id: `owner-${viewing360.ownerInfo.id || viewing360.ownerInfo.name}`,
                             label: viewing360.ownerInfo.name,
                             badge: 'Owner',
+                            badgeRoleType: 'DATA_ASSET_OWNER',
                             onClick: viewing360.ownerInfo.id
                               ? () => { setViewing360(null); navigate(`/people/${viewing360.ownerInfo!.id}`); }
                               : undefined,
@@ -1817,6 +1818,7 @@ export default function DataAssetsPage() {
                             id: `steward-${s.id}`,
                             label: s.name,
                             badge: 'Steward',
+                            badgeRoleType: 'DATA_ASSET_STEWARD',
                             onClick: () => { setViewing360(null); navigate(`/people/${s.id}`); },
                           })),
                         ],

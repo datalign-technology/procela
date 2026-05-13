@@ -249,16 +249,203 @@ const REFERENCE: Record<string, RoleReference> = {
   },
 };
 
-export function getRoleDef(roleType: string): GovernanceRoleDef | null {
-  return GOVERNANCE_ROLES.find((r) => r.roleType === roleType) ?? null;
+// ═══════════════════════════════════════════════════════════════════════════
+// Entity-attached roles
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Procela also has roles that aren't DAMA-style enterprise roles - they're
+// foreign-key fields on Systems / Data Assets / Data Domains: System Owner,
+// Deputy Owner, System Custodian, Asset Owner, Asset Steward, Domain Owner,
+// Domain Steward. Until now these had no central definition - users saw
+// "Custodian" next to "Data Custodian" and reasonably assumed they worked
+// the same, but only the DAMA ones opened the Role Detail drawer.
+//
+// Add the same level of definition (purpose, responsibilities, typical
+// decisions, required skills) to each entity-attached role so the drawer
+// can render them identically. The data model doesn't change - a System's
+// owner is still a foreign key on the System - only the catalog does.
+//
+// Categories are kept separate so the drawer can:
+//   - skip groupsExpectingRole() for entity-attached roles
+//   - query the right source for "Currently held by" (per-entity scan
+//     instead of /dama-roles)
+//   - render a "scope" hint ("Scoped per system" vs "Enterprise") that
+//     helps users understand that two people can both hold System Owner
+//     for different systems without it being a RACI violation.
+
+export type RoleCategory = 'governance' | 'entity';
+export type RoleScope = 'enterprise' | 'system' | 'dataAsset' | 'dataDomain';
+
+export interface EntityRoleDef {
+  roleType: string;
+  label: string;
+  /** Hosting entity. Drives the "Currently held by" data source. */
+  scope: Exclude<RoleScope, 'enterprise'>;
+}
+
+export const ENTITY_ROLES: EntityRoleDef[] = [
+  { roleType: 'SYSTEM_OWNER',           label: 'System Owner',         scope: 'system' },
+  { roleType: 'SYSTEM_DEPUTY_OWNER',    label: 'Deputy System Owner',  scope: 'system' },
+  { roleType: 'SYSTEM_CUSTODIAN',       label: 'System Custodian',     scope: 'system' },
+  { roleType: 'DATA_ASSET_OWNER',       label: 'Data Asset Owner',     scope: 'dataAsset' },
+  { roleType: 'DATA_ASSET_STEWARD',     label: 'Data Asset Steward',   scope: 'dataAsset' },
+  { roleType: 'DATA_DOMAIN_OWNER',      label: 'Data Domain Owner',    scope: 'dataDomain' },
+  { roleType: 'DATA_DOMAIN_STEWARD',    label: 'Data Domain Steward',  scope: 'dataDomain' },
+];
+
+const ENTITY_REFERENCE: Record<string, RoleReference> = {
+  SYSTEM_OWNER: {
+    summary: 'The business owner of a single system - the person who funds it, prioritises changes to it, and answers for its health. Different from a Data Owner: System Owner answers for the application; Data Owner answers for what\'s inside.',
+    responsibilities: [
+      'Own the system\'s roadmap and approve major changes',
+      'Sign off on availability and uptime expectations with the business',
+      'Approve who gets access at the system level',
+      'Sponsor remediation when the system is unreliable or insecure',
+      'Decide when the system is retired or replaced',
+    ],
+    typicalDecisions: [
+      { decision: 'Major system upgrades or replacements', raci: 'A' },
+      { decision: 'System-level access policy', raci: 'A' },
+      { decision: 'Uptime / SLA commitments', raci: 'A' },
+      { decision: 'Budget for the system and its operations', raci: 'A' },
+      { decision: 'Day-to-day operational priorities', raci: 'C' },
+    ],
+    requiredSkills: ['Stakeholder Management', 'Issue Resolution', 'Standards Enforcement'],
+  },
+  SYSTEM_DEPUTY_OWNER: {
+    summary: 'Backup decision-maker for a system. Covers when the owner is unavailable; the same authority on the same scope.',
+    responsibilities: [
+      'Make owner-equivalent decisions when the owner is unavailable',
+      'Stay close enough to the system to answer the same questions the owner would',
+      'Maintain context for continuity if ownership transitions',
+    ],
+    typicalDecisions: [
+      { decision: 'Same decisions as System Owner when acting in their stead', raci: 'A' },
+      { decision: 'Day-to-day operational priorities', raci: 'C' },
+    ],
+    requiredSkills: ['Stakeholder Management', 'Issue Resolution'],
+  },
+  SYSTEM_CUSTODIAN: {
+    summary: 'The technical caretaker of a system. The "ops" of the system: keeps it running, handles incidents, applies patches, manages access. Distinct from the DAMA Data Custodian role, which is enterprise-wide and covers data storage broadly.',
+    responsibilities: [
+      'Operate the system day-to-day; respond to incidents and outages',
+      'Apply security patches and version upgrades on the agreed cadence',
+      'Implement access provisioning as approved by the system owner',
+      'Run backups and validate restores',
+      'Monitor performance and capacity',
+    ],
+    typicalDecisions: [
+      { decision: 'Day-to-day operational changes', raci: 'R' },
+      { decision: 'Patch / upgrade scheduling', raci: 'A' },
+      { decision: 'Incident response actions', raci: 'A' },
+      { decision: 'Access provisioning (per owner policy)', raci: 'R' },
+      { decision: 'Major architecture changes', raci: 'C' },
+    ],
+    requiredSkills: ['Access Control', 'Performance Tuning', 'Audit Trail Management', 'Encryption Management'],
+  },
+  DATA_ASSET_OWNER: {
+    summary: 'Accountable for a specific data asset. Owns its definition, quality, and classification at the asset level (a single table, file, or feed). Sits underneath the broader Domain Owner.',
+    responsibilities: [
+      'Approve the asset\'s definition, classification, and retention',
+      'Sign off on data quality thresholds for this asset',
+      'Decide who gets access to this asset',
+      'Sponsor remediation when quality drops below threshold',
+      'Coordinate with the Domain Owner on cross-asset issues',
+    ],
+    typicalDecisions: [
+      { decision: 'Asset definition and classification', raci: 'A' },
+      { decision: 'Asset quality thresholds', raci: 'A' },
+      { decision: 'Access requests to this asset', raci: 'A' },
+      { decision: 'Schema changes', raci: 'A' },
+      { decision: 'Cross-domain data sharing', raci: 'C' },
+    ],
+    requiredSkills: ['Business Translation', 'Stakeholder Management', 'Issue Resolution'],
+  },
+  DATA_ASSET_STEWARD: {
+    summary: 'Day-to-day operational management for a data asset. Handles definitions, quality investigations, and questions about this specific asset.',
+    responsibilities: [
+      'Maintain the asset\'s metadata in the catalog',
+      'Triage and route data quality issues',
+      'Answer questions about this specific asset',
+      'Coordinate fixes with engineering when something breaks',
+      'Keep the column / business-term mapping current',
+    ],
+    typicalDecisions: [
+      { decision: 'Day-to-day quality issue prioritization', raci: 'R' },
+      { decision: 'Metadata changes', raci: 'R' },
+      { decision: 'Routine access requests', raci: 'R' },
+      { decision: 'Major redefinition of the asset', raci: 'C' },
+    ],
+    requiredSkills: ['Data Cataloging', 'Documentation', 'Business Translation', 'Issue Resolution'],
+  },
+  DATA_DOMAIN_OWNER: {
+    summary: 'Cross-asset owner of a logical domain (e.g. Customer Data, Finance Data). Sets direction for all assets in the domain. The person to escalate to when several assets in the same domain disagree.',
+    responsibilities: [
+      'Set direction and quality bar for the entire domain',
+      'Resolve definitional disputes across assets in the domain',
+      'Approve which assets belong in the domain',
+      'Sponsor the stewards working in the domain',
+      'Coordinate with other Domain Owners on cross-domain integrations',
+    ],
+    typicalDecisions: [
+      { decision: 'Domain-wide definitions and business rules', raci: 'A' },
+      { decision: 'Domain quality thresholds', raci: 'A' },
+      { decision: 'Which assets belong in the domain', raci: 'A' },
+      { decision: 'Cross-domain integrations', raci: 'C' },
+    ],
+    requiredSkills: ['Stakeholder Management', 'Business Translation', 'Issue Resolution', 'Compliance Monitoring'],
+  },
+  DATA_DOMAIN_STEWARD: {
+    summary: 'Day-to-day management within a domain. Coordinates the stewards of the assets in the domain and handles cross-asset issues.',
+    responsibilities: [
+      'Coordinate the asset-level stewards in the domain',
+      'Maintain the domain\'s catalog of business terms',
+      'Triage cross-asset quality issues',
+      'Surface gaps in the domain\'s coverage to the Domain Owner',
+    ],
+    typicalDecisions: [
+      { decision: 'Cross-asset issue prioritization', raci: 'R' },
+      { decision: 'Business glossary additions for the domain', raci: 'R' },
+      { decision: 'Stewardship coordination', raci: 'R' },
+      { decision: 'Major domain restructuring', raci: 'C' },
+    ],
+    requiredSkills: ['Data Cataloging', 'Business Translation', 'Issue Resolution', 'Stakeholder Management', 'Documentation'],
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Unified getters
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// The drawer and any other consumer should use these instead of reaching
+// for GOVERNANCE_ROLES / ENTITY_ROLES directly - they handle both
+// categories transparently.
+
+export function getRoleDef(roleType: string): GovernanceRoleDef | EntityRoleDef | null {
+  const dama = GOVERNANCE_ROLES.find((r) => r.roleType === roleType);
+  if (dama) return dama;
+  return ENTITY_ROLES.find((r) => r.roleType === roleType) ?? null;
 }
 
 export function getRoleReference(roleType: string): RoleReference | null {
-  return REFERENCE[roleType] ?? null;
+  return REFERENCE[roleType] ?? ENTITY_REFERENCE[roleType] ?? null;
 }
 
-/** Reverse-lookup: which governance groups expect this role? Derived from
- *  GOVERNANCE_GROUP_ROLES so we never get out of sync with the source. */
+export function getRoleCategory(roleType: string): RoleCategory | null {
+  if (GOVERNANCE_ROLES.some((r) => r.roleType === roleType)) return 'governance';
+  if (ENTITY_ROLES.some((r) => r.roleType === roleType)) return 'entity';
+  return null;
+}
+
+export function getRoleScope(roleType: string): RoleScope {
+  const entity = ENTITY_ROLES.find((r) => r.roleType === roleType);
+  if (entity) return entity.scope;
+  return 'enterprise';
+}
+
+/** Reverse-lookup: which governance groups expect this role? Returns an
+ *  empty array for entity-attached roles (governance groups don't expect
+ *  System Owners). */
 export function groupsExpectingRole(roleType: string): GovernanceGroupDef[] {
   return GOVERNANCE_GROUP_ROLES.filter((g) => g.roleTypes.includes(roleType));
 }

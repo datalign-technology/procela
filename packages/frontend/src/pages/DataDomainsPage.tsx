@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -55,8 +56,18 @@ function healthDots(domain: DataDomain) {
   );
 }
 
+// Shared style for "Owner" / "Stewards" labels that open the Role Detail
+// drawer. Looks like a label, hints clickability with a dotted underline.
+const roleLabelBtnStyle: React.CSSProperties = {
+  background: 'none', border: 'none', padding: 0,
+  color: 'inherit', font: 'inherit', cursor: 'pointer',
+  textDecoration: 'underline', textDecorationStyle: 'dotted',
+  textUnderlineOffset: 3,
+};
+
 export default function DataDomainsPage() {
   const { activeOrgId } = useOrgContext();
+  const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const [domains, setDomains] = useState<DataDomain[]>([]);
@@ -576,9 +587,20 @@ export default function DataDomainsPage() {
                   </div>
                 )}
 
-                {/* Owner */}
+                {/* Owner — the label opens the Role Detail drawer for
+                  *  Data Domain Owner so users learn the role's
+                  *  responsibilities and typical decision authority. */}
                 <div style={{ marginBottom: 20 }}>
-                  <div style={labelStyle}>Owner (Data Owner)</div>
+                  <div style={labelStyle}>
+                    <button
+                      type="button"
+                      onClick={() => openRoleDrawer('DATA_DOMAIN_OWNER')}
+                      title="Learn about this role"
+                      style={roleLabelBtnStyle}
+                    >
+                      Owner (Data Domain Owner)
+                    </button>
+                  </div>
                   <select style={selectStyle} value={detailOwnerId} onChange={(e) => setDetailOwnerId(e.target.value)}>
                     <option value="">-- Unassigned --</option>
                     {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
@@ -587,7 +609,16 @@ export default function DataDomainsPage() {
 
                 {/* Stewards */}
                 <div style={{ marginBottom: 20 }}>
-                  <div style={labelStyle}>Stewards ({detailStewardIds.length})</div>
+                  <div style={labelStyle}>
+                    <button
+                      type="button"
+                      onClick={() => openRoleDrawer('DATA_DOMAIN_STEWARD')}
+                      title="Learn about this role"
+                      style={roleLabelBtnStyle}
+                    >
+                      Stewards ({detailStewardIds.length})
+                    </button>
+                  </div>
                   <input style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search people..." value={stewardSearch} onChange={(e) => setStewardSearch(e.target.value)} />
                   <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
                     {people.filter((p) => !stewardSearch || p.name.toLowerCase().includes(stewardSearch.toLowerCase())).map((p) => (

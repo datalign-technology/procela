@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 
 // ──────────────────────────────────────────────────────────────────────────
 // WhereUsed — a consistent cross-layer detail panel.
@@ -24,6 +25,11 @@ export interface WhereUsedItem {
   onClick?: () => void;
   /** Optional small badge to the right of the label (e.g. "Owner"). */
   badge?: string;
+  /** When set, the badge becomes a clickable button that opens the Role
+   *  Detail drawer for this role type. Lets Owner / Deputy / Custodian
+   *  / Steward badges show their definitions and responsibilities the
+   *  same way DAMA role chips do elsewhere in the app. */
+  badgeRoleType?: string;
 }
 
 export interface WhereUsedGroup {
@@ -51,6 +57,7 @@ export default function WhereUsed({
   hint,
   groups,
 }: WhereUsedProps) {
+  const openRoleDrawer = useRoleDrawerStore((s) => s.open);
   return (
     <div style={{
       background: 'var(--color-surface)',
@@ -116,12 +123,32 @@ export default function WhereUsed({
                         </span>
                       )}
                       {item.badge && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 600, padding: '1px 5px',
-                          borderRadius: 3, background: '#dbeafe', color: '#1e40af',
-                        }}>
-                          {item.badge}
-                        </span>
+                        item.badgeRoleType ? (
+                          // stopPropagation so clicking the badge opens the
+                          // drawer without also triggering the row's
+                          // navigate-to-person onClick.
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); openRoleDrawer(item.badgeRoleType!); }}
+                            title="Learn about this role"
+                            style={{
+                              fontSize: 9, fontWeight: 600, padding: '1px 5px',
+                              borderRadius: 3, background: '#dbeafe', color: '#1e40af',
+                              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                              textDecoration: 'underline', textDecorationStyle: 'dotted',
+                              textUnderlineOffset: 2,
+                            }}
+                          >
+                            {item.badge}
+                          </button>
+                        ) : (
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, padding: '1px 5px',
+                            borderRadius: 3, background: '#dbeafe', color: '#1e40af',
+                          }}>
+                            {item.badge}
+                          </span>
+                        )
                       )}
                     </>
                   );

@@ -9,10 +9,13 @@ import {
   getRoleDef,
   getRoleReference,
   groupsExpectingRole,
+  getRoleCategory,
+  getRoleScope,
   RACI_LABEL,
   RACI_DESCRIPTION,
   RACI_COLOR,
 } from '../lib/roleDefinitions';
+import type { GovernanceRoleDef } from '../types';
 import { PRIORITY_COLORS } from '../types';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -64,13 +67,37 @@ export default function RoleDetailDrawer() {
     if (!roleType || !activeOrgId) return;
     let cancelled = false;
     setLoadingAssignments(true);
-    Promise.all([
-      apiClient.get<{ success: boolean; data: Assignment[] }>(`/dama-roles?orgId=${activeOrgId}`),
-      apiClient.get<{ success: boolean; data: SkillRecord[] }>(`/skills?orgId=${activeOrgId}`),
-    ])
-      .then(([rolesRes, skillsRes]) => {
+
+    // Skills are always loaded; the holders source depends on whether
+    // the role is enterprise-scoped (DAMA - one assignment per person)
+    // or entity-scoped (System Owner etc. - one assignment per host
+    // record). For entity roles we read the host entities directly and
+    // synthesize per-holder Assignment rows so the rendering below
+    // doesn't have to branch.
+    const category = getRoleCategory(roleType);
+
+    // /people is loaded for entity roles only - DAMA assignments are
+    // already enriched with personName by the server. Saves a roundtrip
+    // for the common drawer-on-DAMA-chip case.
+    const fetchPeople = category === 'entity'
+      ? apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/people?orgId=${activeOrgId}`)
+          .then((res) => new Map((res.data || []).map((p) => [p.id, p.name])))
+      : Promise.resolve(new Map<string, string>());
+
+    const fetchHolders = (peopleNames: Map<string, string>) => category === 'entity'
+      ? fetchEntityRoleHolders(roleType, activeOrgId, peopleNames)
+      : apiClient
+          .get<{ success: boolean; data: Assignment[] }>(`/dama-roles?orgId=${activeOrgId}`)
+          .then((res) => (res.data || []).filter((a) => a.roleType === roleType));
+
+    fetchPeople
+      .then((peopleNames) => Promise.all([
+        fetchHolders(peopleNames),
+        apiClient.get<{ success: boolean; data: SkillRecord[] }>(`/skills?orgId=${activeOrgId}`),
+      ]))
+      .then(([holders, skillsRes]) => {
         if (cancelled) return;
-        setAssignments((rolesRes.data || []).filter((a) => a.roleType === roleType));
+        setAssignments(holders);
         setOrgSkills(skillsRes.data || []);
       })
       .catch(() => {
@@ -97,6 +124,12 @@ export default function RoleDetailDrawer() {
   const def = getRoleDef(roleType);
   const ref = getRoleReference(roleType);
   const groups = groupsExpectingRole(roleType);
+  const category = getRoleCategory(roleType);
+  const scope = getRoleScope(roleType);
+
+  // DAMA-only fields live on GovernanceRoleDef but not EntityRoleDef.
+  // Narrow with a category check rather than `in`/cast soup.
+  const damaDef = category === 'governance' ? (def as GovernanceRoleDef | null) : null;
 
   // Custodian gets the plain-terminology swap; everything else uses its
   // canonical DAMA label.
@@ -105,7 +138,7 @@ export default function RoleDetailDrawer() {
     ? rawLabel.replace('Custodian', custodianLabel)
     : rawLabel;
 
-  const priorityColor = def ? PRIORITY_COLORS[def.priority] : null;
+  const priorityColor = damaDef ? PRIORITY_COLORS[damaDef.priority] : null;
 
   return (
     <>
@@ -141,20 +174,34 @@ export default function RoleDetailDrawer() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{displayLabel}</h2>
-              {priorityColor && def && (
+              {priorityColor && damaDef && (
                 <span style={{
                   fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
                   textTransform: 'uppercase', letterSpacing: '0.04em',
                   background: priorityColor.bg, color: priorityColor.text,
                   border: `1px solid ${priorityColor.border}`,
                 }}>
-                  {def.priority}
+                  {damaDef.priority}
+                </span>
+              )}
+              {/* Scope badge for entity-attached roles - makes it clear at a
+                * glance that System Owner is per-system, Domain Owner is
+                * per-domain, etc. Helps users grok that two people both
+                * being a System Owner isn't a RACI violation. */}
+              {category === 'entity' && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                  background: 'var(--color-bg)', color: 'var(--color-text-muted)',
+                  border: '1px solid var(--color-border)',
+                }}>
+                  {scope === 'system' ? 'Per system' : scope === 'dataAsset' ? 'Per asset' : 'Per domain'}
                 </span>
               )}
             </div>
-            {def?.purpose && (
+            {damaDef?.purpose && (
               <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-                {def.purpose}
+                {damaDef.purpose}
               </p>
             )}
           </div>
@@ -335,3 +382,108 @@ const linkBtnStyle: React.CSSProperties = {
   color: 'var(--color-primary)', cursor: 'pointer',
   fontSize: 'inherit', fontFamily: 'inherit', textDecoration: 'underline',
 };
+
+// ──────────────────────────────────────────────────────────────────────────
+// Entity-role holder lookup.
+//
+// For DAMA roles, "Currently held by" is one /dama-roles call. For
+// entity-attached roles the holder is a foreign key on the host entity,
+// so we read the host list and synthesize per-holder Assignment rows.
+// Multiple host records can have the same holder (e.g. one person owns
+// three systems); we dedupe and keep the count visible by showing the
+// number after the name where it's > 1.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface EntityWithOwner { id: string; name?: string; ownerPersonId?: string | null; deputyOwnerId?: string | null; custodianIds?: string[] | null; }
+interface EntityWithStewards { id: string; name?: string; ownerPersonId?: string | null; stewardIds?: string[] | null; }
+interface DomainEntity { id: string; name?: string; ownerId?: string | null; stewards?: Array<{ id: string }>; }
+
+async function fetchEntityRoleHolders(
+  roleType: string,
+  orgId: string,
+  peopleNames: Map<string, string>,
+): Promise<Assignment[]> {
+  const q = `?orgId=${orgId}`;
+  switch (roleType) {
+    case 'SYSTEM_OWNER': {
+      const res = await apiClient.get<{ success: boolean; data: EntityWithOwner[] }>(`/systems${q}`);
+      return holdersFromSingleFk(roleType, res.data || [], (s) => s.ownerPersonId, peopleNames);
+    }
+    case 'SYSTEM_DEPUTY_OWNER': {
+      const res = await apiClient.get<{ success: boolean; data: EntityWithOwner[] }>(`/systems${q}`);
+      return holdersFromSingleFk(roleType, res.data || [], (s) => s.deputyOwnerId, peopleNames);
+    }
+    case 'SYSTEM_CUSTODIAN': {
+      const res = await apiClient.get<{ success: boolean; data: EntityWithOwner[] }>(`/systems${q}`);
+      return holdersFromMultiFk(roleType, res.data || [], (s) => s.custodianIds || [], peopleNames);
+    }
+    case 'DATA_ASSET_OWNER': {
+      const res = await apiClient.get<{ success: boolean; data: EntityWithStewards[] }>(`/data-assets${q}`);
+      return holdersFromSingleFk(roleType, res.data || [], (a) => a.ownerPersonId, peopleNames);
+    }
+    case 'DATA_ASSET_STEWARD': {
+      const res = await apiClient.get<{ success: boolean; data: EntityWithStewards[] }>(`/data-assets${q}`);
+      return holdersFromMultiFk(roleType, res.data || [], (a) => a.stewardIds || [], peopleNames);
+    }
+    case 'DATA_DOMAIN_OWNER': {
+      const res = await apiClient.get<{ success: boolean; data: DomainEntity[] }>(`/data-domains${q}`);
+      return holdersFromSingleFk(roleType, res.data || [], (d) => d.ownerId, peopleNames);
+    }
+    case 'DATA_DOMAIN_STEWARD': {
+      const res = await apiClient.get<{ success: boolean; data: DomainEntity[] }>(`/data-domains${q}`);
+      return holdersFromMultiFk(roleType, res.data || [], (d) => (d.stewards || []).map((s) => s.id), peopleNames);
+    }
+    default:
+      return [];
+  }
+}
+
+function holdersFromSingleFk<T extends { id: string }>(
+  roleType: string,
+  rows: T[],
+  pick: (row: T) => string | null | undefined,
+  peopleNames: Map<string, string>,
+): Assignment[] {
+  // Dedupe so a person who holds the role on N entities appears once.
+  // We still record the first scopeId we saw them on so the drawer can
+  // link to a relevant detail page if needed.
+  const seen = new Set<string>();
+  const out: Assignment[] = [];
+  for (const row of rows) {
+    const personId = pick(row);
+    if (!personId || seen.has(personId)) continue;
+    seen.add(personId);
+    out.push({
+      id: `${roleType}-${personId}`,
+      personId,
+      personName: peopleNames.get(personId) || 'Unknown',
+      roleType,
+      scopeId: row.id,
+    });
+  }
+  return out;
+}
+
+function holdersFromMultiFk<T extends { id: string }>(
+  roleType: string,
+  rows: T[],
+  pick: (row: T) => string[],
+  peopleNames: Map<string, string>,
+): Assignment[] {
+  const seen = new Set<string>();
+  const out: Assignment[] = [];
+  for (const row of rows) {
+    for (const personId of pick(row)) {
+      if (!personId || seen.has(personId)) continue;
+      seen.add(personId);
+      out.push({
+        id: `${roleType}-${personId}`,
+        personId,
+        personName: peopleNames.get(personId) || 'Unknown',
+        roleType,
+        scopeId: row.id,
+      });
+    }
+  }
+  return out;
+}
