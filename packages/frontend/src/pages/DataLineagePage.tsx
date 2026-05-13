@@ -88,6 +88,8 @@ interface AssetLineageEdgeRow {
   staleAfterDays?: number;
 }
 
+type DbtPollFrequency = 'NEVER' | 'HOURLY' | 'DAILY' | 'WEEKLY';
+
 interface DbtCloudConnectionRow {
   id: string;
   orgId: string;
@@ -100,6 +102,8 @@ interface DbtCloudConnectionRow {
   lastStatus: 'NEVER' | 'SUCCESS' | 'ERROR';
   lastError: string | null;
   lastSummary: DbtImportSummary | null;
+  pollFrequency: DbtPollFrequency;
+  nextPollAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -972,6 +976,7 @@ function DbtCloudConnectionsPanel({
             <tr style={{ background: 'var(--color-bg)' }}>
               <th style={connThStyle}>Name</th>
               <th style={connThStyle}>Account / Job</th>
+              <th style={connThStyle}>Schedule</th>
               <th style={connThStyle}>Last refresh</th>
               <th style={connThStyle}>Status</th>
               <th style={{ ...connThStyle, textAlign: 'right' }}>Actions</th>
@@ -982,6 +987,20 @@ function DbtCloudConnectionsPanel({
               <tr key={c.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                 <td style={connTdStyle}><strong>{c.name}</strong><div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{c.host}</div></td>
                 <td style={connTdStyle}>{c.accountId} / {c.jobId}</td>
+                <td style={connTdStyle}>
+                  {c.pollFrequency === 'NEVER' ? (
+                    <span style={{ color: 'var(--color-text-muted)' }}>Manual only</span>
+                  ) : (
+                    <>
+                      <div>{c.pollFrequency.charAt(0) + c.pollFrequency.slice(1).toLowerCase()}</div>
+                      {c.nextPollAt && (
+                        <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+                          next {formatRelative(c.nextPollAt)}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </td>
                 <td style={connTdStyle}>{c.lastRunAt ? new Date(c.lastRunAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)' }}>never</span>}</td>
                 <td style={connTdStyle}>
                   {c.lastStatus === 'SUCCESS' && (
@@ -1029,6 +1048,20 @@ const statusBadge = (bg: string, color: string): React.CSSProperties => ({
   fontSize: 10, fontWeight: 600, background: bg, color,
 });
 
+/** "in 4h", "in 2 days", "in 12 minutes" - short relative offset for
+ *  the next-poll-at hint under the schedule column. Past times render
+ *  as "any moment" since the scheduler will catch up on the next tick. */
+function formatRelative(iso: string): string {
+  const diffMs = new Date(iso).getTime() - Date.now();
+  if (diffMs <= 0) return 'any moment';
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `in ${hrs}h`;
+  const days = Math.round(hrs / 24);
+  return `in ${days}d`;
+}
+
 // ── dbt Cloud connection form ──────────────────────────────────────────
 // Edits both new and existing connections. For existing connections the
 // token field is left empty by default and only sent if the user types
@@ -1049,6 +1082,7 @@ function DbtCloudConnectionForm({
   const [accountId, setAccountId] = useState(existing?.accountId ?? '');
   const [jobId, setJobId] = useState(existing?.jobId ?? '');
   const [token, setToken] = useState('');
+  const [pollFrequency, setPollFrequency] = useState<DbtPollFrequency>(existing?.pollFrequency ?? 'NEVER');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1065,6 +1099,7 @@ function DbtCloudConnectionForm({
         host: host.trim(),
         accountId: accountId.trim(),
         jobId: jobId.trim(),
+        pollFrequency,
       };
       if (token.trim()) body.token = token.trim();
       if (existing) {
@@ -1121,6 +1156,18 @@ function DbtCloudConnectionForm({
               placeholder={existing?.hasToken ? '••••••••' : 'dbtc_xxx...'}
               style={connInputStyle}
             />
+          </FormRow>
+          <FormRow label="Polling schedule">
+            <select
+              value={pollFrequency}
+              onChange={(e) => setPollFrequency(e.target.value as DbtPollFrequency)}
+              style={connInputStyle}
+            >
+              <option value="NEVER">Manual only — refresh by clicking the button</option>
+              <option value="HOURLY">Every hour</option>
+              <option value="DAILY">Every day</option>
+              <option value="WEEKLY">Every week</option>
+            </select>
           </FormRow>
           <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
             ⚠ Tokens are stored in plaintext in the prototype. Replace with secret-manager refs for production.
