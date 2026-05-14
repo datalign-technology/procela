@@ -151,8 +151,11 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Data Lineage</h3>
         <ul style={listStyle}>
-          <li>Upstream / downstream data flow visualization across systems.</li>
-          <li>Toggle between table and graph views.</li>
+          <li>Upstream / downstream data flow visualisation. Visualization view has a three-way toggle: <strong>Systems</strong> (system-to-system flows), <strong>Assets</strong> (auto-derived asset-to-asset edges), or <strong>Both</strong>.</li>
+          <li><strong>Import dbt manifest</strong> &mdash; drop a dbt-generated <code>manifest.json</code>. Procela creates or matches a Data Asset for each model, source, seed, and snapshot, then derives asset-to-asset edges from <code>depends_on</code>. dbt tests in the manifest become Data Quality rules automatically (not_null &rarr; Completeness/NOT_NULL, unique &rarr; Uniqueness/UNIQUE, accepted_values &rarr; Validity/IN_SET, relationships &rarr; Consistency/CUSTOM).</li>
+          <li><strong>dbt Cloud connections</strong> &mdash; configure account ID, job ID, and API token. Procela pulls the manifest for the latest successful run, on a polling schedule of your choice (Hourly / Daily / Weekly) or on demand via <em>Refresh now</em>. Last refresh time, status, and a relative "next in 4h" hint show in the table.</li>
+          <li><strong>Stale-edge detection</strong> &mdash; auto-derived edges that haven't been re-seen by an import in 30 days are flagged with a STALE badge in the table and rendered as dashed lines in the visualisation. Manual edges are exempt.</li>
+          <li>Re-imports are idempotent &mdash; assets, edges, and dbt-test rules are matched by stable identifiers and updated in place. Edges and rules removed from the manifest are deleted; user edits to a dbt-derived rule survive the next refresh.</li>
         </ul>
         <h3 style={h3Style}>Data Domains</h3>
         <ul style={listStyle}>
@@ -165,6 +168,7 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Quality rules per asset / column with dimensions (completeness, accuracy, timeliness, etc.).</li>
           <li>Weighted scoring rolls up to an asset-level health score.</li>
+          <li>dbt tests imported via a manifest become rules automatically (templateId starts with <code>dbt:</code>). Edits to those rules persist across re-imports; removed tests delete their rule.</li>
         </ul>
       </div>
 
@@ -175,9 +179,9 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Register applications and platforms. Sidebar filter by type (ERP, CRM, GIS, etc.).</li>
           <li>Business criticality rating (High / Medium / Low) with filter.</li>
-          <li>Inline editing for name and system type.</li>
-          <li>Owner, Deputy Owner, and Operators (DAMA: Custodians) per system &mdash; the people on the hook day-to-day.</li>
-          <li>Where Used panel shows every data asset, connection, and process touching the system.</li>
+          <li>Clicking a system name opens the detail modal; inline editing is reserved for the Type column. Rename via the row's Edit pencil.</li>
+          <li>Owner, Deputy Owner, and Operators (DAMA: Custodians) per system &mdash; the people on the hook day-to-day. Clicking any of those role badges opens the Role Detail drawer for that entity-attached role, so users see the same definition / responsibilities / required-skills view as for DAMA roles.</li>
+          <li>Where Used panel shows every data asset, connection, and process touching the system. A Discussion (comments) and Activity section sit at the bottom of the modal.</li>
         </ul>
         <h3 style={h3Style}>Connections</h3>
         <ul style={listStyle}>
@@ -235,6 +239,7 @@ export default function HelpPage() {
           <li>Sidebar filter by role type with live counts; search box matches person, organization, or role label.</li>
           <li><strong>Group by</strong> toggle: By Person (one row per person with their roles as chips), By Role (one section per role listing the people who hold it), or Flat (legacy assignment-per-row with bulk select).</li>
           <li>Click any role chip anywhere in the app to open the <strong>Role Detail drawer</strong> &mdash; plain-language summary, day-to-day responsibilities, typical RACI authority, groups that need the role, current assignees in your org, and required skills.</li>
+          <li>The drawer also covers <strong>entity-attached roles</strong> &mdash; System Owner, Deputy System Owner, System Custodian, Data Asset Owner / Steward, Data Domain Owner / Steward. Same definition layout; the drawer shows a "Per system / asset / domain" scope badge so users understand two people can both hold the same entity-attached role for different entities without it being a RACI violation.</li>
         </ul>
         <h3 style={h3Style}>Decision Rights</h3>
         <ul style={listStyle}>
@@ -289,9 +294,53 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 9. Key Concepts */}
+      {/* 9. Cross-cutting Features */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>9. Key Concepts</h2>
+        <h2 style={h2Style}>9. Cross-cutting Features</h2>
+        <p style={pStyle}>
+          A handful of components show up on every detail page so the patterns stay the same as you move around the app.
+        </p>
+
+        <h3 style={h3Style}>Comments &amp; @mentions</h3>
+        <ul style={listStyle}>
+          <li>Threaded comments on every major detail surface: System, Data Asset, Person, and per-node on the Process Catalog. One level of replies; deeper threading is a known follow-up.</li>
+          <li>Typing <code>@</code> in the composer opens a popover of people in the active org. Arrow keys move selection; Enter or Tab inserts the full name; Escape closes. Cmd/Ctrl + Enter submits the comment.</li>
+          <li>Each new @mention spawns an in-app notification for that person with a link back to the entity. Email notifications are a future follow-up.</li>
+          <li>Authors can edit or delete their own comments; deletes are soft so thread structure stays intact.</li>
+          <li>Comment events appear in the Activity feed under the affected entity, with verbs like "commented on" / "edited a comment".</li>
+        </ul>
+
+        <h3 style={h3Style}>Activity feed</h3>
+        <ul style={listStyle}>
+          <li>Same component in three lenses. Org-wide on the Dashboard's Recent Activity widget; per-entity on the System / Data Asset / Process node detail pages; per-person on the People profile.</li>
+          <li>Rows phrase events as English ("Eleanor created System SAP Finance &middot; 5m ago") with the actor's name, the action verb, and the affected record. Comments use conversation verbs; CRUD events use create/update/delete.</li>
+          <li>Backed by the audit log; comments, role assignments, and dbt imports all flow through it so the timeline is the single source of truth for "what changed and who changed it".</li>
+        </ul>
+
+        <h3 style={h3Style}>Saved views</h3>
+        <ul style={listStyle}>
+          <li>Capture the current sidebar / search / group-by state on a list page under a name, then recall it later. The <strong>Views</strong> button sits in the page header next to Export.</li>
+          <li>Eight list pages support saved views: Data Assets, Systems, Connections, Data Dictionary, Decision Rights, Governance Roles, Business Glossary, and People.</li>
+          <li>Views are org-visible &mdash; everyone in the org sees views saved by anyone. Only the owner can delete or rename their own.</li>
+          <li>Tree-based pages (Mappings, Organizations, Process Catalog, Governance Groups) don't have saved views because their state isn't a flat filter set.</li>
+        </ul>
+
+        <h3 style={h3Style}>Role Detail drawer</h3>
+        <ul style={listStyle}>
+          <li>Click any role chip or label anywhere in the app to open the side drawer. Works for both DAMA roles (CDO, Data Owner, Stewards) and entity-attached roles (System Owner, Custodian, Asset Owner, Domain Steward).</li>
+          <li>Each role has a plain-language summary, day-to-day responsibilities, typical RACI decision authority, governance groups that need it (DAMA only), current assignees in your org, and required skills.</li>
+          <li>Required-skill chips render solid when the skill is in your org's Skills catalog and dashed-italic when it isn't yet, with a hover tooltip explaining what's missing.</li>
+        </ul>
+
+        <h3 style={h3Style}>Discussion drawer integration</h3>
+        <p style={pStyle}>
+          The Comments panel and Activity feed live together on every detail surface, with the Role Detail drawer accessible from any role chip. Together they answer "what is this record, what's changed, and who am I talking to about it" without leaving the page.
+        </p>
+      </div>
+
+      {/* 10. Key Concepts */}
+      <div style={sectionStyle}>
+        <h2 style={h2Style}>10. Key Concepts</h2>
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
@@ -334,7 +383,7 @@ export default function HelpPage() {
 
       {/* 10. Keyboard Shortcuts */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>10. Keyboard Shortcuts</h2>
+        <h2 style={h2Style}>11. Keyboard Shortcuts</h2>
         <ul style={listStyle}>
           <li><strong>Cmd / Ctrl + K</strong> or <strong>/</strong> &mdash; Open the command palette (universal search).</li>
           <li><strong>Shift + ?</strong> &mdash; Open the shortcuts reference modal.</li>
@@ -353,7 +402,7 @@ export default function HelpPage() {
 
       {/* 11. FAQ */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>11. Frequently Asked Questions</h2>
+        <h2 style={h2Style}>12. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
         <p style={pStyle}>
@@ -397,6 +446,31 @@ export default function HelpPage() {
         <h3 style={h3Style}>Why are there two ways to remove someone from a governance group?</h3>
         <p style={pStyle}>
           The <strong>x</strong> next to a role chip removes one role assignment (the person stays in the group). <strong>Remove from group</strong> in the members table is the destructive option &mdash; the person leaves the group entirely, but their governance role assignments at the org level survive.
+        </p>
+
+        <h3 style={h3Style}>How do I automate lineage from dbt?</h3>
+        <p style={pStyle}>
+          Go to Data &rarr; Data Lineage &rarr; <strong>+ Connect a dbt Cloud job</strong>. Fill in your dbt Cloud account ID, job ID, and an API token. Set the polling schedule to Hourly / Daily / Weekly (or leave Manual). Procela pulls the manifest from the latest successful run of that job and reconciles models, edges, and dbt tests into the catalog. The same flow works as a one-off via <strong>Import dbt manifest</strong> if you'd rather upload <code>manifest.json</code> by hand from dbt Core.
+        </p>
+
+        <h3 style={h3Style}>What's a "stale" lineage edge?</h3>
+        <p style={pStyle}>
+          An auto-derived edge (dbt) whose <code>lastSeenAt</code> is older than 30 days &mdash; meaning no recent import has confirmed it still exists. Stale edges render as dashed lines in the visualization and get a STALE badge in the table. Re-import the manifest to clear them, or remove them manually if the upstream model is genuinely gone.
+        </p>
+
+        <h3 style={h3Style}>How do I save a filtered view of a list page?</h3>
+        <p style={pStyle}>
+          On a list page with the <strong>Views</strong> button (Data Assets, Systems, Connections, Data Dictionary, Decision Rights, Governance Roles, Business Glossary, People), set your filters, click <em>Views</em>, then <em>+ Save current filters as view</em> and name it. Views are org-visible; only the owner can rename or delete their own.
+        </p>
+
+        <h3 style={h3Style}>How do I mention someone in a comment?</h3>
+        <p style={pStyle}>
+          Type <code>@</code> in any Discussion composer. A popover appears with people in the active org; arrow-key or click to pick one. The mentioned person sees an in-app notification with a link back to the comment.
+        </p>
+
+        <h3 style={h3Style}>Why does Custodian on a system look different from Data Custodian on the Governance Roles page?</h3>
+        <p style={pStyle}>
+          They're different roles. <em>System Custodian</em> is the technical caretaker of one specific system &mdash; per-system scope. <em>Data Custodian</em> (DAMA) is an enterprise-level role covering data storage, security, and access broadly. Click either badge to open the Role Detail drawer, where the scope badge ("Per system" vs. nothing) and the responsibilities list make the difference clear.
         </p>
 
         <h3 style={h3Style}>Can I undo a delete?</h3>
