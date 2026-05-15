@@ -233,13 +233,14 @@ export default function HelpPage() {
           <li>Per group: an Expected Roles panel lists the governance roles the group should have, the required vs optional split, and current fill status. Click any role label to open the Role Detail drawer.</li>
           <li>Two remove actions are distinct: the <strong>x on a role chip</strong> removes that specific role assignment; <strong>Remove from group</strong> in the members table removes the person from the group entirely (their role assignments survive at the org level).</li>
         </ul>
-        <h3 style={h3Style}>Governance Roles</h3>
+        <h3 style={h3Style}>Roles (with RACI Matrix tab)</h3>
         <ul style={listStyle}>
-          <li>DAMA governance role assignments (CDO, Data Governance Lead, Data Owner, Stewards, etc.).</li>
-          <li>Sidebar filter by role type with live counts; search box matches person, organization, or role label.</li>
-          <li><strong>Group by</strong> toggle: By Person (one row per person with their roles as chips), By Role (one section per role listing the people who hold it), or Flat (legacy assignment-per-row with bulk select).</li>
+          <li>Single page with two tabs: <strong>Assignments</strong> and <strong>RACI Matrix</strong>. RACI is a view derived from role assignments, so editing and inspection live together.</li>
+          <li><strong>Assignments tab.</strong> DAMA governance role assignments (CDO, Data Governance Lead, Data Owner, Stewards, etc.). Sidebar filter by role type with live counts; search box matches person, organization, or role label. <strong>Group by</strong> toggle: By Person (roles as chips), By Role (people per role), or Flat (legacy bulk-select).</li>
           <li>Click any role chip anywhere in the app to open the <strong>Role Detail drawer</strong> &mdash; plain-language summary, day-to-day responsibilities, typical RACI authority, groups that need the role, current assignees in your org, and required skills.</li>
-          <li>The drawer also covers <strong>entity-attached roles</strong> &mdash; System Owner, Deputy System Owner, System Custodian, Data Asset Owner / Steward, Data Domain Owner / Steward. Same definition layout; the drawer shows a "Per system / asset / domain" scope badge so users understand two people can both hold the same entity-attached role for different entities without it being a RACI violation.</li>
+          <li>The drawer also covers <strong>entity-attached roles</strong> &mdash; System Owner, Deputy System Owner, System Custodian, Data Asset Owner / Steward, Data Domain Owner / Steward. The drawer shows a "Per system / asset / domain" scope badge so users understand two people can both hold the same entity-attached role for different entities without it being a RACI violation.</li>
+          <li><strong>RACI Matrix tab.</strong> Responsibility assignments per process step: Responsible, Accountable, Consulted, Informed. Auto-derived from process / asset ownership and governance group membership; click a cell to cycle R &rarr; A &rarr; C &rarr; I &rarr; clear as a manual override. Validation warnings surface RACI rule violations (no R, no A, multiple A's). Export to CSV / Excel / JSON respects active filters and hide-empty-columns setting.</li>
+          <li>Old <code>/raci</code> deep links still work &mdash; they redirect to the RACI tab.</li>
         </ul>
         <h3 style={h3Style}>Decision Rights</h3>
         <ul style={listStyle}>
@@ -248,25 +249,17 @@ export default function HelpPage() {
           <li>Rows are collapsible: default view shows decision + category + decider, click a row to reveal the full R / A / C / I and escalation panel.</li>
           <li>10 seed decisions (approve policy, grant exception, close issue, etc.) ship out of the box.</li>
         </ul>
-        <h3 style={h3Style}>RACI Matrix</h3>
-        <ul style={listStyle}>
-          <li>Responsibility assignments per process step: Responsible, Accountable, Consulted, Informed.</li>
-          <li>Auto-derived from process / asset ownership and governance group membership; click a cell to cycle R &rarr; A &rarr; C &rarr; I &rarr; clear as a manual override.</li>
-          <li>Validation warnings surface RACI rule violations (no R, no A, multiple A's).</li>
-          <li>Export to CSV / Excel / JSON respects your active filters and hide-empty-columns setting.</li>
-        </ul>
         <h3 style={h3Style}>Policies</h3>
         <ul style={listStyle}>
           <li>Governance policies with auto-generated codes (POL-001), review cycles (quarterly &hellip; biennial), and linked controls.</li>
           <li>Controls have a type (Preventive / Detective / Corrective) and an automation mode (Human / Agent / Hybrid).</li>
         </ul>
-        <h3 style={h3Style}>Operations Manual</h3>
+        <h3 style={h3Style}>Documentation (Manual + Procedures)</h3>
         <ul style={listStyle}>
-          <li>Role-specific runbooks for the 10 governance roles, with daily / weekly / monthly / quarterly activities and escalation paths.</li>
-        </ul>
-        <h3 style={h3Style}>Procedures (SOPs)</h3>
-        <ul style={listStyle}>
-          <li>Step-by-step procedures for common governance activities. 5 seed SOPs (onboard data asset, quality incident, access request, escalation, quarterly review).</li>
+          <li>Single page with two tabs &mdash; the Manual answers "what does each role do?", the Procedures tab answers "how do I do task X?".</li>
+          <li><strong>Manual tab.</strong> Role-specific runbooks for the 10 governance roles, with daily / weekly / monthly / quarterly activities and escalation paths.</li>
+          <li><strong>Procedures tab.</strong> Step-by-step SOPs for common governance activities. 5 seed SOPs (onboard data asset, quality incident, access request, escalation, quarterly review).</li>
+          <li>Old <code>/operations-manual</code> and <code>/sops</code> deep links still work &mdash; they redirect to the right tab.</li>
         </ul>
         <h3 style={h3Style}>Governance Calendar</h3>
         <ul style={listStyle}>
@@ -279,13 +272,16 @@ export default function HelpPage() {
           <li><strong>Issues</strong> &mdash; 9 types (Metadata, Data Quality, Classification, Ownership, Policy, Access, Lineage, Compliance, Workflow), severity levels.</li>
           <li>Steward onboarding: auto-creates 4 tasks when a steward role is assigned (7 / 14 / 21 / 90-day milestones).</li>
         </ul>
-        <h3 style={h3Style}>Control Tower</h3>
+        <h3 style={h3Style}>Enterprise View</h3>
         <ul style={listStyle}>
-          <li>Operational dashboard: open issues / tasks, policy coverage, automation rate, coverage gaps by domain / asset / process.</li>
+          <li>Single pane of glass across processes, systems, data assets, domains, and people. Filters by view preset (Process &rarr; System &rarr; Data, Governance, Ownership, Lineage, etc.) to focus on one relationship at a time.</li>
+          <li><strong>Cards / Diagram</strong> toggle &mdash; the diagram lays nodes out as horizontal swimlanes with edges between lanes so you can see how the org is wired together at a glance. Cards is the dense alternative.</li>
+          <li>Click any node to run impact analysis &mdash; the sidebar lists every entity connected to your selection (direct and transitive), and unrelated nodes fade out. Use this to plan changes ("if we deprecate System X, which processes are affected?").</li>
+          <li><strong>What happened to Control Tower?</strong> The operational dashboard view folded in here. Old <code>/control-tower</code> deep links redirect to Enterprise View. Future updates may add a dedicated "Health" preset that mirrors the old dashboard.</li>
         </ul>
         <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>
-          <li>Executive Report (printable / PDF) and Scorecard with governance health dimensions, plus Enterprise View (full cross-entity graph) and Gap Detection.</li>
+          <li>Executive Report (printable / PDF) and Scorecard with governance health dimensions, plus Gap Detection across domains, assets, and processes.</li>
         </ul>
         <h3 style={h3Style}>Dependency Enforcement</h3>
         <p style={pStyle}>
@@ -418,14 +414,22 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>How do SOPs work?</h3>
         <p style={pStyle}>
-          Standard Operating Procedures are step-by-step guides for common governance activities. You can seed 5
-          standard SOPs or create your own. Each step includes a description and estimated time.
+          Open <strong>Governance &rarr; Documentation</strong> and switch to the <em>Procedures</em> tab. Standard Operating Procedures are step-by-step guides for common governance activities. You can seed 5 standard SOPs or create your own. Each step includes a description and estimated time.
         </p>
 
-        <h3 style={h3Style}>What does the Control Tower show?</h3>
+        <h3 style={h3Style}>Where did Control Tower go?</h3>
         <p style={pStyle}>
-          The Control Tower is your operational dashboard showing open issues, active tasks, policy coverage,
-          automation rate, and coverage gaps across domains, assets, and processes.
+          Control Tower folded into <strong>Governance &rarr; Enterprise View</strong>. The operational dashboard view &mdash; open issues, active tasks, policy coverage, automation rate, coverage gaps across domains / assets / processes &mdash; is being reworked as a preset there. Old <code>/control-tower</code> deep links redirect automatically.
+        </p>
+
+        <h3 style={h3Style}>I used to open Operations Manual or SOPs directly &mdash; do those links still work?</h3>
+        <p style={pStyle}>
+          Yes. Both surfaces now live under <strong>Governance &rarr; Documentation</strong> as tabs. Old <code>/operations-manual</code> and <code>/sops</code> bookmarks redirect to the right tab, and shareable links use a <code>?tab=</code> query param so you can deep-link to a tab.
+        </p>
+
+        <h3 style={h3Style}>How do I open the RACI Matrix?</h3>
+        <p style={pStyle}>
+          Open <strong>Governance &rarr; Roles</strong> and switch to the <em>RACI Matrix</em> tab. RACI is a derived view of role assignments, so editing assignments and inspecting RACI now sit together. Old <code>/raci</code> links redirect to the matrix tab.
         </p>
 
         <h3 style={h3Style}>How do I publish a Data Dictionary?</h3>
