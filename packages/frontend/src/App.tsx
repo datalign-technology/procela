@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
@@ -17,13 +17,11 @@ import AgentsPage from '@/pages/AgentsPage';
 import GapDetectionPage from '@/pages/GapDetectionPage';
 import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
 import DataDomainsPage from '@/pages/DataDomainsPage';
-import DamaRolesPage from '@/pages/DamaRolesPage';
 import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
 import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
 import ScorecardPage from '@/pages/ScorecardPage';
 import ExecutiveReportPage from '@/pages/ExecutiveReportPage';
 import ComparisonPage from '@/pages/ComparisonPage';
-import RaciMatrixPage from '@/pages/RaciMatrixPage';
 import DataLineagePage from '@/pages/DataLineagePage';
 import DataQualityPage from '@/pages/DataQualityPage';
 import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
@@ -33,16 +31,15 @@ import ReportsPage from '@/pages/ReportsPage';
 import BrandingPage from '@/pages/BrandingPage';
 import EnterpriseViewPage from '@/pages/EnterpriseViewPage';
 import GovernanceWorkPage from '@/pages/GovernanceWorkPage';
-import ControlTowerPage from '@/pages/ControlTowerPage';
 import GovernancePoliciesPage from '@/pages/GovernancePoliciesPage';
 import GovernanceProgramPage from '@/pages/GovernanceProgramPage';
-import OperationsManualPage from '@/pages/OperationsManualPage';
 import GovernanceCalendarPage from '@/pages/GovernanceCalendarPage';
 import DecisionRightsPage from '@/pages/DecisionRightsPage';
-import SopsPage from '@/pages/SopsPage';
 import BusinessGlossaryPage from '@/pages/BusinessGlossaryPage';
 import DataDictionaryPage from '@/pages/DataDictionaryPage';
 import SkillsPage from '@/pages/SkillsPage';
+import DocumentationPage from '@/pages/DocumentationPage';
+import RolesPage from '@/pages/RolesPage';
 
 export default function App() {
   return (
@@ -72,23 +69,26 @@ export default function App() {
         <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
         <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
         <Route path="/data-domains" element={<DataDomainsPage />} />
-        <Route path="/dama-roles" element={<DamaRolesPage />} />
+        {/* Merged surfaces — option B of the governance IA cleanup */}
+        <Route path="/documentation" element={<DocumentationPage />} />
+        <Route path="/operations-manual" element={<Navigate to="/documentation?tab=manual" replace />} />
+        <Route path="/sops" element={<Navigate to="/documentation?tab=procedures" replace />} />
+        <Route path="/roles" element={<RolesPage />} />
+        <Route path="/dama-roles" element={<RolesPage />} />
+        <Route path="/raci" element={<Navigate to="/roles?tab=raci" replace />} />
+        <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
         <Route path="/scorecard" element={<ScorecardPage />} />
         <Route path="/report" element={<ExecutiveReportPage />} />
-        <Route path="/raci" element={<RaciMatrixPage />} />
         <Route path="/data-lineage" element={<DataLineagePage />} />
         <Route path="/data-quality" element={<DataQualityPage />} />
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/governance-work" element={<GovernanceWorkPage />} />
         <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
-        <Route path="/operations-manual" element={<OperationsManualPage />} />
         <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
         <Route path="/decision-rights" element={<DecisionRightsPage />} />
-        <Route path="/sops" element={<SopsPage />} />
         <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
         <Route path="/data-dictionary" element={<DataDictionaryPage />} />
         <Route path="/governance-program" element={<GovernanceProgramPage />} />
-        <Route path="/control-tower" element={<ControlTowerPage />} />
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />

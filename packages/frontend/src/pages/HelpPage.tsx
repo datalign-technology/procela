@@ -75,7 +75,7 @@ export default function HelpPage() {
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
-          <li><strong>Governance</strong> &mdash; Program, Groups, Roles, Policies, Decision Rights, RACI Matrix, Manuals, Procedures, Calendar, Tasks &amp; Issues, Control Tower, Reports.</li>
+          <li><strong>Governance</strong> &mdash; Program, Groups, Roles (with RACI Matrix tab), Policies, Decision Rights, Documentation (Manual + Procedures tabs), Calendar, Tasks &amp; Issues, Enterprise View, Reports.</li>
         </ul>
         <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
