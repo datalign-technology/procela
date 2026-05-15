@@ -739,14 +739,14 @@ export default function DecisionRightsPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                    <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                       <input type="checkbox" checked={rows.length > 0 && selectedIds.size === rows.length} onChange={toggleSelectAll} />
                     </th>
-                    <th style={{ ...thStyle, width: 32 }} />
-                    {decisionCols.isVisible('decision') && <th style={thStyle}>Decision</th>}
-                    {decisionCols.isVisible('category') && <th style={thStyle}>Category</th>}
-                    {decisionCols.isVisible('decides') && <th style={thStyle}>Decides</th>}
-                    <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                    <th scope="col" style={{ ...thStyle, width: 32 }} />
+                    {decisionCols.isVisible('decision') && <th scope="col" style={thStyle}>Decision</th>}
+                    {decisionCols.isVisible('category') && <th scope="col" style={thStyle}>Category</th>}
+                    {decisionCols.isVisible('decides') && <th scope="col" style={thStyle}>Decides</th>}
+                    <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>

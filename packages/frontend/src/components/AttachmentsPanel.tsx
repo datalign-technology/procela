@@ -184,6 +184,7 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
               </button>
               {!disabled && (
                 <button onClick={() => handleDelete(a.id)}
+                  aria-label="Delete attachment"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-error)', padding: '0 4px' }}
                   title="Delete">
                   &times;

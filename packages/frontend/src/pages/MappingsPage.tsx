@@ -299,7 +299,7 @@ export default function MappingsPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process-Data Mappings</h1>
             <InfoTip term="Mapping" />
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Link data assets to process steps to track data dependencies across your organization.
@@ -602,15 +602,15 @@ export default function MappingsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={mappings.length > 0 && selectedIds.size === mappings.length} onChange={toggleSelectAll} />
                 </th>
                 <SortableTh sortKey="stepPath" active={sortKey} dir={sortDir} onClick={toggleSort}>Process Step</SortableTh>
                 <SortableTh sortKey="assetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>
                 <SortableTh sortKey="linkType" active={sortKey} dir={sortDir} onClick={toggleSort}>Link Type</SortableTh>
-                <th style={thStyle}>AI Suggested</th>
-                <th style={thStyle}>Notes</th>
-                <th style={{ ...thStyle, width: 60, textAlign: 'center' }}>Actions</th>
+                <th scope="col" style={thStyle}>AI Suggested</th>
+                <th scope="col" style={thStyle}>Notes</th>
+                <th scope="col" style={{ ...thStyle, width: 60, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

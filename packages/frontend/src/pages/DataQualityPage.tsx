@@ -856,7 +856,7 @@ export default function DataQualityPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={filteredRules.length > 0 && selectedRuleIds.size === filteredRules.length}
                     onChange={() => {
@@ -865,16 +865,16 @@ export default function DataQualityPage() {
                     }} />
                 </th>
                 {dqCols.isVisible('asset') && <SortableTh sortKey="dataAssetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>}
-                {dqCols.isVisible('column') && <th style={thStyle}>Column</th>}
+                {dqCols.isVisible('column') && <th scope="col" style={thStyle}>Column</th>}
                 {dqCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Rule Name</SortableTh>}
                 {dqCols.isVisible('dimension') && <SortableTh sortKey="dimension" active={sortKey} dir={sortDir} onClick={toggleSort}>Dimension</SortableTh>}
-                {dqCols.isVisible('threshold') && <th style={thStyle}>Threshold</th>}
+                {dqCols.isVisible('threshold') && <th scope="col" style={thStyle}>Threshold</th>}
                 {dqCols.isVisible('currentScore') && <SortableTh sortKey="currentScore" active={sortKey} dir={sortDir} onClick={toggleSort}>Current Score</SortableTh>}
-                {dqCols.isVisible('weight') && <th style={thStyle}>Weight</th>}
+                {dqCols.isVisible('weight') && <th scope="col" style={thStyle}>Weight</th>}
                 {dqCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {dqCols.isVisible('schedule') && <th style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>}
-                {dqCols.isVisible('lastMeasured') && <th style={thStyle}>Last Measured</th>}
-                <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                {dqCols.isVisible('schedule') && <th scope="col" style={thStyle}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>Schedule <HelpPopover id="dq-schedule" title="Rule Scheduling">Click the clock icon to set how often a rule runs automatically: Hourly, Daily, or Weekly. Manual-only rules must be run with the play button.</HelpPopover></span></th>}
+                {dqCols.isVisible('lastMeasured') && <th scope="col" style={thStyle}>Last Measured</th>}
+                <th scope="col" style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1146,13 +1146,13 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
-              <th style={{ ...thLocal, width: 32 }}></th>
-              <th style={thLocal}>Asset</th>
-              <th style={thLocal}>System</th>
-              <th style={thLocal}>Owner</th>
-              <th style={thLocal}>Health</th>
-              <th style={thLocal}>Rules</th>
-              <th style={{ ...thLocal, textAlign: 'center' }}>Actions</th>
+              <th scope="col" style={{ ...thLocal, width: 32 }}></th>
+              <th scope="col" style={thLocal}>Asset</th>
+              <th scope="col" style={thLocal}>System</th>
+              <th scope="col" style={thLocal}>Owner</th>
+              <th scope="col" style={thLocal}>Health</th>
+              <th scope="col" style={thLocal}>Rules</th>
+              <th scope="col" style={{ ...thLocal, textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1235,11 +1235,11 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                             <thead>
                               <tr style={{ background: 'var(--color-bg)' }}>
-                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Column</th>
-                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Type</th>
-                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Health</th>
-                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Rules</th>
-                                <th style={{ ...thLocal, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
+                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Column</th>
+                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Type</th>
+                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Health</th>
+                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px' }}>Rules</th>
+                                <th scope="col" style={{ ...thLocal, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>Actions</th>
                               </tr>
                             </thead>
                             <tbody>

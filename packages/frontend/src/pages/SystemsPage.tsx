@@ -354,7 +354,7 @@ function ConnectPickerModal({
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Connect to a source</h2>
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Pick an existing connection for <strong>{sys.name}</strong>, or create a new one.</span>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
         </div>
 
         {empty && (
@@ -392,7 +392,7 @@ function ConnectPickerModal({
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--color-border)' }}>
-          <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={onClose} aria-label="Close" style={{ padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, cursor: 'pointer' }}>
             Cancel
           </button>
           <button onClick={onCreateNew} style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
@@ -886,7 +886,7 @@ export default function SystemsPage() {
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Systems</h3>
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste CSV or JSON, or browse a file. Format is auto-detected.</span>
             </div>
-            <button onClick={() => { setShowImport(false); setImportText(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
+            <button onClick={() => { setShowImport(false); setImportText(''); }} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
           </div>
           {!activeOrgId && (
             <div style={{ background: '#fef3c7', padding: '8px 12px', borderRadius: 4, fontSize: 12, color: '#92400e', marginBottom: 10 }}>
@@ -1281,15 +1281,15 @@ export default function SystemsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={systems.length > 0 && selectedIds.size === systems.length} onChange={toggleSelectAll} aria-label="Select all systems" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 {systemCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
                 {systemCols.isVisible('description') && <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>}
                 {systemCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
-                {systemCols.isVisible('connections') && <th style={{ ...thStyle, width: 140 }}>Connections</th>}
-                <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
+                {systemCols.isVisible('connections') && <th scope="col" style={{ ...thStyle, width: 140 }}>Connections</th>}
+                <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

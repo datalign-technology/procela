@@ -820,19 +820,6 @@ export default function Layout() {
             </button>
           </div>
         </header>
-        <a
-          href="#main-content"
-          style={{
-            position: 'absolute', left: -9999, top: 8,
-            background: 'var(--color-primary)', color: '#fff',
-            padding: '6px 14px', borderRadius: 4, zIndex: 1200,
-            fontSize: 13, fontWeight: 500,
-          }}
-          onFocus={(e) => { e.currentTarget.style.left = '8px'; }}
-          onBlur={(e) => { e.currentTarget.style.left = '-9999px'; }}
-        >
-          Skip to main content
-        </a>
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
           {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' && location.pathname !== '/' ? (

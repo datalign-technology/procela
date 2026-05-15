@@ -474,7 +474,7 @@ export default function DataLineagePage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Lineage</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Track how data flows between systems — which system feeds which.
@@ -647,19 +647,19 @@ export default function DataLineagePage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                    <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                       <input type="checkbox"
                         checked={links.length > 0 && selectedIds.size === links.length}
                         onChange={toggleSelectAll} />
                     </th>
-                    {lineageCols.isVisible('source') && <th style={thStyle}>Source System</th>}
-                    {lineageCols.isVisible('target') && <th style={thStyle}>Target System</th>}
-                    {lineageCols.isVisible('asset') && <th style={thStyle}>Data Asset</th>}
-                    {lineageCols.isVisible('flowType') && <th style={thStyle}>Flow Type</th>}
-                    {lineageCols.isVisible('frequency') && <th style={thStyle}>Frequency</th>}
-                    {lineageCols.isVisible('status') && <th style={thStyle}>Status</th>}
-                    {lineageCols.isVisible('description') && <th style={thStyle}>Description</th>}
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                    {lineageCols.isVisible('source') && <th scope="col" style={thStyle}>Source System</th>}
+                    {lineageCols.isVisible('target') && <th scope="col" style={thStyle}>Target System</th>}
+                    {lineageCols.isVisible('asset') && <th scope="col" style={thStyle}>Data Asset</th>}
+                    {lineageCols.isVisible('flowType') && <th scope="col" style={thStyle}>Flow Type</th>}
+                    {lineageCols.isVisible('frequency') && <th scope="col" style={thStyle}>Frequency</th>}
+                    {lineageCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
+                    {lineageCols.isVisible('description') && <th scope="col" style={thStyle}>Description</th>}
+                    <th scope="col" style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -767,10 +767,10 @@ export default function DataLineagePage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
-                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source asset</th>
-                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Target asset</th>
-                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source</th>
-                        <th style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Last seen</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source asset</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Target asset</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Source</th>
+                        <th scope="col" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--color-text-muted)', textAlign: 'left' }}>Last seen</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -974,12 +974,12 @@ function DbtCloudConnectionsPanel({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
-              <th style={connThStyle}>Name</th>
-              <th style={connThStyle}>Account / Job</th>
-              <th style={connThStyle}>Schedule</th>
-              <th style={connThStyle}>Last refresh</th>
-              <th style={connThStyle}>Status</th>
-              <th style={{ ...connThStyle, textAlign: 'right' }}>Actions</th>
+              <th scope="col" style={connThStyle}>Name</th>
+              <th scope="col" style={connThStyle}>Account / Job</th>
+              <th scope="col" style={connThStyle}>Schedule</th>
+              <th scope="col" style={connThStyle}>Last refresh</th>
+              <th scope="col" style={connThStyle}>Status</th>
+              <th scope="col" style={{ ...connThStyle, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>

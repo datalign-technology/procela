@@ -855,15 +855,15 @@ export default function GovernanceCalendarPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                    <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                       <input type="checkbox" checked={filteredEvents.length > 0 && selectedIds.size === filteredEvents.length} onChange={toggleSelectAll} />
                     </th>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Type</th>
-                    <th style={thStyle}>Cadence</th>
-                    <th style={thStyle}>Next</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
+                    <th scope="col" style={thStyle}>Name</th>
+                    <th scope="col" style={thStyle}>Type</th>
+                    <th scope="col" style={thStyle}>Cadence</th>
+                    <th scope="col" style={thStyle}>Next</th>
+                    <th scope="col" style={thStyle}>Status</th>
+                    <th scope="col" style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>

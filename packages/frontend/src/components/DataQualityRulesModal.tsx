@@ -499,7 +499,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               </>
             )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}>&times;</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}>&times;</button>
         </div>
 
         {/* Active rules — filtered by selected column when one is picked */}
@@ -520,11 +520,11 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--color-border)', borderRadius: 4 }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)' }}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Last Run</th>
-                  <th style={thStyle}>Result</th>
-                  <th style={{ ...thStyle, textAlign: 'center', width: 160 }}>Actions</th>
+                  <th scope="col" style={thStyle}>Name</th>
+                  <th scope="col" style={thStyle}>Type</th>
+                  <th scope="col" style={thStyle}>Last Run</th>
+                  <th scope="col" style={thStyle}>Result</th>
+                  <th scope="col" style={{ ...thStyle, textAlign: 'center', width: 160 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>

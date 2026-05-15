@@ -557,7 +557,7 @@ export default function GovernanceTasksPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={sorted.length > 0 && selectedIds.size === sorted.length}
                     onChange={toggleSelectAll} />
@@ -568,8 +568,8 @@ export default function GovernanceTasksPage() {
                 {taskCols.isVisible('priority') && <SortableTh sortKey="priority" active={sortKey} dir={sortDir} onClick={toggleSort}>Priority</SortableTh>}
                 {taskCols.isVisible('assignee') && <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assignee</SortableTh>}
                 {taskCols.isVisible('dueDate') && <SortableTh sortKey="dueDate" active={sortKey} dir={sortDir} onClick={toggleSort}>Due Date</SortableTh>}
-                {taskCols.isVisible('mode') && <th style={thStyle}>Mode</th>}
-                <th style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
+                {taskCols.isVisible('mode') && <th scope="col" style={thStyle}>Mode</th>}
+                <th scope="col" style={{ ...thStyle, width: 140, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

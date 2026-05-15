@@ -305,7 +305,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Connect to Source</h2>
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Sync {ENTITY_LABELS[targetEntity]} from an external data source</span>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
         </div>
 
         {/* Step Indicator */}

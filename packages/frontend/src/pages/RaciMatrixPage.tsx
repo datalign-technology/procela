@@ -351,7 +351,7 @@ export default function RaciMatrixPage() {
             <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
               <thead>
                 <tr>
-                  <th style={{ ...thStyle, position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', minWidth: 280 }}>
+                  <th scope="col" style={{ ...thStyle, position: 'sticky', left: 0, zIndex: 2, background: 'var(--color-surface)', minWidth: 280 }}>
                     Process Hierarchy
                   </th>
                   {activeColumns.map((col, ci) => {
@@ -359,7 +359,7 @@ export default function RaciMatrixPage() {
                     const bg = bgColors[ci % bgColors.length];
                     const label = getColumnLabel(col);
                     return (
-                      <th key={col.personId} style={{
+                      <th scope="col" key={col.personId} style={{
                         ...thStyle, padding: 0, minWidth: 36, maxWidth: 40,
                         verticalAlign: 'bottom', background: bg,
                       }}>

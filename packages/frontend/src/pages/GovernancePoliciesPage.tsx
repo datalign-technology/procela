@@ -380,17 +380,17 @@ export default function GovernancePoliciesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={policies.length > 0 && selectedIds.size === policies.length} onChange={toggleSelectAll} />
                 </th>
-                {policyCols.isVisible('code') && <th style={thStyle}>Code</th>}
-                {policyCols.isVisible('name') && <th style={thStyle}>Name</th>}
-                {policyCols.isVisible('category') && <th style={thStyle}>Category</th>}
-                {policyCols.isVisible('status') && <th style={thStyle}>Status</th>}
-                {policyCols.isVisible('owner') && <th style={thStyle}>Owner</th>}
-                {policyCols.isVisible('reviewDue') && <th style={thStyle}>Review Due</th>}
-                {policyCols.isVisible('controls') && <th style={thStyle}>Controls</th>}
-                <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                {policyCols.isVisible('code') && <th scope="col" style={thStyle}>Code</th>}
+                {policyCols.isVisible('name') && <th scope="col" style={thStyle}>Name</th>}
+                {policyCols.isVisible('category') && <th scope="col" style={thStyle}>Category</th>}
+                {policyCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
+                {policyCols.isVisible('owner') && <th scope="col" style={thStyle}>Owner</th>}
+                {policyCols.isVisible('reviewDue') && <th scope="col" style={thStyle}>Review Due</th>}
+                {policyCols.isVisible('controls') && <th scope="col" style={thStyle}>Controls</th>}
+                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -483,12 +483,12 @@ export default function GovernancePoliciesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--color-bg)' }}>
-                  <th style={thStyle}>Code</th>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Mode</th>
-                  <th style={thStyle}>Evidence</th>
-                  <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                  <th scope="col" style={thStyle}>Code</th>
+                  <th scope="col" style={thStyle}>Name</th>
+                  <th scope="col" style={thStyle}>Type</th>
+                  <th scope="col" style={thStyle}>Mode</th>
+                  <th scope="col" style={thStyle}>Evidence</th>
+                  <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>

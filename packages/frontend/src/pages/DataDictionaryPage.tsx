@@ -472,7 +472,7 @@ export default function DataDictionaryPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={{ ...thStyle, width: 32 }} />
+                    <th scope="col" style={{ ...thStyle, width: 32 }} />
                     <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Asset</SortableTh>
                     {dictCols.isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
                     {dictCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
@@ -590,9 +590,9 @@ export default function DataDictionaryPage() {
                                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
                                     <thead>
                                       <tr style={{ background: 'var(--color-bg)' }}>
-                                        <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Column</th>
-                                        <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', width: 140 }}>Type</th>
-                                        <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</th>
+                                        <th scope="col" style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Column</th>
+                                        <th scope="col" style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', width: 140 }}>Type</th>
+                                        <th scope="col" style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</th>
                                       </tr>
                                     </thead>
                                     <tbody>

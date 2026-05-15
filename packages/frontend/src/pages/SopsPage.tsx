@@ -485,17 +485,17 @@ export default function SopsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={sops.length > 0 && selectedIds.size === sops.length} onChange={toggleSelectAll} />
                 </th>
-                {sopCols.isVisible('code') && <th style={{ ...thStyle, width: 80 }}>Code</th>}
-                {sopCols.isVisible('title') && <th style={thStyle}>Title</th>}
-                {sopCols.isVisible('category') && <th style={thStyle}>Category</th>}
-                {sopCols.isVisible('roles') && <th style={thStyle}>Roles</th>}
-                {sopCols.isVisible('steps') && <th style={{ ...thStyle, textAlign: 'center' }}>Steps</th>}
-                {sopCols.isVisible('status') && <th style={thStyle}>Status</th>}
-                {sopCols.isVisible('owner') && <th style={thStyle}>Owner</th>}
-                <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                {sopCols.isVisible('code') && <th scope="col" style={{ ...thStyle, width: 80 }}>Code</th>}
+                {sopCols.isVisible('title') && <th scope="col" style={thStyle}>Title</th>}
+                {sopCols.isVisible('category') && <th scope="col" style={thStyle}>Category</th>}
+                {sopCols.isVisible('roles') && <th scope="col" style={thStyle}>Roles</th>}
+                {sopCols.isVisible('steps') && <th scope="col" style={{ ...thStyle, textAlign: 'center' }}>Steps</th>}
+                {sopCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
+                {sopCols.isVisible('owner') && <th scope="col" style={thStyle}>Owner</th>}
+                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

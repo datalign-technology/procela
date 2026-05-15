@@ -384,7 +384,7 @@ export default function SkillsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={sorted.length > 0 && selectedIds.size === sorted.length}
                     onChange={toggleSelectAll} aria-label="Select all skills" />
@@ -392,7 +392,7 @@ export default function SkillsPage() {
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 <SortableTh sortKey="category" active={sortKey} dir={sortDir} onClick={toggleSort}>Category</SortableTh>
                 <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>
-                <th style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
+                <th scope="col" style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

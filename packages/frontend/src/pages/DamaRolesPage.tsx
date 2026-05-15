@@ -299,7 +299,7 @@ export default function DamaRolesPage() {
           <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
         </>}
       >
-        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
       </PageHeader>
 
       {/* Search + Group-by toggle. The role-type filter moved out of this
@@ -536,7 +536,7 @@ export default function DamaRolesPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
-                    <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                    <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                       <input type="checkbox"
                         checked={filteredRoles.length > 0 && selectedIds.size === filteredRoles.length}
                         onChange={toggleSelectAll} />
@@ -544,8 +544,8 @@ export default function DamaRolesPage() {
                     <SortableTh sortKey="personName" active={sortKey} dir={sortDir} onClick={toggleSort}>Person</SortableTh>
                     <SortableTh sortKey="roleType" active={sortKey} dir={sortDir} onClick={toggleSort}>Governance Role</SortableTh>
                     <SortableTh sortKey="scopeName" active={sortKey} dir={sortDir} onClick={toggleSort}>Organization</SortableTh>
-                    <th style={thStyle}>Since</th>
-                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
+                    <th scope="col" style={thStyle}>Since</th>
+                    <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -639,9 +639,9 @@ function ByPersonView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmD
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr style={{ background: 'var(--color-bg)' }}>
-          <th style={thStyle}>Person</th>
-          <th style={thStyle}>Governance Roles</th>
-          <th style={thStyle}>Organization{sorted.some(([, e]) => e.orgs.size > 1) ? 's' : ''}</th>
+          <th scope="col" style={thStyle}>Person</th>
+          <th scope="col" style={thStyle}>Governance Roles</th>
+          <th scope="col" style={thStyle}>Organization{sorted.some(([, e]) => e.orgs.size > 1) ? 's' : ''}</th>
         </tr>
       </thead>
       <tbody>

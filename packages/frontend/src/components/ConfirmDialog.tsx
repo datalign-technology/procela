@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ConfirmDialog — standard Yes/No confirmation. Two hardening features
@@ -45,6 +46,8 @@ export default function ConfirmDialog({
   const [typed, setTyped] = useState('');
 
   const canConfirm = !requireTypedConfirmation || typed === requireTypedConfirmation;
+
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;

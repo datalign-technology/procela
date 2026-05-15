@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useScrollLock } from '../hooks/useScrollLock';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
@@ -48,6 +49,7 @@ interface Props {
 export default function SystemDetailModal({ systemId, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef, !!systemId);
+  useScrollLock(!!systemId);
   const navigate = useNavigate();
   const custodianLabel = useTerm('custodian');
   const tierLabel = useTierLabel();

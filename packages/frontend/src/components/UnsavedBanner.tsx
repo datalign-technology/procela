@@ -8,7 +8,10 @@ interface UnsavedBannerProps {
 export default function UnsavedBanner({ visible, onSave, onDiscard, saving }: UnsavedBannerProps) {
   if (!visible) return null;
   return (
-    <div style={{
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '8px 16px', marginBottom: 12,
       background: '#fffbeb', border: '1px solid #fcd34d',

@@ -739,7 +739,7 @@ export default function ConnectionsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Connections</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {filterSystem
@@ -1070,7 +1070,7 @@ export default function ConnectionsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={visibleConnections.length > 0 && selectedIds.size === visibleConnections.length}
                     onChange={() => {
@@ -1078,13 +1078,13 @@ export default function ConnectionsPage() {
                       else setSelectedIds(new Set(visibleConnections.map((c) => c.id)));
                     }} />
                 </th>
-                {connCols.isVisible('system') && <th style={thStyle}>System</th>}
+                {connCols.isVisible('system') && <th scope="col" style={thStyle}>System</th>}
                 {connCols.isVisible('name') && <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Connection Name</SortableTh>}
                 {connCols.isVisible('type') && <SortableTh sortKey="connectionType" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {connCols.isVisible('config') && <th style={thStyle}>Config</th>}
+                {connCols.isVisible('config') && <th scope="col" style={thStyle}>Config</th>}
                 {connCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {connCols.isVisible('lastTested') && <th style={thStyle}>Last Tested</th>}
-                <th style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
+                {connCols.isVisible('lastTested') && <th scope="col" style={thStyle}>Last Tested</th>}
+                <th scope="col" style={{ ...thStyle, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1207,11 +1207,11 @@ export default function ConnectionsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'var(--color-bg)' }}>
-                      <th style={{ ...thStyle, width: 28 }}></th>
-                      <th style={thStyle}>Name</th>
-                      <th style={thStyle}>Type</th>
-                      <th style={thStyle}>Rows</th>
-                      <th style={thStyle}>Columns</th>
+                      <th scope="col" style={{ ...thStyle, width: 28 }}></th>
+                      <th scope="col" style={thStyle}>Name</th>
+                      <th scope="col" style={thStyle}>Type</th>
+                      <th scope="col" style={thStyle}>Rows</th>
+                      <th scope="col" style={thStyle}>Columns</th>
                     </tr>
                   </thead>
                   <tbody>

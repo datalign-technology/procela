@@ -314,7 +314,7 @@ export default function AgentsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Agents</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none' }} title="Help">?</Link>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none' }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {'Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.'}
@@ -549,7 +549,7 @@ export default function AgentsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={filtered.length > 0 && selectedIds.size === filtered.length}
                     onChange={toggleSelectAll} aria-label="Select all agents" />
@@ -558,9 +558,9 @@ export default function AgentsPage() {
                 {agentCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
                 {agentCols.isVisible('provider') && <SortableTh sortKey="provider" active={sortKey} dir={sortDir} onClick={toggleSort}>Provider</SortableTh>}
                 {agentCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
-                {agentCols.isVisible('orgs') && <th style={thStyle}>Organizations</th>}
-                {agentCols.isVisible('responsible') && <th style={thStyle}>Responsible</th>}
-                <th style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
+                {agentCols.isVisible('orgs') && <th scope="col" style={thStyle}>Organizations</th>}
+                {agentCols.isVisible('responsible') && <th scope="col" style={thStyle}>Responsible</th>}
+                <th scope="col" style={{ ...thStyle, width: 120, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

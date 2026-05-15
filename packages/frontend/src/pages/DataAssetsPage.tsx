@@ -1389,19 +1389,19 @@ export default function DataAssetsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 40, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} aria-label="Select all assets" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 {isVisible('description') && <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>}
                 {isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
-                {isVisible('source') && <th style={thStyle}>Source</th>}
-                {isVisible('tier') && <th style={thStyle}>Tier</th>}
-                {isVisible('health') && <th style={thStyle}>Health</th>}
+                {isVisible('source') && <th scope="col" style={thStyle}>Source</th>}
+                {isVisible('tier') && <th scope="col" style={thStyle}>Tier</th>}
+                {isVisible('health') && <th scope="col" style={thStyle}>Health</th>}
                 {isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
                 {isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
-                {isVisible('steward') && <th style={thStyle}>Steward</th>}
-                <th style={{ ...thStyle, width: 180, textAlign: 'center' }}>Actions</th>
+                {isVisible('steward') && <th scope="col" style={thStyle}>Steward</th>}
+                <th scope="col" style={{ ...thStyle, width: 180, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1933,7 +1933,7 @@ export default function DataAssetsPage() {
                   Candidate bindings for <strong>{suggestAsset.name}</strong>, ranked by name match against connections in this org.
                 </span>
               </div>
-              <button onClick={() => setSuggestAsset(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+              <button onClick={() => setSuggestAsset(null)} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
             </div>
 
             {suggestLoading ? (

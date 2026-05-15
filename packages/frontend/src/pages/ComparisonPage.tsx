@@ -240,7 +240,7 @@ export default function ComparisonPage() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
               Compare Value Streams
             </h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} title="Help">?</Link>
+            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Select two value streams to compare their hierarchies side by side.

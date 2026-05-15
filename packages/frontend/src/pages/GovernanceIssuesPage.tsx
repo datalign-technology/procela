@@ -519,7 +519,7 @@ export default function GovernanceIssuesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
-                <th style={{ ...thStyle, width: 32, textAlign: 'center' }}>
+                <th scope="col" style={{ ...thStyle, width: 32, textAlign: 'center' }}>
                   <input type="checkbox"
                     checked={sorted.length > 0 && selectedIds.size === sorted.length}
                     onChange={toggleSelectAll} />
@@ -531,7 +531,7 @@ export default function GovernanceIssuesPage() {
                 {issueCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Domain</SortableTh>}
                 {issueCols.isVisible('assignee') && <SortableTh sortKey="assignee" active={sortKey} dir={sortDir} onClick={toggleSort}>Assigned To</SortableTh>}
                 {issueCols.isVisible('created') && <SortableTh sortKey="created" active={sortKey} dir={sortDir} onClick={toggleSort}>Created</SortableTh>}
-                <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
+                <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
