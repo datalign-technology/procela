@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 
 // ──────────────────────────────────────────────────────────────────────────
 // HelpPopover — small `?` chip with a popover. Used inline next to a
@@ -37,9 +37,18 @@ function persistDismissed(set: Set<string>) {
   } catch { /* */ }
 }
 
+const POPOVER_WIDTH = 280;
+const VIEWPORT_MARGIN = 8;
+
 export default function HelpPopover({ id, title, children, showInitially = false }: HelpPopoverProps) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<boolean>(true);  // assume dismissed until we read storage
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Fixed-positioned popover coords. Computed from the button's
+  // getBoundingClientRect so we can clamp to the viewport — otherwise the
+  // popover gets clipped by the sidebar when the trigger sits near the
+  // left edge of the content area.
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
   useEffect(() => {
     const set = readDismissed();
@@ -57,6 +66,29 @@ export default function HelpPopover({ id, title, children, showInitially = false
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
+  // Recompute position whenever the popover opens or the viewport
+  // resizes. useLayoutEffect so the popover paints in the right place on
+  // the first frame, not after a flicker.
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const btn = buttonRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const desiredLeft = rect.left + rect.width / 2 - POPOVER_WIDTH / 2;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - VIEWPORT_MARGIN;
+      const clampedLeft = Math.max(VIEWPORT_MARGIN, Math.min(desiredLeft, maxLeft));
+      setPos({ top: rect.bottom + 6, left: clampedLeft });
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+
   const dismiss = () => {
     const set = readDismissed();
     set.add(id);
@@ -68,6 +100,7 @@ export default function HelpPopover({ id, title, children, showInitially = false
   return (
     <span style={{ position: 'relative', display: 'inline-block' }}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={`Help: ${title || id}`}
@@ -87,9 +120,8 @@ export default function HelpPopover({ id, title, children, showInitially = false
         <div
           role="tooltip"
           style={{
-            position: 'absolute', top: 'calc(100% + 6px)', left: '50%',
-            transform: 'translateX(-50%)',
-            width: 280, zIndex: 950,
+            position: 'fixed', top: pos.top, left: pos.left,
+            width: POPOVER_WIDTH, zIndex: 950,
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-md)',
