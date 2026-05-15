@@ -13,6 +13,8 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import FilterBar from '../components/FilterBar';
+import Button from '../components/Button';
 
 // ──────────────────────────────────────────────────────────────────────────
 // GovernanceIssuesPage — full CRUD list page for governance issues. Supports
@@ -348,42 +350,25 @@ export default function GovernanceIssuesPage() {
         </div>
       </div>
 
-      {/* Filters (left-aligned, mirrors Data Assets) */}
       {issues.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            type="text"
-            placeholder="Search issues..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: '5px 10px', fontSize: 12, background: 'var(--color-surface)', width: 200 }}
-          />
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">All Statuses</option>
-            {ISSUE_STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-          </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 120 }} value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value)}>
-            <option value="">All Severities</option>
-            {ISSUE_SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select style={{ ...selectStyle, width: 'auto', minWidth: 140 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="">All Types</option>
-            {ISSUE_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-          </select>
-          {(filterStatus || filterSeverity || filterType || searchQuery) && (
+        <FilterBar
+          search={{ value: searchQuery, onChange: setSearchQuery, placeholder: 'Search issues…', width: 200 }}
+          filters={[
+            { id: 'status',   label: 'All Statuses',   value: filterStatus,   onChange: setFilterStatus,   width: 140, options: ISSUE_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') })) },
+            { id: 'severity', label: 'All Severities', value: filterSeverity, onChange: setFilterSeverity, width: 140, options: ISSUE_SEVERITIES.map((s) => ({ value: s, label: s })) },
+            { id: 'type',     label: 'All Types',      value: filterType,     onChange: setFilterType,     width: 160, options: ISSUE_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ') })) },
+          ]}
+          leftActions={(filterStatus || filterSeverity || filterType || searchQuery) ? (
             <>
-              <button
-                style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
-                onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); setSearchQuery(''); }}
-              >
+              <Button size="sm" onClick={() => { setFilterStatus(''); setFilterSeverity(''); setFilterType(''); setSearchQuery(''); }}>
                 Clear Filters
-              </button>
+              </Button>
               <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
                 Showing {filtered.length} of {issues.length}
               </span>
             </>
-          )}
-        </div>
+          ) : null}
+        />
       )}
 
       {/* Bulk Action Bar */}
@@ -507,7 +492,7 @@ export default function GovernanceIssuesPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {loading ? (
-          <SkeletonRows rows={5} columns={9} />
+          <SkeletonRows rows={5} columnWidths={[32, null, null, null, null, null, null, null, 100]} />
         ) : issues.length === 0 && !showForm ? (
           <EmptyState
             icon={'!'}

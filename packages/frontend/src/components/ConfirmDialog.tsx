@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useScrollLock } from '../hooks/useScrollLock';
+import Button from './Button';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ConfirmDialog — standard Yes/No confirmation. Two hardening features
@@ -96,8 +97,6 @@ export default function ConfirmDialog({
 
   if (!open) return null;
 
-  const confirmBg = variant === 'danger' ? '#dc2626' : 'var(--color-primary)';
-
   return (
     <div
       role="dialog"
@@ -174,33 +173,22 @@ export default function ConfirmDialog({
             ref={cancelBtnRef}
             onClick={onCancel}
             style={{
-              padding: '8px 16px',
-              fontSize: '0.875rem',
-              background: '#fff',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              color: '#374151',
-              cursor: 'pointer',
+              padding: '8px 16px', fontSize: '0.875rem',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--color-text)', cursor: 'pointer', fontWeight: 500,
             }}
           >
             Cancel
           </button>
-          <button
+          <Button
+            variant={variant === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
             disabled={!canConfirm}
-            style={{
-              padding: '8px 16px',
-              fontSize: '0.875rem',
-              background: canConfirm ? confirmBg : '#e5e7eb',
-              border: 'none',
-              borderRadius: '6px',
-              color: canConfirm ? '#fff' : '#9ca3af',
-              cursor: canConfirm ? 'pointer' : 'not-allowed',
-              fontWeight: 500,
-            }}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -818,7 +818,7 @@ export default function PeoplePage() {
 
   if (loading) return (
     <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden', padding: 8 }}>
-      <SkeletonRows rows={6} columns={5} />
+      <SkeletonRows rows={6} columnWidths={[32, null, null, null, 70]} />
     </div>
   );
 

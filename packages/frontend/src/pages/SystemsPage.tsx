@@ -1268,7 +1268,7 @@ export default function SystemsPage() {
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
         {loading ? (
-          <SkeletonRows rows={5} columns={5} />
+          <SkeletonRows rows={5} columnWidths={[40, null, null, 140, 80]} />
         ) : systems.length === 0 && !showForm ? (
           <EmptyState
             icon={'\u2699'}

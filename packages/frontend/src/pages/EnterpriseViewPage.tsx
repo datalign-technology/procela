@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
+import { badgeColor } from '../lib/badgeColors';
 import HelpPopover from '../components/HelpPopover';
 import EnterpriseDiagram from '../components/EnterpriseDiagram';
 
@@ -410,24 +411,22 @@ export default function EnterpriseViewPage() {
                                 {(n.status || '').replace('_', ' ')}
                               </span>
                             )}
-                            {n.meta.governanceTier && (
-                              <span style={{
-                                fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                                background: n.meta.governanceTier === 'GOLD' ? '#fef3c7' : n.meta.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa',
-                                color: n.meta.governanceTier === 'GOLD' ? '#92400e' : n.meta.governanceTier === 'SILVER' ? '#475569' : '#9a3412',
-                              }}>
-                                {tierLabel(n.meta.governanceTier)}
-                              </span>
-                            )}
-                            {n.meta.healthScore != null && (
-                              <span style={{
-                                fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                                background: n.meta.healthScore >= 80 ? '#d1fae5' : n.meta.healthScore >= 50 ? '#fef3c7' : '#fee2e2',
-                                color: n.meta.healthScore >= 80 ? '#065f46' : n.meta.healthScore >= 50 ? '#92400e' : '#991b1b',
-                              }}>
-                                {n.meta.healthScore}% health
-                              </span>
-                            )}
+                            {n.meta.governanceTier && (() => {
+                              const c = badgeColor('tier', n.meta.governanceTier);
+                              return (
+                                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
+                                  {tierLabel(n.meta.governanceTier)}
+                                </span>
+                              );
+                            })()}
+                            {n.meta.healthScore != null && (() => {
+                              const c = badgeColor('health', n.meta.healthScore);
+                              return (
+                                <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: c.bg, color: c.color }}>
+                                  {n.meta.healthScore}% health
+                                </span>
+                              );
+                            })()}
                             {n.meta.rulesCount > 0 && (
                               <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
                                 {n.meta.rulesCount} rules

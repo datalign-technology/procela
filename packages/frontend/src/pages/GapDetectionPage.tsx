@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
+import { badgeColor } from '../lib/badgeColors';
 import { tierLabel } from '../lib/governanceTier';
 
 // ── Types ──
@@ -411,10 +412,7 @@ function renderItems(key: string, items: any[]) {
       return items.map((a: OrphanedAsset) => (
         <div key={a.id} style={rowStyle}>
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
-          <span style={badgeStyle(
-            a.governanceTier === 'GOLD' ? '#fef3c7' : a.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa',
-            a.governanceTier === 'GOLD' ? '#92400e' : a.governanceTier === 'SILVER' ? '#475569' : '#9a3412',
-          )}>{a.governanceTier}</span>
+          <span style={badgeStyle(badgeColor('tier', a.governanceTier).bg, badgeColor('tier', a.governanceTier).color)}>{a.governanceTier}</span>
         </div>
       ));
 

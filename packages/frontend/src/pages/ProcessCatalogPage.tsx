@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { tierLabel } from '../lib/governanceTier';
+import { badgeColor } from '../lib/badgeColors';
 import { useOrgContext } from '../stores/orgContext';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
@@ -397,8 +398,9 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
 
   const renderRow = (m: MappingInfo) => {
     if (!m.assetInfo) return null;
-    const tierBg = m.assetInfo.governanceTier === 'GOLD' ? '#fef3c7' : m.assetInfo.governanceTier === 'SILVER' ? '#f1f5f9' : '#fed7aa';
-    const tierColor = m.assetInfo.governanceTier === 'GOLD' ? '#92400e' : m.assetInfo.governanceTier === 'SILVER' ? '#475569' : '#9a3412';
+    const tierC = badgeColor('tier', m.assetInfo.governanceTier);
+    const tierBg = tierC.bg;
+    const tierColor = tierC.color;
     const isExp = expandedMapping === m.id;
     return (
       <div key={m.id}>

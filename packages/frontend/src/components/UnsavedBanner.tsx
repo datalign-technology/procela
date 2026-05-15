@@ -1,3 +1,5 @@
+import Button from './Button';
+
 interface UnsavedBannerProps {
   visible: boolean;
   onSave: () => void;
@@ -21,28 +23,8 @@ export default function UnsavedBanner({ visible, onSave, onDiscard, saving }: Un
         You have unsaved changes
       </span>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={onDiscard}
-          style={{
-            padding: '4px 14px', fontSize: 12, fontWeight: 500,
-            background: 'transparent', border: '1px solid #d1d5db',
-            borderRadius: 4, cursor: 'pointer', color: '#6b7280',
-          }}
-        >
-          Discard
-        </button>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          style={{
-            padding: '4px 14px', fontSize: 12, fontWeight: 500,
-            background: 'var(--color-primary)', border: 'none',
-            borderRadius: 4, cursor: 'pointer', color: '#fff',
-            opacity: saving ? 0.6 : 1,
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+        <Button variant="secondary" size="sm" onClick={onDiscard}>Discard</Button>
+        <Button variant="primary" size="sm" onClick={onSave} loading={saving}>Save Changes</Button>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import SkillPicker from '../components/SkillPicker';
 import { formatPersonLabel } from '../lib/personLabel';
+import { badgeColor } from '../lib/badgeColors';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
@@ -106,13 +107,6 @@ interface AgentExecution {
   createdAt: string;
 }
 
-const TYPE_BADGES: Record<string, { bg: string; color: string }> = {
-  AI:              { bg: '#ede9fe', color: '#5b21b6' },
-  SERVICE_ACCOUNT: { bg: '#dbeafe', color: '#1e40af' },
-  PIPELINE:        { bg: '#d1f0eb', color: '#0f4f46' },
-  BOT:             { bg: '#fef3c7', color: '#92400e' },
-  OTHER:           { bg: '#f1f5f9', color: '#64748b' },
-};
 const STATUS_BADGES: Record<string, { bg: string; color: string }> = {
   ACTIVE:  { bg: '#d1f0eb', color: '#0f4f46' },
   PAUSED:  { bg: '#fef3c7', color: '#92400e' },
@@ -565,7 +559,7 @@ export default function AgentsPage() {
             </thead>
             <tbody>
               {sorted.map((a) => {
-                const tb = TYPE_BADGES[a.agentType] || TYPE_BADGES.OTHER;
+                const tb = badgeColor('agentType', a.agentType);
                 const sb = STATUS_BADGES[a.status] || STATUS_BADGES.ACTIVE;
                 const isSelected = selectedIds.has(a.id);
                 const roles = agentRoles.filter((r) => r.agentId === a.id);
