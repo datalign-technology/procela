@@ -16,6 +16,7 @@ import PersonDetailPage from '@/pages/PersonDetailPage';
 import AgentsPage from '@/pages/AgentsPage';
 import GapDetectionPage from '@/pages/GapDetectionPage';
 import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
+import GovernanceGroupDetailPage from '@/pages/GovernanceGroupDetailPage';
 import DataDomainsPage from '@/pages/DataDomainsPage';
 import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
 import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
+        <Route path="/governance-groups/:id" element={<GovernanceGroupDetailPage />} />
         <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
         <Route path="/data-domains" element={<DataDomainsPage />} />
         {/* Merged surfaces — option B of the governance IA cleanup */}

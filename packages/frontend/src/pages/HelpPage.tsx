@@ -232,6 +232,7 @@ export default function HelpPage() {
           <li>Generate the standard DAMA structure with one click. Explore Recommendations suggests additional groups based on your data domains.</li>
           <li>Per group: an Expected Roles panel lists the governance roles the group should have, the required vs optional split, and current fill status. Click any role label to open the Role Detail drawer.</li>
           <li>Two remove actions are distinct: the <strong>x on a role chip</strong> removes that specific role assignment; <strong>Remove from group</strong> in the members table removes the person from the group entirely (their role assignments survive at the org level).</li>
+          <li><strong>Open full composition →</strong> on any selected group jumps to the Group Composition page (<code>/governance-groups/:id</code>) &mdash; one cohesive surface that combines members, expected-role gaps, decision rights this body owns, policies tied to it via member roles, the calendar cadence, and a snapshot of RACI assignments. Each role chip shows the typical RACI letter(s) the role holds on common decisions, so you can see at a glance what each role is accountable / responsible / consulted / informed for without opening the drawer.</li>
         </ul>
         <h3 style={h3Style}>Roles (with RACI Matrix tab)</h3>
         <ul style={listStyle}>

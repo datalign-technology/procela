@@ -965,7 +965,19 @@ export default function GovernanceGroupsPage() {
                   {selectedGroupDetail.description && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{selectedGroupDetail.description}</p>}
                   <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 2 }}>Tip: You can also manage group memberships from Organizations {'→'} click "Manage" on any person.</p>
                 </div>
-                <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* Surface the full Composition view as the primary action — it
+                      covers everything this side panel does and adds decisions,
+                      policies, calendar, and a RACI snapshot. The side panel
+                      stays for the quick scan use case. */}
+                  <button
+                    style={{ ...btnPrimary, fontSize: 12, padding: '4px 12px' }}
+                    onClick={() => navigate(`/governance-groups/${selectedGroupDetail.id}`)}
+                  >
+                    Open full composition →
+                  </button>
+                  <button style={{ ...btnIcon, fontSize: 12 }} onClick={() => { setSelectedGroupId(null); setSelectedGroupDetail(null); }}>Close</button>
+                </div>
               </div>
 
               {/* Expected Governance Roles */}
