@@ -232,8 +232,13 @@ function buildFacts(orgId: string | undefined): Fact[] {
 
 interface CubeRequest {
   orgId?: string;
-  rowDim: Dim;
-  colDim: Dim;
+  // Modern shape: arrays so callers can stack a primary + secondary
+  // dimension on each axis (sub-grouping). Single-dim callers can keep
+  // sending rowDim/colDim — we coerce. Max 2 dims per axis in v1.
+  rowDims?: Dim[];
+  colDims?: Dim[];
+  rowDim?: Dim;
+  colDim?: Dim;
   // Filters constrain facts to those that match the given dim/value.
   filters?: Array<{ dim: Dim; value: string }>;
   // Cap so a 500-asset axis doesn't crush the client. Default 50 per axis.
@@ -249,6 +254,7 @@ interface CubeCell {
 }
 
 const MAX_DRILL = 100;
+const MAX_DIMS_PER_AXIS = 2;
 
 const router = Router();
 
@@ -292,23 +298,48 @@ router.get('/dimensions', (_req, res) => {
 });
 
 // POST /api/v1/analysis/cube — main pivot endpoint.
+//
+// Group facts by composite (rowKey1, rowKey2, ..., colKey1, colKey2, ...)
+// where each axis carries up to MAX_DIMS_PER_AXIS dimensions. Single-dim
+// pivots collapse to the same code path with one-element key arrays.
 router.post('/cube', (req: Request, res: Response) => {
   const body = (req.body || {}) as CubeRequest;
-  const { rowDim, colDim, orgId } = body;
+  const { orgId } = body;
   const filters = body.filters || [];
   const maxPerAxis = Math.max(5, Math.min(200, body.maxPerAxis ?? 50));
 
-  if (!rowDim || !colDim) {
-    res.status(400).json({ success: false, error: 'rowDim and colDim are required' });
+  // Coerce legacy single-dim shape into the new arrays.
+  const rowDims: Dim[] = (body.rowDims && body.rowDims.length > 0)
+    ? body.rowDims
+    : body.rowDim ? [body.rowDim] : [];
+  const colDims: Dim[] = (body.colDims && body.colDims.length > 0)
+    ? body.colDims
+    : body.colDim ? [body.colDim] : [];
+
+  // ── Validation ──
+  if (rowDims.length === 0 || colDims.length === 0) {
+    res.status(400).json({ success: false, error: 'At least one row and one column dimension are required' });
     return;
   }
-  if (!ALL_DIMS.includes(rowDim) || !ALL_DIMS.includes(colDim)) {
-    res.status(400).json({ success: false, error: 'rowDim/colDim must be one of: ' + ALL_DIMS.join(', ') });
+  if (rowDims.length > MAX_DIMS_PER_AXIS || colDims.length > MAX_DIMS_PER_AXIS) {
+    res.status(400).json({ success: false, error: `Up to ${MAX_DIMS_PER_AXIS} dimensions per axis.` });
     return;
   }
-  if (rowDim === colDim) {
-    res.status(400).json({ success: false, error: 'rowDim and colDim must differ' });
-    return;
+  for (const d of [...rowDims, ...colDims]) {
+    if (!ALL_DIMS.includes(d)) {
+      res.status(400).json({ success: false, error: `Unknown dimension: ${d}` });
+      return;
+    }
+  }
+  // No duplicates within an axis or across axes — pivoting a dim by
+  // itself or against itself isn't meaningful.
+  const seen = new Set<Dim>();
+  for (const d of [...rowDims, ...colDims]) {
+    if (seen.has(d)) {
+      res.status(400).json({ success: false, error: `Dimension '${d}' appears more than once.` });
+      return;
+    }
+    seen.add(d);
   }
 
   const facts = buildFacts(orgId);
@@ -322,64 +353,136 @@ router.post('/cube', (req: Request, res: Response) => {
     );
   }
 
-  // Keep only facts that populate both axes.
-  filtered = filtered.filter((f) => f.refs[rowDim] && f.refs[colDim]);
+  // Drop facts that don't populate every dim on either axis. Sub-group
+  // by a dim that the fact doesn't attribute to ⇒ the fact has no
+  // meaningful position on that axis.
+  filtered = filtered.filter((f) =>
+    rowDims.every((d) => f.refs[d]) && colDims.every((d) => f.refs[d]),
+  );
 
-  // Group by (rowKey, colKey)
+  // ── Composite key helpers ──
+  const refsToKey = (f: Fact, dims: Dim[]): string =>
+    dims.map((d) => f.refs[d]!).join('\x00');
+  const keyToPath = (key: string): string[] => key.split('\x00');
+
+  // ── Group ──
   const cells = new Map<string, CubeCell>();
   const rowKeys = new Set<string>();
   const colKeys = new Set<string>();
   for (const f of filtered) {
-    const r = f.refs[rowDim]!;
-    const c = f.refs[colDim]!;
-    rowKeys.add(r);
-    colKeys.add(c);
-    const key = `${r}\x00${c}`;
-    let cell = cells.get(key);
-    if (!cell) { cell = { count: 0, factIds: [] }; cells.set(key, cell); }
+    const rKey = refsToKey(f, rowDims);
+    const cKey = refsToKey(f, colDims);
+    rowKeys.add(rKey);
+    colKeys.add(cKey);
+    const cellKey = `${rKey}\x01${cKey}`;
+    let cell = cells.get(cellKey);
+    if (!cell) { cell = { count: 0, factIds: [] }; cells.set(cellKey, cell); }
     cell.count++;
     if (cell.factIds.length < MAX_DRILL) cell.factIds.push(f.factId);
   }
 
-  // Build labelled axis arrays. Sort by descending row/col totals so the
-  // heaviest rows surface to the top; ties broken alphabetically.
+  // ── Totals per row / per column ──
   const rowTotals = new Map<string, number>();
   const colTotals = new Map<string, number>();
-  for (const [key, cell] of cells.entries()) {
-    const [r, c] = key.split('\x00');
-    rowTotals.set(r, (rowTotals.get(r) || 0) + cell.count);
-    colTotals.set(c, (colTotals.get(c) || 0) + cell.count);
+  for (const [k, cell] of cells.entries()) {
+    const [rk, ck] = k.split('\x01');
+    rowTotals.set(rk, (rowTotals.get(rk) || 0) + cell.count);
+    colTotals.set(ck, (colTotals.get(ck) || 0) + cell.count);
   }
-  const sortFn = (totals: Map<string, number>) => (a: string, b: string) => {
-    const ta = totals.get(a) || 0;
-    const tb = totals.get(b) || 0;
-    if (tb !== ta) return tb - ta;
-    return lookups.label(rowDim, a).localeCompare(lookups.label(rowDim, b));
-  };
-  const rows = Array.from(rowKeys).sort(sortFn(rowTotals)).slice(0, maxPerAxis);
-  const cols = Array.from(colKeys).sort(sortFn(colTotals)).slice(0, maxPerAxis);
 
-  // Materialize the dense grid the client renders. Sparse cells become
-  // { count: 0, factIds: [] }.
-  const grid: Array<{ rowId: string; rowLabel: string; cells: Array<{ colId: string; colLabel: string; count: number; factIds: string[] }> }> = [];
-  for (const r of rows) {
-    grid.push({
-      rowId: r,
-      rowLabel: lookups.label(rowDim, r),
-      cells: cols.map((c) => {
-        const cell = cells.get(`${r}\x00${c}`) || { count: 0, factIds: [] };
-        return { colId: c, colLabel: lookups.label(colDim, c), count: cell.count, factIds: cell.factIds };
-      }),
+  // ── Sort axis values ──
+  // Sort by total descending so the heaviest combinations bubble up.
+  // Tie-break alphabetically on the first-level label, then second, so
+  // sibling sub-rows stay grouped together (the client renders the
+  // first-level header as a rowspan-merged cell).
+  const labelForPath = (dims: Dim[], path: string[]): string[] =>
+    path.map((id, i) => lookups.label(dims[i], id));
+
+  const sortKeys = (keys: Set<string>, dims: Dim[], totals: Map<string, number>): string[] => {
+    return Array.from(keys).sort((a, b) => {
+      const ta = totals.get(a) || 0;
+      const tb = totals.get(b) || 0;
+      if (tb !== ta) return tb - ta;
+      const la = labelForPath(dims, keyToPath(a));
+      const lb = labelForPath(dims, keyToPath(b));
+      for (let i = 0; i < Math.max(la.length, lb.length); i++) {
+        const cmp = (la[i] || '').localeCompare(lb[i] || '');
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
     });
-  }
+  };
+
+  // For sub-grouping, sort by (first-level total desc, second-level
+  // total desc) so sibling sub-rows stick together. Compute per-level
+  // totals first.
+  const groupedSort = (keys: Set<string>, dims: Dim[]): string[] => {
+    if (dims.length <= 1) return sortKeys(keys, dims, dims === rowDims ? rowTotals : colTotals);
+    const totals = dims === rowDims ? rowTotals : colTotals;
+    // Roll up totals to the first-level key.
+    const firstTotals = new Map<string, number>();
+    for (const k of keys) {
+      const [first] = keyToPath(k);
+      firstTotals.set(first, (firstTotals.get(first) || 0) + (totals.get(k) || 0));
+    }
+    return Array.from(keys).sort((a, b) => {
+      const pa = keyToPath(a);
+      const pb = keyToPath(b);
+      const fa = firstTotals.get(pa[0]) || 0;
+      const fb = firstTotals.get(pb[0]) || 0;
+      if (fb !== fa) return fb - fa;
+      // Same primary group — alpha by first-level label.
+      const cmpFirst = lookups.label(dims[0], pa[0]).localeCompare(lookups.label(dims[0], pb[0]));
+      if (cmpFirst !== 0) return cmpFirst;
+      // Tie-break on second-level total then label.
+      const ta = totals.get(a) || 0;
+      const tb = totals.get(b) || 0;
+      if (tb !== ta) return tb - ta;
+      return lookups.label(dims[1], pa[1]).localeCompare(lookups.label(dims[1], pb[1]));
+    });
+  };
+
+  const rows = groupedSort(rowKeys, rowDims).slice(0, maxPerAxis);
+  const cols = groupedSort(colKeys, colDims).slice(0, maxPerAxis);
+
+  // ── Build dense grid ──
+  const grid = rows.map((rk) => {
+    const path = keyToPath(rk);
+    const labels = labelForPath(rowDims, path);
+    return {
+      rowPath: path,
+      rowLabels: labels,
+      cells: cols.map((ck) => {
+        const cKeyPath = keyToPath(ck);
+        const cLabels = labelForPath(colDims, cKeyPath);
+        const cell = cells.get(`${rk}\x01${ck}`) || { count: 0, factIds: [] };
+        return {
+          colPath: cKeyPath,
+          colLabels: cLabels,
+          count: cell.count,
+          factIds: cell.factIds,
+        };
+      }),
+    };
+  });
 
   res.json({
     success: true,
     data: {
-      rowDim,
-      colDim,
-      rows: rows.map((r) => ({ id: r, label: lookups.label(rowDim, r), total: rowTotals.get(r) || 0 })),
-      cols: cols.map((c) => ({ id: c, label: lookups.label(colDim, c), total: colTotals.get(c) || 0 })),
+      rowDims, colDims,
+      // Back-compat: clients reading rowDim/colDim still see the
+      // first-level dim so old code degrades gracefully.
+      rowDim: rowDims[0], colDim: colDims[0],
+      rows: rows.map((rk) => ({
+        path: keyToPath(rk),
+        labels: labelForPath(rowDims, keyToPath(rk)),
+        total: rowTotals.get(rk) || 0,
+      })),
+      cols: cols.map((ck) => ({
+        path: keyToPath(ck),
+        labels: labelForPath(colDims, keyToPath(ck)),
+        total: colTotals.get(ck) || 0,
+      })),
       grid,
       // Diagnostics so the UI can show "showing 50 of 187 rows" hints.
       truncated: { rows: rowKeys.size > maxPerAxis, cols: colKeys.size > maxPerAxis },

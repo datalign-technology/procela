@@ -281,11 +281,13 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Analysis (cube)</h3>
         <ul style={listStyle}>
-          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship in v1: Systems, Data Assets, Domains, Processes, Roles, People, Connections.</li>
+          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections.</li>
+          <li><strong>Sub-group.</strong> Drag a second dimension into either zone to create a nested grouping (max 2 per axis). The grid renders the parent label with a merged cell spanning all its sub-rows / sub-columns, so e.g. <em>Systems &gt; Data Assets</em> on rows shows each system once with its assets indented underneath.</li>
+          <li><strong>Pivot.</strong> The ⇄ button between the Rows and Columns zones swaps everything in one click — useful when you want to flip a tall report into a wide one without re-dragging.</li>
           <li><strong>Drill down.</strong> Click any cell count to open a side panel listing the underlying records (asset facts, role assignments, mappings, ownership rows, etc.).</li>
           <li><strong>Filter.</strong> Click any row label or column header to add that value as a filter; chips appear above the grid and can be removed individually. Each filter narrows the cube to facts that match that dim/value.</li>
-          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active row/col are also mirrored to the URL so direct links are shareable without saving.</li>
-          <li><strong>Export.</strong> The full grid exports to CSV, Excel, JSON, or PDF (browser-print) with row/column totals included.</li>
+          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active dims are also mirrored to the URL so direct links are shareable without saving.</li>
+          <li><strong>Export.</strong> The full grid exports to CSV, Excel, JSON, or PDF (browser-print) with row/column totals included. Sub-group labels are flattened with “ / ” separators in the export.</li>
         </ul>
         <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>

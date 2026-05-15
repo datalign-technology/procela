@@ -33,11 +33,18 @@ interface DimensionDef {
 }
 
 interface CubeResponse {
+  rowDims: Dim[];
+  colDims: Dim[];
+  // Back-compat — still present in responses so old clients reading
+  // rowDim/colDim keep working. Use rowDims/colDims directly.
   rowDim: Dim;
   colDim: Dim;
-  rows: Array<{ id: string; label: string; total: number }>;
-  cols: Array<{ id: string; label: string; total: number }>;
-  grid: Array<{ rowId: string; rowLabel: string; cells: Array<{ colId: string; colLabel: string; count: number; factIds: string[] }> }>;
+  rows: Array<{ path: string[]; labels: string[]; total: number }>;
+  cols: Array<{ path: string[]; labels: string[]; total: number }>;
+  grid: Array<{
+    rowPath: string[]; rowLabels: string[];
+    cells: Array<{ colPath: string[]; colLabels: string[]; count: number; factIds: string[] }>;
+  }>;
   truncated: { rows: boolean; cols: boolean };
   totalRows: number;
   totalCols: number;
@@ -57,7 +64,14 @@ interface SavedReport {
   description: string | null;
   ownerId: string | null;
   ownerName: string | null;
-  config: { rowDim?: Dim; colDim?: Dim; filters?: Array<{ dim: Dim; value: string; label?: string }> };
+  // Modern shape uses rowDims/colDims; legacy rowDim/colDim are still
+  // honoured on load so reports saved before sub-grouping shipped
+  // continue to work.
+  config: {
+    rowDims?: Dim[]; colDims?: Dim[];
+    rowDim?: Dim; colDim?: Dim;
+    filters?: Array<{ dim: Dim; value: string; label?: string }>;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -72,14 +86,24 @@ interface FilterEntry {
 // outside the page don't collide.
 const DND_TYPE = 'application/x-procela-dim';
 
+// Mirrors the backend cap. v1 supports 1 or 2 dimensions per axis.
+const MAX_DIMS_PER_AXIS = 2;
+
 export default function AnalysisPage() {
   const { activeOrgId } = useOrgContext();
   const addToast = useToastStore((s) => s.addToast);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [dimensions, setDimensions] = useState<DimensionDef[]>([]);
-  const [rowDim, setRowDim] = useState<Dim | null>((searchParams.get('row') as Dim) || null);
-  const [colDim, setColDim] = useState<Dim | null>((searchParams.get('col') as Dim) || null);
+  // Up to MAX_DIMS_PER_AXIS dimensions per axis. Primary is index 0;
+  // index 1 is the sub-group nested under the primary. Initial state
+  // comes from the URL (comma-separated) so reloads keep place and
+  // links survive.
+  const parseDims = (s: string | null): Dim[] => s
+    ? (s.split(',').filter(Boolean) as Dim[]).slice(0, MAX_DIMS_PER_AXIS)
+    : [];
+  const [rowDims, setRowDims] = useState<Dim[]>(parseDims(searchParams.get('row')));
+  const [colDims, setColDims] = useState<Dim[]>(parseDims(searchParams.get('col')));
   const [filters, setFilters] = useState<FilterEntry[]>([]);
   const [cube, setCube] = useState<CubeResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -114,25 +138,33 @@ export default function AnalysisPage() {
   }, [activeOrgId]);
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
-  // ── Persist (rowDim, colDim) to URL so reloads and shared links keep state ──
+  // ── Persist (rowDims, colDims) to URL so reloads and shared links keep state ──
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (rowDim) next.set('row', rowDim); else next.delete('row');
-    if (colDim) next.set('col', colDim); else next.delete('col');
+    if (rowDims.length > 0) next.set('row', rowDims.join(',')); else next.delete('row');
+    if (colDims.length > 0) next.set('col', colDims.join(',')); else next.delete('col');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowDim, colDim]);
+  }, [rowDims, colDims]);
 
   // ── Run the cube whenever the config changes ──
   const runCube = useCallback(async () => {
-    if (!rowDim || !colDim) { setCube(null); return; }
-    if (rowDim === colDim) { setError('Rows and Columns must be different dimensions.'); setCube(null); return; }
+    if (rowDims.length === 0 || colDims.length === 0) { setCube(null); return; }
+    // Same dim on both axes (or sub-grouped by the same dim) is nonsense
+    // — the engine 400s on it; surface a friendly message instead of
+    // round-tripping just to error.
+    const all = [...rowDims, ...colDims];
+    if (new Set(all).size !== all.length) {
+      setError('Each dimension can appear on only one axis.');
+      setCube(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const r = await apiClient.post<{ success: boolean; data: CubeResponse }>('/analysis/cube', {
         orgId: activeOrgId || undefined,
-        rowDim, colDim,
+        rowDims, colDims,
         filters: filters.map((f) => ({ dim: f.dim, value: f.value })),
       });
       setCube(r.data);
@@ -142,7 +174,7 @@ export default function AnalysisPage() {
     } finally {
       setLoading(false);
     }
-  }, [rowDim, colDim, filters, activeOrgId]);
+  }, [rowDims, colDims, filters, activeOrgId]);
   useEffect(() => { runCube(); }, [runCube]);
 
   // ── DnD handlers ──
@@ -156,24 +188,49 @@ export default function AnalysisPage() {
       e.dataTransfer.dropEffect = 'move';
     }
   };
+  // Append the dropped dim to the zone's array. Caps at MAX_DIMS_PER_AXIS
+  // and rejects duplicates within the same zone — the user can still
+  // remove and re-add to reorder.
   const onZoneDrop = (zone: 'row' | 'col' | 'filter') => (e: React.DragEvent) => {
     e.preventDefault();
     const dim = e.dataTransfer.getData(DND_TYPE) as Dim;
     if (!dim) return;
     setActiveReportId(null);  // user is deviating from any loaded report
-    if (zone === 'row') setRowDim(dim);
-    else if (zone === 'col') setColDim(dim);
-    else {
-      // Adding a filter requires picking a value too. For v1, we just
-      // open a chooser inline — the user picks a row off the cube to
-      // turn it into a filter (handled by clicking a row label).
+    if (zone === 'row' || zone === 'col') {
+      const setter = zone === 'row' ? setRowDims : setColDims;
+      const current = zone === 'row' ? rowDims : colDims;
+      const other = zone === 'row' ? colDims : rowDims;
+      if (current.includes(dim)) {
+        addToast('info', `${dimensionLabel(dim)} is already on ${zone === 'row' ? 'Rows' : 'Columns'}.`);
+        return;
+      }
+      if (other.includes(dim)) {
+        addToast('info', `${dimensionLabel(dim)} is already on the other axis. Remove it there first.`);
+        return;
+      }
+      if (current.length >= MAX_DIMS_PER_AXIS) {
+        addToast('info', `Up to ${MAX_DIMS_PER_AXIS} dimensions per axis. Remove one before adding another.`);
+        return;
+      }
+      setter([...current, dim]);
+    } else {
       addToast('info', `Click any ${dimensionLabel(dim)} row label in the grid to filter by it.`);
     }
   };
 
-  const clearZone = (zone: 'row' | 'col') => () => {
-    if (zone === 'row') setRowDim(null);
-    else setColDim(null);
+  // Remove a single dim from a zone (by index — order matters for sub-grouping).
+  const removeFromZone = (zone: 'row' | 'col', index: number) => {
+    if (zone === 'row') setRowDims((prev) => prev.filter((_, i) => i !== index));
+    else setColDims((prev) => prev.filter((_, i) => i !== index));
+    setActiveReportId(null);
+  };
+
+  // Pivot rows ↔ columns. Keeps the dim order within each axis, so a
+  // (Systems > Domains) row pivot becomes (Systems > Domains) on
+  // columns; the existing filter chips travel with them.
+  const pivotAxes = () => {
+    setRowDims(colDims);
+    setColDims(rowDims);
     setActiveReportId(null);
   };
 
@@ -199,7 +256,7 @@ export default function AnalysisPage() {
         const r = await apiClient.patch<{ success: boolean; data: SavedReport }>(`/analysis-reports/${activeReportId}`, {
           name: saveName.trim(),
           description: saveDesc.trim() || null,
-          config: { rowDim, colDim, filters },
+          config: { rowDims, colDims, filters },
         });
         addToast('success', 'Report updated.');
         setReports((prev) => prev.map((p) => p.id === r.data.id ? r.data : p));
@@ -208,7 +265,7 @@ export default function AnalysisPage() {
           orgId: activeOrgId || undefined,
           name: saveName.trim(),
           description: saveDesc.trim() || null,
-          config: { rowDim, colDim, filters },
+          config: { rowDims, colDims, filters },
         });
         addToast('success', 'Report saved.');
         setReports((prev) => [r.data, ...prev]);
@@ -221,8 +278,16 @@ export default function AnalysisPage() {
   };
 
   const loadReport = (r: SavedReport) => {
-    if (r.config.rowDim) setRowDim(r.config.rowDim);
-    if (r.config.colDim) setColDim(r.config.colDim);
+    // Honour both modern (rowDims) and legacy (rowDim) configs so older
+    // reports keep working after the sub-group rollout.
+    const rd = r.config.rowDims && r.config.rowDims.length > 0
+      ? r.config.rowDims
+      : r.config.rowDim ? [r.config.rowDim] : [];
+    const cd = r.config.colDims && r.config.colDims.length > 0
+      ? r.config.colDims
+      : r.config.colDim ? [r.config.colDim] : [];
+    setRowDims(rd);
+    setColDims(cd);
     setFilters((r.config.filters || []).map((f) => ({ dim: f.dim, value: f.value, label: f.label || f.value })));
     setActiveReportId(r.id);
     setSaveName(r.name);
@@ -248,19 +313,30 @@ export default function AnalysisPage() {
 
   const exportPayload = useMemo(() => () => {
     if (!cube) return null;
-    const headers = [dimensionLabel(cube.rowDim) + ' \\ ' + dimensionLabel(cube.colDim), ...cube.cols.map((c) => c.label), 'Total'];
+    // Header row: one cell per row-dimension (e.g. "System", "Domain")
+    // followed by each column's flattened label (joined with " / " when
+    // sub-grouped), plus a trailing Total column.
+    const rowDimHeaders = cube.rowDims.map((d) => dimensionLabel(d));
+    const colHeaders = cube.cols.map((c) => c.labels.join(' / '));
+    const headers = [...rowDimHeaders, ...colHeaders, 'Total'];
+
     const rows = cube.grid.map((r) => {
       const rowTotal = r.cells.reduce((s, c) => s + c.count, 0);
-      return [r.rowLabel, ...r.cells.map((c) => c.count), rowTotal] as Array<string | number>;
+      // Pad row-labels to rowDims length so the leading columns stay aligned
+      // even if (for some reason) the path is shorter than the dim list.
+      const padded = cube.rowDims.map((_, i) => r.rowLabels[i] || '');
+      return [...padded, ...r.cells.map((c) => c.count), rowTotal] as Array<string | number>;
     });
-    const colTotalsRow = ['Total', ...cube.cols.map((c) => c.total), cube.cols.reduce((s, c) => s + c.total, 0)] as Array<string | number>;
+    const totalLeader = ['Total', ...Array(Math.max(0, cube.rowDims.length - 1)).fill('')];
+    const colTotalsRow = [...totalLeader, ...cube.cols.map((c) => c.total), cube.cols.reduce((s, c) => s + c.total, 0)] as Array<string | number>;
     rows.push(colTotalsRow);
+
     const filterSuffix = filters.length > 0
       ? '_' + filters.map((f) => `${f.dim}=${f.label}`).join('_').replace(/[^a-z0-9_-]/gi, '_')
       : '';
     return {
-      filenameBase: `analysis_${cube.rowDim}_x_${cube.colDim}${filterSuffix}`,
-      sheetName: `${dimensionLabel(cube.rowDim)} × ${dimensionLabel(cube.colDim)}`,
+      filenameBase: `analysis_${cube.rowDims.join('-')}_x_${cube.colDims.join('-')}${filterSuffix}`,
+      sheetName: `${cube.rowDims.map(dimensionLabel).join(' / ')} × ${cube.colDims.map(dimensionLabel).join(' / ')}`,
       headers,
       rows,
     };
@@ -287,38 +363,74 @@ export default function AnalysisPage() {
   );
 
   const DropZone = ({
-    label, value, onDrop, onClear, hint,
-  }: { label: string; value: Dim | null; onDrop: (e: React.DragEvent) => void; onClear: () => void; hint: string }) => (
-    <div
-      onDragOver={onZoneDragOver}
-      onDrop={onDrop}
-      style={{
-        flex: 1, minWidth: 0,
-        padding: 12,
-        background: value ? 'var(--color-bg)' : 'transparent',
-        border: `1.5px dashed ${value ? 'var(--color-primary)' : 'var(--color-border)'}`,
-        borderRadius: 'var(--radius-md)',
-        minHeight: 56,
-      }}
-    >
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 4 }}>
-        {label}
-      </div>
-      {value ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>
-            {dimensionIcon(value)} {dimensionLabel(value)}
-          </span>
-          <button onClick={onClear} aria-label={`Clear ${label.toLowerCase()}`}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 16 }}>
-            ×
-          </button>
+    label, values, onDrop, onRemove, hint, secondaryHint,
+  }: {
+    label: string;
+    values: Dim[];
+    onDrop: (e: React.DragEvent) => void;
+    onRemove: (index: number) => void;
+    hint: string;
+    secondaryHint: string;
+  }) => {
+    const hasAny = values.length > 0;
+    return (
+      <div
+        onDragOver={onZoneDragOver}
+        onDrop={onDrop}
+        style={{
+          flex: 1, minWidth: 0,
+          padding: 12,
+          background: hasAny ? 'var(--color-bg)' : 'transparent',
+          border: `1.5px dashed ${hasAny ? 'var(--color-primary)' : 'var(--color-border)'}`,
+          borderRadius: 'var(--radius-md)',
+          minHeight: 56,
+        }}
+      >
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+          {label}
+          {hasAny && values.length < MAX_DIMS_PER_AXIS && (
+            <span style={{ marginLeft: 8, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--color-text-muted)' }}>
+              · drop another to sub-group
+            </span>
+          )}
         </div>
-      ) : (
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{hint}</div>
-      )}
-    </div>
-  );
+        {hasAny ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            {values.map((dim, i) => (
+              <span key={dim}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '4px 8px',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-primary)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 13, fontWeight: 600,
+                }}
+                title={i === 0 ? 'Primary dimension' : 'Sub-group nested under the primary'}
+              >
+                <span style={{ fontSize: 14 }}>{dimensionIcon(dim)}</span>
+                <span>{dimensionLabel(dim)}</span>
+                {i > 0 && (
+                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'var(--color-bg)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                    Sub
+                  </span>
+                )}
+                <button onClick={() => onRemove(i)} aria-label={`Remove ${dimensionLabel(dim)}`}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 14, padding: 0, lineHeight: 1 }}>
+                  ×
+                </button>
+              </span>
+            ))}
+            {values.length < MAX_DIMS_PER_AXIS && (
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{secondaryHint}</span>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{hint}</div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -384,10 +496,32 @@ export default function AnalysisPage() {
 
         {/* Main column */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Drop zones + action bar */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <DropZone label="Rows" value={rowDim} onDrop={onZoneDrop('row')} onClear={clearZone('row')} hint="Drag a dimension here for the y-axis." />
-            <DropZone label="Columns" value={colDim} onDrop={onZoneDrop('col')} onClear={clearZone('col')} hint="Drag a dimension here for the x-axis." />
+          {/* Drop zones + pivot toggle */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'stretch' }}>
+            <DropZone
+              label="Rows"
+              values={rowDims}
+              onDrop={onZoneDrop('row')}
+              onRemove={(i) => removeFromZone('row', i)}
+              hint="Drag a dimension here for the y-axis."
+              secondaryHint="+ drag again for a sub-group"
+            />
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <IconButton
+                icon="refresh"
+                label="Pivot rows and columns"
+                onClick={pivotAxes}
+                disabled={rowDims.length === 0 && colDims.length === 0}
+              />
+            </div>
+            <DropZone
+              label="Columns"
+              values={colDims}
+              onDrop={onZoneDrop('col')}
+              onRemove={(i) => removeFromZone('col', i)}
+              hint="Drag a dimension here for the x-axis."
+              secondaryHint="+ drag again for a sub-group"
+            />
           </div>
 
           {/* Filter chips */}
@@ -411,10 +545,10 @@ export default function AnalysisPage() {
 
           {/* Action bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Button variant="primary" size="sm" onClick={runCube} disabled={!rowDim || !colDim || loading}>
+            <Button variant="primary" size="sm" onClick={runCube} disabled={rowDims.length === 0 || colDims.length === 0 || loading}>
               {loading ? 'Running…' : 'Run'}
             </Button>
-            <Button size="sm" onClick={() => { setSaveName(''); setSaveDesc(''); setActiveReportId(null); setShowSave(true); }} disabled={!rowDim || !colDim}>
+            <Button size="sm" onClick={() => { setSaveName(''); setSaveDesc(''); setActiveReportId(null); setShowSave(true); }} disabled={rowDims.length === 0 || colDims.length === 0}>
               Save as new
             </Button>
             {activeReportId && (
@@ -433,90 +567,34 @@ export default function AnalysisPage() {
               {error}
             </div>
           )}
-          {!rowDim || !colDim ? (
+          {rowDims.length === 0 || colDims.length === 0 ? (
             <EmptyState
               icon={'⊞'}
-              title="Pick two dimensions"
-              description="Drag one dimension into Rows and another into Columns. The grid below will show how many records connect them."
+              title="Pick dimensions to pivot"
+              description="Drag at least one dimension into Rows and one into Columns. Drag a second into either zone to create a sub-group."
             />
           ) : cube && cube.totalFacts === 0 ? (
             <EmptyState
               icon={'⊟'}
               title="No data for this pivot"
-              description={`No ${dimensionLabel(rowDim)} link to ${dimensionLabel(colDim)} under the current filters.`}
+              description={`No ${rowDims.map(dimensionLabel).join(' / ')} link to ${colDims.map(dimensionLabel).join(' / ')} under the current filters.`}
             />
           ) : cube ? (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'auto' }}>
-              {(cube.truncated.rows || cube.truncated.cols) && (
-                <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
-                  Showing {cube.rows.length} of {cube.totalRows} rows and {cube.cols.length} of {cube.totalCols} columns. Add filters to narrow further.
-                </div>
+            <CubeGrid
+              cube={cube}
+              dimensionLabel={dimensionLabel}
+              onCellClick={(rowLabels, colLabels, count, factIds) => openDrill(
+                rowLabels.join(' / '), colLabels.join(' / '), count, factIds,
               )}
-              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th scope="col" style={thStyle()}>
-                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>
-                        {dimensionLabel(cube.rowDim)} ↓ / {dimensionLabel(cube.colDim)} →
-                      </span>
-                    </th>
-                    {cube.cols.map((c) => (
-                      <th scope="col" key={c.id} style={thStyle()} title={`Total: ${c.total}`}>
-                        <button
-                          onClick={() => setFilters((prev) => [...prev.filter((f) => f.dim !== cube.colDim), { dim: cube.colDim, value: c.id, label: c.label }])}
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, textAlign: 'left' }}
-                          title="Click to add as filter"
-                        >
-                          {c.label}
-                        </button>
-                      </th>
-                    ))}
-                    <th scope="col" style={{ ...thStyle(), background: 'var(--color-bg)' }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cube.grid.map((r) => {
-                    const rowTotal = r.cells.reduce((s, c) => s + c.count, 0);
-                    return (
-                      <tr key={r.rowId}>
-                        <th scope="row" style={thRowStyle()}>
-                          <button
-                            onClick={() => setFilters((prev) => [...prev.filter((f) => f.dim !== cube.rowDim), { dim: cube.rowDim, value: r.rowId, label: r.rowLabel }])}
-                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, textAlign: 'left' }}
-                            title="Click to add as filter"
-                          >
-                            {r.rowLabel}
-                          </button>
-                        </th>
-                        {r.cells.map((cell) => (
-                          <td key={cell.colId} style={tdStyle(cell.count)}>
-                            {cell.count > 0 ? (
-                              <button
-                                onClick={() => openDrill(r.rowLabel, cell.colLabel, cell.count, cell.factIds)}
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, fontWeight: 600 }}
-                                title="Drill down"
-                              >
-                                {cell.count}
-                              </button>
-                            ) : (
-                              <span style={{ color: 'var(--color-text-muted)' }}>·</span>
-                            )}
-                          </td>
-                        ))}
-                        <td style={{ ...tdStyle(rowTotal), background: 'var(--color-bg)', fontWeight: 600 }}>{rowTotal}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr>
-                    <th scope="row" style={{ ...thRowStyle(), background: 'var(--color-bg)' }}>Total</th>
-                    {cube.cols.map((c) => (
-                      <td key={c.id} style={{ ...tdStyle(c.total), background: 'var(--color-bg)', fontWeight: 600 }}>{c.total}</td>
-                    ))}
-                    <td style={{ ...tdStyle(cube.totalFacts), background: 'var(--color-bg)', fontWeight: 700 }}>{cube.totalFacts}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+              onAddRowFilter={(dim, value, label) => setFilters((prev) => [
+                ...prev.filter((f) => !(f.dim === dim && f.value === value)),
+                { dim, value, label },
+              ])}
+              onAddColFilter={(dim, value, label) => setFilters((prev) => [
+                ...prev.filter((f) => !(f.dim === dim && f.value === value)),
+                { dim, value, label },
+              ])}
+            />
           ) : null}
         </div>
       </div>
@@ -583,6 +661,203 @@ function tdStyle(count: number): React.CSSProperties {
     borderBottom: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)',
     background: bg,
   };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// CubeGrid — pivot table with sub-grouped headers and merged cells.
+//
+// For a one-dim axis it renders a plain header row / row-label column.
+// For a two-dim axis it merges adjacent cells that share the first-level
+// id (rowspan for sub-grouped rows, colspan for sub-grouped columns) so
+// the parent group reads as one block. Sub-group totals are inserted at
+// every parent boundary so users can compare blocks at a glance.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface CubeGridProps {
+  cube: CubeResponse;
+  dimensionLabel: (d: Dim) => string;
+  onCellClick: (rowLabels: string[], colLabels: string[], count: number, factIds: string[]) => void;
+  onAddRowFilter: (dim: Dim, value: string, label: string) => void;
+  onAddColFilter: (dim: Dim, value: string, label: string) => void;
+}
+
+function CubeGrid({ cube, dimensionLabel, onCellClick, onAddRowFilter, onAddColFilter }: CubeGridProps) {
+  // Precompute row spans: for the first dim, group consecutive rows that
+  // share the primary id so we can render the parent label with
+  // rowspan=N. For 1-dim axes this collapses to rowspan=1.
+  const rowSpans = useMemo(() => {
+    const spans: number[] = []; // spans[i] = how many rows the parent at i covers; 0 = covered by a previous span
+    if (cube.rowDims.length === 1) {
+      cube.grid.forEach(() => spans.push(1));
+      return spans;
+    }
+    let i = 0;
+    while (i < cube.grid.length) {
+      const primary = cube.grid[i].rowPath[0];
+      let j = i + 1;
+      while (j < cube.grid.length && cube.grid[j].rowPath[0] === primary) j++;
+      spans.push(j - i);
+      for (let k = i + 1; k < j; k++) spans.push(0);
+      i = j;
+    }
+    return spans;
+  }, [cube]);
+
+  // Same idea for columns. colSpans[i] = number of columns spanned by
+  // the parent header above column i; 0 means "this col is under a
+  // span that started earlier".
+  const colSpans = useMemo(() => {
+    const spans: number[] = [];
+    if (cube.colDims.length === 1) {
+      cube.cols.forEach(() => spans.push(1));
+      return spans;
+    }
+    let i = 0;
+    while (i < cube.cols.length) {
+      const primary = cube.cols[i].path[0];
+      let j = i + 1;
+      while (j < cube.cols.length && cube.cols[j].path[0] === primary) j++;
+      spans.push(j - i);
+      for (let k = i + 1; k < j; k++) spans.push(0);
+      i = j;
+    }
+    return spans;
+  }, [cube]);
+
+  // Aggregate column totals for the per-primary sub-totals (only
+  // meaningful when col-sub-grouping is in play).
+  const colPrimaryTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    cube.cols.forEach((c) => {
+      const k = c.path[0];
+      map.set(k, (map.get(k) || 0) + c.total);
+    });
+    return map;
+  }, [cube]);
+
+  const rowDimsCount = cube.rowDims.length;
+  const colDimsCount = cube.colDims.length;
+
+  return (
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'auto' }}>
+      {(cube.truncated.rows || cube.truncated.cols) && (
+        <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
+          Showing {cube.rows.length} of {cube.totalRows} row-{cube.totalRows === 1 ? 'group' : 'groups'} and {cube.cols.length} of {cube.totalCols} column-{cube.totalCols === 1 ? 'group' : 'groups'}. Add filters to narrow further.
+        </div>
+      )}
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+        <thead>
+          {/* Primary header row — shows the first-level column dim. For
+              1-dim columns this is the only header row. */}
+          <tr>
+            <th scope="col" colSpan={rowDimsCount} rowSpan={colDimsCount} style={thStyle()}>
+              <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, fontSize: 11 }}>
+                {cube.rowDims.map(dimensionLabel).join(' / ')} ↓
+                <br />
+                {cube.colDims.map(dimensionLabel).join(' / ')} →
+              </span>
+            </th>
+            {cube.cols.map((c, i) => {
+              if (colSpans[i] === 0) return null;
+              const label = c.labels[0];
+              const dim = cube.colDims[0];
+              return (
+                <th scope="col" key={`p-${c.path[0]}-${i}`} colSpan={colSpans[i]} style={thStyle()} title={`Total: ${colPrimaryTotals.get(c.path[0]) || 0}`}>
+                  <button
+                    onClick={() => onAddColFilter(dim, c.path[0], label)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, textAlign: 'left', fontWeight: 600 }}
+                    title="Click to add as filter"
+                  >
+                    {label}
+                  </button>
+                </th>
+              );
+            })}
+            <th scope="col" rowSpan={colDimsCount} style={{ ...thStyle(), background: 'var(--color-bg)' }}>Total</th>
+          </tr>
+          {/* Sub header row — only rendered when columns are sub-grouped. */}
+          {colDimsCount > 1 && (
+            <tr>
+              {cube.cols.map((c, i) => {
+                const dim = cube.colDims[1];
+                const label = c.labels[1];
+                return (
+                  <th scope="col" key={`s-${c.path.join('-')}-${i}`} style={{ ...thStyle(), fontSize: 11, fontWeight: 500 }} title={`Total: ${c.total}`}>
+                    <button
+                      onClick={() => onAddColFilter(dim, c.path[1], label)}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, textAlign: 'left' }}
+                      title="Click to add as filter"
+                    >
+                      {label}
+                    </button>
+                  </th>
+                );
+              })}
+            </tr>
+          )}
+        </thead>
+        <tbody>
+          {cube.grid.map((r, ri) => {
+            const rowTotal = r.cells.reduce((s, c) => s + c.count, 0);
+            const span = rowSpans[ri];
+            return (
+              <tr key={r.rowPath.join('\x00')}>
+                {/* Primary row label: rendered only when this row starts
+                    a new primary group (span > 0). Skipped otherwise so
+                    the previous row's rowspan covers the cell. */}
+                {span > 0 && (
+                  <th scope="row" rowSpan={span} style={{ ...thRowStyle(), verticalAlign: 'top' }}>
+                    <button
+                      onClick={() => onAddRowFilter(cube.rowDims[0], r.rowPath[0], r.rowLabels[0])}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, textAlign: 'left', fontWeight: 600 }}
+                      title="Click to add as filter"
+                    >
+                      {r.rowLabels[0]}
+                    </button>
+                  </th>
+                )}
+                {rowDimsCount > 1 && (
+                  <th scope="row" style={{ ...thRowStyle(), fontSize: 11, fontWeight: 500, paddingLeft: 18 }}>
+                    <button
+                      onClick={() => onAddRowFilter(cube.rowDims[1], r.rowPath[1], r.rowLabels[1])}
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, textAlign: 'left' }}
+                      title="Click to add as filter"
+                    >
+                      {r.rowLabels[1]}
+                    </button>
+                  </th>
+                )}
+                {r.cells.map((cell, ci) => (
+                  <td key={`${cell.colPath.join('\x00')}-${ci}`} style={tdStyle(cell.count)}>
+                    {cell.count > 0 ? (
+                      <button
+                        onClick={() => onCellClick(r.rowLabels, cell.colLabels, cell.count, cell.factIds)}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', padding: 0, fontWeight: 600 }}
+                        title="Drill down"
+                      >
+                        {cell.count}
+                      </button>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-muted)' }}>·</span>
+                    )}
+                  </td>
+                ))}
+                <td style={{ ...tdStyle(rowTotal), background: 'var(--color-bg)', fontWeight: 600 }}>{rowTotal}</td>
+              </tr>
+            );
+          })}
+          {/* Grand total row */}
+          <tr>
+            <th scope="row" colSpan={rowDimsCount} style={{ ...thRowStyle(), background: 'var(--color-bg)' }}>Total</th>
+            {cube.cols.map((c, i) => (
+              <td key={`tot-${c.path.join('\x00')}-${i}`} style={{ ...tdStyle(c.total), background: 'var(--color-bg)', fontWeight: 600 }}>{c.total}</td>
+            ))}
+            <td style={{ ...tdStyle(cube.totalFacts), background: 'var(--color-bg)', fontWeight: 700 }}>{cube.totalFacts}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 // ── DrillPanel ──
