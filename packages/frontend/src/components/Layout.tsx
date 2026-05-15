@@ -93,6 +93,7 @@ const navSections: NavSection[] = [
       { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },
       { to: '/governance-work', label: 'Tasks & Issues', icon: '\u2605' },
       { to: '/control-tower', label: 'Control Tower', icon: '\u2713' },
+      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u29c9' },
       { to: '/reports', label: 'Reports', icon: '\u2630' },
     ],
   },
