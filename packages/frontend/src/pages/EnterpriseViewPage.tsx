@@ -5,6 +5,7 @@ import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import HelpPopover from '../components/HelpPopover';
+import EnterpriseDiagram from '../components/EnterpriseDiagram';
 
 // ── Types ──
 
@@ -110,6 +111,7 @@ export default function EnterpriseViewPage() {
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   const [activeView, setActiveView] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'diagram'>('cards');
 
   const fetchData = useCallback(async () => {
     try {
@@ -258,13 +260,31 @@ export default function EnterpriseViewPage() {
           ))}
         </div>
 
-        {/* Active view description */}
+        {/* Active view description + display-mode toggle */}
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 16, padding: '6px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 600 }}>{preset.label}:</span>
           <span>{preset.description}</span>
           <span style={{ marginLeft: 'auto', fontSize: 11 }}>
             {filteredNodes.length} entities &middot; {filteredEdges.length} relationships
           </span>
+          <div role="tablist" aria-label="Display mode" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)' }}>
+            {(['cards', 'diagram'] as const).map((mode) => (
+              <button
+                key={mode}
+                role="tab"
+                aria-selected={viewMode === mode}
+                onClick={() => setViewMode(mode)}
+                style={{
+                  padding: '4px 12px', fontSize: 11, fontWeight: viewMode === mode ? 600 : 400,
+                  border: 'none', cursor: 'pointer',
+                  background: viewMode === mode ? 'var(--color-primary)' : 'transparent',
+                  color: viewMode === mode ? '#fff' : 'var(--color-text)',
+                }}
+              >
+                {mode === 'cards' ? 'Cards' : 'Diagram'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Summary cards */}
@@ -305,8 +325,21 @@ export default function EnterpriseViewPage() {
           </div>
         )}
 
-        {/* Grouped columns — each entity type as an expandable section */}
-        {COLUMN_ORDER.filter((t) => preset.entityTypes.has(t)).map((type) => {
+        {/* Diagram view */}
+        {viewMode === 'diagram' && (
+          <EnterpriseDiagram
+            nodes={filteredNodes}
+            edges={filteredEdges}
+            selected={selected}
+            impactSet={impactSet}
+            onSelect={(n) => selectNode(n as GraphNode)}
+            typeConfig={TYPE_CONFIG}
+            columnOrder={COLUMN_ORDER.filter((t) => preset.entityTypes.has(t))}
+          />
+        )}
+
+        {/* Cards view — grouped columns, each entity type as an expandable section */}
+        {viewMode === 'cards' && COLUMN_ORDER.filter((t) => preset.entityTypes.has(t)).map((type) => {
           const cfg = TYPE_CONFIG[type];
           const items = byType[type] || [];
           const isOpen = expandedCols.has(type);
