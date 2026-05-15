@@ -40,6 +40,7 @@ import DataDictionaryPage from '@/pages/DataDictionaryPage';
 import SkillsPage from '@/pages/SkillsPage';
 import DocumentationPage from '@/pages/DocumentationPage';
 import RolesPage from '@/pages/RolesPage';
+import AnalysisPage from '@/pages/AnalysisPage';
 
 export default function App() {
   return (
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/data-dictionary" element={<DataDictionaryPage />} />
         <Route path="/governance-program" element={<GovernanceProgramPage />} />
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
+        <Route path="/analysis" element={<AnalysisPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/branding" element={<BrandingPage />} />

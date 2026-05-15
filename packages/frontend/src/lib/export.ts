@@ -19,7 +19,7 @@
 // to defensively coerce.
 // ──────────────────────────────────────────────────────────────────────────
 
-export type ExportFormat = 'csv' | 'xlsx' | 'json' | 'clipboard';
+export type ExportFormat = 'csv' | 'xlsx' | 'json' | 'pdf' | 'clipboard';
 
 export type Cell = string | number | boolean | null | undefined;
 
@@ -37,6 +37,7 @@ export const FORMAT_LABELS: Record<ExportFormat, string> = {
   csv: 'CSV (.csv)',
   xlsx: 'Excel (.xlsx)',
   json: 'JSON (.json)',
+  pdf: 'PDF (print)',
   clipboard: 'Copy to clipboard',
 };
 
@@ -45,6 +46,7 @@ export async function exportData(format: ExportFormat, payload: ExportPayload): 
     case 'csv':       return exportCsvImpl(payload);
     case 'xlsx':      return exportXlsxImpl(payload);
     case 'json':      return exportJsonImpl(payload);
+    case 'pdf':       return exportPdfImpl(payload);
     case 'clipboard': return exportClipboardImpl(payload);
   }
 }
@@ -113,6 +115,57 @@ function exportJsonImpl({ filenameBase, headers, rows }: ExportPayload): void {
   });
   const json = JSON.stringify(objects, null, 2);
   download(`${filenameBase}.json`, new Blob([json], { type: 'application/json' }));
+}
+
+// ── PDF (browser print) ───────────────────────────────────────────────────
+// No PDF library bundled — we open a print-styled window with the table
+// rendered as HTML and let the user pick "Save as PDF" from the system
+// print dialog. Works in every modern browser and keeps the JS bundle
+// lean. Trade-off: requires a user click (browsers block print from
+// async handlers if there's no user gesture, which the menu click
+// satisfies).
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  } as Record<string, string>)[ch]);
+}
+
+function exportPdfImpl({ filenameBase, headers, rows, sheetName }: ExportPayload): void {
+  const title = sheetName || filenameBase;
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) {
+    throw new Error('Popup blocked — allow popups for this site to export PDF.');
+  }
+  const styles = `
+    @page { size: A4 landscape; margin: 14mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .meta { font-size: 11px; color: #64748b; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th, td { padding: 6px 10px; border: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+    thead th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) td { background: #fafafa; }
+    @media print { body { padding: 0; } }
+  `;
+  const body = `
+    <h1>${escapeHtml(title)}</h1>
+    <div class="meta">${escapeHtml(filenameBase)} &middot; ${rows.length} row${rows.length === 1 ? '' : 's'} &middot; generated ${new Date().toLocaleString()}</div>
+    <table>
+      <thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(cellToString(c))}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>
+  `;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${styles}</style></head><body>${body}</body></html>`);
+  win.document.close();
+  // Give the new window a tick to lay out before invoking print.
+  win.addEventListener('load', () => {
+    win.focus();
+    win.print();
+  });
+  // Some browsers fire 'load' synchronously for document.write windows;
+  // belt-and-suspenders: also try print after a short timeout.
+  setTimeout(() => { try { win.print(); } catch { /* */ } }, 250);
 }
 
 // ── Clipboard (TSV) ────────────────────────────────────────────────────────

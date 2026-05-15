@@ -75,7 +75,7 @@ export default function HelpPage() {
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
-          <li><strong>Governance</strong> &mdash; Program, Groups, Roles (with RACI Matrix tab), Policies, Decision Rights, Documentation (Manual + Procedures tabs), Calendar, Tasks &amp; Issues, Enterprise View, Reports.</li>
+          <li><strong>Governance</strong> &mdash; Program, Groups, Roles (with RACI Matrix tab), Policies, Decision Rights, Documentation (Manual + Procedures tabs), Calendar, Tasks &amp; Issues, Enterprise View, Analysis, Reports.</li>
         </ul>
         <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
@@ -278,6 +278,14 @@ export default function HelpPage() {
           <li><strong>Cards / Diagram</strong> toggle &mdash; the diagram lays nodes out as horizontal swimlanes with edges between lanes so you can see how the org is wired together at a glance. Cards is the dense alternative.</li>
           <li>Click any node to run impact analysis &mdash; the sidebar lists every entity connected to your selection (direct and transitive), and unrelated nodes fade out. Use this to plan changes ("if we deprecate System X, which processes are affected?").</li>
           <li><strong>What happened to Control Tower?</strong> The operational dashboard view folded in here. Old <code>/control-tower</code> deep links redirect to Enterprise View. Future updates may add a dedicated "Health" preset that mirrors the old dashboard.</li>
+        </ul>
+        <h3 style={h3Style}>Analysis (cube)</h3>
+        <ul style={listStyle}>
+          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship in v1: Systems, Data Assets, Domains, Processes, Roles, People, Connections.</li>
+          <li><strong>Drill down.</strong> Click any cell count to open a side panel listing the underlying records (asset facts, role assignments, mappings, ownership rows, etc.).</li>
+          <li><strong>Filter.</strong> Click any row label or column header to add that value as a filter; chips appear above the grid and can be removed individually. Each filter narrows the cube to facts that match that dim/value.</li>
+          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active row/col are also mirrored to the URL so direct links are shareable without saving.</li>
+          <li><strong>Export.</strong> The full grid exports to CSV, Excel, JSON, or PDF (browser-print) with row/column totals included.</li>
         </ul>
         <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>
