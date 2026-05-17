@@ -9,6 +9,7 @@ import Button from '../components/Button';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
+import PersonPicker from '../components/PersonPicker';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { getRoleReference, RACI_COLOR, RACI_LABEL, Raci } from '../lib/roleDefinitions';
 
@@ -59,12 +60,6 @@ interface GroupDetail {
   children: Array<{ id: string; name: string; type: string }>;
 }
 
-interface Person {
-  id: string;
-  name: string;
-  email: string;
-  jobRole?: string;
-}
 
 interface DamaRole {
   id: string;
@@ -151,7 +146,6 @@ export default function GovernanceGroupDetailPage() {
   const openRoleDrawer = useRoleDrawerStore((s) => s.open);
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
-  const [people, setPeople] = useState<Person[]>([]);
   const [damaRoles, setDamaRoles] = useState<DamaRole[]>([]);
   const [decisionRights, setDecisionRights] = useState<DecisionRight[]>([]);
   const [policies, setPolicies] = useState<Policy[]>([]);
@@ -177,9 +171,8 @@ export default function GovernanceGroupDetailPage() {
     setError(null);
     try {
       const orgQuery = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [groupRes, peopleRes, damaRes, drRes, polRes, calRes, raciRes] = await Promise.all([
+      const [groupRes, damaRes, drRes, polRes, calRes, raciRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GroupDetail }>(`/governance-groups/${id}`),
-        apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: DamaRole[] }>(`/dama-roles${orgQuery}`),
         apiClient.get<{ success: boolean; data: DecisionRight[] }>(`/decision-rights${orgQuery}`),
         apiClient.get<{ success: boolean; data: Policy[] }>(`/governance-policies${orgQuery}`),
@@ -187,7 +180,6 @@ export default function GovernanceGroupDetailPage() {
         apiClient.get<{ success: boolean; data: { rows: RaciRow[] } }>(`/dashboard/raci${orgQuery}`).catch(() => ({ data: { rows: [] } })),
       ]);
       setGroup(groupRes.data);
-      setPeople(peopleRes.data || []);
       setDamaRoles(damaRes.data || []);
       setDecisionRights(drRes.data || []);
       setPolicies(polRes.data || []);
@@ -418,22 +410,17 @@ export default function GovernanceGroupDetailPage() {
             {/* Inline assign panel for the active slot */}
             {assignRoleSlot && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '8px 10px', background: 'var(--color-surface)', borderRadius: 4, border: '1px solid var(--color-border)' }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>Assign {DAMA_ROLE_LABELS[assignRoleSlot]} to:</span>
-                <select
-                  value={assignRolePersonId}
-                  onChange={(e) => setAssignRolePersonId(e.target.value)}
-                  style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
-                >
-                  <option value="">Pick a person…</option>
-                  {people.map((p) => {
-                    const alreadyHasIt = memberRoles.some((m) => m.personId === p.id && m.roleType === assignRoleSlot);
-                    return (
-                      <option key={p.id} value={p.id} disabled={alreadyHasIt}>
-                        {p.name}{alreadyHasIt ? ' (already assigned)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Assign {DAMA_ROLE_LABELS[assignRoleSlot]} to:</span>
+                <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
+                  <PersonPicker
+                    mode="single"
+                    valueMode="id"
+                    value={assignRolePersonId || null}
+                    onChange={(id) => setAssignRolePersonId(id || '')}
+                    orgId={activeOrgId || undefined}
+                    placeholder="Pick a person…"
+                  />
+                </div>
                 <Button size="sm" variant="primary" onClick={() => handleAssignRole(assignRoleSlot, assignRolePersonId)} disabled={!assignRolePersonId}>
                   Assign
                 </Button>
@@ -504,17 +491,17 @@ export default function GovernanceGroupDetailPage() {
 
         {/* Add-member panel */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>Add member:</span>
-          <select
-            value={addMemberPersonId}
-            onChange={(e) => setAddMemberPersonId(e.target.value)}
-            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
-          >
-            <option value="">Pick a person…</option>
-            {people.filter((p) => !memberIds.has(p.id)).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Add member:</span>
+          <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
+            <PersonPicker
+              mode="single"
+              valueMode="id"
+              value={addMemberPersonId || null}
+              onChange={(id) => setAddMemberPersonId(id || '')}
+              orgId={activeOrgId || undefined}
+              placeholder="Pick a person…"
+            />
+          </div>
           <select
             value={addMemberRole}
             onChange={(e) => setAddMemberRole(e.target.value)}

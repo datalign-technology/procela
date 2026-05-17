@@ -12,6 +12,7 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
+import PersonPicker from '../components/PersonPicker';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
@@ -105,7 +106,6 @@ export default function DataDomainsPage() {
   const [detailOwnerId, setDetailOwnerId] = useState('');
   const [detailStewardIds, setDetailStewardIds] = useState<string[]>([]);
   const [detailAssetIds, setDetailAssetIds] = useState<string[]>([]);
-  const [stewardSearch, setStewardSearch] = useState('');
   const [assetSearch, setAssetSearch] = useState('');
 
   // AI generate
@@ -156,7 +156,6 @@ export default function DataDomainsPage() {
     setDetailOwnerId(domain.ownerId || '');
     setDetailStewardIds(domain.stewardIds || []);
     setDetailAssetIds(domain.dataAssetIds || []);
-    setStewardSearch('');
     setAssetSearch('');
     setShowForm(false);
   };
@@ -601,10 +600,13 @@ export default function DataDomainsPage() {
                       Owner (Data Domain Owner)
                     </button>
                   </div>
-                  <select style={selectStyle} value={detailOwnerId} onChange={(e) => setDetailOwnerId(e.target.value)}>
-                    <option value="">-- Unassigned --</option>
-                    {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-                  </select>
+                  <PersonPicker
+                    mode="single"
+                    valueMode="id"
+                    value={detailOwnerId || null}
+                    onChange={(pid) => setDetailOwnerId(pid || '')}
+                    placeholder="-- Unassigned --"
+                  />
                 </div>
 
                 {/* Stewards */}
@@ -619,15 +621,13 @@ export default function DataDomainsPage() {
                       Stewards ({detailStewardIds.length})
                     </button>
                   </div>
-                  <input style={{ ...inputStyle, fontSize: 12, marginBottom: 6 }} placeholder="Search people..." value={stewardSearch} onChange={(e) => setStewardSearch(e.target.value)} />
-                  <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 4, padding: 6, background: 'var(--color-bg)' }}>
-                    {people.filter((p) => !stewardSearch || p.name.toLowerCase().includes(stewardSearch.toLowerCase())).map((p) => (
-                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '3px 4px', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={detailStewardIds.includes(p.id)} onChange={() => setDetailStewardIds((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} />
-                        {p.name}
-                      </label>
-                    ))}
-                  </div>
+                  <PersonPicker
+                    mode="multi"
+                    valueMode="id"
+                    value={detailStewardIds}
+                    onChange={(ids) => setDetailStewardIds(ids as string[])}
+                    placeholder="Add stewards…"
+                  />
                 </div>
 
                 {/* Data Assets */}

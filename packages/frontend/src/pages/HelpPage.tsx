@@ -114,6 +114,7 @@ export default function HelpPage() {
           <li>AI-powered Value Stream Wizard generates industry-specific process hierarchies; one-click clone across divisions.</li>
           <li>Level-specific attributes: frequency, risk level, responsible role, automation level.</li>
           <li>Status lifecycle: Draft &rarr; Active &rarr; Deprecated.</li>
+          <li>Assigning an Owner or Stakeholders opens the shared <strong>person picker</strong> &mdash; search by name / title / org, or browse the org tree (Company &rarr; Division &rarr; Department) or governance groups. Every result shows the person's title and org path so two people with the same name are distinguishable. The same picker is used for owners, stewards, deputies, and group members across the app.</li>
         </ul>
         <h3 style={h3Style}>Mappings</h3>
         <ul style={listStyle}>

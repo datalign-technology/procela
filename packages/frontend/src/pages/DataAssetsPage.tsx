@@ -19,6 +19,7 @@ import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
+import PersonPicker from '../components/PersonPicker';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import { errorToast } from '../lib/errorToast';
@@ -1099,10 +1100,13 @@ export default function DataAssetsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Owner</label>
-              <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => updateField('ownerPersonId', e.target.value)}>
-                <option value="">-- No owner --</option>
-                {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
+              <PersonPicker
+                mode="single"
+                valueMode="id"
+                value={form.ownerPersonId || null}
+                onChange={(pid) => updateField('ownerPersonId', pid || '')}
+                placeholder="-- No owner --"
+              />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
@@ -1111,20 +1115,20 @@ export default function DataAssetsPage() {
                   The first steward listed is the primary contact. Add additional stewards for backup coverage.
                 </HelpPopover>
               </label>
-              <select
-                style={selectStyle}
-                value=""
-                onChange={(e) => {
-                  if (e.target.value && !form.stewardIds.includes(e.target.value)) {
-                    setForm((prev) => ({ ...prev, stewardIds: [...prev.stewardIds, e.target.value] }));
+              {/* Adder: pick a person → append to stewardIds. The chip
+                  list below keeps the ordered "PRIMARY first" semantics
+                  and per-chip removal. */}
+              <PersonPicker
+                mode="single"
+                valueMode="id"
+                value={null}
+                onChange={(pid) => {
+                  if (pid && !form.stewardIds.includes(pid)) {
+                    setForm((prev) => ({ ...prev, stewardIds: [...prev.stewardIds, pid] }));
                   }
                 }}
-              >
-                <option value="">+ Add steward...</option>
-                {peopleList.filter((p) => !form.stewardIds.includes(p.id)).map((p) => (
-                  <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
-                ))}
-              </select>
+                placeholder="+ Add steward…"
+              />
               {form.stewardIds.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                   {form.stewardIds.map((sid, idx) => {

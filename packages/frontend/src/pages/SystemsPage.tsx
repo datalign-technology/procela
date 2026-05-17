@@ -11,6 +11,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import { usePolling } from '../hooks/usePolling';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
@@ -954,14 +955,13 @@ export default function SystemsPage() {
                   Single accountable business owner — the CDO of this system. Drives the roadmap, signs off on changes and decommissioning, escalation point when it breaks. Required for Integrated systems; optional for Manual/Vendor-managed.
                 </HelpPopover>
               </label>
-              <select
-                style={selectStyle}
-                value={form.ownerPersonId}
-                onChange={(e) => setFormDirty({ ...form, ownerPersonId: e.target.value })}
-              >
-                <option value="">-- Unassigned --</option>
-                {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
+              <PersonPicker
+                mode="single"
+                valueMode="id"
+                value={form.ownerPersonId || null}
+                onChange={(pid) => setFormDirty({ ...form, ownerPersonId: pid || '' })}
+                placeholder="-- Unassigned --"
+              />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
@@ -970,21 +970,16 @@ export default function SystemsPage() {
                   Optional backup for the primary Owner. Same authority when the primary is unavailable — for coverage, succession, or matrix-org co-ownership. Must be a different person from the primary; only one is in charge at a time.
                 </HelpPopover>
               </label>
-              <select
-                style={{
-                  ...selectStyle,
-                  ...(form.deputyOwnerId && form.deputyOwnerId === form.ownerPersonId
-                    ? { borderColor: '#ef4444', background: '#fef2f2' }
-                    : {}),
-                }}
-                value={form.deputyOwnerId}
-                onChange={(e) => setFormDirty({ ...form, deputyOwnerId: e.target.value })}
-              >
-                <option value="">-- None --</option>
-                {peopleList
-                  .filter((p) => p.id !== form.ownerPersonId)
-                  .map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
+              <div style={form.deputyOwnerId && form.deputyOwnerId === form.ownerPersonId
+                ? { outline: '1px solid #ef4444', borderRadius: 'var(--radius-md)' } : undefined}>
+                <PersonPicker
+                  mode="single"
+                  valueMode="id"
+                  value={form.deputyOwnerId || null}
+                  onChange={(pid) => setFormDirty({ ...form, deputyOwnerId: pid || '' })}
+                  placeholder="-- None --"
+                />
+              </div>
               {form.deputyOwnerId && form.deputyOwnerId === form.ownerPersonId && (
                 <span style={{ fontSize: 11, color: '#991b1b', display: 'block', marginTop: 4 }}>
                   Deputy must differ from the primary Owner.

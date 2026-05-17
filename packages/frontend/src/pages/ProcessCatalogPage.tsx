@@ -10,6 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
+import PersonPicker from '../components/PersonPicker';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
 import { useToastStore } from '../stores/toastStore';
@@ -80,7 +81,6 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
 };
 
 import { getStatusColor } from '@/lib/statusBadge';
-import { formatPersonLabel } from '../lib/personLabel';
 
 const ALL_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
 const statusColors = Object.fromEntries(ALL_STATUSES.map((s) => [s, getStatusColor(s)]));
@@ -310,6 +310,38 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
       {saved && <span style={{ color: '#16a34a', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+    </div>
+  );
+}
+
+// ── Person field — inline label + shared PersonPicker. Replaces the
+//    flat name-only Owner dropdown / Stakeholders multiselect so users
+//    get org-tree / group / search context and name disambiguation.
+//    Owner stores ownerId (valueMode="id"); Stakeholders keeps the
+//    legacy comma-joined *name* string (valueMode="name") so no data
+//    migration is needed. ──
+
+function DocPersonField({ label, mode, valueMode, value, onChange, disabled }: {
+  label: string;
+  mode: 'single' | 'multi';
+  valueMode: 'id' | 'name';
+  value: string | string[] | null;
+  onChange: (v: any) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 7 }}>{label}:</span>
+      <div style={{ flex: 1, maxWidth: 320 }}>
+        <PersonPicker
+          mode={mode}
+          valueMode={valueMode}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          placeholder={mode === 'single' ? 'Select owner…' : 'Select stakeholders…'}
+        />
+      </div>
     </div>
   );
 }
@@ -719,19 +751,19 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Value Stream fields */}
               {node.level === 'VALUE_STREAM' && (
                 <>
-                  <DocDropdown label="Owner" value={peopleList.find((p) => p.id === node.ownerId)?.name || ''} options={peopleList.map((p) => p.name)} onSave={(v) => { const person = peopleList.find((p) => p.name === v); onUpdate(node.id, { ownerId: person?.id || null }); }} disabled={isLocked} placeholder="Select owner..." />
+                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} />
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                   <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
-                  <DocMultiSelect label="Stakeholders" selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} options={peopleList.map((p) => p.name)} onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })} disabled={isLocked} placeholder="Select stakeholders..." />
+                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} />
                   <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                 </>
               )}
               {/* Process fields */}
               {node.level === 'PROCESS' && (
                 <>
-                  <DocDropdown label="Owner" value={peopleList.find((p) => p.id === node.ownerId)?.name || ''} options={peopleList.map((p) => p.name)} onSave={(v) => { const person = peopleList.find((p) => p.name === v); onUpdate(node.id, { ownerId: person?.id || null }); }} disabled={isLocked} placeholder="Select owner..." />
+                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} />
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                  <DocMultiSelect label="Stakeholders" selected={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} options={peopleList.map((p) => p.name)} onSave={(vals) => onUpdate(node.id, { stakeholders: vals.join(', ') })} disabled={isLocked} placeholder="Select stakeholders..." />
+                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} />
                   <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                   <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
                   <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
@@ -1632,14 +1664,13 @@ export default function ProcessCatalogPage() {
         onCancel={() => { setBulkOwnerOpen(false); setBulkOwnerValue(''); }}
       >
         <div style={{ marginTop: 8 }}>
-          <select
-            style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', appearance: 'auto' as any }}
-            value={bulkOwnerValue}
-            onChange={(e) => setBulkOwnerValue(e.target.value)}
-          >
-            <option value="">-- Select person --</option>
-            {peopleList.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-          </select>
+          <PersonPicker
+            mode="single"
+            valueMode="id"
+            value={bulkOwnerValue || null}
+            onChange={(id) => setBulkOwnerValue(id || '')}
+            placeholder="-- Select person --"
+          />
         </div>
       </ConfirmDialog>
 
