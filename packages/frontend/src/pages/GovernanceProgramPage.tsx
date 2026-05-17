@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
@@ -293,10 +294,43 @@ function PhaseCard({
   );
 }
 
+type ProgramStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+
+// Client mirror of the backend state machine. The backend is
+// authoritative — this only decides which buttons to show.
+const VALID_TRANSITIONS: Record<ProgramStatus, ProgramStatus[]> = {
+  PLANNING: ['ACTIVE'],
+  ACTIVE: ['PAUSED', 'COMPLETED'],
+  PAUSED: ['ACTIVE', 'COMPLETED'],
+  COMPLETED: ['ACTIVE'],
+};
+
+const STATUS_ACTION_LABEL: Record<string, string> = {
+  'PLANNING>ACTIVE': 'Launch program',
+  'PAUSED>ACTIVE': 'Resume program',
+  'COMPLETED>ACTIVE': 'Reopen program',
+  'ACTIVE>PAUSED': 'Pause program',
+  'ACTIVE>COMPLETED': 'Complete program',
+  'PAUSED>COMPLETED': 'Complete program',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  PLANNING: 'Planning', ACTIVE: 'Active', PAUSED: 'Paused', COMPLETED: 'Completed',
+};
+
+interface IncompletePhase { phase: number; name: string; missing: string[] }
+
 export default function GovernanceProgramPage() {
   const { activeOrgId } = useOrgContext();
   const { addToast } = useToastStore();
+  const { isAdmin } = usePermissions();
   const navigate = useNavigate();
+
+  // Governed status-transition dialog state.
+  const [statusTarget, setStatusTarget] = useState<ProgramStatus | null>(null);
+  const [statusReason, setStatusReason] = useState('');
+  const [earlyLaunchInfo, setEarlyLaunchInfo] = useState<IncompletePhase[] | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const [program, setProgram] = useState<Program | null>(null);
   const [status, setStatus] = useState<PhaseStatus | null>(null);
@@ -398,6 +432,45 @@ export default function GovernanceProgramPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useRefreshOnFocus(fetchAll);
+
+  // Governed status change. The backend enforces role, valid
+  // transitions, the Phase-1 hard prerequisite, and the early-launch
+  // soft gate; the client handles its responses:
+  //   400 blockingPhase   → hard-blocked, show what's missing
+  //   409 requiresConfirm → open the early-launch confirm, then retry
+  //                         with force: true
+  const changeStatus = async (to: ProgramStatus, opts: { force?: boolean; reason?: string } = {}) => {
+    if (!program) return;
+    setStatusBusy(true);
+    try {
+      const res = await apiClient.put<{ success: boolean; data: Program }>(
+        `/governance-program/${program.id}`,
+        { status: to, ...(opts.force ? { force: true } : {}), ...(opts.reason ? { reason: opts.reason } : {}) },
+      );
+      if (res.data) { setProgram(res.data); hydrateFromProgram(res.data); }
+      addToast('success', `Program ${STATUS_LABEL[to].toLowerCase()}.`);
+      setStatusTarget(null);
+      setStatusReason('');
+      setEarlyLaunchInfo(null);
+      fetchAll();
+    } catch (e: any) {
+      const body = (e && typeof e === 'object' && 'body' in e ? e.body : null) || {};
+      if (body?.requiresConfirmation && Array.isArray(body.incompletePhases)) {
+        // Soft gate — surface exactly what's incomplete and let the
+        // admin confirm an early launch.
+        setEarlyLaunchInfo(body.incompletePhases);
+        setStatusTarget(to);
+      } else if (body?.blockingPhase) {
+        addToast('error', `${body.error} Missing: ${(body.missing || []).join(', ')}`);
+        setStatusTarget(null);
+      } else {
+        addToast('error', body?.error || e?.message || 'Status change failed');
+        setStatusTarget(null);
+      }
+    } finally {
+      setStatusBusy(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
@@ -957,17 +1030,60 @@ export default function GovernanceProgramPage() {
               {expandedPhase === 4 && program && (
                 <div>
                   <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, lineHeight: 1.6 }}>
-                    When all foundation, structural, and people requirements are in place, launch the program to move it into active operations.
+                    The program lifecycle is governed: only an admin / program owner can change it, transitions follow a fixed path, and every change is written to the audit log. Phase 1 (Foundation) must be complete before the program can go active; launching with later phases incomplete asks for an explicit confirmation.
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 13 }}>Current status: <strong>{program.status === 'ACTIVE' ? 'Active' : program.status === 'PAUSED' ? 'Paused' : program.status === 'COMPLETED' ? 'Completed' : 'Planning'}</strong></span>
-                    {program.status !== 'ACTIVE' && (
-                      <button style={{ ...btnPrimary, fontSize: 13 }} onClick={async () => {
-                        if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
-                        try { const res = await apiClient.put<{ success: boolean; data: Program }>(`/governance-program/${program.id}`, { status: 'ACTIVE' }); if (res.data) { setProgram(res.data); hydrateFromProgram(res.data); } addToast('success', 'Program launched!'); fetchAll(); } catch { addToast('error', 'Failed to launch program'); }
-                      }}>Launch Program</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13 }}>
+                      Current status: <strong>{STATUS_LABEL[program.status] || program.status}</strong>
+                    </span>
+                    {program.status === 'ACTIVE' && (
+                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Program is live</span>
                     )}
-                    {program.status === 'ACTIVE' && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Program is live</span>}
+                    {(VALID_TRANSITIONS[program.status as ProgramStatus] || []).map((to) => {
+                      const key = `${program.status}>${to}`;
+                      const label = STATUS_ACTION_LABEL[key] || `Set ${STATUS_LABEL[to]}`;
+                      const isPrimary = to === 'ACTIVE';
+                      const isDanger = to === 'COMPLETED';
+                      return (
+                        <button
+                          key={to}
+                          disabled={!isAdmin || statusBusy}
+                          title={!isAdmin ? 'Only an admin / program owner can change the program status' : undefined}
+                          style={{
+                            ...btnPrimary, fontSize: 13,
+                            background: !isAdmin ? 'var(--color-border)'
+                              : isDanger ? '#b91c1c'
+                              : isPrimary ? 'var(--color-primary)'
+                              : 'var(--color-bg)',
+                            color: !isAdmin ? 'var(--color-text-muted)'
+                              : (isPrimary || isDanger) ? '#fff' : 'var(--color-text)',
+                            border: isPrimary || isDanger ? 'none' : '1px solid var(--color-border)',
+                            cursor: !isAdmin || statusBusy ? 'not-allowed' : 'pointer',
+                          }}
+                          onClick={() => {
+                            if (!activeOrgId) { addToast('error', 'Select an organization first.'); return; }
+                            setStatusReason('');
+                            setEarlyLaunchInfo(null);
+                            // Launch goes straight to the request — the
+                            // backend decides if a confirmation is needed
+                            // and returns the incomplete list. Pause /
+                            // Complete / Reopen always confirm first.
+                            if (to === 'ACTIVE' && program.status === 'PLANNING') {
+                              changeStatus('ACTIVE');
+                            } else {
+                              setStatusTarget(to);
+                            }
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                    {!isAdmin && (
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                        View only — your role can't change the program lifecycle.
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -998,6 +1114,74 @@ export default function GovernanceProgramPage() {
         }}
         onCancel={() => setConfirmRemoveRoleId(null)}
       />
+
+      {/* Early-launch confirmation — phases 2–4 incomplete. Backend
+          returned the list; admin confirms to force it. */}
+      <ConfirmDialog
+        open={!!earlyLaunchInfo}
+        title="Launch with incomplete phases?"
+        message="The program isn't fully set up. Launching now marks it active in the scorecard and dashboards with these gaps:"
+        confirmLabel="Launch anyway"
+        variant="danger"
+        onConfirm={() => statusTarget && changeStatus(statusTarget, { force: true, reason: statusReason })}
+        onCancel={() => { setEarlyLaunchInfo(null); setStatusTarget(null); setStatusReason(''); }}
+      >
+        <div style={{ marginTop: 8, marginBottom: 12 }}>
+          {(earlyLaunchInfo || []).map((p) => (
+            <div key={p.phase} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Phase {p.phase} — {p.name}</div>
+              <ul style={{ margin: '2px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                {p.missing.map((m) => <li key={m}>{m}</li>)}
+              </ul>
+            </div>
+          ))}
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginTop: 8, marginBottom: 4 }}>
+            Reason (recorded in the audit log)
+          </label>
+          <input
+            value={statusReason}
+            onChange={(e) => setStatusReason(e.target.value)}
+            placeholder="e.g. running a 30-day pilot ahead of full rollout"
+            style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 6, boxSizing: 'border-box' }}
+          />
+        </div>
+      </ConfirmDialog>
+
+      {/* Plain transition confirmation — Pause / Resume / Complete /
+          Reopen. (Launch from PLANNING goes direct; the backend gates
+          it and may bounce back into the early-launch dialog above.) */}
+      <ConfirmDialog
+        open={statusTarget !== null && !earlyLaunchInfo}
+        title={
+          statusTarget === 'COMPLETED' ? 'Complete this program?'
+          : statusTarget === 'PAUSED' ? 'Pause this program?'
+          : statusTarget === 'ACTIVE' && program?.status === 'COMPLETED' ? 'Reopen this completed program?'
+          : statusTarget === 'ACTIVE' ? 'Resume this program?'
+          : 'Change program status?'
+        }
+        message={
+          statusTarget === 'COMPLETED' ? 'Completed marks the program as closed out. Reopening later is possible but is an explicit, audited action.'
+          : statusTarget === 'PAUSED' ? 'Pausing keeps all configuration but signals the program is not actively operating (e.g. a reorg or budget freeze).'
+          : statusTarget === 'ACTIVE' && program?.status === 'COMPLETED' ? 'This moves a closed program back to active. The reopen is recorded in the audit log.'
+          : 'This resumes active operations.'
+        }
+        confirmLabel={statusTarget ? (STATUS_ACTION_LABEL[`${program?.status}>${statusTarget}`] || `Set ${STATUS_LABEL[statusTarget]}`) : 'Confirm'}
+        variant={statusTarget === 'COMPLETED' ? 'danger' : 'primary'}
+        onConfirm={() => statusTarget && changeStatus(statusTarget, { reason: statusReason })}
+        onCancel={() => { setStatusTarget(null); setStatusReason(''); }}
+      >
+        <div style={{ marginTop: 8 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+            Reason (optional — recorded in the audit log)
+          </label>
+          <input
+            value={statusReason}
+            onChange={(e) => setStatusReason(e.target.value)}
+            placeholder="Why is the status changing?"
+            style={{ width: '100%', padding: '6px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 6, boxSizing: 'border-box' }}
+          />
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

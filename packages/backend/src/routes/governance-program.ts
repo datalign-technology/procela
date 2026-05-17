@@ -3,6 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
+import { hasPermission } from '../lib/permissions';
+import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
 
 // ---------------------------------------------------------------------------
@@ -11,6 +13,26 @@ import logger from '../lib/logger';
 
 export type OperatingModel = 'CENTRALIZED' | 'FEDERATED' | 'HYBRID' | '';
 export type ProgramStatus = 'PLANNING' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+
+// Program status is an org-wide, audit-weight signal the scorecard and
+// dashboards key off — so transitions are governed, not a free field:
+//
+//  • Only an admin / program owner (governance:write) may change it.
+//  • Only the transitions below are legal. Anything else is rejected so
+//    the status can't silently slide backwards or skip the lifecycle.
+//  • Entering ACTIVE is additionally gated: Phase 1 (Foundation) is a
+//    hard prerequisite; Phases 2–4 are a soft gate that needs an
+//    explicit `force` (the UI shows what's incomplete and confirms).
+//
+//  PLANNING ─▶ ACTIVE ⇄ PAUSED
+//                 │        │
+//                 └──▶ COMPLETED ──▶ ACTIVE   (explicit reopen)
+const VALID_TRANSITIONS: Record<ProgramStatus, ProgramStatus[]> = {
+  PLANNING: ['ACTIVE'],
+  ACTIVE: ['PAUSED', 'COMPLETED'],
+  PAUSED: ['ACTIVE', 'COMPLETED'],
+  COMPLETED: ['ACTIVE'], // reopening a closed program is allowed but explicit
+};
 
 export interface StoredGovernanceProgram {
   id: string;
@@ -478,7 +500,13 @@ router.put('/:id', (req: Request, res: Response) => {
     program.targetLaunchDate = targetLaunchDate ? String(targetLaunchDate) : null;
   }
 
-  if (status !== undefined) {
+  // ── Governed status transition ──────────────────────────────────────
+  // Status is handled separately from the rest of the form so the role
+  // gate, state machine, and launch gating only apply when the status
+  // actually changes — editing scope/principles stays unrestricted.
+  let statusTransition: { from: ProgramStatus; to: ProgramStatus; earlyLaunch: boolean } | null = null;
+
+  if (status !== undefined && status !== program.status) {
     const valid: ProgramStatus[] = ['PLANNING', 'ACTIVE', 'PAUSED', 'COMPLETED'];
     if (!valid.includes(status)) {
       res.status(400).json({
@@ -487,13 +515,105 @@ router.put('/:id', (req: Request, res: Response) => {
       });
       return;
     }
-    program.status = status;
+
+    const actor = (req as AuthenticatedRequest).user;
+    // Only an admin / program owner may move the program's lifecycle.
+    if (!actor || !hasPermission(actor.role, 'governance:write')) {
+      res.status(403).json({
+        success: false,
+        error: `Changing the program status requires an admin / program-owner role (your role: ${actor?.role || 'unknown'}).`,
+      });
+      return;
+    }
+
+    const from = program.status;
+    const to = status as ProgramStatus;
+
+    // State machine — block backwards slides and lifecycle skips.
+    if (!VALID_TRANSITIONS[from].includes(to)) {
+      res.status(409).json({
+        success: false,
+        error: `Cannot move the program from ${from} to ${to}. Allowed from ${from}: ${VALID_TRANSITIONS[from].join(', ') || 'none'}.`,
+      });
+      return;
+    }
+
+    let earlyLaunch = false;
+
+    // Entering ACTIVE (launch or relaunch) is gated on phase completion.
+    if (to === 'ACTIVE') {
+      const phaseStatus = computePhaseStatus(program);
+      const p = phaseStatus.phases;
+
+      // Phase 1 is a hard prerequisite — launching with no scope or
+      // operating model isn't a pilot, it's empty.
+      if (!p.phase1.completed) {
+        const missing = p.phase1.checks.filter((c) => !c.done).map((c) => c.label);
+        res.status(400).json({
+          success: false,
+          error: 'Phase 1 (Foundation) must be complete before the program can go active.',
+          blockingPhase: 1,
+          missing,
+        });
+        return;
+      }
+
+      const incompletePhases = [
+        !p.phase2.completed ? { phase: 2, name: p.phase2.name, missing: p.phase2.checks.filter((c) => !c.done).map((c) => c.label) } : null,
+        !p.phase3.completed ? { phase: 3, name: p.phase3.name, missing: p.phase3.checks.filter((c) => !c.done).map((c) => c.label) } : null,
+        !p.phase4.completed ? { phase: 4, name: p.phase4.name, missing: p.phase4.checks.filter((c) => !c.done && c.label !== 'Program launched').map((c) => c.label) } : null,
+      ].filter(Boolean);
+
+      // Soft gate: phases 2–4 incomplete needs an explicit confirmation.
+      // The client gets the incomplete list back so it can show exactly
+      // what's missing, then re-submits with force: true.
+      if (incompletePhases.length > 0 && req.body?.force !== true) {
+        res.status(409).json({
+          success: false,
+          requiresConfirmation: true,
+          error: 'The program has incomplete phases. Confirm an early launch to proceed.',
+          incompletePhases,
+        });
+        return;
+      }
+      earlyLaunch = incompletePhases.length > 0;
+    }
+
+    program.status = to;
+    statusTransition = { from, to, earlyLaunch };
   }
 
   program.updatedAt = new Date().toISOString();
   saveStore('governancePrograms', governancePrograms);
-  auditService.log(program.orgId, null, 'GovernanceProgram', program.id, 'UPDATE', before, program);
-  logger.info({ programId: program.id }, 'Updated governance program');
+
+  const actorId = (req as AuthenticatedRequest).user?.sub || null;
+  auditService.log(program.orgId, actorId, 'GovernanceProgram', program.id, 'UPDATE', before, program);
+
+  // Dedicated, queryable audit entry for the lifecycle change so a
+  // compliance reviewer can answer "who launched/paused/closed this and
+  // when" without diffing generic UPDATE rows.
+  if (statusTransition) {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    auditService.log(
+      program.orgId,
+      actorId,
+      'GovernanceProgram',
+      program.id,
+      'STATUS_CHANGE',
+      { status: statusTransition.from },
+      {
+        status: statusTransition.to,
+        ...(reason ? { reason } : {}),
+        ...(statusTransition.earlyLaunch ? { earlyLaunch: true } : {}),
+      },
+    );
+    logger.info(
+      { programId: program.id, from: statusTransition.from, to: statusTransition.to, by: actorId, earlyLaunch: statusTransition.earlyLaunch },
+      'Governance program status changed',
+    );
+  } else {
+    logger.info({ programId: program.id }, 'Updated governance program');
+  }
 
   res.json({ success: true, data: program });
 });

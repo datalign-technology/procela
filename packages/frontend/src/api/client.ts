@@ -2,10 +2,14 @@ import { useAuthStore } from '@/stores/authStore';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    // Parsed JSON error body when the server returned one. Lets callers
+    // read structured fields (validation details, requiresConfirmation,
+    // etc.) instead of only the flattened message string.
+    public body?: any,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -105,13 +109,14 @@ async function request<T>(
   if (!response.ok) {
     const errorBody = await response.text();
     let message: string;
+    let parsedBody: any;
     try {
-      const parsed = JSON.parse(errorBody);
-      message = parsed.message ?? parsed.error ?? errorBody;
+      parsedBody = JSON.parse(errorBody);
+      message = parsedBody.message ?? parsedBody.error ?? errorBody;
     } catch {
       message = errorBody || response.statusText;
     }
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, parsedBody);
   }
 
   if (response.status === 204) {
@@ -144,13 +149,14 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
   if (!response.ok) {
     const errorBody = await response.text();
     let message: string;
+    let parsedBody: any;
     try {
-      const parsed = JSON.parse(errorBody);
-      message = parsed.message ?? parsed.error ?? errorBody;
+      parsedBody = JSON.parse(errorBody);
+      message = parsedBody.message ?? parsedBody.error ?? errorBody;
     } catch {
       message = errorBody || response.statusText;
     }
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, parsedBody);
   }
 
   if (response.status === 204) return undefined as T;
@@ -165,5 +171,3 @@ export const apiClient = {
   delete: <T>(path: string, body?: unknown) => request<T>('DELETE', path, body),
   upload: <T>(path: string, file: File) => uploadFile<T>(path, file),
 };
-
-export { ApiError };

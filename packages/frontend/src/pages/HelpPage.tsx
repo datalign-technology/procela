@@ -226,6 +226,7 @@ export default function HelpPage() {
           <li>4-phase setup journey with progress tracking per phase.</li>
           <li>Define governance scope (what's in / out), guiding principles, operating model.</li>
           <li>Phase completion is computed automatically from your actual data; next-action recommendations link to the right page.</li>
+          <li><strong>Governed lifecycle:</strong> the program status (Planning &rarr; Active &harr; Paused &rarr; Completed, with explicit Reopen) can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2&ndash;4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch.</li>
         </ul>
         <h3 style={h3Style}>Governance Groups</h3>
         <ul style={listStyle}>
