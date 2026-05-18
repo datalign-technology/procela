@@ -345,6 +345,12 @@ export default function GovernanceGroupsPage() {
 
   // DAMA roles for the members of the selected group
   const [memberDamaRoles, setMemberDamaRoles] = useState<DamaRoleAssignment[]>([]);
+  // All governance-role assignments in the active org (the same scope
+  // the Governance Roles page writes at). The Expected Roles panel uses
+  // this so a role assigned org-wide is recognised here even if that
+  // person isn't (yet) a member of this group — keeps the two pages
+  // consistent.
+  const [orgDamaRoles, setOrgDamaRoles] = useState<DamaRoleAssignment[]>([]);
   const [agentsList, setAgentsList] = useState<Agent[]>([]);
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
   const [assignRoleAgentId, setAssignRoleAgentId] = useState('');
@@ -424,6 +430,7 @@ export default function GovernanceGroupsPage() {
         apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`),
       ]);
       const allRoles = rolesRes.data || [];
+      setOrgDamaRoles(allRoles);
       setAgentsList(Array.isArray(agentsRes.data) ? agentsRes.data.filter((a) => a.status === 'ACTIVE') : []);
 
       if (detail?.members?.length > 0) {
@@ -557,6 +564,20 @@ export default function GovernanceGroupsPage() {
     try {
       await apiClient.post(`/governance-groups/${selectedGroupId}/members`, { personId: memberPersonId, groupRole: memberRole });
       setMemberPersonId(''); setMemberRole('MEMBER');
+      fetchGroupDetail(selectedGroupId);
+      fetchGroups();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to add member');
+    }
+  };
+
+  // Add a specific person to the selected group (used by the Expected
+  // Roles panel's "Add to group" on an org-level role holder who isn't
+  // a member yet — the bridge between the Roles page and this page).
+  const addMemberById = async (personId: string) => {
+    if (!selectedGroupId || !personId) return;
+    try {
+      await apiClient.post(`/governance-groups/${selectedGroupId}/members`, { personId, groupRole: 'MEMBER' });
       fetchGroupDetail(selectedGroupId);
       fetchGroups();
     } catch (e) {
@@ -984,7 +1005,12 @@ export default function GovernanceGroupsPage() {
               {EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type] && (() => {
                 const expectedRoles = EXPECTED_ROLES_BY_GROUP[selectedGroupDetail.type];
                 const requiredCount = expectedRoles.filter((r) => r.required).length;
-                const requiredFilled = expectedRoles.filter((r) => r.required && memberDamaRoles.some((d) => d.roleType === r.roleType)).length;
+                // "Filled" = the role is held anywhere in the org (same
+                // scope the Roles page assigns at), not just by a current
+                // member of this group. That's what makes assigning on
+                // the Roles page show up here.
+                const memberIdSet = new Set((selectedGroupDetail.members || []).map((m: GroupMember) => m.personId));
+                const requiredFilled = expectedRoles.filter((r) => r.required && orgDamaRoles.some((d) => d.roleType === r.roleType)).length;
                 return (
                   <div style={{ marginBottom: 16, padding: 14, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -997,7 +1023,7 @@ export default function GovernanceGroupsPage() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {expectedRoles.map((expected) => {
-                        const assigned = memberDamaRoles.filter((r) => r.roleType === expected.roleType);
+                        const assigned = orgDamaRoles.filter((r) => r.roleType === expected.roleType);
                         const isFilled = assigned.length > 0;
                         const canAddMore = expected.multiAssign || assigned.length === 0;
                         return (
@@ -1055,11 +1081,25 @@ export default function GovernanceGroupsPage() {
                                     {assigned.map((a) => {
                                       const isAgent = !!a.agentId;
                                       const displayName = isAgent ? (a.agentName || 'Agent') : (a.personName || 'Unknown');
+                                      // Does this org-level role holder also sit on
+                                      // THIS group? If not, offer to add them so the
+                                      // body actually has the role represented.
+                                      const inThisGroup = isAgent || (a.personId ? memberIdSet.has(a.personId) : false);
                                       return (
-                                        <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : '#d1f0eb', color: isAgent ? '#5b21b6' : '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        <span key={a.id} title={inThisGroup ? undefined : 'Holds this role in the org but is not a member of this group'}
+                                          style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : inThisGroup ? '#d1f0eb' : '#fef3c7', color: isAgent ? '#5b21b6' : inThisGroup ? '#0f4f46' : '#92400e', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                           {isAgent && <span title="AI Agent" style={{ fontSize: 10 }}>{'⚙'}</span>}
                                           {displayName}
-                                          <button onClick={() => handleRemoveDamaRole(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                          {!inThisGroup && (
+                                            <button
+                                              onClick={() => a.personId && addMemberById(a.personId)}
+                                              title="Add to this group"
+                                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 10, fontWeight: 700, padding: 0, lineHeight: 1, textDecoration: 'underline' }}
+                                            >
+                                              + add to group
+                                            </button>
+                                          )}
+                                          <button onClick={() => handleRemoveDamaRole(a.id)} title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
                                         </span>
                                       );
                                     })}
