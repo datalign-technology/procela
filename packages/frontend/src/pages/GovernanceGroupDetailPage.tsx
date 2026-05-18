@@ -382,6 +382,11 @@ export default function GovernanceGroupDetailPage() {
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
               Expected roles ({requiredFilled}/{requiredExpected.length} required filled)
             </div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+              Governance roles are <strong>org-wide</strong> — assigning one here is the
+              same assignment shown on the Governance Roles page and the Governance
+              Groups expected-role panel.
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {expectedRoles.map((er) => {
                 const assigned = memberRoles.filter((m) => m.roleType === er.roleType);

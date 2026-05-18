@@ -1021,6 +1021,11 @@ export default function GovernanceGroupsPage() {
                         {requiredFilled} of {requiredCount} required roles filled
                       </span>
                     </div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                      Governance roles are <strong>org-wide</strong>. Assigning one here is the
+                      same assignment shown on the Governance Roles page and the Group
+                      Composition view — not a separate, group-only role.
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {expectedRoles.map((expected) => {
                         const assigned = orgDamaRoles.filter((r) => r.roleType === expected.roleType);

@@ -374,6 +374,11 @@ export default function DamaRolesPage() {
       {/* Assign Form */}
       {showForm && (
         <SectionCard title="Assign Governance Role">
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12, lineHeight: 1.5 }}>
+            Governance roles are <strong>org-wide</strong>. Assigning here, or from a
+            group's expected-role panel on Governance Groups / Group Composition,
+            all create the <strong>same</strong> assignment — it appears in every one of those places.
+          </div>
           {error && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
               {error}
