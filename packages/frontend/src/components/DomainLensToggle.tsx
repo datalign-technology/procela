@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
-import { useDomainLensStore, DomainLens } from '../stores/domainLensStore';
+import { useDomainLensStore, useDomainLens, DomainLens } from '../stores/domainLensStore';
 
-// Segmented "All · Operational · Governance" control. Pages that have a
-// primary audience pass `defaultLens` so they open focused (e.g. the
-// Process Catalog defaults to OPERATIONAL); the user's explicit change
-// still persists globally via the store.
+// Segmented "All · Operational · Governance" control. Each page passes a
+// stable `pageKey` so its lens is independent — setting Governance on
+// Data Assets no longer affects the Process Catalog and vice versa.
+// `defaultLens` is the value used until the user picks something on
+// that page.
 
 const OPTIONS: Array<{ value: DomainLens; label: string }> = [
   { value: 'ALL', label: 'All' },
@@ -12,19 +12,15 @@ const OPTIONS: Array<{ value: DomainLens; label: string }> = [
   { value: 'GOVERNANCE', label: 'Governance' },
 ];
 
-export default function DomainLensToggle({ defaultLens }: { defaultLens?: DomainLens }) {
-  const lens = useDomainLensStore((s) => s.lens);
+export default function DomainLensToggle({
+  pageKey,
+  defaultLens = 'ALL',
+}: {
+  pageKey: string;
+  defaultLens?: DomainLens;
+}) {
+  const lens = useDomainLens(pageKey, defaultLens);
   const setLens = useDomainLensStore((s) => s.setLens);
-
-  // Apply the page's audience default once on mount, only if the user
-  // hasn't already chosen something this session (store starts from
-  // localStorage; we only nudge when it's still the global 'ALL').
-  useEffect(() => {
-    if (defaultLens && lens === 'ALL' && defaultLens !== 'ALL') {
-      setLens(defaultLens);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div
@@ -42,7 +38,7 @@ export default function DomainLensToggle({ defaultLens }: { defaultLens?: Domain
             key={o.value}
             role="tab"
             aria-selected={active}
-            onClick={() => setLens(o.value)}
+            onClick={() => setLens(pageKey, o.value)}
             style={{
               padding: '4px 12px', fontSize: 11,
               fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer',

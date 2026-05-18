@@ -13,7 +13,7 @@ import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
 import { GOVERNANCE_ROLES } from '../types';
-import { useDomainLensStore, passesLens } from '../stores/domainLensStore';
+import { useDomainLensStore, useDomainLens, passesLens } from '../stores/domainLensStore';
 import { processDomain } from '../lib/entityDomain';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
@@ -1439,10 +1439,17 @@ export default function ProcessCatalogPage() {
   const byLevel = stats.byLevel || {};
   const totalNodes = stats.total || 0;
   // Domain lens — value streams carry a governance/operational domain;
-  // filtering at the root hides whole subtrees so process owners and the
-  // data office can each focus. Defaults to All (the shared store
-  // default); the user's choice persists.
-  const domainLens = useDomainLensStore((s) => s.lens);
+  // filtering at the root hides whole subtrees. Page-scoped (key
+  // 'process-catalog'), and force-reset to All on entry so the catalog
+  // always opens showing everything — without touching any other
+  // page's lens (the bug this replaces). Switching it here only affects
+  // this page.
+  const domainLens = useDomainLens('process-catalog', 'ALL');
+  const setLens = useDomainLensStore((s) => s.setLens);
+  useEffect(() => {
+    setLens('process-catalog', 'ALL');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const lensedTree = useMemo(
     () => tree.filter((vs) => passesLens(domainLens, processDomain(vs))),
     [tree, domainLens],
@@ -1508,7 +1515,7 @@ export default function ProcessCatalogPage() {
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
           <div style={{ marginTop: 8 }}>
-            <DomainLensToggle />
+            <DomainLensToggle pageKey="process-catalog" />
           </div>
         </div>
         {canCreateValueStreams && (

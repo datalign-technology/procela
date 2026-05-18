@@ -21,7 +21,7 @@ import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
-import { useDomainLensStore, passesLens } from '../stores/domainLensStore';
+import { useDomainLens, passesLens } from '../stores/domainLensStore';
 import { assetDomain } from '../lib/entityDomain';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
@@ -334,7 +334,7 @@ export default function DataAssetsPage() {
   const [filterTier, setFilterTier] = useState('');
   const [filterSystemId, setFilterSystemId] = useState('');
   const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
-  const domainLens = useDomainLensStore((s) => s.lens);
+  const domainLens = useDomainLens('data-assets', 'ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Column visibility — toggleable from the Columns popover via the
@@ -862,7 +862,7 @@ export default function DataAssetsPage() {
             Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.
           </p>
           <div style={{ marginTop: 8 }}>
-            <DomainLensToggle />
+            <DomainLensToggle pageKey="data-assets" />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
