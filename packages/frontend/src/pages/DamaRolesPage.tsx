@@ -183,6 +183,20 @@ export default function DamaRolesPage() {
     setShowForm(true);
   };
 
+  // Open the assign form pre-filled with a specific governance role —
+  // used by the "By Role" catalog so an unfilled role is one click from
+  // being assigned (mirrors the Governance Groups expected-role slate).
+  const openAddForRole = (roleType: string) => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    setForm({
+      ...emptyForm,
+      roleType,
+      scopeId: activeOrgId || (orgs.length > 0 ? orgs[0].id : ''),
+    });
+    setError('');
+    setShowForm(true);
+  };
+
   const handleSave = async () => {
     if (!roleValidation.validateAll(form)) return;
     setError('');
@@ -503,11 +517,27 @@ export default function DamaRolesPage() {
           <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
             {loading ? (
               <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+            ) : groupBy === 'role' ? (
+              // Catalog view — always lists every governance role with
+              // its holders or an "Unfilled · Assign" row, even with zero
+              // assignments. This is what makes the Roles page consistent
+              // with the Governance Groups expected-role slate (which
+              // shows the same roles as fillable slots).
+              <ByRoleView
+                roles={filteredRoles}
+                catalog={(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS))}
+                filterRoleType={filterRoleType}
+                roleBadge={roleBadge}
+                scopeName={scopeName}
+                openRoleDrawer={openRoleDrawer}
+                onAssign={openAddForRole}
+                setConfirmDelete={setConfirmDelete}
+              />
             ) : roles.length === 0 && !showForm ? (
               <EmptyState
                 icon="👤"
-                title="No governance roles yet"
-                description="Assign data management roles like CDO, Data Owner, and Data Steward to people across your organization."
+                title="No governance roles assigned yet"
+                description="Switch to the “By Role” view to see every governance role and assign people to the unfilled ones — the same roles the Governance Groups page expects."
                 action={{ label: 'Assign Role', onClick: openAdd }}
               />
             ) : filteredRoles.length === 0 ? (
@@ -518,14 +548,6 @@ export default function DamaRolesPage() {
               </div>
             ) : groupBy === 'person' ? (
               <ByPersonView
-                roles={filteredRoles}
-                roleBadge={roleBadge}
-                scopeName={scopeName}
-                openRoleDrawer={openRoleDrawer}
-                setConfirmDelete={setConfirmDelete}
-              />
-            ) : groupBy === 'role' ? (
-              <ByRoleView
                 roles={filteredRoles}
                 roleBadge={roleBadge}
                 scopeName={scopeName}
@@ -682,11 +704,17 @@ function ByPersonView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmD
 // ── By-Role view ──────────────────────────────────────────────────────────
 // One section per role type, showing the people who hold that role. The
 // section header is clickable to open the Role Detail drawer.
-function ByRoleView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmDelete }: {
+function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, openRoleDrawer, onAssign, setConfirmDelete }: {
   roles: DamaRoleAssignment[];
+  /** Full governance-role catalog so every role is listed even with
+   *  zero holders (consistent with the Governance Groups expected-role
+   *  slate). */
+  catalog: string[];
+  filterRoleType: string | null;
   roleBadge: (rt: string) => React.CSSProperties;
   scopeName: (id: string) => string;
   openRoleDrawer: (rt: string) => void;
+  onAssign: (rt: string) => void;
   setConfirmDelete: (id: string) => void;
 }) {
   const byRole = new Map<string, DamaRoleAssignment[]>();
@@ -694,13 +722,18 @@ function ByRoleView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmDel
     if (!byRole.has(r.roleType)) byRole.set(r.roleType, []);
     byRole.get(r.roleType)!.push(r);
   }
-  // Render in the canonical ROLE_TYPE_LABELS order so executive roles
-  // come first regardless of insertion order.
-  const ordered = Object.keys(ROLE_TYPE_LABELS).filter((rt) => byRole.has(rt));
+  // Iterate the whole catalog in canonical ROLE_TYPE_LABELS order
+  // (executive first), not just roles that happen to have holders. When
+  // a specific role filter is active, show only that section.
+  const catalogSet = new Set(catalog);
+  const ordered = Object.keys(ROLE_TYPE_LABELS)
+    .filter((rt) => catalogSet.has(rt))
+    .filter((rt) => !filterRoleType || rt === filterRoleType);
   return (
     <div>
       {ordered.map((rt) => {
-        const list = byRole.get(rt)!.sort((a, b) => a.personName.localeCompare(b.personName));
+        const list = (byRole.get(rt) || []).slice().sort((a, b) => a.personName.localeCompare(b.personName));
+        const filled = list.length > 0;
         return (
           <div key={rt} style={{ borderBottom: '1px solid var(--color-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--color-bg)' }}>
@@ -712,18 +745,35 @@ function ByRoleView({ roles, roleBadge, scopeName, openRoleDrawer, setConfirmDel
               >
                 {ROLE_TYPE_LABELS[rt] || rt}
               </button>
-              <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{list.length} held</span>
+              {filled ? (
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{list.length} held</span>
+              ) : (
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unfilled</span>
+              )}
+              <button
+                type="button"
+                onClick={() => onAssign(rt)}
+                style={{ marginLeft: 'auto', background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--color-primary)' }}
+              >
+                + Assign
+              </button>
             </div>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {list.map((r) => (
-                <li key={r.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
-                  <span style={{ fontWeight: 500 }}>{r.personName}</span>
-                  <span style={{ color: 'var(--color-text-secondary)' }}>{scopeName(r.scopeId)}</span>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
-                  <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
-                </li>
-              ))}
-            </ul>
+            {filled ? (
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {list.map((r) => (
+                  <li key={r.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
+                    <span style={{ fontWeight: 500 }}>{r.personName}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{scopeName(r.scopeId)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
+                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ padding: '8px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                No one holds this role yet.
+              </div>
+            )}
           </div>
         );
       })}
