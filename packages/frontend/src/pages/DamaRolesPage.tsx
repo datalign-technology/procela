@@ -8,7 +8,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
-import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import SortableTh from '../components/SortableTh';
@@ -316,10 +315,11 @@ export default function DamaRolesPage() {
         <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
       </PageHeader>
 
-      {/* Search + Group-by toggle. The role-type filter moved out of this
-       *  row into the sidebar; the sidebar is the durable navigator and
-       *  the search box is the quick lookup. */}
-      {roles.length > 0 && (
+      {/* Search + Group-by toggle. Shown even with zero assignments so
+       *  the By Person / By Role / Flat switch is always reachable —
+       *  it used to be hidden when there were no rows, which made the
+       *  "switch to By Role" guidance a dead instruction. */}
+      {!loading && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="search"
@@ -517,12 +517,14 @@ export default function DamaRolesPage() {
           <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
             {loading ? (
               <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
-            ) : groupBy === 'role' ? (
+            ) : (groupBy === 'role' || (roles.length === 0 && !showForm)) ? (
               // Catalog view — always lists every governance role with
               // its holders or an "Unfilled · Assign" row, even with zero
-              // assignments. This is what makes the Roles page consistent
-              // with the Governance Groups expected-role slate (which
-              // shows the same roles as fillable slots).
+              // assignments. We force it when nothing is assigned yet so
+              // the page is immediately actionable (every role + Assign,
+              // mirroring the Governance Groups expected-role slate)
+              // rather than a dead-end empty state pointing at a toggle
+              // that used to be hidden when there were no rows.
               <ByRoleView
                 roles={filteredRoles}
                 catalog={(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS))}
@@ -532,13 +534,6 @@ export default function DamaRolesPage() {
                 openRoleDrawer={openRoleDrawer}
                 onAssign={openAddForRole}
                 setConfirmDelete={setConfirmDelete}
-              />
-            ) : roles.length === 0 && !showForm ? (
-              <EmptyState
-                icon="👤"
-                title="No governance roles assigned yet"
-                description="Switch to the “By Role” view to see every governance role and assign people to the unfilled ones — the same roles the Governance Groups page expects."
-                action={{ label: 'Assign Role', onClick: openAdd }}
               />
             ) : filteredRoles.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
