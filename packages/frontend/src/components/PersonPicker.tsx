@@ -107,6 +107,11 @@ interface PersonPickerProps {
   /** Show the "By group" tab. Needs the extra /governance-groups
    *  fetch; on by default. */
   showGroups?: boolean;
+  /** Audience hint from the surrounding entity. GOVERNANCE opens the
+   *  picker on the "By group" tab (governance bodies first);
+   *  OPERATIONAL opens it on the org tree. Selection is never
+   *  restricted — this only sets the default lens. */
+  domain?: 'GOVERNANCE' | 'OPERATIONAL';
 }
 
 export default function PersonPicker({
@@ -119,9 +124,17 @@ export default function PersonPicker({
   placeholder = 'Select person…',
   disabled,
   showGroups = true,
+  domain,
 }: PersonPickerProps) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>('search');
+  // Default lens follows the entity's domain: governance work opens on
+  // the governance bodies, operational work on the org tree. Plain
+  // 'search' when there's no domain hint.
+  const [tab, setTab] = useState<Tab>(
+    domain === 'GOVERNANCE' && showGroups ? 'group'
+      : domain === 'OPERATIONAL' ? 'tree'
+      : 'search',
+  );
   const [query, setQuery] = useState('');
   const [data, setData] = useState<CacheEntry | null>(null);
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());

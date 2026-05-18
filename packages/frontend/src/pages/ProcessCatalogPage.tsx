@@ -12,6 +12,7 @@ import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
+import { GOVERNANCE_ROLES } from '../types';
 import { useDomainLensStore, passesLens } from '../stores/domainLensStore';
 import { processDomain } from '../lib/entityDomain';
 import CommentsPanel from '../components/CommentsPanel';
@@ -325,13 +326,14 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
 //    legacy comma-joined *name* string (valueMode="name") so no data
 //    migration is needed. ──
 
-function DocPersonField({ label, mode, valueMode, value, onChange, disabled }: {
+function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain }: {
   label: string;
   mode: 'single' | 'multi';
   valueMode: 'id' | 'name';
   value: string | string[] | null;
   onChange: (v: any) => void;
   disabled: boolean;
+  domain?: 'GOVERNANCE' | 'OPERATIONAL';
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
@@ -343,9 +345,78 @@ function DocPersonField({ label, mode, valueMode, value, onChange, disabled }: {
           value={value}
           onChange={onChange}
           disabled={disabled}
+          domain={domain}
           placeholder={mode === 'single' ? 'Select owner…' : 'Select stakeholders…'}
         />
       </div>
+    </div>
+  );
+}
+
+// ── Domain-scoped Responsible Role selector ──
+// Governance nodes only offer the DAMA governance roles; operational
+// nodes offer the generic business roles. A "show all" toggle reveals
+// the other set for genuine cross-overs; picking a role from the other
+// domain tags the field with a visible cross-domain marker. A legacy
+// free-text value that's in neither catalog is preserved as a selectable
+// option until the user re-picks.
+function DocRoleField({ value, onSave, disabled, domain }: {
+  value: string;
+  onSave: (v: string) => void;
+  disabled: boolean;
+  domain: 'GOVERNANCE' | 'OPERATIONAL';
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const govLabels = GOVERNANCE_ROLES.map((r) => r.label);
+  const primary = domain === 'GOVERNANCE' ? govLabels : ROLE_OPTIONS;
+  const secondary = domain === 'GOVERNANCE' ? ROLE_OPTIONS : govLabels;
+
+  const inPrimary = !!value && primary.includes(value);
+  const inSecondary = !!value && secondary.includes(value);
+  const isLegacy = !!value && !inPrimary && !inSecondary;
+  // Auto-reveal the full set if the saved value belongs to the other
+  // domain (or is legacy) so it stays visible and editable.
+  const effectiveShowAll = showAll || inSecondary || isLegacy;
+
+  const options = [
+    ...primary,
+    ...(effectiveShowAll ? secondary : []),
+    ...(isLegacy ? [value] : []),
+  ];
+  const crossDomain = inSecondary;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, flexWrap: 'wrap' }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Responsible Role:</span>
+      <select
+        value={value}
+        onChange={(e) => onSave(e.target.value)}
+        disabled={disabled}
+        style={{
+          fontSize: 11, border: '1px solid var(--color-border)', borderRadius: 4,
+          background: 'var(--color-surface)', cursor: disabled ? 'default' : 'pointer',
+          color: value ? 'var(--color-text)' : 'var(--color-text-muted)', padding: '2px 6px',
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        <option value="">Select role...</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      {crossDomain && (
+        <span title="This role is outside this process's domain"
+          style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#fef3c7', color: '#92400e', textTransform: 'uppercase' }}>
+          Cross-domain
+        </span>
+      )}
+      {!disabled && !effectiveShowAll && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--color-primary)', padding: 0, textDecoration: 'underline' }}
+        >
+          show all roles
+        </button>
+      )}
     </div>
   );
 }
@@ -755,19 +826,19 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Value Stream fields */}
               {node.level === 'VALUE_STREAM' && (
                 <>
-                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} />
+                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                   <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
-                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} />
+                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                 </>
               )}
               {/* Process fields */}
               {node.level === 'PROCESS' && (
                 <>
-                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} />
+                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} />
+                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                   <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
                   <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
@@ -781,7 +852,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Activity fields */}
               {node.level === 'ACTIVITY' && (
                 <>
-                  <DocDropdown label="Responsible Role" value={node.responsibleRole || ''} options={ROLE_OPTIONS} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} placeholder="Select role..." />
+                  <DocRoleField value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
                   <DocField label="Est. Duration" value={node.estimatedDuration || ''} onSave={(v) => onUpdate(node.id, { estimatedDuration: v })} disabled={isLocked} placeholder="e.g. 2 hours, 1 day" />
                   <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />

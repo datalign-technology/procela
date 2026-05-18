@@ -115,6 +115,7 @@ export default function HelpPage() {
           <li>Level-specific attributes: frequency, risk level, responsible role, automation level.</li>
           <li>Status lifecycle: Draft &rarr; Active &rarr; Deprecated.</li>
           <li>Assigning an Owner or Stakeholders opens the shared <strong>person picker</strong> &mdash; search by name / title / org, or browse the org tree (Company &rarr; Division &rarr; Department) or governance groups. Every result shows the person's title and org path so two people with the same name are distinguishable. The same picker is used for owners, stewards, deputies, and group members across the app.</li>
+          <li><strong>Domain-aware role assignment.</strong> Governance value streams default the person picker to the governance bodies and the <strong>Responsible Role</strong> selector to the DAMA governance roles only; operational (business) processes default to the org tree and the generic business roles, with the DAMA roles hidden. A "show all roles" toggle reveals the other set for genuine cross-overs, and a picked role from the other domain is flagged <em>Cross-domain</em>. Existing free-text role values are preserved until you re-pick.</li>
         </ul>
         <h3 style={h3Style}>Mappings</h3>
         <ul style={listStyle}>
