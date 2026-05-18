@@ -287,6 +287,32 @@ function validateProcessIntegrity(vsId: string): { valid: boolean; errors: strin
 
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Cascade-delete the process↔data mappings (ProcessDataLink rows) that
+// point at deleted step ids. mappings.ts imports from this module, so a
+// top-level import here would be circular — use the lazy-require pattern
+// the rest of the codebase uses for the same situation. Without this,
+// deleting a value stream leaves orphaned mappings that still show up on
+// the Process Data Mappings page with a null step.
+function cascadeDeleteMappings(stepIds: Set<string>): number {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('./mappings');
+    const mappings: Array<{ processStepId: string }> = mod.mappings;
+    if (!Array.isArray(mappings)) return 0;
+    let removed = 0;
+    for (let i = mappings.length - 1; i >= 0; i--) {
+      if (stepIds.has(mappings[i].processStepId)) {
+        mappings.splice(i, 1);
+        removed++;
+      }
+    }
+    if (removed > 0) saveStore('mappings', mappings);
+    return removed;
+  } catch {
+    return 0;
+  }
+}
+
 const router = Router();
 
 // ── HIERARCHY NODES ──
@@ -295,12 +321,15 @@ const router = Router();
 router.delete('/all', (_req: Request, res: Response) => {
   const count = processNodes.length;
   const flowCount = flowRelationships.length;
+  // Every step is going away, so every mapping is now orphaned.
+  const allStepIds = new Set(processNodes.map((n) => n.id));
   processNodes.splice(0, processNodes.length);
   flowRelationships.splice(0, flowRelationships.length);
+  const mappingsRemoved = cascadeDeleteMappings(allStepIds);
   saveStore('processNodes', processNodes);
   saveStore('flowRelationships', flowRelationships);
-  auditService.log(DEV_ORG_ID, null, 'ProcessNode', '*', 'DELETE_ALL', null, { count, flowCount });
-  logger.info({ count, flowCount }, 'Deleted all process nodes and flow relationships');
+  auditService.log(DEV_ORG_ID, null, 'ProcessNode', '*', 'DELETE_ALL', null, { count, flowCount, mappingsRemoved });
+  logger.info({ count, flowCount, mappingsRemoved }, 'Deleted all process nodes and flow relationships');
   res.json({ success: true, deleted: count + flowCount });
 });
 
@@ -664,10 +693,13 @@ router.delete('/nodes/:id', (req: Request, res: Response) => {
     }
   }
 
+  // Cascade: drop data mappings that referenced any deleted step.
+  const mappingsRemoved = cascadeDeleteMappings(idsToRemove);
+
   saveStore('processNodes', processNodes);
   saveStore('flowRelationships', flowRelationships);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', nodeId, 'DELETE', node, null);
-  logger.info({ id: nodeId, level: node.level, descendantsRemoved: descendants.length }, 'Deleted process node');
+  logger.info({ id: nodeId, level: node.level, descendantsRemoved: descendants.length, mappingsRemoved }, 'Deleted process node');
 
   res.status(204).send();
 });
