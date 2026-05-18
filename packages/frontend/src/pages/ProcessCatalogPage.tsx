@@ -1440,8 +1440,8 @@ export default function ProcessCatalogPage() {
   const totalNodes = stats.total || 0;
   // Domain lens — value streams carry a governance/operational domain;
   // filtering at the root hides whole subtrees so process owners and the
-  // data office each see a focused catalog. Default this page to the
-  // operational audience.
+  // data office can each focus. Defaults to All (the shared store
+  // default); the user's choice persists.
   const domainLens = useDomainLensStore((s) => s.lens);
   const lensedTree = useMemo(
     () => tree.filter((vs) => passesLens(domainLens, processDomain(vs))),
@@ -1508,7 +1508,7 @@ export default function ProcessCatalogPage() {
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
           <div style={{ marginTop: 8 }}>
-            <DomainLensToggle defaultLens="OPERATIONAL" />
+            <DomainLensToggle />
           </div>
         </div>
         {canCreateValueStreams && (
