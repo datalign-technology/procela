@@ -22,7 +22,16 @@ import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { usePermissions } from '@/hooks/usePermissions';
 
 type NavItem = { to: string; label: string; icon: string };
-type NavSection = { label: string | null; items: NavItem[]; adminOnly?: boolean };
+// `items` is always the flat source of truth (active-state, flyout,
+// collapsed icon). `subGroups`, when present, only adds labelled
+// dividers in the expanded accordion so a heavy section (Governance)
+// reads as Setup / Operate / Analyze instead of an 11-item wall.
+type NavSection = {
+  label: string | null;
+  items: NavItem[];
+  subGroups?: { label: string; itemTos: string[] }[];
+  adminOnly?: boolean;
+};
 
 // Append U+FE0E (VARIATION SELECTOR-15) to single-codepoint symbol
 // icons so the OS renders them as text glyphs, not coloured emoji.
@@ -93,6 +102,11 @@ const navSections: NavSection[] = [
       { to: '/enterprise-view', label: 'Enterprise View', icon: '\u29c9' },
       { to: '/analysis', label: 'Analysis', icon: '\u229e' },
       { to: '/reports', label: 'Reports', icon: '\u2630' },
+    ],
+    subGroups: [
+      { label: 'Set up', itemTos: ['/governance-program', '/governance-groups', '/dama-roles', '/governance-policies', '/decision-rights'] },
+      { label: 'Operate', itemTos: ['/documentation', '/governance-calendar', '/governance-work'] },
+      { label: 'Analyze', itemTos: ['/enterprise-view', '/analysis', '/reports'] },
     ],
   },
 ];
@@ -466,23 +480,36 @@ export default function Layout() {
                   </button>
 
                   {/* Expanded children (accordion — only when sidebar is open) */}
-                  {!sidebarCollapsed && isExpanded && section.items.map((item) => {
-                    const groupRoutes = ROUTE_GROUPS[item.to];
-                    const isGroupActive = groupRoutes
-                      ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                      : location.pathname === item.to;
-                    return (
-                      <NavLink
-                        key={item.to}
-                        to={item.to}
-                        end={item.to === '/'}
-                        className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
-                      >
-                        <span className={styles.navIcon}>{textIcon(item.icon)}</span>
-                        {item.label}
-                      </NavLink>
-                    );
-                  })}
+                  {!sidebarCollapsed && isExpanded && (() => {
+                    const renderItem = (item: NavItem) => {
+                      const groupRoutes = ROUTE_GROUPS[item.to];
+                      const isGroupActive = groupRoutes
+                        ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                        : location.pathname === item.to;
+                      return (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          end={item.to === '/'}
+                          className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
+                        >
+                          <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                          {item.label}
+                        </NavLink>
+                      );
+                    };
+                    if (!section.subGroups) return section.items.map(renderItem);
+                    // Labelled sub-clusters: a small uppercase divider
+                    // above each group's items. Falls back to flat for
+                    // any item not placed in a cluster.
+                    const byTo = new Map(section.items.map((i) => [i.to, i]));
+                    return section.subGroups.map((sg) => (
+                      <div key={sg.label}>
+                        <div className={styles.navSubGroupLabel}>{sg.label}</div>
+                        {sg.itemTos.map((to) => byTo.get(to)).filter(Boolean).map((i) => renderItem(i as NavItem))}
+                      </div>
+                    ));
+                  })()}
 
                   {/* Flyout panel (collapsed sidebar hover) */}
                   {sidebarCollapsed && isFlyoutOpen && (

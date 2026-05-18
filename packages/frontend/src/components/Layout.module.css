@@ -92,6 +92,18 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* Divider label inside an expanded section (Governance: Set up /
+   Operate / Analyze). Smaller and dimmer than the section label, and
+   indented to sit above the child links. */
+.navSubGroupLabel {
+  padding: 10px 24px 2px 28px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.3);
+}
+
 .navSpacer {
   height: 0;
 }
