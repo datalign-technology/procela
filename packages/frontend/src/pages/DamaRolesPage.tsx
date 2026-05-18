@@ -333,29 +333,36 @@ export default function DamaRolesPage() {
               background: 'var(--color-surface)',
             }}
           />
-          <div role="group" aria-label="Group by" style={{
+          {/* Segmented control — same visual treatment as the app's
+           *  other view toggles (DomainLensToggle / Tabs): pill
+           *  container, primary-filled active segment. */}
+          <div role="tablist" aria-label="Group by" style={{
             display: 'inline-flex', alignItems: 'center',
-            background: 'var(--color-bg)',
+            background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
-            borderRadius: 6, padding: 2,
+            borderRadius: 999, overflow: 'hidden',
           }}>
-            {(['person', 'role', 'none'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setGroupBy(mode)}
-                aria-pressed={groupBy === mode}
-                title={mode === 'person' ? 'One row per person' : mode === 'role' ? 'One section per role' : 'Flat list of assignments'}
-                style={{
-                  padding: '4px 10px', fontSize: 11, fontWeight: 500,
-                  background: groupBy === mode ? 'var(--color-surface)' : 'transparent',
-                  color: groupBy === mode ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  border: 'none', borderRadius: 4, cursor: 'pointer',
-                  boxShadow: groupBy === mode ? 'var(--shadow-sm)' : 'none',
-                }}
-              >
-                {mode === 'person' ? 'By Person' : mode === 'role' ? 'By Role' : 'Flat'}
-              </button>
-            ))}
+            {(['person', 'role', 'none'] as const).map((mode) => {
+              const active = groupBy === mode;
+              return (
+                <button
+                  key={mode}
+                  role="tab"
+                  onClick={() => setGroupBy(mode)}
+                  aria-selected={active}
+                  title={mode === 'person' ? 'One row per person' : mode === 'role' ? 'One section per role' : 'Flat list of assignments'}
+                  style={{
+                    padding: '4px 12px', fontSize: 11,
+                    fontWeight: active ? 600 : 400,
+                    background: active ? 'var(--color-primary)' : 'transparent',
+                    color: active ? '#fff' : 'var(--color-text)',
+                    border: 'none', cursor: 'pointer',
+                  }}
+                >
+                  {mode === 'person' ? 'By Person' : mode === 'role' ? 'By Role' : 'Flat'}
+                </button>
+              );
+            })}
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
             {filteredRoles.length} of {roles.length} assignments
@@ -517,14 +524,12 @@ export default function DamaRolesPage() {
           <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
             {loading ? (
               <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
-            ) : (groupBy === 'role' || (roles.length === 0 && !showForm)) ? (
+            ) : groupBy === 'role' ? (
               // Catalog view — always lists every governance role with
-              // its holders or an "Unfilled · Assign" row, even with zero
-              // assignments. We force it when nothing is assigned yet so
-              // the page is immediately actionable (every role + Assign,
-              // mirroring the Governance Groups expected-role slate)
-              // rather than a dead-end empty state pointing at a toggle
-              // that used to be hidden when there were no rows.
+              // its holders or an "Unfilled · + Assign" row, even with
+              // zero assignments, mirroring the Governance Groups
+              // expected-role slate. Each view is now driven purely by
+              // the toggle so switching always changes what's shown.
               <ByRoleView
                 roles={filteredRoles}
                 catalog={(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS))}
@@ -535,11 +540,23 @@ export default function DamaRolesPage() {
                 onAssign={openAddForRole}
                 setConfirmDelete={setConfirmDelete}
               />
+            ) : roles.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
+                <div style={{ marginBottom: 10 }}>No one is assigned to any governance role yet.</div>
+                <button onClick={() => setGroupBy('role')} style={{ ...btnPrimary, fontSize: 13 }}>
+                  View all roles &amp; assign
+                </button>
+                <div style={{ marginTop: 8, fontSize: 12 }}>
+                  Or use the <strong>By Role</strong> toggle above &mdash; it lists every governance role with an Assign action.
+                </div>
+              </div>
             ) : filteredRoles.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', fontSize: 13 }}>
                 {searchQuery.trim()
                   ? 'No assignments match your search.'
-                  : `No assignments for ${ROLE_TYPE_LABELS[filterRoleType || ''] || filterRoleType}.`}
+                  : filterRoleType
+                    ? `No assignments for ${ROLE_TYPE_LABELS[filterRoleType] || filterRoleType}.`
+                    : 'No assignments match the current filters.'}
               </div>
             ) : groupBy === 'person' ? (
               <ByPersonView
