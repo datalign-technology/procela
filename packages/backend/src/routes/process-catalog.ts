@@ -1177,13 +1177,24 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
       { name: 'Stakeholder Communications', description: 'Policy change notifications, training materials, resolution notices, and lessons learned', governanceTier: 'BRONZE', dataClassification: 'INTERNAL' },
     ];
 
-    // Create assets (skip existing by name)
-    const existingNames = new Set(dataAssets.map((a: any) => a.name.toLowerCase()));
+    // Create assets, skipping ones that already exist *for this org*.
+    // The dedup must be org-scoped: the placeholder names are generic
+    // ("Data Policies", "Business Glossary", …) so a global name match
+    // means the second and every later company reuses the first org's
+    // asset records and never gets its own. Its mappings then point at
+    // another org's assets — the names still resolve on the Mappings
+    // page (asset lookup is global) but the org-scoped Data Assets page
+    // shows nothing. Scoping the dedup to templateOrgId gives every org
+    // its own copy and keeps mappings same-org.
+    const orgAssets = dataAssets.filter((a: any) => a.orgId === templateOrgId);
+    const existingByName = new Map<string, any>(
+      orgAssets.map((a: any) => [a.name.toLowerCase(), a]),
+    );
     const createdAssets: Record<string, string> = {}; // name → id
     for (const def of govAssetDefs) {
-      if (existingNames.has(def.name.toLowerCase())) {
-        const existing = dataAssets.find((a: any) => a.name.toLowerCase() === def.name.toLowerCase());
-        if (existing) createdAssets[def.name] = existing.id;
+      const existing = existingByName.get(def.name.toLowerCase());
+      if (existing) {
+        createdAssets[def.name] = existing.id;
         continue;
       }
       const asset = {
