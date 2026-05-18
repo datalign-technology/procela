@@ -20,6 +20,9 @@ import SortableTh from '../components/SortableTh';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
+import DomainLensToggle from '../components/DomainLensToggle';
+import { useDomainLensStore, passesLens } from '../stores/domainLensStore';
+import { assetDomain } from '../lib/entityDomain';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import { errorToast } from '../lib/errorToast';
@@ -331,6 +334,7 @@ export default function DataAssetsPage() {
   const [filterTier, setFilterTier] = useState('');
   const [filterSystemId, setFilterSystemId] = useState('');
   const [filterOrigin, setFilterOrigin] = useState<'' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED'>('');
+  const domainLens = useDomainLensStore((s) => s.lens);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Column visibility — toggleable from the Columns popover via the
@@ -498,6 +502,7 @@ export default function DataAssetsPage() {
   };
 
   const filteredAssets = assets.filter((a) => {
+    if (!passesLens(domainLens, assetDomain(a))) return false;
     if (filterCategory) {
       if (filterCategory === '__none__') { if (a.dataType) return false; }
       else if ((a.dataType || '') !== filterCategory) return false;
@@ -856,6 +861,9 @@ export default function DataAssetsPage() {
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4, maxWidth: 760 }}>
             Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.
           </p>
+          <div style={{ marginTop: 8 }}>
+            <DomainLensToggle />
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <SavedViewsMenu

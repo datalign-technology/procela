@@ -202,10 +202,15 @@ function computePhaseStatus(program: StoredGovernanceProgram): PhaseStatus {
   ];
 
   // ── Phase 4 — Operationalization
-  const hasGovernanceProcesses = orgProcesses.some((n: any) => {
-    const name: string = n?.name || '';
-    return /governance|data management/i.test(name);
-  });
+  // Prefer the persisted domain classifier; the lazy require matches how
+  // this module pulls its siblings (avoids a circular top-level import).
+  let isGovernanceNode: (n: { domain?: string; name?: string }) => boolean;
+  try {
+    isGovernanceNode = require('./process-catalog').isGovernanceNode;
+  } catch {
+    isGovernanceNode = (n) => /governance|data management/i.test(n?.name || '');
+  }
+  const hasGovernanceProcesses = orgProcesses.some((n: any) => isGovernanceNode(n));
   const hasActivePolicy = orgPolicies.some((p: any) => p.status === 'ACTIVE');
   const programLaunched = program.status === 'ACTIVE';
 

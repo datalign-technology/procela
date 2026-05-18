@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { processNodes, flowRelationships, NODE_LEVELS } from './process-catalog';
+import { processNodes, flowRelationships, NODE_LEVELS, isGovernanceNode as isGovernanceProcess } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { mappings } from './mappings';
 import { systems } from './systems';
@@ -353,7 +353,7 @@ router.get('/raci', (req: Request, res: Response) => {
 
   // Check if a row is under the governance value stream
   const govVsIds = new Set(filteredNodes.filter((n) =>
-    n.level === 'VALUE_STREAM' && (n.name.includes('Governance') || n.name.includes('Data Management')),
+    n.level === 'VALUE_STREAM' && isGovernanceProcess(n),
   ).map((n) => n.id));
 
   function isGovernanceNode(nodeId: string): boolean {
@@ -946,7 +946,7 @@ router.get('/governance-status', (req: Request, res: Response) => {
 
   // Check each component
   const hasGovProcesses = processNodes.some((n) =>
-    n.level === 'VALUE_STREAM' && (n.name.includes('Governance') || n.name.includes('Data Management')) &&
+    n.level === 'VALUE_STREAM' && isGovernanceProcess(n) &&
     (oid ? n.orgId === oid || n.orgIds?.includes(oid) : true),
   );
   const hasGovGroups = governanceGroups.some((g) => oid ? g.orgId === oid : true);

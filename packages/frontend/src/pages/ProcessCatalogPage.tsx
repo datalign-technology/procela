@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { tierLabel } from '../lib/governanceTier';
@@ -11,6 +11,9 @@ import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
+import DomainLensToggle from '../components/DomainLensToggle';
+import { useDomainLensStore, passesLens } from '../stores/domainLensStore';
+import { processDomain } from '../lib/entityDomain';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
 import { useToastStore } from '../stores/toastStore';
@@ -48,6 +51,7 @@ interface ProcessNode {
   automationLevel?: string;
   estimatedDuration?: string;
   requiredSkillIds?: string[];
+  domain?: 'GOVERNANCE' | 'OPERATIONAL';
   children?: ProcessNode[];
 }
 
@@ -1363,7 +1367,17 @@ export default function ProcessCatalogPage() {
 
   const byLevel = stats.byLevel || {};
   const totalNodes = stats.total || 0;
-  const issues = collectIssues(tree);
+  // Domain lens — value streams carry a governance/operational domain;
+  // filtering at the root hides whole subtrees so process owners and the
+  // data office each see a focused catalog. Default this page to the
+  // operational audience.
+  const domainLens = useDomainLensStore((s) => s.lens);
+  const lensedTree = useMemo(
+    () => tree.filter((vs) => passesLens(domainLens, processDomain(vs))),
+    [tree, domainLens],
+  );
+
+  const issues = collectIssues(lensedTree);
 
   // Governance maturity stats: recursively count nodes, owners, and active status
   const governanceStats = (() => {
@@ -1422,6 +1436,9 @@ export default function ProcessCatalogPage() {
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
+          <div style={{ marginTop: 8 }}>
+            <DomainLensToggle defaultLens="OPERATIONAL" />
+          </div>
         </div>
         {canCreateValueStreams && (
           <div style={{ display: 'flex', gap: 6 }}>
@@ -1779,15 +1796,20 @@ export default function ProcessCatalogPage() {
               </p>
             )}
           </div>
+        ) : lensedTree.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--color-text-secondary)', fontSize: 13 }}>
+            No {domainLens === 'GOVERNANCE' ? 'governance' : 'operational'} value streams.
+            {' '}Switch the lens above to see {domainLens === 'GOVERNANCE' ? 'operational' : 'governance'} processes.
+          </div>
         ) : (
-          tree.map((node, idx) => (
+          lensedTree.map((node, idx) => (
             <TreeNode key={node.id} node={node} depth={0}
               onUpdate={updateNode} onDelete={deleteNode} onClone={cloneNode}
               onAddChild={(parentId) => setAddingTo(parentId)}
               expanded={expanded} toggleExpand={toggleExpand}
               selectedIds={selectedIds} toggleSelect={toggleNodeSelect}
               validChildrenMap={validChildrenMap} flows={flows}
-              siblingIndex={idx} siblingCount={tree.length} onReorder={reorderNode}
+              siblingIndex={idx} siblingCount={lensedTree.length} onReorder={reorderNode}
               onShowHistory={showHistory}
               allTags={allTags}
               onAddTag={addTag}

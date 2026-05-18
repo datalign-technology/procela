@@ -98,8 +98,25 @@ export interface ProcessNode {
   automationLevel?: string;
   estimatedDuration?: string;
   requiredSkillIds?: string[];
+  // Governance vs operational classifier. Replaces the brittle
+  // `name.includes('Governance')` runtime checks. Set at creation
+  // (governance template → GOVERNANCE; business wizard / manual →
+  // OPERATIONAL, inherited from parent), backfilled once on load for
+  // pre-existing rows. Optional in the type only so the one-time
+  // backfill can run; treat a missing value as OPERATIONAL.
+  domain?: 'GOVERNANCE' | 'OPERATIONAL';
   createdAt: string;
   updatedAt: string;
+}
+
+// Single source of truth for "is this a governance node?". Prefers the
+// persisted `domain` field; falls back to the legacy name heuristic for
+// any row not yet backfilled (defensive — the load-time backfill below
+// normally fills every row first).
+export function isGovernanceNode(n: { domain?: string; name?: string }): boolean {
+  if (n.domain) return n.domain === 'GOVERNANCE';
+  const name = n.name || '';
+  return /governance|data management/i.test(name);
 }
 
 export interface FlowRelationship {
@@ -129,6 +146,33 @@ export { SIMPLE_TRANSITIONS, ADVANCED_TRANSITIONS, SIMPLE_LOCKED, ADVANCED_LOCKE
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
+
+// ── One-time backfill of the `domain` classifier ──
+// Pre-existing nodes have no `domain`. Resolve it once from the
+// value-stream-ancestor name (the old heuristic), persist, and from
+// then on every detection reads the field instead of matching strings.
+{
+  const byId = new Map(processNodes.map((n) => [n.id, n]));
+  const rootDomain = (n: ProcessNode): 'GOVERNANCE' | 'OPERATIONAL' => {
+    let cur: ProcessNode | undefined = n;
+    const seen = new Set<string>();
+    while (cur?.parentId && byId.has(cur.parentId) && !seen.has(cur.parentId)) {
+      seen.add(cur.parentId);
+      cur = byId.get(cur.parentId);
+    }
+    return /governance|data management/i.test(cur?.name || '') ? 'GOVERNANCE' : 'OPERATIONAL';
+  };
+  let backfilled = 0;
+  for (const n of processNodes) {
+    if (n.domain) continue;
+    n.domain = rootDomain(n);
+    backfilled++;
+  }
+  if (backfilled > 0) {
+    saveStore('processNodes', processNodes);
+    logger.info({ backfilled }, 'Backfilled process node domain classifier');
+  }
+}
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
@@ -456,6 +500,12 @@ router.post('/nodes', (req: Request, res: Response) => {
     : processNodes.filter((n) => n.level === 'VALUE_STREAM');
 
   const now = new Date().toISOString();
+  // A child node belongs to whatever domain its parent does; a new
+  // top-level value stream created by hand is operational (the
+  // governance hierarchy only comes from the governance template).
+  const parentForDomain = parentId ? findNode(parentId) : null;
+  const nodeDomain: 'GOVERNANCE' | 'OPERATIONAL' =
+    parentForDomain?.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL';
   const node: ProcessNode = {
     id: uuid(),
     parentId: parentId || null,
@@ -477,6 +527,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     ...(responsibleRole ? { responsibleRole } : {}),
     ...(statusJustification ? { statusJustification } : {}),
     ...(Array.isArray(requiredSkillIds) && requiredSkillIds.length ? { requiredSkillIds } : {}),
+    domain: nodeDomain,
     createdAt: now,
     updatedAt: now,
   };
@@ -883,7 +934,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
         activityId: generateNodeId('VALUE_STREAM'), status: 'DRAFT',
         orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-        version: 1,
+        version: 1, domain: 'OPERATIONAL',
         ...(tvs.purpose ? { purpose: tvs.purpose } : {}),
         ...(tvs.businessOutcome ? { businessOutcome: tvs.businessOutcome } : {}),
         createdAt: now, updatedAt: now,
@@ -899,7 +950,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
           name: proc.name, description: proc.description || '',
           activityId: generateNodeId('PROCESS'), status: 'DRAFT', orderIndex: pIdx,
           orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-          version: 1,
+          version: 1, domain: 'OPERATIONAL',
           ...(proc.purpose ? { purpose: proc.purpose } : {}),
           createdAt: now, updatedAt: now,
         };
@@ -918,7 +969,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
               name: sp.name, description: sp.description || '',
               activityId: generateNodeId('SUBPROCESS'), status: 'DRAFT', orderIndex: spIdx,
               orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-              version: 1,
+              version: 1, domain: 'OPERATIONAL',
               createdAt: now, updatedAt: now,
             };
             processNodes.push(spNode);
@@ -945,7 +996,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
             name: act.name, description: act.description || '',
             activityId: generateNodeId('ACTIVITY'), status: 'DRAFT', orderIndex: aIdx,
             orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-            version: 1,
+            version: 1, domain: 'OPERATIONAL',
             createdAt: now, updatedAt: now,
           };
           processNodes.push(actNode);
@@ -998,8 +1049,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
 
   // Check if governance processes already exist anywhere in the company
   const existing = processNodes.filter((n) =>
-    n.level === 'VALUE_STREAM' && n.orgId === templateOrgId &&
-    (n.name.includes('Governance') || n.name.includes('Data Management')),
+    n.level === 'VALUE_STREAM' && n.orgId === templateOrgId && isGovernanceNode(n),
   );
   if (existing.length > 0) {
     const companyName = organizations.find((o) => o.id === templateOrgId)?.name || templateOrgId;
@@ -1100,7 +1150,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
       activityId: generateNodeId('VALUE_STREAM'), status: 'DRAFT',
       orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
       orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-      version: 1,
+      version: 1, domain: 'GOVERNANCE',
       purpose: tvs.purpose, businessOutcome: tvs.businessOutcome,
       createdAt: now, updatedAt: now,
     };
@@ -1114,7 +1164,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
         name: proc.name, description: proc.description,
         activityId: generateNodeId('PROCESS'), status: 'DRAFT', orderIndex: pIdx,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-        version: 1, purpose: proc.purpose,
+        version: 1, domain: 'GOVERNANCE', purpose: proc.purpose,
         createdAt: now, updatedAt: now,
       };
       processNodes.push(procNode);
@@ -1128,7 +1178,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
           name: act.name, description: act.description,
           activityId: generateNodeId('ACTIVITY'), status: 'DRAFT', orderIndex: aIdx,
           orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
-          version: 1,
+          version: 1, domain: 'GOVERNANCE',
           ...((act as any).responsibleRole ? { responsibleRole: (act as any).responsibleRole } : {}),
           ...((act as any).inputsOutputs ? { inputsOutputs: (act as any).inputsOutputs } : {}),
           createdAt: now, updatedAt: now,
