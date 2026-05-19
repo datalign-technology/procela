@@ -8,6 +8,22 @@ import { dataAssets } from './data-assets';
 import { connections, connectionSystemLinks, connectionsForSystem } from './connections';
 import { mappings } from './mappings';
 
+interface SystemIntegration {
+  id: string;
+  /** Target System in the catalog this integration points at. Empty
+   *  string only on rows migrated from the legacy flat fields, until
+   *  the user assigns a target. New rows always carry a real id. */
+  targetSystemId: string;
+  /** Interface used for this specific integration (REST_API, FILE_DROP,
+   *  …). Empty only on legacy-migrated rows that had a frequency but no
+   *  mechanism. */
+  interfaceType: string;
+  /** Optional cadence for this one integration. */
+  frequency?: string;
+  /** Data-flow direction relative to THIS system. */
+  direction: 'INBOUND' | 'OUTBOUND' | 'BIDIRECTIONAL';
+}
+
 interface StoredSystem {
   id: string;
   orgId: string;
@@ -23,10 +39,16 @@ interface StoredSystem {
   /** Integration patterns this system uses. Multi-select so a system
    *  that exposes a REST API and also drops batch files can record
    *  both. Queryable for impact analysis ("which systems still rely
-   *  on FILE_DROP?"). */
+   *  on FILE_DROP?").
+   *  @deprecated Superseded by `integrations` — a structured, directed
+   *  edge to a specific target System with its own interface type and
+   *  cadence. A one-time load migration folds any value here into
+   *  `integrations` rows and then strips this field. Do not write it. */
   integrationMechanisms?: string[];
   /** How often the integration runs. Optional — many systems don't
-   *  have a single canonical answer. */
+   *  have a single canonical answer.
+   *  @deprecated Superseded by per-integration `frequency`. Migrated and
+   *  stripped on load alongside `integrationMechanisms`. */
   integrationFrequency?:
     | 'REAL_TIME'
     | 'EVENT_DRIVEN'
@@ -35,6 +57,12 @@ interface StoredSystem {
     | 'WEEKLY'
     | 'MONTHLY'
     | 'ON_DEMAND';
+  /** Directed integrations to other Systems in the catalog. Each row is
+   *  one interface to one target system, with its own type, cadence and
+   *  direction — so "feeds Billing via REST hourly" and "drops a nightly
+   *  file to the Data Lake" are two distinct, individually-governable
+   *  rows rather than two disconnected flat lists. */
+  integrations?: SystemIntegration[];
   /** Single accountable business owner. Required for INTEGRATED
    *  systems (surfaced as a gap when missing); optional for
    *  MANUAL/EXTERNAL systems where the lifecycle sits outside Procela. */
@@ -67,6 +95,7 @@ const VALID_INTEGRATION_MECHANISMS = [
 const VALID_INTEGRATION_FREQUENCY = [
   'REAL_TIME', 'EVENT_DRIVEN', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'ON_DEMAND',
 ] as const;
+const VALID_INTEGRATION_DIRECTION = ['INBOUND', 'OUTBOUND', 'BIDIRECTIONAL'] as const;
 
 let connectivityMigrated = false;
 for (const s of systems) {
@@ -89,7 +118,41 @@ for (const s of systems) {
     mechanismsMigrated = true;
   }
 }
-if (connectivityMigrated || mechanismsMigrated) saveStore('systems', systems);
+// One-time fold of the flat integrationMechanisms[] + single
+// integrationFrequency into structured `integrations` rows. The flat
+// fields could only ever say "this system uses REST and FILE_DROP,
+// daily" with no target, so we can't infer the other end — each
+// migrated row keeps targetSystemId empty for the user to fill in.
+// One row per mechanism (lossless); a frequency-only system with no
+// mechanism still gets one row so its cadence isn't dropped. After
+// folding, the legacy fields are stripped so they have a single home.
+let integrationsMigrated = false;
+for (const s of systems) {
+  if (Array.isArray(s.integrations)) {
+    // Already migrated; just drop any straggler legacy fields.
+    if (s.integrationMechanisms !== undefined || s.integrationFrequency !== undefined) {
+      delete s.integrationMechanisms;
+      delete s.integrationFrequency;
+      integrationsMigrated = true;
+    }
+    continue;
+  }
+  const mechanisms = Array.isArray(s.integrationMechanisms) ? s.integrationMechanisms : [];
+  const freq = s.integrationFrequency;
+  if (mechanisms.length === 0 && !freq) continue;
+  const rows: SystemIntegration[] = (mechanisms.length > 0 ? mechanisms : ['']).map((m) => ({
+    id: uuid(),
+    targetSystemId: '',
+    interfaceType: m,
+    ...(freq ? { frequency: freq } : {}),
+    direction: 'BIDIRECTIONAL' as const,
+  }));
+  s.integrations = rows;
+  delete s.integrationMechanisms;
+  delete s.integrationFrequency;
+  integrationsMigrated = true;
+}
+if (connectivityMigrated || mechanismsMigrated || integrationsMigrated) saveStore('systems', systems);
 
 const SYSTEM_TYPES = [
   'ERP', 'CRM', 'GIS', 'SCADA', 'Data Warehouse', 'Data Lake',
@@ -150,6 +213,40 @@ function resolveOwnership(sys: StoredSystem): {
   return { ownerName, deputyOwnerName, custodianNames };
 }
 
+/** Resolve a stored integration's target into a display name so the UI
+ *  can render the edge without its own per-row join. */
+function enrichIntegrations(sys: StoredSystem) {
+  return (sys.integrations || []).map((i) => ({
+    ...i,
+    targetSystemName: i.targetSystemId
+      ? systems.find((s) => s.id === i.targetSystemId)?.name || null
+      : null,
+  }));
+}
+
+/** The inverse view: integrations OTHER systems declared pointing at
+ *  this one. Derived, never stored — so a user only has to declare an
+ *  edge from one side and both systems show the connection. */
+function referencedByIntegrations(sysId: string) {
+  const out: Array<{
+    systemId: string; systemName: string;
+    interfaceType: string; frequency?: string; direction: string;
+  }> = [];
+  for (const s of systems) {
+    if (s.id === sysId) continue;
+    for (const i of s.integrations || []) {
+      if (i.targetSystemId !== sysId) continue;
+      out.push({
+        systemId: s.id, systemName: s.name,
+        interfaceType: i.interfaceType,
+        ...(i.frequency ? { frequency: i.frequency } : {}),
+        direction: i.direction,
+      });
+    }
+  }
+  return out;
+}
+
 function decorate(sys: StoredSystem) {
   const { ownerName, deputyOwnerName, custodianNames } = resolveOwnership(sys);
   return {
@@ -157,6 +254,8 @@ function decorate(sys: StoredSystem) {
     connectivity: sys.connectivity || 'INTEGRATED',
     connectionCount: profilesForSystem(sys.id).length,
     connectionStatus: rollupConnectionStatus(sys),
+    integrations: enrichIntegrations(sys),
+    integrationCount: (sys.integrations || []).length,
     ownerName,
     deputyOwnerName,
     custodianNames,
@@ -184,6 +283,7 @@ router.get('/', (req: Request, res: Response) => {
     connectivityOptions: VALID_CONNECTIVITY,
     integrationMechanismOptions: VALID_INTEGRATION_MECHANISMS,
     integrationFrequencyOptions: VALID_INTEGRATION_FREQUENCY,
+    integrationDirectionOptions: VALID_INTEGRATION_DIRECTION,
   });
 });
 
@@ -191,7 +291,10 @@ router.get('/', (req: Request, res: Response) => {
 router.get('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  res.json({ success: true, data: decorate(sys) });
+  res.json({
+    success: true,
+    data: { ...decorate(sys), referencedByIntegrations: referencedByIntegrations(sys.id) },
+  });
 });
 
 /** GET /api/v1/systems/:id/360 — full cross-layer view of a System.
@@ -265,7 +368,7 @@ router.get('/:id/360', (req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
-      system: decorate(sys),
+      system: { ...decorate(sys), referencedByIntegrations: referencedByIntegrations(sys.id) },
       linkedConnections,
       assetsHere,
       dependentActivities,
@@ -278,34 +381,69 @@ router.get('/:id/360', (req: Request, res: Response) => {
   });
 });
 
-function validateMechanisms(value: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
+/** Validate the structured integrations array. `selfId` is the system
+ *  being saved so a system can't declare an integration with itself.
+ *  Empty interfaceType/targetSystemId are tolerated (legacy-migrated
+ *  rows the user hasn't completed yet); non-empty values are checked.
+ *  Exact (target, interface, direction) triples are de-duped. */
+function validateIntegrations(
+  value: unknown,
+  selfId: string,
+): { ok: true; value: SystemIntegration[] } | { ok: false; error: string } {
   if (value === undefined) return { ok: true, value: [] };
-  if (!Array.isArray(value)) return { ok: false, error: 'integrationMechanisms must be an array' };
-  const cleaned: string[] = [];
-  for (const v of value) {
-    if (typeof v !== 'string') return { ok: false, error: 'integrationMechanisms entries must be strings' };
-    if (!VALID_INTEGRATION_MECHANISMS.includes(v as any)) {
-      return { ok: false, error: `integrationMechanism "${v}" must be one of ${VALID_INTEGRATION_MECHANISMS.join(', ')}` };
+  if (!Array.isArray(value)) return { ok: false, error: 'integrations must be an array' };
+  const out: SystemIntegration[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') {
+      return { ok: false, error: 'each integration must be an object' };
     }
-    if (!cleaned.includes(v)) cleaned.push(v);
+    const r = raw as Record<string, unknown>;
+    const targetSystemId = typeof r.targetSystemId === 'string' ? r.targetSystemId.trim() : '';
+    if (targetSystemId) {
+      if (targetSystemId === selfId) {
+        return { ok: false, error: 'a system cannot integrate with itself' };
+      }
+      if (!systems.some((s) => s.id === targetSystemId)) {
+        return { ok: false, error: `integration target "${targetSystemId}" is not a known system` };
+      }
+    }
+    const interfaceType = typeof r.interfaceType === 'string' ? r.interfaceType.trim() : '';
+    if (interfaceType && !VALID_INTEGRATION_MECHANISMS.includes(interfaceType as any)) {
+      return { ok: false, error: `interfaceType "${interfaceType}" must be one of ${VALID_INTEGRATION_MECHANISMS.join(', ')}` };
+    }
+    const freqRaw = typeof r.frequency === 'string' ? r.frequency.trim() : '';
+    if (freqRaw && !VALID_INTEGRATION_FREQUENCY.includes(freqRaw as any)) {
+      return { ok: false, error: `frequency "${freqRaw}" must be one of ${VALID_INTEGRATION_FREQUENCY.join(', ')}` };
+    }
+    const direction = typeof r.direction === 'string' && VALID_INTEGRATION_DIRECTION.includes(r.direction as any)
+      ? (r.direction as SystemIntegration['direction'])
+      : 'BIDIRECTIONAL';
+    const key = `${targetSystemId}|${interfaceType}|${direction}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: typeof r.id === 'string' && r.id ? r.id : uuid(),
+      targetSystemId,
+      interfaceType,
+      ...(freqRaw ? { frequency: freqRaw } : {}),
+      direction,
+    });
   }
-  return { ok: true, value: cleaned };
+  return { ok: true, value: out };
 }
 
 /** POST /api/v1/systems */
 router.post('/', (req: Request, res: Response) => {
-  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
+  const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity, integrations, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (connectivity && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
     return;
   }
-  const mech = validateMechanisms(integrationMechanisms);
-  if (!mech.ok) { res.status(400).json({ success: false, error: mech.error }); return; }
-  if (integrationFrequency !== undefined && integrationFrequency !== '' && !VALID_INTEGRATION_FREQUENCY.includes(integrationFrequency)) {
-    res.status(400).json({ success: false, error: `integrationFrequency must be one of ${VALID_INTEGRATION_FREQUENCY.join(', ')}` });
-    return;
-  }
+  const newId = uuid();
+  const integ = validateIntegrations(integrations, newId);
+  if (!integ.ok) { res.status(400).json({ success: false, error: integ.error }); return; }
   const cleanedCustodians = Array.isArray(custodianIds)
     ? Array.from(new Set(custodianIds.filter((c) => typeof c === 'string' && c.trim())))
     : [];
@@ -320,14 +458,13 @@ router.post('/', (req: Request, res: Response) => {
   }
   const now = new Date().toISOString();
   const sys: StoredSystem = {
-    id: uuid(), orgId: orgId || DEV_ORG_ID, name,
+    id: newId, orgId: orgId || DEV_ORG_ID, name,
     description: description || '', systemType: systemType || '',
     connectivity: connectivity || 'INTEGRATED',
     ...(businessCriticality ? { businessCriticality } : {}),
     ...(vendor ? { vendor } : {}),
     ...(integrationPoints ? { integrationPoints } : {}),
-    ...(mech.value.length > 0 ? { integrationMechanisms: mech.value } : {}),
-    ...(integrationFrequency ? { integrationFrequency } : {}),
+    ...(integ.value.length > 0 ? { integrations: integ.value } : {}),
     ...(typeof ownerPersonId === 'string' && ownerPersonId ? { ownerPersonId } : {}),
     ...(typeof deputyOwnerId === 'string' && deputyOwnerId ? { deputyOwnerId } : {}),
     ...(cleanedCustodians.length > 0 ? { custodianIds: cleanedCustodians } : {}),
@@ -343,25 +480,15 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrationMechanisms, integrationFrequency, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
+  const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrations, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (connectivity !== undefined && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
     return;
   }
-  if (integrationMechanisms !== undefined) {
-    const mech = validateMechanisms(integrationMechanisms);
-    if (!mech.ok) { res.status(400).json({ success: false, error: mech.error }); return; }
-    sys.integrationMechanisms = mech.value.length > 0 ? mech.value : undefined;
-  }
-  if (integrationFrequency !== undefined) {
-    if (integrationFrequency === '' || integrationFrequency === null) {
-      sys.integrationFrequency = undefined;
-    } else if (VALID_INTEGRATION_FREQUENCY.includes(integrationFrequency)) {
-      sys.integrationFrequency = integrationFrequency;
-    } else {
-      res.status(400).json({ success: false, error: `integrationFrequency must be one of ${VALID_INTEGRATION_FREQUENCY.join(', ')}` });
-      return;
-    }
+  if (integrations !== undefined) {
+    const integ = validateIntegrations(integrations, sys.id);
+    if (!integ.ok) { res.status(400).json({ success: false, error: integ.error }); return; }
+    sys.integrations = integ.value.length > 0 ? integ.value : undefined;
   }
   if (name !== undefined) sys.name = name;
   if (description !== undefined) sys.description = description;
@@ -432,6 +559,18 @@ router.delete('/:id', (req: Request, res: Response) => {
     }
   }
   if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
+  // Cascade: drop any integration edge on a surviving system that
+  // pointed at the deleted one, so the catalog has no dangling targets.
+  let prunedEdges = false;
+  for (const s of systems) {
+    if (!s.integrations || s.integrations.length === 0) continue;
+    const kept = s.integrations.filter((i) => i.targetSystemId !== removed.id);
+    if (kept.length !== s.integrations.length) {
+      s.integrations = kept.length > 0 ? kept : undefined;
+      prunedEdges = true;
+    }
+  }
+  if (prunedEdges) saveStore('systems', systems);
   res.status(204).send();
 });
 

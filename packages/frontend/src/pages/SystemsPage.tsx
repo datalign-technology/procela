@@ -30,6 +30,18 @@ type IntegrationMechanism =
   | 'FILE_DROP' | 'ETL_BATCH' | 'DATABASE_REPLICATION' | 'MANUAL_EXPORT';
 type IntegrationFrequency =
   | 'REAL_TIME' | 'EVENT_DRIVEN' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ON_DEMAND';
+type IntegrationDirection = 'INBOUND' | 'OUTBOUND' | 'BIDIRECTIONAL';
+
+/** One declared interface from this system to another catalog system.
+ *  Mirrors the backend SystemIntegration; `id` is absent on rows the
+ *  user just added in the form and is assigned server-side on save. */
+interface IntegrationDraft {
+  id?: string;
+  targetSystemId: string;
+  interfaceType: IntegrationMechanism | '';
+  frequency: IntegrationFrequency | '';
+  direction: IntegrationDirection;
+}
 
 const MECHANISM_LABEL: Record<IntegrationMechanism, string> = {
   REST_API:             'REST API',
@@ -51,8 +63,14 @@ const FREQUENCY_LABEL: Record<IntegrationFrequency, string> = {
   MONTHLY:      'Monthly',
   ON_DEMAND:    'On-demand',
 };
+const DIRECTION_LABEL: Record<IntegrationDirection, string> = {
+  OUTBOUND:      'Sends to →',
+  INBOUND:       'Receives from ←',
+  BIDIRECTIONAL: 'Two-way ⇄',
+};
 const MECHANISM_VALUES: IntegrationMechanism[] = Object.keys(MECHANISM_LABEL) as IntegrationMechanism[];
 const FREQUENCY_VALUES: IntegrationFrequency[] = Object.keys(FREQUENCY_LABEL) as IntegrationFrequency[];
+const DIRECTION_VALUES: IntegrationDirection[] = Object.keys(DIRECTION_LABEL) as IntegrationDirection[];
 
 interface SystemEntity {
   id: string;
@@ -62,8 +80,9 @@ interface SystemEntity {
   businessCriticality?: string;
   vendor?: string;
   integrationPoints?: string;
-  integrationMechanisms?: IntegrationMechanism[];
-  integrationFrequency?: IntegrationFrequency;
+  /** Backend-enriched: each row carries the resolved target name. */
+  integrations?: Array<IntegrationDraft & { targetSystemName?: string | null }>;
+  integrationCount?: number;
   ownerPersonId?: string | null;
   deputyOwnerId?: string | null;
   custodianIds?: string[];
@@ -143,8 +162,7 @@ interface FormData {
   businessCriticality: string;
   vendor: string;
   integrationPoints: string;
-  integrationMechanisms: IntegrationMechanism[];
-  integrationFrequency: IntegrationFrequency | '';
+  integrations: IntegrationDraft[];
   ownerPersonId: string;
   deputyOwnerId: string;
   custodianIds: string[];
@@ -158,7 +176,7 @@ interface FormData {
 const emptyForm: FormData = {
   name: '', description: '', systemType: '', businessCriticality: '',
   vendor: '', integrationPoints: '',
-  integrationMechanisms: [], integrationFrequency: '',
+  integrations: [],
   ownerPersonId: '', deputyOwnerId: '', custodianIds: [],
   connectivity: 'INTEGRATED',
   connectionIds: [],
@@ -498,8 +516,13 @@ export default function SystemsPage() {
       businessCriticality: sys.businessCriticality || '',
       vendor: sys.vendor || '',
       integrationPoints: sys.integrationPoints || '',
-      integrationMechanisms: sys.integrationMechanisms || [],
-      integrationFrequency: sys.integrationFrequency || '',
+      integrations: (sys.integrations || []).map((i) => ({
+        id: i.id,
+        targetSystemId: i.targetSystemId || '',
+        interfaceType: i.interfaceType || '',
+        frequency: i.frequency || '',
+        direction: i.direction || 'BIDIRECTIONAL',
+      })),
       ownerPersonId: sys.ownerPersonId || '',
       deputyOwnerId: sys.deputyOwnerId || '',
       custodianIds: sys.custodianIds || [],
@@ -578,8 +601,12 @@ export default function SystemsPage() {
               businessCriticality: sys.businessCriticality,
               vendor: sys.vendor,
               integrationPoints: sys.integrationPoints,
-              integrationMechanisms: sys.integrationMechanisms,
-              integrationFrequency: sys.integrationFrequency,
+              integrations: (sys.integrations || []).map((i) => ({
+                targetSystemId: i.targetSystemId || '',
+                interfaceType: i.interfaceType || '',
+                frequency: i.frequency || '',
+                direction: i.direction || 'BIDIRECTIONAL',
+              })),
               ownerPersonId: sys.ownerPersonId,
               deputyOwnerId: sys.deputyOwnerId,
               custodianIds: sys.custodianIds,
@@ -1054,62 +1081,114 @@ export default function SystemsPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                Integration Mechanisms
-                <HelpPopover id="sys-mechanisms" title="Integration Mechanisms">
-                  How this system exchanges data with others. Multi-select — a system that exposes a REST API and also drops nightly batch files lists both. Used by impact analysis and compliance reports ("which systems still depend on FILE_DROP?").
+                Integrations
+                <HelpPopover id="sys-integrations" title="Integrations">
+                  Each row is one interface to another system in the catalog — its own type (REST API, file drop, …), cadence, and direction. Add a row per distinct interface, e.g. "sends to Billing via REST hourly" and "drops a nightly file to the Data Lake" are two rows. You only declare it from one side; the other system shows it automatically.
                 </HelpPopover>
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {MECHANISM_VALUES.map((m) => {
-                  const checked = form.integrationMechanisms.includes(m);
-                  return (
-                    <label key={m} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      padding: '4px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer',
-                      border: `1px solid ${checked ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      background: checked ? 'var(--color-primary-light, #dbeafe)' : 'var(--color-surface)',
-                      color: checked ? 'var(--color-primary)' : 'var(--color-text)',
-                      fontWeight: checked ? 600 : 400,
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => setFormDirty({
-                          ...form,
-                          integrationMechanisms: checked
-                            ? form.integrationMechanisms.filter((x) => x !== m)
-                            : [...form.integrationMechanisms, m],
-                        })}
-                        style={{ display: 'none' }}
-                      />
-                      {MECHANISM_LABEL[m]}
-                    </label>
-                  );
-                })}
-              </div>
-              {form.connectivity === 'INTEGRATED' && form.integrationMechanisms.length === 0 && (
-                <div style={{
-                  marginTop: 6, padding: '6px 10px', fontSize: 11, lineHeight: 1.4,
-                  background: '#fef3c7', color: '#92400e', borderRadius: 'var(--radius-sm, 4px)',
-                  border: '1px solid #fde68a',
-                }}>
-                  This system is marked <strong>Integrated</strong> but no mechanism is selected. You can save without one, but downstream impact reports won't see how it integrates.
-                </div>
-              )}
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Frequency</label>
-              <select
-                style={selectStyle}
-                value={form.integrationFrequency}
-                onChange={(e) => setFormDirty({ ...form, integrationFrequency: e.target.value as IntegrationFrequency | '' })}
-              >
-                <option value="">-- Not specified --</option>
-                {FREQUENCY_VALUES.map((f) => <option key={f} value={f}>{FREQUENCY_LABEL[f]}</option>)}
-              </select>
-            </div>
-            <div>
-              {/* Empty cell to keep the two-column grid aligned next to Frequency */}
+              {(() => {
+                const targetable = systems.filter((s) => s.id !== editingId);
+                const update = (idx: number, patch: Partial<IntegrationDraft>) =>
+                  setFormDirty({
+                    ...form,
+                    integrations: form.integrations.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
+                  });
+                const remove = (idx: number) =>
+                  setFormDirty({ ...form, integrations: form.integrations.filter((_, i) => i !== idx) });
+                const add = () =>
+                  setFormDirty({
+                    ...form,
+                    integrations: [
+                      ...form.integrations,
+                      { targetSystemId: '', interfaceType: '', frequency: '', direction: 'BIDIRECTIONAL' },
+                    ],
+                  });
+                return (
+                  <>
+                    {form.integrations.length === 0 && (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', marginBottom: 6 }}>
+                        No integrations yet — add one for each system this connects to.
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {form.integrations.map((row, idx) => {
+                        const incomplete = !row.targetSystemId || !row.interfaceType;
+                        return (
+                          <div key={row.id || idx} style={{
+                            display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+                            padding: 8, borderRadius: 'var(--radius-md)',
+                            border: `1px solid ${incomplete ? '#fde68a' : 'var(--color-border)'}`,
+                            background: incomplete ? '#fffbeb' : 'var(--color-bg)',
+                          }}>
+                            <select
+                              style={{ ...selectStyle, flex: '2 1 160px', width: 'auto' }}
+                              value={row.direction}
+                              onChange={(e) => update(idx, { direction: e.target.value as IntegrationDirection })}
+                              aria-label="Direction"
+                            >
+                              {DIRECTION_VALUES.map((d) => <option key={d} value={d}>{DIRECTION_LABEL[d]}</option>)}
+                            </select>
+                            <select
+                              style={{ ...selectStyle, flex: '3 1 180px', width: 'auto' }}
+                              value={row.targetSystemId}
+                              onChange={(e) => update(idx, { targetSystemId: e.target.value })}
+                              aria-label="Target system"
+                            >
+                              <option value="">-- Select system --</option>
+                              {targetable.map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}{s.systemType ? ` (${s.systemType})` : ''}</option>
+                              ))}
+                            </select>
+                            <select
+                              style={{ ...selectStyle, flex: '2 1 150px', width: 'auto' }}
+                              value={row.interfaceType}
+                              onChange={(e) => update(idx, { interfaceType: e.target.value as IntegrationMechanism | '' })}
+                              aria-label="Interface type"
+                            >
+                              <option value="">-- Interface --</option>
+                              {MECHANISM_VALUES.map((m) => <option key={m} value={m}>{MECHANISM_LABEL[m]}</option>)}
+                            </select>
+                            <select
+                              style={{ ...selectStyle, flex: '2 1 130px', width: 'auto' }}
+                              value={row.frequency}
+                              onChange={(e) => update(idx, { frequency: e.target.value as IntegrationFrequency | '' })}
+                              aria-label="Frequency"
+                            >
+                              <option value="">Any cadence</option>
+                              {FREQUENCY_VALUES.map((f) => <option key={f} value={f}>{FREQUENCY_LABEL[f]}</option>)}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => remove(idx)}
+                              aria-label="Remove integration"
+                              title="Remove integration"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '4px 6px', fontSize: 16, lineHeight: 1 }}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={add}
+                      style={{ ...btnSecondary, marginTop: 8, fontSize: 12, padding: '6px 12px' }}
+                    >
+                      + Add integration
+                    </button>
+                    {form.connectivity === 'INTEGRATED' && form.integrations.length === 0 && (
+                      <div style={{
+                        marginTop: 6, padding: '6px 10px', fontSize: 11, lineHeight: 1.4,
+                        background: '#fef3c7', color: '#92400e', borderRadius: 'var(--radius-sm, 4px)',
+                        border: '1px solid #fde68a',
+                      }}>
+                        This system is marked <strong>Integrated</strong> but has no integrations declared. You can save without them, but the connection map and impact reports won't see how it links to other systems.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Notes</label>
@@ -1117,7 +1196,7 @@ export default function SystemsPage() {
                 style={inputStyle}
                 value={form.integrationPoints}
                 onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })}
-                placeholder="Anything the mechanism + frequency don't capture — target system names, vendor portals, batch windows, etc."
+                placeholder="Anything the integration rows don't capture — vendor portals, batch windows, auth quirks, etc."
               />
             </div>
             {form.connectivity === 'INTEGRATED' && (
