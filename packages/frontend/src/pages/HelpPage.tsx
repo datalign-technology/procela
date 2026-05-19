@@ -75,7 +75,7 @@ export default function HelpPage() {
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
-          <li><strong>Governance</strong> &mdash; Program, Groups, Roles (with RACI Matrix tab), Policies, Decision Rights, Documentation (Manual + Procedures tabs), Calendar, Tasks &amp; Issues, Enterprise View, Analysis, Reports.</li>
+          <li><strong>Governance</strong> &mdash; the heaviest section, grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights), <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues), and <strong>Analyze</strong> (Enterprise View, Analysis, Reports). The sub-labels are visual dividers in the expanded section — every item still navigates directly.</li>
         </ul>
         <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
@@ -114,7 +114,7 @@ export default function HelpPage() {
           <li>AI-powered Value Stream Wizard generates industry-specific process hierarchies; one-click clone across divisions.</li>
           <li>Level-specific attributes: frequency, risk level, responsible role, automation level.</li>
           <li>Status lifecycle: Draft &rarr; Active &rarr; Deprecated.</li>
-          <li><strong>Operational / Governance lens.</strong> A segmented control (<em>All · Operational · Governance</em>) at the top filters which value streams show. Governance value streams (created by the governance template) carry a persisted domain classifier; business value streams are operational. The Process Catalog always opens on <strong>All</strong> so nothing is hidden on entry; switching the lens still persists across the app's other lens-aware pages.</li>
+          <li><strong>Operational / Governance lens.</strong> A segmented control (<em>All · Operational · Governance</em>) at the top filters which value streams show. Governance value streams (created by the governance template) carry a persisted domain classifier; business value streams are operational. The lens is <strong>per page</strong> — the Process Catalog always opens on <strong>All</strong>, and your choice here is independent of the lens on other pages (so it can't reset what you picked on Data Assets).</li>
           <li>Assigning an Owner or Stakeholders opens the shared <strong>person picker</strong> &mdash; search by name / title / org, or browse the org tree (Company &rarr; Division &rarr; Department) or governance groups. Every result shows the person's title and org path so two people with the same name are distinguishable. The same picker is used for owners, stewards, deputies, and group members across the app.</li>
           <li><strong>Domain-aware role assignment.</strong> Governance value streams default the person picker to the governance bodies and the <strong>Responsible Role</strong> selector to the DAMA governance roles only; operational (business) processes default to the org tree and the generic business roles, with the DAMA roles hidden. A "show all roles" toggle reveals the other set for genuine cross-overs, and a picked role from the other domain is flagged <em>Cross-domain</em>. Existing free-text role values are preserved until you re-pick.</li>
         </ul>
@@ -138,7 +138,7 @@ export default function HelpPage() {
           <li>Expandable columns show data types and quality rules per column.</li>
           <li>Bulk set Trust Level / owner / steward.</li>
           <li><strong>Where Used</strong> in the detail modal shows every process, mapping, and policy referencing the asset.</li>
-          <li><strong>Operational / Governance lens.</strong> The same <em>All · Operational · Governance</em> control used on the Process Catalog. Governance-template placeholder assets are classified governance; everything else is operational. The lens preference is shared across lens-aware pages, so the cut you pick here follows you to the Process Catalog and back.</li>
+          <li><strong>Operational / Governance lens.</strong> The same <em>All · Operational · Governance</em> control used on the Process Catalog. Governance-template placeholder assets are classified governance; everything else is operational. The lens is <strong>per page</strong> and persisted — Data Assets remembers your choice independently of other pages.</li>
         </ul>
         <h3 style={h3Style}>Business Glossary</h3>
         <ul style={listStyle}>
@@ -226,7 +226,7 @@ export default function HelpPage() {
         <h2 style={h2Style}>8. Governance</h2>
         <h3 style={h3Style}>Governance Program</h3>
         <ul style={listStyle}>
-          <li>4-phase setup journey with progress tracking per phase.</li>
+          <li>4-phase setup journey with progress tracking per phase. The phase you're currently on is highlighted with a <strong>“YOU ARE HERE”</strong> marker and a larger title, so "phase N of 4" is obvious at a glance; completed phases show a check and finished ones dim back.</li>
           <li>Define governance scope (what's in / out), guiding principles, operating model.</li>
           <li>Phase completion is computed automatically from your actual data; next-action recommendations link to the right page.</li>
           <li><strong>Governed lifecycle:</strong> the program status (Planning &rarr; Active &harr; Paused &rarr; Completed, with explicit Reopen) can only be changed by an admin / program owner, follows a fixed transition path (no backward slides or skips), and every change is written to the audit log with the actor and an optional reason. Phase 1 (Foundation) must be complete before the program can go Active; launching with Phases 2&ndash;4 incomplete pops a confirmation listing exactly what's missing and records it as an early launch.</li>
@@ -239,6 +239,7 @@ export default function HelpPage() {
           <li><strong>Org-aware fill status.</strong> A role counts as filled when it's held anywhere in the org — the same scope the Governance Roles page assigns at — not only by a current member of this group. Each holder chip shows their relationship to this body: teal = on the group, amber = holds the role org-wide but isn't a member yet, with an inline <strong>+ add to group</strong> to bring them on. So a role assigned on the Roles page is recognised here, and assigning here writes the same org-scoped assignment — the two pages stay consistent in both directions.</li>
           <li>Two remove actions are distinct: the <strong>x on a role chip</strong> removes that specific role assignment; <strong>Remove from group</strong> in the members table removes the person from the group entirely (their role assignments survive at the org level).</li>
           <li><strong>Open full composition →</strong> on any selected group jumps to the Group Composition page (<code>/governance-groups/:id</code>) &mdash; one cohesive surface that combines members, expected-role gaps, decision rights this body owns, policies tied to it via member roles, the calendar cadence, and a snapshot of RACI assignments. Each role chip shows the typical RACI letter(s) the role holds on common decisions, so you can see at a glance what each role is accountable / responsible / consulted / informed for without opening the drawer.</li>
+          <li><strong>Group role vs governance role.</strong> These are two independent things and the members table calls it out: a person's <em>group role</em> (Chair, Member, Secretary…) is just their seat on this body and has no RACI effect; their <em>governance roles</em> (Data Owner, Steward, CDO…) are the org-wide DAMA roles that drive RACI and ownership. Someone can be a group Member with no governance role, or hold a governance role without sitting on any group.</li>
         </ul>
         <h3 style={h3Style}>Roles (with RACI Matrix tab)</h3>
         <ul style={listStyle}>
@@ -288,17 +289,19 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Analysis (cube)</h3>
         <ul style={listStyle}>
-          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections.</li>
+          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections. Reachable from the sidebar (Governance &rarr; Analyze) and from Dashboard <strong>Quick Actions</strong>.</li>
+          <li><strong>Starter pivots.</strong> Before you've configured anything, the empty state offers one-click examples (Data Assets by System, Roles by Person, Assets by Domain, Processes by System) so you can see a result immediately instead of facing a blank palette.</li>
           <li><strong>Sub-group.</strong> Drag a second dimension into either zone to create a nested grouping (max 2 per axis). The grid renders the parent label with a merged cell spanning all its sub-rows / sub-columns, so e.g. <em>Systems &gt; Data Assets</em> on rows shows each system once with its assets indented underneath.</li>
           <li><strong>Pivot.</strong> The ⇄ button between the Rows and Columns zones swaps everything in one click — useful when you want to flip a tall report into a wide one without re-dragging.</li>
           <li><strong>Drill down.</strong> Click any cell count to open a side panel listing the underlying records (asset facts, role assignments, mappings, ownership rows, etc.).</li>
           <li><strong>Filter.</strong> Click any row label or column header to add that value as a filter; chips appear above the grid and can be removed individually. Each filter narrows the cube to facts that match that dim/value.</li>
-          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active dims are also mirrored to the URL so direct links are shareable without saving.</li>
+          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active dims are also mirrored to the URL so direct links are shareable without saving. Saved pivots also appear under <strong>Reports &rarr; Analysis</strong>, so the two report homes stay connected.</li>
           <li><strong>Export.</strong> The full grid exports to CSV, Excel, JSON, or PDF (browser-print) with row/column totals included. Sub-group labels are flattened with “ / ” separators in the export.</li>
         </ul>
         <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>
-          <li>Executive Report (printable / PDF) and Scorecard with governance health dimensions, plus Gap Detection across domains, assets, and processes.</li>
+          <li>Tabbed: <strong>Executive Report</strong> (printable / PDF), <strong>Scorecard</strong> (governance health by dimension), and <strong>Analysis</strong> — a read-only list of saved cube pivots with a link straight into the Analysis builder, so saved pivots are discoverable from the Reports home too.</li>
+          <li>Gap Detection (unmapped steps, ungoverned assets) is surfaced across domains, assets, and processes.</li>
         </ul>
         <h3 style={h3Style}>Dependency Enforcement</h3>
         <p style={pStyle}>
