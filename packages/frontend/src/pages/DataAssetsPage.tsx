@@ -349,6 +349,14 @@ export default function DataAssetsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
+  // Source-connection discovery state — populated when the user clicks
+  // "Discover" on the Link to Source block so they can pick a table /
+  // file / sheet / endpoint instead of typing one. Reset on every
+  // connection change so the dropdown matches the current connection.
+  const [sourceDiscovering, setSourceDiscovering] = useState(false);
+  const [sourceDiscovered, setSourceDiscovered] = useState<Array<{ name: string; type?: string }>>([]);
+  const [sourceDiscoverError, setSourceDiscoverError] = useState<string | null>(null);
+
   // Column state — expandable per-asset
   const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null);
   const [columnsMap, setColumnsMap] = useState<Record<string, DataAssetColumn[]>>({});
@@ -766,6 +774,49 @@ export default function DataAssetsPage() {
   const updateField = (field: keyof FormData, value: string | number) => {
     markDirty();
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  /** Re-run a field's validator so the error clears the moment the
+   *  value becomes valid, but ONLY once the field has actually been
+   *  engaged with (touched). Prevents the red error from sticking on
+   *  screen while the user is mid-typing, which reads as "my input
+   *  isn't being accepted." */
+  const updateAndRevalidate = (field: keyof FormData, value: string) => {
+    markDirty();
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (formValidation.touched[field]) {
+        formValidation.validateField(field, value, next);
+      }
+      return next;
+    });
+  };
+
+  /** Ask the backend what tables / files / sheets / endpoints live
+   *  behind the picked connection. If there's exactly one result it
+   *  goes straight into the field (the common case for a single-file
+   *  upload); otherwise we show the list so the user can pick. */
+  const discoverSourceAssets = async () => {
+    if (!form.sourceConnectionId) return;
+    setSourceDiscovering(true);
+    setSourceDiscoverError(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: { details?: { assets?: Array<{ name: string; type?: string }> } } }>(
+        `/connections/${form.sourceConnectionId}/discover`,
+        {},
+      );
+      const assets = res.data?.details?.assets || [];
+      setSourceDiscovered(assets);
+      if (assets.length === 0) {
+        setSourceDiscoverError('No assets found on this connection.');
+      } else if (assets.length === 1 && !form.sourceAsset.trim()) {
+        updateAndRevalidate('sourceAsset', assets[0].name);
+      }
+    } catch (err: any) {
+      setSourceDiscoverError(err?.response?.data?.error || 'Discovery failed.');
+    } finally {
+      setSourceDiscovering(false);
+    }
   };
 
   const toggleSelect = (id: string) => {
@@ -1251,42 +1302,104 @@ export default function DataAssetsPage() {
               Link to Source
               <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}>(optional)</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection</label>
-                <select
-                  style={selectStyle}
-                  value={form.sourceConnectionId}
-                  onChange={(e) => {
-                    updateField('sourceConnectionId', e.target.value);
-                    formValidation.touch('sourceAsset');
-                    formValidation.validateField('sourceAsset', form.sourceAsset, { ...form, sourceConnectionId: e.target.value });
-                  }}
-                >
-                  <option value="">-- No connection --</option>
-                  {connectionsList.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}{c.connectionType ? ` (${c.connectionType})` : ''}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                  Table / File / Asset{form.sourceConnectionId ? ' *' : ''}
-                </label>
-                <input
-                  style={{ ...inputStyle, border: formValidation.fieldError('sourceAsset') ? inputErrorBorder : inputStyle.border }}
-                  value={form.sourceAsset}
-                  onChange={(e) => updateField('sourceAsset', e.target.value)}
-                  onBlur={() => { formValidation.touch('sourceAsset'); formValidation.validateField('sourceAsset', form.sourceAsset, form); }}
-                  placeholder="e.g. customers, invoices.csv"
-                />
-                {formValidation.fieldError('sourceAsset') && <div style={fieldErrorStyle}>{formValidation.fieldError('sourceAsset')}</div>}
-              </div>
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Column (optional)</label>
-                <input style={inputStyle} value={form.sourceColumn} onChange={(e) => updateField('sourceColumn', e.target.value)} placeholder="e.g. email, account_id" />
-              </div>
-            </div>
+            {(() => {
+              const selectedConn = connectionsList.find((c) => c.id === form.sourceConnectionId);
+              const connType = selectedConn?.connectionType || '';
+              // Per-type vocabulary so the field stops asking generically
+              // for "Table / File / Asset" — the right word depends on
+              // what kind of source the user just picked.
+              const assetLabelByType: Record<string, { label: string; placeholder: string }> = {
+                DATABASE:       { label: 'Table',    placeholder: 'e.g. customers, public.invoices' },
+                DATA_WAREHOUSE: { label: 'Table',    placeholder: 'e.g. analytics.fact_sales' },
+                FILE_STORAGE:   { label: 'File',     placeholder: 'e.g. invoices.csv' },
+                SPREADSHEET:    { label: 'Sheet',    placeholder: 'e.g. Sheet1 - Revenue' },
+                API:            { label: 'Endpoint', placeholder: 'e.g. /api/customers' },
+              };
+              const lbl = assetLabelByType[connType] || { label: 'Table / File / Asset', placeholder: 'e.g. customers, invoices.csv' };
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection</label>
+                    <select
+                      style={selectStyle}
+                      value={form.sourceConnectionId}
+                      onChange={(e) => {
+                        updateField('sourceConnectionId', e.target.value);
+                        // Discovery results belong to the previous
+                        // connection; clear so the picker matches the
+                        // new one and the user isn't shown stale
+                        // suggestions.
+                        setSourceDiscovered([]);
+                        setSourceDiscoverError(null);
+                        // Intentionally do NOT pre-touch sourceAsset
+                        // here — the field's "required" error should
+                        // only surface after the user has actually
+                        // engaged with it (or attempted to save), not
+                        // the instant they pick a connection.
+                        if (formValidation.touched.sourceAsset) {
+                          formValidation.validateField('sourceAsset', form.sourceAsset, { ...form, sourceConnectionId: e.target.value });
+                        }
+                      }}
+                    >
+                      <option value="">-- No connection --</option>
+                      {connectionsList.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}{c.connectionType ? ` (${c.connectionType})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span>{lbl.label}{form.sourceConnectionId ? ' *' : ''}</span>
+                      {form.sourceConnectionId && (
+                        <button
+                          type="button"
+                          onClick={discoverSourceAssets}
+                          disabled={sourceDiscovering}
+                          style={{
+                            fontSize: 10, fontWeight: 500, padding: '2px 8px',
+                            border: '1px solid var(--color-border)', borderRadius: 999,
+                            background: 'var(--color-surface)', color: 'var(--color-primary)',
+                            cursor: sourceDiscovering ? 'wait' : 'pointer',
+                          }}
+                          title={`List ${lbl.label.toLowerCase()}s on this connection`}
+                        >
+                          {sourceDiscovering ? 'Discovering…' : 'Discover'}
+                        </button>
+                      )}
+                    </label>
+                    {sourceDiscovered.length > 1 && (
+                      <select
+                        style={{ ...selectStyle, marginBottom: 4 }}
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) updateAndRevalidate('sourceAsset', e.target.value);
+                        }}
+                      >
+                        <option value="">-- Pick from {sourceDiscovered.length} discovered --</option>
+                        {sourceDiscovered.map((a) => (
+                          <option key={a.name} value={a.name}>{a.name}{a.type ? ` (${a.type.toLowerCase()})` : ''}</option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      style={{ ...inputStyle, border: formValidation.fieldError('sourceAsset') ? inputErrorBorder : inputStyle.border }}
+                      value={form.sourceAsset}
+                      onChange={(e) => updateAndRevalidate('sourceAsset', e.target.value)}
+                      onBlur={() => { formValidation.touch('sourceAsset'); formValidation.validateField('sourceAsset', form.sourceAsset, form); }}
+                      placeholder={lbl.placeholder}
+                    />
+                    {formValidation.fieldError('sourceAsset') && <div style={fieldErrorStyle}>{formValidation.fieldError('sourceAsset')}</div>}
+                    {sourceDiscoverError && !formValidation.fieldError('sourceAsset') && (
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 3 }}>{sourceDiscoverError}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Column (optional)</label>
+                    <input style={inputStyle} value={form.sourceColumn} onChange={(e) => updateField('sourceColumn', e.target.value)} placeholder="e.g. email, account_id" />
+                  </div>
+                </div>
+              );
+            })()}
             {form.sourceConnectionId && (
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
                 This asset will be linked to {connectionNameById[form.sourceConnectionId] || 'the selected connection'}
