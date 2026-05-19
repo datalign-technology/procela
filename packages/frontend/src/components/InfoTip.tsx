@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 
 // ──────────────────────────────────────────────────────────────────────────
 // InfoTip — dictionary-driven "?" tooltip for key Procela terms.
@@ -52,6 +52,12 @@ export default function InfoTip({ term, inline }: InfoTipProps) {
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLSpanElement>(null);
+  // Fixed-position coords computed from the trigger so the tooltip is
+  // never clipped — the old absolute "bottom: 100%" rendered upward and
+  // got cut off the top of the screen when the trigger sat in a page
+  // header (e.g. Process-Data Mappings).
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: -9999, left: -9999 });
 
   // Clean up timer on unmount
   useEffect(() => {
@@ -71,6 +77,28 @@ export default function InfoTip({ term, inline }: InfoTipProps) {
     }
     setVisible(false);
   };
+
+  // Place the tooltip below the trigger by default (page headers sit at
+  // the top, so there's room below); flip above only if it would spill
+  // off the bottom. Clamp horizontally to an 8px viewport margin.
+  useLayoutEffect(() => {
+    if (!visible) return;
+    const trigger = wrapperRef.current;
+    const tip = tipRef.current;
+    if (!trigger || !tip) return;
+    const t = trigger.getBoundingClientRect();
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+    const margin = 8;
+    const gap = 8;
+    let left = t.left + t.width / 2 - w / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+    let top = t.bottom + gap;
+    if (top + h > window.innerHeight - margin && t.top - gap - h > margin) {
+      top = t.top - gap - h; // flip above when there's no room below
+    }
+    setPos({ top, left });
+  }, [visible]);
 
   if (!explanation) return null;
 
@@ -114,16 +142,17 @@ export default function InfoTip({ term, inline }: InfoTipProps) {
         ?
       </span>
 
-      {/* Tooltip */}
+      {/* Tooltip — fixed + viewport-clamped so it can't be clipped by
+          the header or screen edges. */}
       {visible && (
         <span
+          ref={tipRef}
           role="tooltip"
           style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 8px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            maxWidth: 280,
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            width: 280,
             padding: '8px 12px',
             background: '#1e293b',
             color: '#fff',
@@ -139,18 +168,6 @@ export default function InfoTip({ term, inline }: InfoTipProps) {
         >
           <span style={{ fontWeight: 600, display: 'block', marginBottom: 2 }}>{term}</span>
           {explanation}
-          {/* Arrow pointing down */}
-          <span
-            style={{
-              position: 'absolute',
-              bottom: -4,
-              left: '50%',
-              transform: 'translateX(-50%) rotate(45deg)',
-              width: 8,
-              height: 8,
-              background: '#1e293b',
-            }}
-          />
         </span>
       )}
     </span>
