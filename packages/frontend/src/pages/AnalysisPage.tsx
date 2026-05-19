@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
+import PageHeader from '../components/PageHeader';
 import EmptyState from '../components/EmptyState';
 import ExportMenu from '../components/ExportMenu';
 import Button from '../components/Button';
@@ -434,18 +435,14 @@ export default function AnalysisPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Analysis</h1>
-          <HelpPopover id="analysis-intro" title="Cube-style analysis" showInitially>
-            Drag dimensions into Rows and Columns to pivot the org's catalog. Each cell shows how many records connect both. Click a cell to drill down to the matching entities. Click a row label to use that value as a filter. Saved reports persist your configuration and can be shared via link.
-          </HelpPopover>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          Pivot any two dimensions to see how the org connects. Drag from the palette into Rows and Columns.
-        </p>
-      </div>
+      <PageHeader
+        title="Analysis"
+        subtitle="Pivot any two dimensions to see how the org connects. Drag from the palette into Rows and Columns."
+      >
+        <HelpPopover id="analysis-intro" title="Cube-style analysis" showInitially>
+          Drag dimensions into Rows and Columns to pivot the org's catalog. Each cell shows how many records connect both. Click a cell to drill down to the matching entities. Click a row label to use that value as a filter. Saved reports persist your configuration and can be shared via link.
+        </HelpPopover>
+      </PageHeader>
 
       <div style={{ display: 'flex', gap: 16 }}>
         {/* Left palette */}
@@ -458,6 +455,9 @@ export default function AnalysisPage() {
           <div style={{ marginTop: 16, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Saved Reports</span>
             <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>{reports.length}</span>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>
+            Also listed under <Link to="/reports?tab=analysis" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Reports → Analysis</Link>.
           </div>
           {reports.length === 0 && (
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: '6px 0' }}>
@@ -568,11 +568,33 @@ export default function AnalysisPage() {
             </div>
           )}
           {rowDims.length === 0 || colDims.length === 0 ? (
-            <EmptyState
-              icon={'⊞'}
-              title="Pick dimensions to pivot"
-              description="Drag at least one dimension into Rows and one into Columns. Drag a second into either zone to create a sub-group."
-            />
+            <div>
+              <EmptyState
+                icon={'⊞'}
+                title="Pick dimensions to pivot"
+                description="Drag at least one dimension into Rows and one into Columns. Drag a second into either zone to create a sub-group — or start from an example below."
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 4 }}>
+                {([
+                  { label: 'Data Assets by System', row: ['systems'], col: ['dataAssets'] },
+                  { label: 'Roles by Person', row: ['roles'], col: ['people'] },
+                  { label: 'Assets by Domain', row: ['domains'], col: ['dataAssets'] },
+                  { label: 'Processes by System', row: ['processes'], col: ['systems'] },
+                ] as Array<{ label: string; row: Dim[]; col: Dim[] }>).map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => { setRowDims(p.row); setColDims(p.col); }}
+                    style={{
+                      fontSize: 12, padding: '6px 14px', borderRadius: 999, cursor: 'pointer',
+                      border: '1px solid var(--color-border)', background: 'var(--color-surface)',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    Try: {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : cube && cube.totalFacts === 0 ? (
             <EmptyState
               icon={'⊟'}

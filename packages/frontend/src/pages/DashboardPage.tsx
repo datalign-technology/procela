@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
+import { SkeletonRows } from '../components/Skeleton';
 import { useAuthStore } from '../stores/authStore';
 import { usePolling } from '../hooks/usePolling';
 
@@ -199,7 +200,7 @@ function MyDashboard() {
   if (loading) return (
     <div style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>My Dashboard</h2>
-      <div style={{ ...cardStyle, color: 'var(--color-text-muted)', fontSize: 13 }}>Loading...</div>
+      <div style={cardStyle}><SkeletonRows rows={4} columnWidths={[180, null, 90]} /></div>
     </div>
   );
 
@@ -488,6 +489,7 @@ const quickActions = [
   { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
   { icon: '↔', label: 'Mappings', description: 'Link processes to data', link: '/mappings' },
   { icon: '▨', label: 'Enterprise View', description: 'Full cross-entity visibility', link: '/enterprise-view' },
+  { icon: '⊞', label: 'Analysis', description: 'Pivot the catalog (systems × domains, roles × people…)', link: '/analysis' },
 ];
 
 function QuickActions() {
@@ -874,7 +876,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Dashboard</h1>
         </div>
-        <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
+        <SkeletonRows rows={6} columnWidths={[200, null, null, 90]} />
       </div>
     );
   }

@@ -442,7 +442,19 @@ export default function GovernanceGroupDetailPage() {
           <thead>
             <tr>
               <th scope="col" style={th}>Member</th>
-              <th scope="col" style={th}>Group role</th>
+              <th scope="col" style={th}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  Group role
+                  <HelpPopover id="group-role-vs-governance-role" title="Group role vs governance role">
+                    <strong>Group role</strong> is the person's seat on this body — Chair,
+                    Member, Secretary, etc. It's local to the group and has no RACI effect.
+                    <strong> Governance roles</strong> (next column) are the org-wide DAMA
+                    roles — Data Owner, Steward, CDO — that drive RACI and ownership.
+                    Someone can be a group <em>Member</em> with no governance role, or hold
+                    a governance role without sitting on any group.
+                  </HelpPopover>
+                </span>
+              </th>
               <th scope="col" style={th}>Governance roles</th>
               <th scope="col" style={{ ...th, width: 80 }}></th>
             </tr>

@@ -221,10 +221,15 @@ function PhaseCard({
           {isCompleted ? '✓' : phaseNum}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Phase {phaseNum}
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>Phase {phaseNum}</span>
+            {isCurrent && !isCompleted && (
+              <span style={{ background: color, color: '#fff', fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 999, letterSpacing: '0.04em' }}>
+                YOU ARE HERE
+              </span>
+            )}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>
+          <div style={{ fontSize: isCurrent && !isCompleted ? 16 : 14, fontWeight: 700, color: 'var(--color-text)' }}>
             {phase.name || PHASE_TITLES[phaseNum]}
           </div>
         </div>
