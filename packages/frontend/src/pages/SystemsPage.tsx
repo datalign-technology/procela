@@ -353,7 +353,7 @@ function ConnectPickerModal({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Connect to a source</h2>
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Pick an existing connection for <strong>{sys.name}</strong>, or create a new one.</span>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Pick a connection to serve <strong>{sys.name}</strong>, or create a new one. A connection can serve several systems at once.</span>
           </div>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
         </div>
@@ -1123,15 +1123,15 @@ export default function SystemsPage() {
             {form.connectivity === 'INTEGRATED' && (
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                  Connections
+                  Served by connections
                   <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
-                    one or more — link the data source(s) that back this system
+                    one or more — a connection can serve several systems at once
                   </span>
                 </label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
                   {form.connectionIds.length === 0 && (
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                      No connections linked yet — pick one below or create a new one.
+                      No connections serving this system yet — pick one below or create a new one.
                     </span>
                   )}
                   {form.connectionIds.map((cid) => {

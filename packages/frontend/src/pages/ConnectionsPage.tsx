@@ -187,7 +187,7 @@ function timeAgo(iso: string | null): string {
 
 type ConnColId = 'system' | 'name' | 'type' | 'config' | 'status' | 'lastTested';
 const CONN_COLUMN_DEFS: Array<{ id: ConnColId; label: string; defaultVisible: boolean }> = [
-  { id: 'system',     label: 'System',         defaultVisible: true  },
+  { id: 'system',     label: 'Systems',        defaultVisible: true  },
   { id: 'name',       label: 'Connection Name',defaultVisible: true  },
   { id: 'type',       label: 'Type',           defaultVisible: true  },
   { id: 'config',     label: 'Config',         defaultVisible: false },
@@ -909,15 +909,15 @@ export default function ConnectionsPage() {
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                Systems
+                Systems served
                 <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: 6 }}>
-                  one or more — leave empty if not yet assigned
+                  one connection can serve several systems — leave empty if not yet assigned
                 </span>
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
                 {form.systemIds.length === 0 && (
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                    No systems linked yet.
+                    No systems served yet.
                   </span>
                 )}
                 {form.systemIds.map((sid) => {
