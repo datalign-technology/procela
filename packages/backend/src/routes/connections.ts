@@ -16,7 +16,12 @@ import logger from '../lib/logger';
 interface ConnectionProfile {
   id: string;
   orgId: string;
-  systemId: string;
+  /** @deprecated Retired. A connection links to zero or more systems
+   *  via the `connectionSystemLinks` join table (`systemIds` on the
+   *  public shape). This single field is no longer written or read —
+   *  it only persists on pre-migration rows so the one-time backfill
+   *  below can seed the join table from it. Do not add new readers. */
+  systemId?: string;
   name: string;
   connectionType: 'DATABASE' | 'FILE_STORAGE' | 'API' | 'DATA_WAREHOUSE' | 'SPREADSHEET';
 
@@ -166,11 +171,12 @@ function maskCredentials(creds: ConnectionProfile['credentials']): ConnectionPro
  *  compatibility but `systemIds` is the source of truth. */
 function toPublic(profile: ConnectionProfile) {
   const systemIds = systemIdsForConnection(profile.id);
+  // `systemId` is intentionally NOT emitted — `systemIds` (from the
+  // join table) is the sole source of truth. Strip any legacy value
+  // off pre-migration rows so it can't be read by accident.
+  const { systemId: _legacy, ...rest } = profile;
   return {
-    ...profile,
-    // Keep the legacy field for back-compat but mirror the first link
-    // so older readers see the expected shape.
-    systemId: systemIds[0] || profile.systemId || '',
+    ...rest,
     systemIds,
     credentials: maskCredentials(profile.credentials),
   };
@@ -211,9 +217,7 @@ router.get('/', (req: Request, res: Response) => {
   if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
   if (systemId) {
     const linkedIds = new Set(connectionsForSystem(systemId as string));
-    // Also accept the legacy single field so any rows whose links haven't
-    // migrated still show up in a system-scoped query.
-    filtered = filtered.filter((c) => linkedIds.has(c.id) || c.systemId === systemId);
+    filtered = filtered.filter((c) => linkedIds.has(c.id));
   }
   res.json({
     success: true,
@@ -255,7 +259,6 @@ router.post('/', (req: Request, res: Response) => {
   const conn: ConnectionProfile = {
     id: uuid(),
     orgId: orgId || DEV_ORG_ID,
-    systemId: requestedSystemIds[0] || '',
     name,
     connectionType,
     config: config || {},
@@ -306,7 +309,6 @@ router.put('/:id', (req: Request, res: Response) => {
     for (const sid of next) {
       connectionSystemLinks.push({ id: uuid(), orgId: conn.orgId, connectionId: conn.id, systemId: sid, createdAt: now });
     }
-    conn.systemId = next[0] || '';
     linksChanged = true;
   } else if (systemId !== undefined) {
     // Legacy single-system semantics: empty string means "unlink all";
@@ -320,7 +322,6 @@ router.put('/:id', (req: Request, res: Response) => {
         id: uuid(), orgId: conn.orgId, connectionId: conn.id, systemId, createdAt: new Date().toISOString(),
       });
     }
-    conn.systemId = systemId || '';
     linksChanged = true;
   }
   if (linksChanged) saveStore('connectionSystemLinks', connectionSystemLinks);
@@ -652,13 +653,6 @@ router.post('/:id/systems', (req: Request, res: Response) => {
     createdAt: new Date().toISOString(),
   };
   connectionSystemLinks.push(link);
-  // Mirror the first link into the legacy field so older readers that
-  // still join on conn.systemId keep working until they're updated.
-  if (!conn.systemId) {
-    conn.systemId = systemId;
-    conn.updatedAt = link.createdAt;
-    saveStore('connections', connections);
-  }
   saveStore('connectionSystemLinks', connectionSystemLinks);
   auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'LINK_SYSTEM', null, { systemId });
   res.status(201).json({ success: true, data: link });
@@ -672,13 +666,7 @@ router.delete('/:id/systems/:systemId', (req: Request, res: Response) => {
   const idx = connectionSystemLinks.findIndex((l) => l.connectionId === conn.id && l.systemId === systemId);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Link not found' }); return; }
   connectionSystemLinks.splice(idx, 1);
-  // Re-mirror the legacy field to whatever link is now first, so the
-  // shape stays sane even when the just-removed link was the legacy one.
-  const remaining = systemIdsForConnection(conn.id);
-  conn.systemId = remaining[0] || '';
-  conn.updatedAt = new Date().toISOString();
   saveStore('connectionSystemLinks', connectionSystemLinks);
-  saveStore('connections', connections);
   auditService.log(conn.orgId, null, 'ConnectionProfile', conn.id, 'UNLINK_SYSTEM', { systemId }, null);
   res.status(204).send();
 });

@@ -155,7 +155,7 @@ router.get('/', (req: Request, res: Response) => {
     ? filterByOrgScope(connections, orgId as string)
     : connections;
   const unassignedConnections = orgScopedConnections
-    .filter((c) => systemIdsForConnection(c.id).length === 0 && !c.systemId)
+    .filter((c) => systemIdsForConnection(c.id).length === 0)
     .map((c) => ({ id: c.id, name: c.name, connectionType: c.connectionType, status: c.status }));
 
   // 10. Ownerless systems — INTEGRATED systems with no business owner

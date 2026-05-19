@@ -107,10 +107,10 @@ const router = Router();
  * isn't treated as missing.
  */
 function profilesForSystem(systemId: string) {
-  // Pull profiles via the join table (authoritative) and fall back to
-  // any remaining legacy single-systemId rows for migrations in flight.
+  // Connection↔system is many-to-many via the join table — the sole
+  // source of truth now that the legacy single `systemId` is retired.
   const linkedIds = new Set(connectionsForSystem(systemId));
-  return connections.filter((c) => linkedIds.has(c.id) || c.systemId === systemId);
+  return connections.filter((c) => linkedIds.has(c.id));
 }
 
 function rollupConnectionStatus(
@@ -432,20 +432,6 @@ router.delete('/:id', (req: Request, res: Response) => {
     }
   }
   if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
-  // Re-mirror legacy systemId field on any connection that lost its
-  // primary link, so older readers see the next remaining link (or '').
-  let connsTouched = false;
-  for (const c of connections) {
-    if (c.systemId === removed.id) {
-      const remaining = connectionsForSystem.length > 0 ? [] : []; // placeholder
-      // Use the helper directly to read the current set per connection.
-      const links = connectionSystemLinks.filter((l) => l.connectionId === c.id);
-      c.systemId = links[0]?.systemId || '';
-      c.updatedAt = new Date().toISOString();
-      connsTouched = true;
-    }
-  }
-  if (connsTouched) saveStore('connections', connections);
   res.status(204).send();
 });
 
