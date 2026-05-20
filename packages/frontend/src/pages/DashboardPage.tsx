@@ -4,6 +4,10 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
+import PageHeader from '../components/PageHeader';
+import DomainLensToggle from '../components/DomainLensToggle';
+import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
+import { useDomainLens } from '../stores/domainLensStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePolling } from '../hooks/usePolling';
 
@@ -45,6 +49,26 @@ const cardStyle: React.CSSProperties = {
 // to do first; this card gives a guided four-step path through the
 // three layers (Business / Data / Systems / People).
 // ──────────────────────────────────────────────────────────────────────────
+
+// Small "?" circle linked to the Help page. Used in the Dashboard
+// header next to the title so newcomers always have a one-click escape
+// hatch when they don't know what they're looking at.
+function HelpIconLink() {
+  return (
+    <Link
+      to="/help"
+      aria-label="Help"
+      title="Help"
+      style={{
+        width: 16, height: 16, borderRadius: '50%',
+        border: '1px solid var(--color-text-muted)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 10, color: 'var(--color-text-muted)',
+        textDecoration: 'none', cursor: 'pointer', flexShrink: 0,
+      }}
+    >?</Link>
+  );
+}
 
 function GettingStartedCard({ stats }: { stats: DashboardStats }) {
   const steps = [
@@ -381,7 +405,16 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
   ];
   return (
     <div style={{ marginBottom: 24 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Overview</h2>
+      {/* Heading row carries the lens toggle so the user can sweep the
+          KPI strip between operational and governance work without
+          leaving the dashboard. Value Streams / Processes / Coverage
+          numbers refetch with `?domain=…`; Data Assets / Systems / Avg
+          Health stay constant — they are not domain-tagged. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Overview</h2>
+        <DomainLensToggle pageKey="dashboard" />
+      </div>
+      <DomainLensActiveBanner pageKey="dashboard" entityLabel="process counts" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         {kpis.map((k) => (
           <div key={k.label} style={{ ...cardStyle, padding: '14px 16px', textAlign: 'center' }}>
@@ -811,16 +844,21 @@ export default function DashboardPage() {
   const { activeOrgId } = useOrgContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Dashboard-scoped lens — defaults to ALL and refetches when the
+  // user changes it so KPIs (process-side) reflect the chosen domain.
+  // Assets / Systems / People are cross-cutting and stay unfiltered.
+  const dashboardLens = useDomainLens('dashboard', 'ALL');
 
   const fetchData = useCallback(async () => {
     if (!activeOrgId) { setStats(null); return; }
     try {
-      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats?orgId=${activeOrgId}`);
+      const domainQS = dashboardLens === 'ALL' ? '' : `&domain=${dashboardLens}`;
+      const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats?orgId=${activeOrgId}${domainQS}`);
       setStats(res.data);
     } catch (err: any) {
       setError(err.message || 'Failed to load dashboard');
     }
-  }, [activeOrgId]);
+  }, [activeOrgId, dashboardLens]);
 
   useEffect(() => {
     fetchData();
@@ -834,10 +872,9 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
-        </div>
+        <PageHeader title="Dashboard">
+          <HelpIconLink />
+        </PageHeader>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
     );
@@ -846,9 +883,9 @@ export default function DashboardPage() {
   if (!stats && !activeOrgId) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Dashboard</h1>
-        </div>
+        <PageHeader title="Dashboard">
+          <HelpIconLink />
+        </PageHeader>
         <div style={{
           background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center',
@@ -873,9 +910,9 @@ export default function DashboardPage() {
   if (!stats) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Dashboard</h1>
-        </div>
+        <PageHeader title="Dashboard">
+          <HelpIconLink />
+        </PageHeader>
         <SkeletonRows rows={6} columnWidths={[200, null, null, 90]} />
       </div>
     );
@@ -903,12 +940,9 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Dashboard</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
-        </div>
-        {!isEmptyOrg && (
+      <PageHeader
+        title="Dashboard"
+        actions={!isEmptyOrg ? (
           <button
             onClick={() => setShowCustomize((v) => !v)}
             style={{
@@ -921,8 +955,10 @@ export default function DashboardPage() {
           >
             {showCustomize ? 'Done' : 'Customize'}
           </button>
-        )}
-      </div>
+        ) : undefined}
+      >
+        <HelpIconLink />
+      </PageHeader>
 
       {showCustomize && (
         <div style={{

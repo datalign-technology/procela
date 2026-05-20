@@ -232,6 +232,17 @@ export default function Layout() {
   // Search state
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // Re-run guided tour. Triggered from Help / Settings via a window
+  // event so the buttons don't have to plumb a setter through React
+  // context. Distinct from the first-run wizard mount below — this one
+  // is "tour-only" and never tries to create another org.
+  const [tourOpen, setTourOpen] = useState(false);
+  useEffect(() => {
+    const handler = () => setTourOpen(true);
+    window.addEventListener('procela:start-tour', handler);
+    return () => window.removeEventListener('procela:start-tour', handler);
+  }, []);
+
   // Shortcuts modal state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -671,6 +682,25 @@ export default function Layout() {
             })()}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Ask AI — surfaces the ChatPanel from the top bar. The
+                ChatPanel still owns its own open state and its floating
+                bottom-right bubble; this button is a second entry point
+                so dense pages don't bury it. */}
+            <button
+              onClick={() => window.dispatchEvent(new Event('procela:toggle-chat'))}
+              aria-label="Ask the AI assistant"
+              title="Ask the AI assistant"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>💬</span>
+              <span>Ask AI</span>
+            </button>
             {/* Notification Bell */}
             <div ref={notifWrapperRef} style={{ position: 'relative' }}>
               <button
@@ -897,6 +927,9 @@ export default function Layout() {
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
         {!activeOrgId && !localStorage.getItem('procela:onboarding-complete') && (
           <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/'); }} />
+        )}
+        {tourOpen && (
+          <OnboardingWizard mode="tour-only" onComplete={() => setTourOpen(false)} />
         )}
       </div>
     </div>

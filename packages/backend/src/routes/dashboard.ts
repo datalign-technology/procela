@@ -22,20 +22,38 @@ const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
 
 const router = Router();
 
-/** GET /api/v1/dashboard/stats */
+/** GET /api/v1/dashboard/stats
+ *
+ * Accepts an optional `domain` query parameter ("OPERATIONAL" or
+ * "GOVERNANCE") that narrows the process-side counts (value streams,
+ * processes, activities, flows, coverage) to one domain. Data assets,
+ * systems and people are not domain-tagged so they remain unfiltered
+ * — the dashboard treats those as cross-cutting.
+ */
 router.get('/stats', (req: Request, res: Response) => {
-  const { orgId } = req.query;
+  const { orgId, domain } = req.query;
   const oid = orgId as string | undefined;
+  const dom = domain === 'OPERATIONAL' || domain === 'GOVERNANCE' ? domain : undefined;
 
-  const filteredNodes = oid ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid) : processNodes;
+  // Missing domain on a node is treated as OPERATIONAL (matches the
+  // backfill and frontend `passesLens` convention) so legacy rows
+  // never silently disappear when the user picks the Operational lens.
+  const nodeMatchesDomain = (n: any) => !dom || (n.domain || 'OPERATIONAL') === dom;
+
+  const filteredNodes = (oid ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid) : processNodes)
+    .filter(nodeMatchesDomain);
   const filteredAssets = oid ? dataAssets.filter((a) => a.orgId === oid) : dataAssets;
   const filteredMappings = oid ? mappings.filter((m) => m.orgId === oid) : mappings;
   const filteredSystems = oid ? systems.filter((s) => s.orgId === oid) : systems;
   const filteredPeople = oid ? people.filter((p) => p.orgIds?.includes(oid)) : people;
-  const filteredFlows = oid ? flowRelationships.filter((f) => {
+  const filteredFlows = (oid ? flowRelationships.filter((f) => {
     const from = processNodes.find((n) => n.id === f.fromNodeId);
     return from && (from.orgIds.includes(oid) || from.orgId === oid);
-  }) : flowRelationships;
+  }) : flowRelationships).filter((f) => {
+    if (!dom) return true;
+    const from = processNodes.find((n) => n.id === f.fromNodeId);
+    return from ? nodeMatchesDomain(from) : true;
+  });
 
   // Count by level
   const byLevel = Object.fromEntries(

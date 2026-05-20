@@ -40,7 +40,21 @@ const listStyle: React.CSSProperties = {
 export default function HelpPage() {
   return (
     <div style={{ maxWidth: 820, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>Help Guide</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 8 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600 }}>Help Guide</h1>
+        <button
+          onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
+          style={{
+            padding: '8px 16px', background: 'var(--color-surface)',
+            color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+            borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          title="Show the three-phase intro screen again"
+        >
+          Restart guided tour
+        </button>
+      </div>
       <p style={{ ...pStyle, marginBottom: 24 }}>
         Procela is a DAMA-aligned governance operating platform that helps organizations design, execute, and mature
         data governance using workflows, accountability models, and structured procedures.

@@ -6,6 +6,12 @@ import { INDUSTRIES } from '../types';
 
 interface OnboardingWizardProps {
   onComplete: () => void;
+  /** "first-run" runs the full create-org flow and is the default behaviour
+   *  shown to brand-new users. "tour-only" shows just the conceptual
+   *  phase overview and is reachable from Help / Settings so an existing
+   *  user can refresh themselves on what Procela does without creating
+   *  another organization. */
+  mode?: 'first-run' | 'tour-only';
 }
 
 const btnPrimary: React.CSSProperties = {
@@ -23,7 +29,8 @@ const PHASE_INFO = [
   { num: 3, title: 'Discover', description: 'Find gaps, monitor health, and connect to real data sources as your program matures.', color: '#22c55e' },
 ];
 
-export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
+export default function OnboardingWizard({ onComplete, mode = 'first-run' }: OnboardingWizardProps) {
+  const isTour = mode === 'tour-only';
   const navigate = useNavigate();
   const { setActiveOrg, triggerRefresh } = useOrgContext();
   const [step, setStep] = useState(0);
@@ -90,12 +97,15 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         background: 'var(--color-surface)', borderRadius: 12, maxWidth: 560, width: '95vw',
         boxShadow: '0 24px 80px rgba(0,0,0,0.25)', overflow: 'hidden',
       }}>
-        {/* Progress bar */}
-        <div style={{ display: 'flex', height: 4 }}>
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={{ flex: 1, background: i <= step ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 0.3s' }} />
-          ))}
-        </div>
+        {/* Progress bar — hidden in tour-only mode where there is just
+            one screen and a progress bar would be misleading. */}
+        {!isTour && (
+          <div style={{ display: 'flex', height: 4 }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} style={{ flex: 1, background: i <= step ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 0.3s' }} />
+            ))}
+          </div>
+        )}
 
         <div style={{ padding: '32px 36px' }}>
           {/* Step 0: Welcome */}
@@ -121,14 +131,18 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                   </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button style={btnPrimary} onClick={() => setStep(1)}>Get Started</button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                {isTour ? (
+                  <button style={btnPrimary} onClick={onComplete}>Got it</button>
+                ) : (
+                  <button style={btnPrimary} onClick={() => setStep(1)}>Get Started</button>
+                )}
               </div>
             </>
           )}
 
           {/* Step 1: Create Organization */}
-          {step === 1 && (
+          {!isTour && step === 1 && (
             <>
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Set up your organization</h2>
               <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 20, lineHeight: 1.5 }}>
@@ -200,7 +214,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
           )}
 
           {/* Step 2: Ready to go */}
-          {step === 2 && (
+          {!isTour && step === 2 && (
             <>
               <div style={{ textAlign: 'center', marginBottom: 8 }}>
                 <div style={{ fontSize: 40, marginBottom: 8 }}>{'✓'}</div>

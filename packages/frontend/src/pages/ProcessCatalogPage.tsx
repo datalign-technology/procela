@@ -973,13 +973,19 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 bits.push(`${assetCount} data asset${assetCount === 1 ? '' : 's'}`);
                 return (
                   <div style={{
-                    fontSize: 10, color: 'var(--color-text-muted)',
-                    padding: '3px 8px', marginBottom: 4,
+                    display: 'flex', alignItems: 'flex-start', gap: 6,
+                    fontSize: 11, marginBottom: 6,
+                    padding: '6px 8px',
                     background: 'var(--color-bg)', border: '1px solid var(--color-border)',
                     borderRadius: 4,
                   }}>
-                    <span style={{ fontWeight: 600, marginRight: 6 }}>Where it runs:</span>
-                    {bits.join(' · ')}
+                    {/* Label column matches the 100px / muted-color
+                        treatment used by the DocField rows directly
+                        below, so "Where it runs" lines up with "Owner",
+                        "Purpose", etc. instead of being a different
+                        widget. */}
+                    <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Where it runs:</span>
+                    <span style={{ flex: 1, color: 'var(--color-text-secondary)' }}>{bits.join(' · ')}</span>
                   </div>
                 );
               })()}

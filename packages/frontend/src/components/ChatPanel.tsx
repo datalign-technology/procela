@@ -24,6 +24,15 @@ export default function ChatPanel() {
     }
   }, [messages]);
 
+  // Allow the top-bar "Ask AI" button (and any future entry point) to
+  // open the panel without lifting state into Layout. The event is a
+  // simple toggle so the same button can also close the panel.
+  useEffect(() => {
+    const handler = () => setOpen((o) => !o);
+    window.addEventListener('procela:toggle-chat', handler);
+    return () => window.removeEventListener('procela:toggle-chat', handler);
+  }, []);
+
   async function handleSend() {
     const text = input.trim();
     if (!text || loading) return;
