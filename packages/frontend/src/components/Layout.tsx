@@ -243,6 +243,19 @@ export default function Layout() {
     return () => window.removeEventListener('procela:start-tour', handler);
   }, []);
 
+  // Mirror the ChatPanel's open state so the top-bar "Ask AI" button
+  // can reflect it (aria-expanded + active styling). The ChatPanel
+  // dispatches procela:chat-state whenever its internal open changes.
+  const [chatOpen, setChatOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ open: boolean }>).detail;
+      if (detail && typeof detail.open === 'boolean') setChatOpen(detail.open);
+    };
+    window.addEventListener('procela:chat-state', handler);
+    return () => window.removeEventListener('procela:chat-state', handler);
+  }, []);
+
   // Shortcuts modal state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -714,14 +727,17 @@ export default function Layout() {
                 so dense pages don't bury it. */}
             <button
               onClick={() => window.dispatchEvent(new Event('procela:toggle-chat'))}
-              aria-label="Ask the AI assistant"
-              title="Ask the AI assistant"
+              aria-label={chatOpen ? 'Close the AI assistant' : 'Ask the AI assistant'}
+              aria-expanded={chatOpen}
+              title={chatOpen ? 'Close the AI assistant' : 'Ask the AI assistant'}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 12px', fontSize: 12, fontWeight: 500,
-                background: 'var(--color-surface)', color: 'var(--color-text)',
-                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
+                background: chatOpen ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: chatOpen ? '#fff' : 'var(--color-text)',
+                border: '1px solid ' + (chatOpen ? 'var(--color-primary)' : 'var(--color-border)'),
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer', transition: 'background 0.15s, color 0.15s, border-color 0.15s',
               }}
             >
               <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>💬</span>

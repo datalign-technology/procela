@@ -119,11 +119,18 @@ export default function InfoTip({ term, inline }: InfoTipProps) {
         flexShrink: 0,
       }}
     >
-      {/* Trigger circle */}
+      {/* Trigger circle — also handles click/touch (for users without
+          hover) and Enter/Space/Escape so it isn't keyboard-trap-only. */}
       <span
         role="button"
         tabIndex={0}
         aria-label={`Info: ${term}`}
+        aria-expanded={visible}
+        onClick={() => setVisible((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setVisible((v) => !v); }
+          if (e.key === 'Escape') { e.preventDefault(); setVisible(false); }
+        }}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

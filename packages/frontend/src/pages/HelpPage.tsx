@@ -93,17 +93,18 @@ export default function HelpPage() {
       {/* 2. Navigation */}
       <div style={sectionStyle}>
         <h2 style={h2Style}>2. Navigation</h2>
-        <p style={pStyle}>The sidebar is organized into Dashboard plus five plain-noun buckets, so you can find pages by what they ARE rather than which DAMA phase they belong to.</p>
+        <p style={pStyle}>The sidebar has Dashboard at the top, Organizations right below it (your company tree), then five plain-noun buckets so you can find pages by what they ARE rather than which DAMA phase they belong to.</p>
         <ul style={listStyle}>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
+          <li><strong>Organizations</strong> &mdash; The company / division / team tree your processes and data are scoped to.</li>
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. (The cross-process flat-list view of step↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
-          <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
+          <li><strong>People</strong> &mdash; People and Skills (the humans on your team and what they're qualified for).</li>
           <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
-          <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
+          <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports, Process Coverage. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
-        <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
+        <p style={pStyle}>Agents (your AI workers), Settings and Help sit at the bottom of the sidebar.</p>
 
         <h3 style={h3Style}>Header controls</h3>
         <ul style={listStyle}>
@@ -423,28 +424,11 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 10. Keyboard Shortcuts */}
+      {/* 11. FAQ — the keyboard-shortcuts section that used to live
+          here was a duplicate of the formatted table further down the
+          page. Removed when the L-pass appendix added the better one. */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>11. Keyboard Shortcuts</h2>
-        <ul style={listStyle}>
-          <li><strong>Cmd / Ctrl + K</strong> or <strong>/</strong> &mdash; Open the command palette (universal search).</li>
-          <li><strong>Shift + ?</strong> &mdash; Open the shortcuts reference modal.</li>
-          <li><strong>g then d</strong> &mdash; Go to Dashboard</li>
-          <li><strong>g then c</strong> &mdash; Go to Processes</li>
-          <li><strong>g then m</strong> &mdash; Go to Process Coverage</li>
-          <li><strong>g then a</strong> &mdash; Go to Data Assets</li>
-          <li><strong>g then q</strong> &mdash; Go to Data Quality</li>
-          <li><strong>g then l</strong> &mdash; Go to Data Lineage</li>
-          <li><strong>g then s</strong> &mdash; Go to Systems</li>
-          <li><strong>g then p</strong> &mdash; Go to People</li>
-          <li><strong>g then o</strong> &mdash; Go to Organizations</li>
-          <li><strong>Escape</strong> &mdash; Close the palette, drawers, modals, and dropdowns.</li>
-        </ul>
-      </div>
-
-      {/* 11. FAQ */}
-      <div style={sectionStyle}>
-        <h2 style={h2Style}>12. Frequently Asked Questions</h2>
+        <h2 style={h2Style}>11. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
         <p style={pStyle}>
@@ -546,7 +530,7 @@ export default function HelpPage() {
           the same overlay the user gets from Shift+? globally. Keeps
           discoverability high without forcing users to know the chord. */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>Keyboard shortcuts</h2>
+        <h2 style={h2Style}>12. Keyboard shortcuts</h2>
         <p style={pStyle}>
           Procela has a small set of keyboard chords for the things you'll do most often.
           Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere
@@ -567,6 +551,7 @@ export default function HelpPage() {
               ['g then m', 'Go to Process Coverage (mappings)'],
               ['g then l', 'Go to Lineage'],
               ['g then q', 'Go to Data Quality'],
+              ['Escape', 'Close the palette, drawers, modals, and dropdowns'],
             ].map(([keys, what]) => (
               <tr key={keys} style={{ borderBottom: '1px solid var(--color-border)' }}>
                 <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>

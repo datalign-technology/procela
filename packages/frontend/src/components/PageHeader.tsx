@@ -10,7 +10,7 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, subtitle, children, actions, meta }: PageHeaderProps) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+    <div className="procela-stack-on-mobile" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>{title}</h1>

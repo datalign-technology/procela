@@ -335,18 +335,27 @@ body[data-density="compact"] textarea {
 
 /* ── Responsive breakpoints ──
  * Forms use inline grid styles (gridTemplateColumns: '1fr 1fr').
- * These overrides stack them on small screens. */
+ * These overrides stack them on small screens.
+ *
+ * History note: there used to be a wider rule here that stacked
+ * EVERY inline `justify-content: space-between` row on mobile, which
+ * collapsed dozens of dashboard "label … value" rows that were never
+ * meant to wrap. It's now opt-in via the .procela-stack-on-mobile
+ * class (applied by PageHeader, and by any other component that wants
+ * its actions to drop below the title on narrow screens). */
 @media (max-width: 768px) {
-  /* Stack 2-column form grids to single column */
-  div[style*="gridTemplateColumns"] {
+  /* Stack 2-column form grids to single column. Narrowed to the
+     literal "1fr 1fr" inline style so single-row flex/grid containers
+     that happen to mention `gridTemplateColumns` aren't matched. */
+  div[style*="'1fr 1fr'"] {
     grid-template-columns: 1fr !important;
   }
 
-  /* Stack page headers (title left, actions right) */
-  div[style*="justifyContent: 'space-between'"][style*="alignItems"] {
-    flex-direction: column;
+  /* Stack opted-in page-header rows (title left, actions right). */
+  .procela-stack-on-mobile {
+    flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 12px;
+    gap: 12px !important;
   }
 
   /* Make tables scrollable horizontally */
