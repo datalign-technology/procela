@@ -124,6 +124,29 @@ const RISK_OPTIONS = ['High', 'Medium', 'Low'];
 
 const AUTOMATION_OPTIONS = ['Manual', 'Semi-automated', 'Fully automated'];
 
+// Buckets for Est. Duration on activities. A fixed list keeps reports
+// comparable across activities (and across organisations) instead of
+// the previous free-text mix of "2 hrs", "couple hours", "120 minutes",
+// "half a day"… If a node already has a legacy free-text value the
+// use-site appends it to the options so it stays selectable until
+// edited.
+const DURATION_OPTIONS = [
+  '< 5 minutes',
+  '5–15 minutes',
+  '15–30 minutes',
+  '30 minutes – 1 hour',
+  '1–2 hours',
+  '2–4 hours',
+  '4–8 hours',
+  '1 day',
+  '1–2 days',
+  '2–5 days',
+  '1–2 weeks',
+  '2–4 weeks',
+  '1–3 months',
+  '3+ months',
+];
+
 const ROLE_OPTIONS = [
   'Process Owner', 'Process Manager', 'Business Analyst', 'Data Analyst',
   'System Administrator', 'End User', 'Supervisor', 'Technician',
@@ -950,7 +973,19 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 <>
                   <DocRoleField value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
                   <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
-                  <DocField label="Est. Duration" value={node.estimatedDuration || ''} onSave={(v) => onUpdate(node.id, { estimatedDuration: v })} disabled={isLocked} placeholder="e.g. 2 hours, 1 day" />
+                  <DocDropdown
+                    label="Est. Duration"
+                    value={node.estimatedDuration || ''}
+                    /* Append any legacy free-text value so it remains
+                       visible in the dropdown until the user picks a
+                       canonical bucket. */
+                    options={node.estimatedDuration && !DURATION_OPTIONS.includes(node.estimatedDuration)
+                      ? [...DURATION_OPTIONS, node.estimatedDuration]
+                      : DURATION_OPTIONS}
+                    onSave={(v) => onUpdate(node.id, { estimatedDuration: v })}
+                    disabled={isLocked}
+                    placeholder="Pick a duration..."
+                  />
                   <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
                   {/* Agent execution — Run button + last status */}
