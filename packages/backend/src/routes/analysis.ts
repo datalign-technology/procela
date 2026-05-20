@@ -32,6 +32,13 @@ export type Dim = 'systems' | 'dataAssets' | 'domains' | 'processes' | 'roles' |
 
 const ALL_DIMS: Dim[] = ['systems', 'dataAssets', 'domains', 'processes', 'roles', 'people', 'connections'];
 
+/** Sentinel id used in the pivot key when a fact's reference can't be
+ *  resolved to a real entity (e.g. a data asset whose `systemId` points
+ *  at a system that's been deleted). Collapsing all unresolved ids in a
+ *  dimension to a single key means "(unknown system)" appears at most
+ *  once per pivot rather than once per stale id. */
+const UNK = '__UNK__';
+
 // Per-dimension labelling — turns an id into something the user can read.
 function makeLookups() {
   const sys = new Map(systems.map((s) => [s.id, s.name]));
@@ -42,8 +49,35 @@ function makeLookups() {
   const conn = new Map(connections.map((c) => [c.id, c.name]));
   // Roles are special — the "id" is the role type string itself.
   const roleLabel = (t: string) => t;
+  /** Map a raw ref to the id that should appear in the pivot key. Real
+   *  ids pass through; ids that no longer resolve become the UNK
+   *  sentinel so dangling refs group together instead of fanning out
+   *  into one row per unresolved id. Roles aren't id-resolved here, so
+   *  they always pass through unchanged. */
+  const normalize = (dim: Dim, id: string): string => {
+    switch (dim) {
+      case 'systems':     return sys.has(id) ? id : UNK;
+      case 'dataAssets':  return ass.has(id) ? id : UNK;
+      case 'domains':     return dom.has(id) ? id : UNK;
+      case 'processes':   return proc.has(id) ? id : UNK;
+      case 'people':      return ppl.has(id) ? id : UNK;
+      case 'connections': return conn.has(id) ? id : UNK;
+      case 'roles':       return id;
+    }
+  };
   return {
     label(dim: Dim, id: string): string {
+      if (id === UNK) {
+        switch (dim) {
+          case 'systems':     return '(unknown system)';
+          case 'dataAssets':  return '(unknown asset)';
+          case 'domains':     return '(unknown domain)';
+          case 'processes':   return '(unknown process)';
+          case 'people':      return '(unknown person)';
+          case 'connections': return '(unknown connection)';
+          case 'roles':       return '(unknown role)';
+        }
+      }
       switch (dim) {
         case 'systems':     return sys.get(id) || '(unknown system)';
         case 'dataAssets':  return ass.get(id) || '(unknown asset)';
@@ -54,6 +88,7 @@ function makeLookups() {
         case 'roles':       return roleLabel(id);
       }
     },
+    normalize,
   };
 }
 
@@ -361,8 +396,11 @@ router.post('/cube', (req: Request, res: Response) => {
   );
 
   // ── Composite key helpers ──
+  // Normalize each ref through the lookups so unresolved ids collapse
+  // to a single UNK sentinel per dim — otherwise N different dangling
+  // ids render N identical "(unknown X)" rows.
   const refsToKey = (f: Fact, dims: Dim[]): string =>
-    dims.map((d) => f.refs[d]!).join('\x00');
+    dims.map((d) => lookups.normalize(d, f.refs[d]!)).join('\x00');
   const keyToPath = (key: string): string[] => key.split('\x00');
 
   // ── Group ──

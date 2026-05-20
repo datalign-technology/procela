@@ -571,6 +571,19 @@ router.delete('/:id', (req: Request, res: Response) => {
     }
   }
   if (prunedEdges) saveStore('systems', systems);
+  // Cascade: clear `systemId` on any data asset that pointed at the
+  // removed system. The asset itself stays (it may still be useful
+  // catalogued, e.g. as an orphan to reassign) but the dangling ref is
+  // gone — otherwise analysis pivots and gap reports keep counting a
+  // ghost system through the asset's stale id.
+  let assetRefsCleared = 0;
+  for (const a of dataAssets) {
+    if (a.systemId === removed.id) {
+      a.systemId = '';
+      assetRefsCleared++;
+    }
+  }
+  if (assetRefsCleared > 0) saveStore('dataAssets', dataAssets);
   res.status(204).send();
 });
 
