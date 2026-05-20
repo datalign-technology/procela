@@ -154,6 +154,50 @@ for (const s of systems) {
 }
 if (connectivityMigrated || mechanismsMigrated || integrationsMigrated) saveStore('systems', systems);
 
+// One-time prune of dangling system references on entities outside the
+// systems store. The system-delete handler clears these going forward,
+// but stores written before that cascade existed (or by an import that
+// bypassed the cascade) can still hold ids that no longer resolve to
+// any system. Surfaces in the Analysis pivot as "(unknown system)"
+// rows. Idempotent: each subsequent boot is a no-op once the store is
+// clean.
+// Deferred to the next tick so it runs AFTER all the circularly-imported
+// stores (data-assets, process-catalog) have finished their own module
+// bodies. Touching them during systems.ts init hits the TDZ on the
+// other side's `export const`. By the next tick every module is fully
+// loaded and the references are valid.
+process.nextTick(() => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dataAssets } = require('./data-assets') as typeof import('./data-assets');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
+  const validSystemIds = new Set(systems.map((s) => s.id));
+  let assetsTouched = 0;
+  for (const a of dataAssets) {
+    if (a.systemId && !validSystemIds.has(a.systemId)) {
+      a.systemId = '';
+      assetsTouched++;
+    }
+  }
+  if (assetsTouched > 0) {
+    saveStore('dataAssets', dataAssets);
+    logger.info({ assetsTouched }, 'Pruned dangling dataAssets.systemId references');
+  }
+  let nodesTouched = 0;
+  for (const n of processNodes) {
+    if (!n.systemIds || n.systemIds.length === 0) continue;
+    const kept = n.systemIds.filter((sid) => validSystemIds.has(sid));
+    if (kept.length !== n.systemIds.length) {
+      n.systemIds = kept.length > 0 ? kept : undefined;
+      nodesTouched++;
+    }
+  }
+  if (nodesTouched > 0) {
+    saveStore('processNodes', processNodes);
+    logger.info({ nodesTouched }, 'Pruned dangling processNodes.systemIds references');
+  }
+});
+
 const SYSTEM_TYPES = [
   'ERP', 'CRM', 'GIS', 'SCADA', 'Data Warehouse', 'Data Lake',
   'Business Intelligence', 'Document Management', 'HRIS', 'Financial',
