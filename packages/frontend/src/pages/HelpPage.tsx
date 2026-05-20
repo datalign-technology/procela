@@ -75,7 +75,8 @@ export default function HelpPage() {
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
-          <li><strong>Governance</strong> &mdash; the heaviest section, grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights), <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues), and <strong>Analyze</strong> (Enterprise View, Analysis, Reports). The sub-labels are visual dividers in the expanded section — every item still navigates directly.</li>
+          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
+          <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
         <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
@@ -289,7 +290,7 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Analysis (cube)</h3>
         <ul style={listStyle}>
-          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections. Reachable from the sidebar (Governance &rarr; Analyze) and from Dashboard <strong>Quick Actions</strong>.</li>
+          <li>Drag-and-drop pivot builder. Drag a dimension into <strong>Rows</strong>, another into <strong>Columns</strong>; the grid below shows how many records connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections. Reachable from the sidebar (<strong>Insights</strong> &rarr; Analysis) and from Dashboard <strong>Quick Actions</strong>.</li>
           <li><strong>Starter pivots.</strong> Before you've configured anything, the empty state offers one-click examples (Data Assets by System, Roles by Person, Assets by Domain, Processes by System) so you can see a result immediately instead of facing a blank palette.</li>
           <li><strong>Sub-group.</strong> Drag a second dimension into either zone to create a nested grouping (max 2 per axis). The grid renders the parent label with a merged cell spanning all its sub-rows / sub-columns, so e.g. <em>Systems &gt; Data Assets</em> on rows shows each system once with its assets indented underneath.</li>
           <li><strong>Pivot.</strong> The ⇄ button between the Rows and Columns zones swaps everything in one click — useful when you want to flip a tall report into a wide one without re-dragging.</li>
@@ -439,7 +440,7 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>Where did Control Tower go?</h3>
         <p style={pStyle}>
-          Control Tower folded into <strong>Governance &rarr; Enterprise View</strong>. The operational dashboard view &mdash; open issues, active tasks, policy coverage, automation rate, coverage gaps across domains / assets / processes &mdash; is being reworked as a preset there. Old <code>/control-tower</code> deep links redirect automatically.
+          Control Tower folded into <strong>Insights &rarr; Enterprise View</strong>. The operational dashboard view &mdash; open issues, active tasks, policy coverage, automation rate, coverage gaps across domains / assets / processes &mdash; is being reworked as a preset there. Old <code>/control-tower</code> deep links redirect automatically.
         </p>
 
         <h3 style={h3Style}>I used to open Operations Manual or SOPs directly &mdash; do those links still work?</h3>

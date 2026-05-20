@@ -99,14 +99,22 @@ const navSections: NavSection[] = [
       { to: '/documentation', label: 'Documentation', icon: '\u2611' },
       { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },
       { to: '/governance-work', label: 'Tasks & Issues', icon: '\u2605' },
-      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u29c9' },
-      { to: '/analysis', label: 'Analysis', icon: '\u229e' },
-      { to: '/reports', label: 'Reports', icon: '\u2630' },
     ],
     subGroups: [
       { label: 'Set up', itemTos: ['/governance-program', '/governance-groups', '/dama-roles', '/governance-policies', '/decision-rights'] },
       { label: 'Operate', itemTos: ['/documentation', '/governance-calendar', '/governance-work'] },
-      { label: 'Analyze', itemTos: ['/enterprise-view', '/analysis', '/reports'] },
+    ],
+  },
+  {
+    // Cross-cutting exploration / reporting surfaces. They read across
+    // Data, Systems, People, Processes and Governance \u2014 not governance
+    // artefacts in their own right \u2014 so they live at the top level
+    // rather than under Governance where they used to sit.
+    label: 'Insights',
+    items: [
+      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u29c9' },
+      { to: '/analysis',        label: 'Analysis',        icon: '\u229e' },
+      { to: '/reports',         label: 'Reports',         icon: '\u2630' },
     ],
   },
 ];
