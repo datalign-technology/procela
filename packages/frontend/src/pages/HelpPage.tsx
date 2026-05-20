@@ -37,6 +37,17 @@ const listStyle: React.CSSProperties = {
   marginBottom: 8,
 };
 
+const kbdStyle: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '2px 6px',
+  fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+  fontSize: 11,
+  background: 'var(--color-bg)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  color: 'var(--color-text)',
+};
+
 export default function HelpPage() {
   return (
     <div style={{ maxWidth: 820, margin: '0 auto' }}>
@@ -529,6 +540,53 @@ export default function HelpPage() {
           In the current prototype, data is stored in JSON files on the server. In production, Procela is designed
           to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
         </p>
+      </div>
+
+      {/* Keyboard shortcuts — list the chords plus a button that pops
+          the same overlay the user gets from Shift+? globally. Keeps
+          discoverability high without forcing users to know the chord. */}
+      <div style={sectionStyle}>
+        <h2 style={h2Style}>Keyboard shortcuts</h2>
+        <p style={pStyle}>
+          Procela has a small set of keyboard chords for the things you'll do most often.
+          Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere
+          to open the full reference, or use the button below.
+        </p>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
+          <tbody>
+            {[
+              ['/', 'Open command palette'],
+              ['Ctrl / Cmd + K', 'Open command palette'],
+              ['Shift + ?', 'Show all keyboard shortcuts'],
+              ['g then d', 'Go to Dashboard'],
+              ['g then o', 'Go to Organizations'],
+              ['g then p', 'Go to People'],
+              ['g then c', 'Go to Processes'],
+              ['g then a', 'Go to Data Assets'],
+              ['g then s', 'Go to Systems'],
+              ['g then m', 'Go to Process Coverage (mappings)'],
+              ['g then l', 'Go to Lineage'],
+              ['g then q', 'Go to Data Quality'],
+            ].map(([keys, what]) => (
+              <tr key={keys} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                  <kbd style={kbdStyle}>{keys}</kbd>
+                </td>
+                <td style={{ padding: '6px 8px', color: 'var(--color-text-secondary)' }}>{what}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button
+          onClick={() => window.dispatchEvent(new Event('procela:open-shortcuts'))}
+          style={{
+            padding: '8px 16px', background: 'var(--color-surface)',
+            color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+            borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+          }}
+        >
+          Open keyboard shortcuts overlay
+        </button>
       </div>
     </div>
   );

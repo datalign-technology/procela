@@ -40,6 +40,8 @@ export const GLOSSARY: Record<string, string> = {
     'The Data Management Association framework — an industry standard for organizing data governance practices.',
   'Governance Group':
     'An organizational body (Council, Office, Committee, Working Group) that oversees data governance decisions.',
+  'Domain Lens':
+    'Filters the page between operational work (running the business) and governance work (looking after the data and the rules). Pick "All" to see both. Each page remembers its own choice.',
 };
 
 interface InfoTipProps {

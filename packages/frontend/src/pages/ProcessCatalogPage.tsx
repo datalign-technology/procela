@@ -9,6 +9,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
+import HelpIconLink from '../components/HelpIconLink';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
@@ -1821,6 +1822,7 @@ export default function ProcessCatalogPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process Catalog</h1>
+            <HelpIconLink />
             <HelpPopover id="process-catalog-overview" title="Process hierarchy">
               The required path is Value Stream → Process → Activity. Optional
               levels (Domain, Capability, Sub-Process, Task) sit between for

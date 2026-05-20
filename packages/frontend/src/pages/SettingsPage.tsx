@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import HelpIconLink from '../components/HelpIconLink';
 import { apiClient } from '../api/client';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -220,7 +221,7 @@ export default function SettingsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Settings</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
+          <HelpIconLink />
         </div>
         <button
           onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}

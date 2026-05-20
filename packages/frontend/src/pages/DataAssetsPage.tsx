@@ -21,6 +21,7 @@ import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
+import HelpIconLink from '../components/HelpIconLink';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { useDomainLens, passesLens } from '../stores/domainLensStore';
 import { assetDomain } from '../lib/entityDomain';
@@ -903,6 +904,7 @@ export default function DataAssetsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
+            <HelpIconLink />
             <HelpPopover id="data-assets-overview" title="Data assets">
               Define your data in business terms first ("Customer accounts",
               "Billing records") — then link each one to where it actually

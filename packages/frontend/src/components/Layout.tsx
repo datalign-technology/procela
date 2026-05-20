@@ -246,6 +246,32 @@ export default function Layout() {
   // Shortcuts modal state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
+  // Window-event opener for the keyboard shortcuts modal, so any page
+  // (Help, in particular) can pop it without holding a setter handle.
+  useEffect(() => {
+    const handler = () => setShortcutsOpen(true);
+    window.addEventListener('procela:open-shortcuts', handler);
+    return () => window.removeEventListener('procela:open-shortcuts', handler);
+  }, []);
+
+  // Per-page browser tab title. Without this, every Procela tab in the
+  // browser bar reads "Procela" and a user with several tabs open
+  // cannot tell them apart. Derived from the matching nav item label so
+  // each page automatically picks up the right title with no per-page
+  // wiring needed.
+  useEffect(() => {
+    const path = location.pathname;
+    const allItems: NavItem[] = [
+      ...navSections.flatMap((s) => s.items),
+      ...bottomNavItems,
+    ];
+    // Prefer the most specific match (longest route prefix).
+    const match = allItems
+      .filter((i) => path === i.to || path.startsWith(i.to + '/'))
+      .sort((a, b) => b.to.length - a.to.length)[0];
+    document.title = match ? `${match.label} · Procela` : 'Procela';
+  }, [location.pathname]);
+
   // Global keyboard shortcuts. Cmd/Ctrl+K and `/` both open the command
   // palette. `?` opens the shortcuts modal. `g` followed by a letter goes
   // somewhere (handled separately so the second key isn't a chord).

@@ -5,6 +5,7 @@ import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
+import HelpIconLink from '../components/HelpIconLink';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { useDomainLens } from '../stores/domainLensStore';
@@ -49,26 +50,6 @@ const cardStyle: React.CSSProperties = {
 // to do first; this card gives a guided four-step path through the
 // three layers (Business / Data / Systems / People).
 // ──────────────────────────────────────────────────────────────────────────
-
-// Small "?" circle linked to the Help page. Used in the Dashboard
-// header next to the title so newcomers always have a one-click escape
-// hatch when they don't know what they're looking at.
-function HelpIconLink() {
-  return (
-    <Link
-      to="/help"
-      aria-label="Help"
-      title="Help"
-      style={{
-        width: 16, height: 16, borderRadius: '50%',
-        border: '1px solid var(--color-text-muted)',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 10, color: 'var(--color-text-muted)',
-        textDecoration: 'none', cursor: 'pointer', flexShrink: 0,
-      }}
-    >?</Link>
-  );
-}
 
 function GettingStartedCard({ stats }: { stats: DashboardStats }) {
   const steps = [

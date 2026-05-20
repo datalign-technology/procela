@@ -1,4 +1,5 @@
 import { useDomainLensStore, useDomainLens, DomainLens } from '../stores/domainLensStore';
+import InfoTip from './InfoTip';
 
 // Segmented "All · Operational · Governance" control. Each page passes a
 // stable `pageKey` so its lens is independent — setting Governance on
@@ -23,33 +24,36 @@ export default function DomainLensToggle({
   const setLens = useDomainLensStore((s) => s.setLens);
 
   return (
-    <div
-      role="tablist"
-      aria-label="Governance / operational lens"
-      style={{
-        display: 'inline-flex', border: '1px solid var(--color-border)',
-        borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)',
-      }}
-    >
-      {OPTIONS.map((o) => {
-        const active = lens === o.value;
-        return (
-          <button
-            key={o.value}
-            role="tab"
-            aria-selected={active}
-            onClick={() => setLens(pageKey, o.value)}
-            style={{
-              padding: '4px 12px', fontSize: 11,
-              fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer',
-              background: active ? 'var(--color-primary)' : 'transparent',
-              color: active ? '#fff' : 'var(--color-text)',
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <div
+        role="tablist"
+        aria-label="Governance / operational lens"
+        style={{
+          display: 'inline-flex', border: '1px solid var(--color-border)',
+          borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)',
+        }}
+      >
+        {OPTIONS.map((o) => {
+          const active = lens === o.value;
+          return (
+            <button
+              key={o.value}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setLens(pageKey, o.value)}
+              style={{
+                padding: '4px 12px', fontSize: 11,
+                fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer',
+                background: active ? 'var(--color-primary)' : 'transparent',
+                color: active ? '#fff' : 'var(--color-text)',
+              }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <InfoTip term="Domain Lens" inline />
     </div>
   );
 }

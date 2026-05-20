@@ -33,10 +33,8 @@ export default function ChatPanel() {
     return () => window.removeEventListener('procela:toggle-chat', handler);
   }, []);
 
-  async function handleSend() {
-    const text = input.trim();
+  async function send(text: string) {
     if (!text || loading) return;
-
     const userMsg: Message = { role: 'user', content: text };
     const updated = [...messages, userMsg];
     setMessages(updated);
@@ -57,6 +55,20 @@ export default function ChatPanel() {
       setLoading(false);
     }
   }
+
+  async function handleSend() {
+    await send(input.trim());
+  }
+
+  // Starter prompts shown when the chat is empty. They mirror the
+  // example questions from CLAUDE.md so newcomers immediately see the
+  // kind of thing the assistant can help with — much higher discoverability
+  // than a single "ask me anything" hint.
+  const SUGGESTED_PROMPTS = [
+    'Where are our data gaps?',
+    'What data supports our regulatory reporting process?',
+    'Which assets are below 80% health and linked to critical processes?',
+  ];
 
   return (
     <>
@@ -143,10 +155,37 @@ export default function ChatPanel() {
                   color: 'var(--color-text-muted)',
                   fontSize: 13,
                   textAlign: 'center',
-                  marginTop: 40,
+                  marginTop: 24,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 12,
                 }}
               >
-                Ask me anything about your processes, data assets, or governance.
+                <div>Ask me anything about your processes, data assets, or governance.</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Try one of these:</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 280 }}>
+                  {SUGGESTED_PROMPTS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => send(p)}
+                      disabled={loading}
+                      style={{
+                        textAlign: 'left',
+                        padding: '8px 12px',
+                        fontSize: 12, lineHeight: 1.4,
+                        background: 'var(--color-bg)',
+                        color: 'var(--color-text)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: loading ? 'wait' : 'pointer',
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((msg, i) => (
