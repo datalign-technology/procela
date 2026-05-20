@@ -412,6 +412,10 @@ function DocRoleField({ value, onSave, disabled, domain }: {
           Cross-domain
         </span>
       )}
+      {/* Two-way toggle between the primary (domain-matching) role set
+         and the full set. The "less" direction is suppressed when the
+         currently-saved value lives in the secondary set or is legacy —
+         collapsing would hide it from the dropdown. */}
       {!disabled && !effectiveShowAll && (
         <button
           type="button"
@@ -419,6 +423,15 @@ function DocRoleField({ value, onSave, disabled, domain }: {
           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--color-primary)', padding: 0, textDecoration: 'underline' }}
         >
           show all roles
+        </button>
+      )}
+      {!disabled && effectiveShowAll && !inSecondary && !isLegacy && (
+        <button
+          type="button"
+          onClick={() => setShowAll(false)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--color-primary)', padding: 0, textDecoration: 'underline' }}
+        >
+          show {domain === 'GOVERNANCE' ? 'governance' : 'business'} roles only
         </button>
       )}
     </div>
