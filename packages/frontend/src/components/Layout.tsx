@@ -52,6 +52,11 @@ const navSections: NavSection[] = [
     label: null,
     items: [
       { to: '/', label: 'Dashboard', icon: '\u25A3' },
+      // Organizations is the company / division / team tree the user
+      // builds during onboarding. It's structural, not personnel \u2014
+      // putting it under "People" misled newcomers, so it now sits
+      // top-level next to Dashboard.
+      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
     ],
   },
   {
@@ -82,9 +87,7 @@ const navSections: NavSection[] = [
     label: 'People',
     items: [
       { to: '/people', label: 'People', icon: '\uD83D\uDC65' },
-      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/skills', label: 'Skills', icon: '\u2605' },
-      { to: '/agents', label: 'Agents', icon: '\u2699' },
     ],
   },
   {
@@ -120,6 +123,10 @@ const navSections: NavSection[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
+  // Agents is the AI-bot registry kept next to Settings rather than
+  // under 'People' alongside humans, where it was easy to miss and
+  // conceptually misleading.
+  { to: '/agents', label: 'Agents', icon: '\u2699' },
   { to: '/settings', label: 'Settings', icon: '\u2638' },
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
@@ -864,7 +871,7 @@ export default function Layout() {
               <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Organization Required</h2>
               <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
                 You need to create an organization before you can use this feature.
-                Go to Administer to set up your company.
+                Open Organizations from the sidebar to set up your company.
               </p>
               <button
                 onClick={() => navigate('/organizations')}

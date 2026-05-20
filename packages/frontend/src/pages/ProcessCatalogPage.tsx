@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
@@ -12,6 +12,7 @@ import HelpPopover from '../components/HelpPopover';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
+import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { GOVERNANCE_ROLES } from '../types';
 import { useDomainLensStore, useDomainLens, passesLens } from '../stores/domainLensStore';
 import { processDomain } from '../lib/entityDomain';
@@ -354,7 +355,7 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
 //    legacy comma-joined *name* string (valueMode="name") so no data
 //    migration is needed. ──
 
-function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, placeholder }: {
+function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, disabledHintLink, placeholder }: {
   label: string;
   mode: 'single' | 'multi';
   valueMode: 'id' | 'name';
@@ -370,6 +371,10 @@ function DocPersonField({ label, mode, valueMode, value, onChange, disabled, dom
    *  explains why a Responsible Person picker is locked until a role
    *  is set or until someone holds that role. */
   disabledHint?: string;
+  /** Optional in-place link rendered next to the disabled hint so the
+   *  user can resolve the gap (open Governance Roles, etc.) without
+   *  hunting through the sidebar. */
+  disabledHintLink?: { to: string; label: string };
   /** Overrides the default trigger placeholder. */
   placeholder?: string;
 }) {
@@ -387,9 +392,17 @@ function DocPersonField({ label, mode, valueMode, value, onChange, disabled, dom
           eligibleKeys={eligibleKeys}
           placeholder={placeholder || (mode === 'single' ? 'Select owner…' : 'Select stakeholders…')}
         />
-        {disabled && disabledHint && (
+        {disabled && (disabledHint || disabledHintLink) && (
           <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3, fontStyle: 'italic' }}>
             {disabledHint}
+            {disabledHintLink && (
+              <>
+                {disabledHint ? ' ' : ''}
+                <Link to={disabledHintLink.to} style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontStyle: 'normal', fontWeight: 500 }}>
+                  {disabledHintLink.label} →
+                </Link>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -797,7 +810,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, systemsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles, governanceHolderIds, holdersByRoleLabel }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, systemsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -834,6 +847,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
    *  on activities to restrict to people who hold the activity's
    *  Responsible Role. */
   holdersByRoleLabel: Map<string, Set<string>>;
+  /** Simple hides Compliance, Frequency, Risk Level, Automation and
+   *  Est. Duration from the per-node panel. Advanced shows everything. */
+  viewMode: 'simple' | 'advanced';
 }) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -981,11 +997,13 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
                 return (
                   <>
-                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
+                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                     <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
-                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
-                    <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    {viewMode === 'advanced' && (
+                      <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                    )}
                   </>
                 );
               })()}
@@ -999,12 +1017,16 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
                 return (
                   <>
-                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
+                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
-                    <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
-                    <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
-                    <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
+                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    {viewMode === 'advanced' && (
+                      <>
+                        <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                        <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
+                        <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
+                      </>
+                    )}
                   </>
                 );
               })()}
@@ -1042,24 +1064,29 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'}
                         eligibleKeys={holders}
                         disabledHint={hint}
+                        disabledHintLink={noHolders && !noRole ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined}
                         placeholder={noRole ? 'Pick a role first…' : 'Select responsible person…'}
                       />
                     );
                   })()}
-                  <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
-                  <DocDropdown
-                    label="Est. Duration"
-                    value={node.estimatedDuration || ''}
-                    /* Append any legacy free-text value so it remains
-                       visible in the dropdown until the user picks a
-                       canonical bucket. */
-                    options={node.estimatedDuration && !DURATION_OPTIONS.includes(node.estimatedDuration)
-                      ? [...DURATION_OPTIONS, node.estimatedDuration]
-                      : DURATION_OPTIONS}
-                    onSave={(v) => onUpdate(node.id, { estimatedDuration: v })}
-                    disabled={isLocked}
-                    placeholder="Pick a duration..."
-                  />
+                  {viewMode === 'advanced' && (
+                    <>
+                      <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
+                      <DocDropdown
+                        label="Est. Duration"
+                        value={node.estimatedDuration || ''}
+                        /* Append any legacy free-text value so it remains
+                           visible in the dropdown until the user picks a
+                           canonical bucket. */
+                        options={node.estimatedDuration && !DURATION_OPTIONS.includes(node.estimatedDuration)
+                          ? [...DURATION_OPTIONS, node.estimatedDuration]
+                          : DURATION_OPTIONS}
+                        onSave={(v) => onUpdate(node.id, { estimatedDuration: v })}
+                        disabled={isLocked}
+                        placeholder="Pick a duration..."
+                      />
+                    </>
+                  )}
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
                   {/* Agent execution — Run button + last status */}
                   {hasAgentRoles && onRunAgent && (
@@ -1344,7 +1371,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           runningActivity={runningActivity}
           hasAgentRoles={hasAgentRoles}
           governanceHolderIds={governanceHolderIds}
-          holdersByRoleLabel={holdersByRoleLabel} />
+          holdersByRoleLabel={holdersByRoleLabel}
+          viewMode={viewMode} />
       ))}
     </div>
   );
@@ -1379,6 +1407,19 @@ export default function ProcessCatalogPage() {
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
   const [showLevelGuide, setShowLevelGuide] = useState(false);
+  // Simple / Advanced view mode — Simple is the default for newcomers
+  // and hides the rarely-used per-level fields (Compliance, Frequency,
+  // Risk Level, Automation, Est. Duration) plus the rarely-used node
+  // levels in the legend. Toggle persists across visits.
+  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>(() => {
+    try {
+      return (localStorage.getItem('procela:catalog-view-mode') as 'simple' | 'advanced') || 'simple';
+    } catch { return 'simple'; }
+  });
+  const setViewModePersist = (m: 'simple' | 'advanced') => {
+    setViewMode(m);
+    try { localStorage.setItem('procela:catalog-view-mode', m); } catch { /* noop */ }
+  };
 
   // Agent execution state
   interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; completedAt: string | null; durationMs: number | null; createdAt: string; }
@@ -1784,8 +1825,37 @@ export default function ProcessCatalogPage() {
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
           </p>
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <DomainLensToggle pageKey="process-catalog" />
+            {/* Simple ↔ Advanced view toggle — Simple hides Compliance,
+                Frequency, Risk Level, Automation and Est. Duration from
+                the per-node panel and downplays rare levels in the
+                legend. Default is Simple for first-time users. */}
+            <div role="tablist" aria-label="View detail" style={{
+              display: 'inline-flex', border: '1px solid var(--color-border)',
+              borderRadius: 999, overflow: 'hidden', background: 'var(--color-surface)',
+            }}>
+              {(['simple', 'advanced'] as const).map((m) => {
+                const active = viewMode === m;
+                return (
+                  <button
+                    key={m}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setViewModePersist(m)}
+                    title={m === 'simple' ? 'Hide rarely-used fields and levels' : 'Show every field and level'}
+                    style={{
+                      padding: '4px 12px', fontSize: 11,
+                      fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer',
+                      background: active ? 'var(--color-primary)' : 'transparent',
+                      color: active ? '#fff' : 'var(--color-text)',
+                    }}
+                  >
+                    {m === 'simple' ? 'Simple' : 'Advanced'}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         {canCreateValueStreams && (
@@ -2074,6 +2144,8 @@ export default function ProcessCatalogPage() {
         );
       })()}
 
+      <DomainLensActiveBanner pageKey="process-catalog" entityLabel="value streams" />
+
       {/* Add root form */}
       {addingTo === '__root__' && (
         <div style={{ marginBottom: 12 }}>
@@ -2174,7 +2246,8 @@ export default function ProcessCatalogPage() {
               runningActivity={runningActivity}
               hasAgentRoles={damaAgentRoles.length > 0}
               governanceHolderIds={governanceHolderIds}
-              holdersByRoleLabel={holdersByRoleLabel} />
+              holdersByRoleLabel={holdersByRoleLabel}
+          viewMode={viewMode} />
           ))
         )}
       </div>

@@ -21,6 +21,7 @@ import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
+import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { useDomainLens, passesLens } from '../stores/domainLensStore';
 import { assetDomain } from '../lib/entityDomain';
 import { useSortedList } from '../hooks/useSortedList';
@@ -1498,6 +1499,8 @@ export default function DataAssetsPage() {
         }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
+
+      <DomainLensActiveBanner pageKey="data-assets" entityLabel="data assets" />
 
       {/* Table */}
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>

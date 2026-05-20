@@ -51,9 +51,9 @@ export default function HelpPage() {
         <h2 style={h2Style}>1. Getting Started</h2>
         <ol style={{ ...listStyle, listStyle: 'decimal' }}>
           <li>Sign in using dev mode or your enterprise SSO credentials</li>
-          <li>Go to <strong>Administer &rarr; Organizations</strong> to create your company structure</li>
-          <li>Go to <strong>Administer &rarr; People</strong> to add team members and assign roles</li>
-          <li>Go to <strong>Govern &rarr; Program</strong> to begin the 4-phase governance setup journey</li>
+          <li>Go to <strong>Organizations</strong> (top-level sidebar item) to create your company structure</li>
+          <li>Go to <strong>People &rarr; People</strong> to add team members and assign roles</li>
+          <li>Go to <strong>Governance &rarr; Program</strong> to begin the 4-phase governance setup journey</li>
           <li>Follow the phase recommendations to build your governance foundation</li>
         </ol>
         <h3 style={h3Style}>The 4-Phase Governance Journey</h3>
