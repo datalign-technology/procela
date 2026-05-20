@@ -110,8 +110,14 @@ interface PersonPickerProps {
   /** Audience hint from the surrounding entity. GOVERNANCE opens the
    *  picker on the "By group" tab (governance bodies first);
    *  OPERATIONAL opens it on the org tree. Selection is never
-   *  restricted — this only sets the default lens. */
+   *  restricted by this prop — it only sets the default lens. */
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
+  /** If provided, only people whose key (id or name, matching valueMode)
+   *  is in this set can appear in the picker. Used to gate selection
+   *  by role-holder eligibility — e.g. an activity with Responsible
+   *  Role "Business Data Steward" only allows picking people who hold
+   *  that role on the Governance Roles page. */
+  eligibleKeys?: Set<string>;
 }
 
 export default function PersonPicker({
@@ -125,6 +131,7 @@ export default function PersonPicker({
   disabled,
   showGroups = true,
   domain,
+  eligibleKeys,
 }: PersonPickerProps) {
   const [open, setOpen] = useState(false);
   // Default lens follows the entity's domain: governance work opens on
@@ -166,7 +173,22 @@ export default function PersonPicker({
     };
   }, [open]);
 
-  const people = data?.people || [];
+  // Apply the eligibility gate before any of the search / tree / group
+  // views derive from it, so all three tabs see the same restricted
+  // set. The currently-selected value(s) pass through even if they
+  // aren't in the eligible set, so removing/displaying a stale pick
+  // still works without it disappearing from the trigger label.
+  const rawPeople = data?.people || [];
+  const people = useMemo(() => {
+    if (!eligibleKeys) return rawPeople;
+    const selKeys = new Set(
+      value == null ? [] : Array.isArray(value) ? value : value === '' ? [] : [value],
+    );
+    return rawPeople.filter((p) => {
+      const key = valueMode === 'name' ? p.name : p.id;
+      return eligibleKeys.has(key) || selKeys.has(key);
+    });
+  }, [rawPeople, eligibleKeys, value, valueMode]);
 
   // Resolve the selected value(s) to person records for the trigger label.
   const selectedKeys: string[] = useMemo(() => {

@@ -92,6 +92,13 @@ export interface ProcessNode {
   complianceTags?: string[];
   inputsOutputs?: string;
   responsibleRole?: string;
+  /** Specific person carrying the responsible role on this node, when
+   *  it's one. Always paired with `responsibleRole`; the UI only allows
+   *  picking a person who actually holds that role on the Governance
+   *  Roles page, but the backend doesn't enforce that — it only checks
+   *  the id resolves to a real person, so role-holder reshuffles don't
+   *  retroactively invalidate this row. */
+  responsiblePersonId?: string | null;
   statusJustification?: string;
   frequency?: string;
   riskLevel?: string;
@@ -368,6 +375,28 @@ const router = Router();
  *  referencing an existing system. Returns the cleaned/deduped list,
  *  or null after writing a 400 response (caller should return). Uses
  *  lazy-require so this module doesn't pull systems at import time. */
+/** Validate a personId — must reference a real person, or be empty /
+ *  null to clear. Returns { ok: true, value: id | null } where null
+ *  means "clear", or { ok: false } after writing a 400. Lazy-required
+ *  to avoid the process-catalog ↔ people cycle. */
+function validatePersonId(
+  value: unknown,
+  res: Response,
+): { ok: true; value: string | null } | { ok: false } {
+  if (value === '' || value === null) return { ok: true, value: null };
+  if (typeof value !== 'string' || !value.trim()) {
+    res.status(400).json({ success: false, error: 'personId must be a string id (or empty to clear)' });
+    return { ok: false };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { people } = require('./people') as { people: Array<{ id: string }> };
+  if (!people.some((p) => p.id === value)) {
+    res.status(400).json({ success: false, error: `Unknown person id "${value}"` });
+    return { ok: false };
+  }
+  return { ok: true, value };
+}
+
 function validateSystemIds(value: unknown, res: Response): string[] | null {
   if (!Array.isArray(value)) {
     res.status(400).json({ success: false, error: 'systemIds must be an array' });
@@ -482,7 +511,7 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 router.post('/nodes', (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
+    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -538,6 +567,16 @@ router.post('/nodes', (req: Request, res: Response) => {
     : validateSystemIds(systemIds, res);
   if (cleanedSystemIds === null) return;
 
+  // Responsible Person — only allowed at the activity / task level
+  // (other levels use Owner). The picker enforces "must hold the role";
+  // the backend just verifies the id resolves to a real person.
+  let cleanedResponsiblePersonId: string | null | undefined = undefined;
+  if (responsiblePersonId !== undefined) {
+    const v = validatePersonId(responsiblePersonId, res);
+    if (!v.ok) return;
+    cleanedResponsiblePersonId = v.value;
+  }
+
   const siblings = parentId
     ? processNodes.filter((n) => n.parentId === parentId)
     : processNodes.filter((n) => n.level === 'VALUE_STREAM');
@@ -568,6 +607,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     ...(complianceTags?.length ? { complianceTags } : {}),
     ...(inputsOutputs ? { inputsOutputs } : {}),
     ...(responsibleRole ? { responsibleRole } : {}),
+    ...(cleanedResponsiblePersonId ? { responsiblePersonId: cleanedResponsiblePersonId } : {}),
     ...(statusJustification ? { statusJustification } : {}),
     ...(Array.isArray(requiredSkillIds) && requiredSkillIds.length ? { requiredSkillIds } : {}),
     ...(cleanedSystemIds && cleanedSystemIds.length ? { systemIds: cleanedSystemIds } : {}),
@@ -595,7 +635,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
+    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
   if (version !== undefined && version !== (node.version ?? 1)) {
@@ -642,7 +682,8 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
     || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined
     || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined
-    || requiredSkillIds !== undefined || systemIds !== undefined;
+    || requiredSkillIds !== undefined || systemIds !== undefined
+    || responsiblePersonId !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = organizations.find((o) => o.id === node.orgId);
   const isAdvanced = nodeOrg?.statusMode === 'advanced';
@@ -668,6 +709,11 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   if (complianceTags !== undefined) node.complianceTags = complianceTags;
   if (inputsOutputs !== undefined) node.inputsOutputs = inputsOutputs;
   if (responsibleRole !== undefined) node.responsibleRole = responsibleRole;
+  if (responsiblePersonId !== undefined) {
+    const v = validatePersonId(responsiblePersonId, res);
+    if (!v.ok) return;
+    node.responsiblePersonId = v.value;
+  }
   if (statusJustification !== undefined) node.statusJustification = statusJustification;
   if (frequency !== undefined) node.frequency = frequency;
   if (riskLevel !== undefined) node.riskLevel = riskLevel;

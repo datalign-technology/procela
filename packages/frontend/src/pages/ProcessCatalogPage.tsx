@@ -46,6 +46,7 @@ interface ProcessNode {
   complianceTags?: string[];
   inputsOutputs?: string;
   responsibleRole?: string;
+  responsiblePersonId?: string | null;
   statusJustification?: string;
   frequency?: string;
   riskLevel?: string;
@@ -353,7 +354,7 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
 //    legacy comma-joined *name* string (valueMode="name") so no data
 //    migration is needed. ──
 
-function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain }: {
+function DocPersonField({ label, mode, valueMode, value, onChange, disabled, domain, eligibleKeys, disabledHint, placeholder }: {
   label: string;
   mode: 'single' | 'multi';
   valueMode: 'id' | 'name';
@@ -361,6 +362,16 @@ function DocPersonField({ label, mode, valueMode, value, onChange, disabled, dom
   onChange: (v: any) => void;
   disabled: boolean;
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
+  /** If provided, restrict the picker's options to these keys (ids or
+   *  names, matching valueMode). Used to gate selection to role-holders
+   *  on governance work. */
+  eligibleKeys?: Set<string>;
+  /** Hint rendered next to the picker when `disabled` is true — e.g.
+   *  explains why a Responsible Person picker is locked until a role
+   *  is set or until someone holds that role. */
+  disabledHint?: string;
+  /** Overrides the default trigger placeholder. */
+  placeholder?: string;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
@@ -373,8 +384,14 @@ function DocPersonField({ label, mode, valueMode, value, onChange, disabled, dom
           onChange={onChange}
           disabled={disabled}
           domain={domain}
-          placeholder={mode === 'single' ? 'Select owner…' : 'Select stakeholders…'}
+          eligibleKeys={eligibleKeys}
+          placeholder={placeholder || (mode === 'single' ? 'Select owner…' : 'Select stakeholders…')}
         />
+        {disabled && disabledHint && (
+          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3, fontStyle: 'italic' }}>
+            {disabledHint}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -780,7 +797,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, systemsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, systemsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles, governanceHolderIds, holdersByRoleLabel }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -809,6 +826,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   onRunAgent?: (activityId: string, activityName: string) => void;
   runningActivity?: string | null;
   hasAgentRoles?: boolean;
+  /** Union of personIds holding ANY governance role in this org —
+   *  used to gate Owner / Stakeholders on governance value streams
+   *  and processes. */
+  governanceHolderIds: Set<string>;
+  /** Per-role-label → personIds. Used by the Responsible Person picker
+   *  on activities to restrict to people who hold the activity's
+   *  Responsible Role. */
+  holdersByRoleLabel: Map<string, Set<string>>;
 }) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -943,26 +968,46 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 );
               })()}
               {/* Value Stream fields */}
-              {node.level === 'VALUE_STREAM' && (
-                <>
-                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
-                  <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                  <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
-                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
-                  <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
-                </>
-              )}
+              {node.level === 'VALUE_STREAM' && (() => {
+                const isGov = node.domain === 'GOVERNANCE';
+                // On governance nodes, restrict the person pickers to
+                // people who hold a governance role. If nobody has a
+                // role assigned yet, the picker is locked with a hint
+                // pointing the user at the Governance Roles page.
+                const govNamesEligible = new Set(
+                  peopleList.filter((p) => governanceHolderIds.has(p.id)).map((p) => p.name),
+                );
+                const noHolders = governanceHolderIds.size === 0;
+                const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
+                return (
+                  <>
+                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
+                    <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
+                    <DocField label="Business Outcome" value={node.businessOutcome || ''} onSave={(v) => onUpdate(node.id, { businessOutcome: v })} disabled={isLocked} placeholder="What value does this deliver?" />
+                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
+                    <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                  </>
+                );
+              })()}
               {/* Process fields */}
-              {node.level === 'PROCESS' && (
-                <>
-                  <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
-                  <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
-                  <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
-                  <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
-                  <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
-                  <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
-                </>
-              )}
+              {node.level === 'PROCESS' && (() => {
+                const isGov = node.domain === 'GOVERNANCE';
+                const govNamesEligible = new Set(
+                  peopleList.filter((p) => governanceHolderIds.has(p.id)).map((p) => p.name),
+                );
+                const noHolders = governanceHolderIds.size === 0;
+                const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
+                return (
+                  <>
+                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
+                    <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
+                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} />
+                    <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
+                    <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
+                    <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
+                  </>
+                );
+              })()}
               {/* Sub-Process fields — no level-specific fields; the
                  Inputs / Outputs note now lives next to the data-asset
                  panel below so the text and the structured list sit
@@ -972,6 +1017,35 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {node.level === 'ACTIVITY' && (
                 <>
                   <DocRoleField value={node.responsibleRole || ''} onSave={(v) => onUpdate(node.id, { responsibleRole: v })} disabled={isLocked} domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'} />
+                  {/* Responsible Person — restricted to people who
+                     currently hold node.responsibleRole. Disabled until
+                     the role is set, or if no one holds that role yet
+                     (with hints pointing the user at where to fix it). */}
+                  {(() => {
+                    const role = node.responsibleRole || '';
+                    const holders = role ? (holdersByRoleLabel.get(role) || new Set<string>()) : new Set<string>();
+                    const noRole = !role;
+                    const noHolders = !noRole && holders.size === 0;
+                    const hint = noRole
+                      ? 'Pick a Responsible Role first — then the person list will be filtered to people who hold it.'
+                      : noHolders
+                        ? `No one currently holds "${role}". Assign it on the Governance Roles page first.`
+                        : undefined;
+                    return (
+                      <DocPersonField
+                        label="Responsible Person"
+                        mode="single"
+                        valueMode="id"
+                        value={node.responsiblePersonId || null}
+                        onChange={(id) => onUpdate(node.id, { responsiblePersonId: id || null })}
+                        disabled={isLocked || noRole || noHolders}
+                        domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'}
+                        eligibleKeys={holders}
+                        disabledHint={hint}
+                        placeholder={noRole ? 'Pick a role first…' : 'Select responsible person…'}
+                      />
+                    );
+                  })()}
                   <DocDropdown label="Automation" value={node.automationLevel || ''} options={AUTOMATION_OPTIONS} onSave={(v) => onUpdate(node.id, { automationLevel: v })} disabled={isLocked} placeholder="Automation level..." />
                   <DocDropdown
                     label="Est. Duration"
@@ -1268,7 +1342,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           agentExecByActivity={agentExecByActivity}
           onRunAgent={onRunAgent}
           runningActivity={runningActivity}
-          hasAgentRoles={hasAgentRoles} />
+          hasAgentRoles={hasAgentRoles}
+          governanceHolderIds={governanceHolderIds}
+          holdersByRoleLabel={holdersByRoleLabel} />
       ))}
     </div>
   );
@@ -1311,10 +1387,18 @@ export default function ProcessCatalogPage() {
   const [damaAgentRoles, setDamaAgentRoles] = useState<DamaRoleInfo[]>([]);
   const [runningActivity, setRunningActivity] = useState<string | null>(null);
 
+  // Governance role assignments in this org — drives the role-gated
+  // person pickers below. governanceHolderIds is the union (any
+  // governance role) and powers Owner/Stakeholders on governance VS /
+  // Process. holdersByRoleLabel is per-role and powers the Responsible
+  // Person picker on activities.
+  interface RoleAssignment { personId: string; roleType: string; }
+  const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>([]);
+
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, systemsRes, mappingsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, systemsRes, mappingsRes, rolesRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
@@ -1322,6 +1406,7 @@ export default function ProcessCatalogPage() {
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${qp}`),
         apiClient.get<{ success: boolean; data: SystemRef[] }>(`/systems${qp}`),
         apiClient.get<{ success: boolean; data: MappingInfo[] }>(`/mappings${qp}`),
+        apiClient.get<{ success: boolean; data: RoleAssignment[] }>(`/dama-roles${qp}`),
       ]);
       const byStep: Record<string, MappingInfo[]> = {};
       for (const m of (mappingsRes.data || [])) {
@@ -1337,6 +1422,7 @@ export default function ProcessCatalogPage() {
       setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
       setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name })));
       setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
+      setRoleAssignments((rolesRes.data || []).map((r: any) => ({ personId: r.personId, roleType: r.roleType })));
       // Fetch agent executions and DAMA roles for agent-assigned activities
       try {
         const [execsRes, rolesRes] = await Promise.all([
@@ -1617,6 +1703,27 @@ export default function ProcessCatalogPage() {
     () => tree.filter((vs) => passesLens(domainLens, processDomain(vs))),
     [tree, domainLens],
   );
+
+  // Build the role-eligibility maps. Activity.responsibleRole is stored
+  // as a label string (e.g. "Business Data Steward"); dama-roles uses
+  // the roleType code ("BUSINESS_DATA_STEWARD"). Walk GOVERNANCE_ROLES
+  // once to map label → roleType, then group personIds by both.
+  const { governanceHolderIds, holdersByRoleLabel } = useMemo(() => {
+    const roleTypeByLabel = new Map<string, string>();
+    for (const r of GOVERNANCE_ROLES) roleTypeByLabel.set(r.label, r.roleType);
+    const govHolders = new Set<string>();
+    const byLabel = new Map<string, Set<string>>();
+    const personsByRoleType = new Map<string, Set<string>>();
+    for (const a of roleAssignments) {
+      govHolders.add(a.personId);
+      if (!personsByRoleType.has(a.roleType)) personsByRoleType.set(a.roleType, new Set());
+      personsByRoleType.get(a.roleType)!.add(a.personId);
+    }
+    for (const r of GOVERNANCE_ROLES) {
+      byLabel.set(r.label, personsByRoleType.get(r.roleType) || new Set());
+    }
+    return { governanceHolderIds: govHolders, holdersByRoleLabel: byLabel };
+  }, [roleAssignments]);
 
   const issues = collectIssues(lensedTree);
 
@@ -2065,7 +2172,9 @@ export default function ProcessCatalogPage() {
               agentExecByActivity={agentExecByActivity}
               onRunAgent={handleRunAgent}
               runningActivity={runningActivity}
-              hasAgentRoles={damaAgentRoles.length > 0} />
+              hasAgentRoles={damaAgentRoles.length > 0}
+              governanceHolderIds={governanceHolderIds}
+              holdersByRoleLabel={holdersByRoleLabel} />
           ))
         )}
       </div>
