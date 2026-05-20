@@ -23,6 +23,7 @@ import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
 import HelpIconLink from '../components/HelpIconLink';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
+import BulkSelectHint from '../components/BulkSelectHint';
 import { useDomainLens, passesLens } from '../stores/domainLensStore';
 import { assetDomain } from '../lib/entityDomain';
 import { useSortedList } from '../hooks/useSortedList';
@@ -1437,6 +1438,8 @@ export default function DataAssetsPage() {
           </div>
         </SectionCard>
       )}
+
+      <BulkSelectHint storageKey="data-assets" itemLabel="data assets" hasItems={assets.length > 0} hasSelection={selectedIds.size > 0} />
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (

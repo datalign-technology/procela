@@ -668,7 +668,15 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
  *  the "what I did" feed all share rendering, enrichment, and timestamp
  *  behaviour. */
 function RecentActivity() {
-  return <ActivityFeed title="Recent Activity" />;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Recent Activity</h2>
+        <Link to="/audit-log" style={{ fontSize: 12, color: 'var(--color-primary)' }}>View full audit log →</Link>
+      </div>
+      <ActivityFeed inline />
+    </div>
+  );
 }
 
 function ProgramMaturity() {

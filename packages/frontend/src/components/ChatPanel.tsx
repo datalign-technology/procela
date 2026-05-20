@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { apiClient } from '../api/client';
+import { useIsMobile } from '../hooks/useMediaQuery';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -17,6 +18,14 @@ export default function ChatPanel() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+  // The mobile sidebar collapses to a ~60px fixed bottom strip, so the
+  // floating chat bubble has to ride above it; on desktop we can pin
+  // to the viewport corner like before.
+  const bubbleBottom = isMobile ? 80 : 24;
+  const panelStyle = isMobile
+    ? { left: 8, right: 8, bottom: bubbleBottom + 56, top: 56, width: 'auto' as const, height: 'auto' as const }
+    : { right: 24, bottom: bubbleBottom + 56, width: 400, height: 520 };
 
   useEffect(() => {
     if (listRef.current) {
@@ -83,7 +92,7 @@ export default function ChatPanel() {
         onClick={() => setOpen((o) => !o)}
         style={{
           position: 'fixed',
-          bottom: 24,
+          bottom: bubbleBottom,
           right: 24,
           width: 48,
           height: 48,
@@ -111,15 +120,14 @@ export default function ChatPanel() {
         {open ? '\u2715' : '\u2753'}
       </button>
 
-      {/* Chat window */}
+      {/* Chat window. On phones it expands edge-to-edge with margins,
+          riding above the mobile nav strip; on desktop it's a 400×520
+          floating card in the corner. */}
       {open && (
         <div
           style={{
             position: 'fixed',
-            bottom: 84,
-            right: 24,
-            width: 400,
-            height: 500,
+            ...panelStyle,
             backgroundColor: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-lg)',

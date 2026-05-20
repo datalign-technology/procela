@@ -20,6 +20,7 @@ import { useBrandingStore } from '@/stores/brandingStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useIsMobile } from '@/hooks/useMediaQuery';
 
 type NavItem = { to: string; label: string; icon: string };
 // `items` is always the flat source of truth (active-state, flyout,
@@ -118,6 +119,7 @@ const navSections: NavSection[] = [
       { to: '/analysis',          label: 'Analysis',          icon: '\u229e' },
       { to: '/reports',           label: 'Reports',           icon: '\u2630' },
       { to: '/mappings',          label: 'Process Coverage',  icon: '\u21c4' },
+      { to: '/audit-log',         label: 'Audit Log',         icon: '\u29d6' },
     ],
   },
 ];
@@ -190,6 +192,7 @@ export default function Layout() {
 
   // Sidebar collapse state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile();
 
   // Accordion nav: which section is expanded (one at a time)
   const activeSectionLabel = (() => {
@@ -485,7 +488,40 @@ export default function Layout() {
           {!sidebarCollapsed && <span>{branding.companyName || 'Procela'}</span>}
         </div>
         <nav className={styles.sidebarNav}>
-          {visibleSections.map((section, sIdx) => {
+          {isMobile ? (
+            /* On phones the sidebar collapses to a horizontal scrolling
+               strip at the bottom of the screen. The accordion model
+               (a section *button* per cluster that expands children
+               vertically) was actively broken there — clicking a
+               section had nowhere to expand, so leaf pages (Data
+               Assets, Roles, Calendar…) were unreachable. On mobile
+               we render every leaf as a direct link instead, skipping
+               the section headers entirely. */
+            (() => {
+              const allLeaves: NavItem[] = [
+                ...visibleSections.flatMap((s) => s.items),
+                ...bottomNavItems,
+              ];
+              return allLeaves.map((item) => {
+                const groupRoutes = ROUTE_GROUPS[item.to];
+                const isGroupActive = groupRoutes
+                  ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                  : location.pathname === item.to;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
+                    title={item.label}
+                  >
+                    <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                    <span style={{ fontSize: 10 }}>{item.label}</span>
+                  </NavLink>
+                );
+              });
+            })()
+          ) : visibleSections.map((section, sIdx) => {
             const isExpanded = section.label ? expandedNavSection === section.label : true;
             const isFlyoutOpen = sidebarCollapsed && flyoutSection === section.label;
             const sectionHasActive = section.items.some((item) => {
@@ -631,22 +667,29 @@ export default function Layout() {
             );
           })}
 
-          <div className={styles.navSpacer} />
-          <div className={styles.navDivider} />
-
-          {bottomNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                clsx(styles.navLink, isActive && styles.navLinkActive)
-              }
-              title={sidebarCollapsed ? item.label : undefined}
-            >
-              <span className={styles.navIcon}>{textIcon(item.icon)}</span>
-              {!sidebarCollapsed && item.label}
-            </NavLink>
-          ))}
+          {/* Bottom-nav cluster (Agents / Settings / Help). Skipped on
+              mobile — those items are already inlined into the flat
+              leaf list above so the bottom strip stays in a single
+              horizontal row. */}
+          {!isMobile && (
+            <>
+              <div className={styles.navSpacer} />
+              <div className={styles.navDivider} />
+              {bottomNavItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    clsx(styles.navLink, isActive && styles.navLinkActive)
+                  }
+                  title={sidebarCollapsed ? item.label : undefined}
+                >
+                  <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                  {!sidebarCollapsed && item.label}
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
         <button
           className={styles.sidebarToggle}
