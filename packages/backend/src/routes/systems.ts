@@ -196,6 +196,23 @@ process.nextTick(() => {
     saveStore('processNodes', processNodes);
     logger.info({ nodesTouched }, 'Pruned dangling processNodes.systemIds references');
   }
+  // connectionSystemLinks rows whose `systemId` no longer resolves to a
+  // real system. The DELETE handler cascades these going forward; this
+  // catches links from stores written before that cascade existed (or
+  // from imports / direct edits that bypassed it). Each surviving link
+  // becomes a sys-conn fact in the analysis cube — a dangling one
+  // shows up as an "(unknown system)" row.
+  let linksTouched = 0;
+  for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
+    if (!validSystemIds.has(connectionSystemLinks[i].systemId)) {
+      connectionSystemLinks.splice(i, 1);
+      linksTouched++;
+    }
+  }
+  if (linksTouched > 0) {
+    saveStore('connectionSystemLinks', connectionSystemLinks);
+    logger.info({ linksTouched }, 'Pruned dangling connectionSystemLinks rows');
+  }
 });
 
 const SYSTEM_TYPES = [
