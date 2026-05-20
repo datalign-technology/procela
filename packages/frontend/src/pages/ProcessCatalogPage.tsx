@@ -961,13 +961,13 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                   <DocDropdown label="Frequency" value={node.frequency || ''} options={FREQUENCY_OPTIONS} onSave={(v) => onUpdate(node.id, { frequency: v })} disabled={isLocked} placeholder="How often?" />
                   <DocDropdown label="Risk Level" value={node.riskLevel || ''} options={RISK_OPTIONS} onSave={(v) => onUpdate(node.id, { riskLevel: v })} disabled={isLocked} placeholder="Select risk..." />
-                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
                 </>
               )}
-              {/* Sub-Process fields */}
-              {node.level === 'SUBPROCESS' && (
-                <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
-              )}
+              {/* Sub-Process fields — no level-specific fields; the
+                 Inputs / Outputs note now lives next to the data-asset
+                 panel below so the text and the structured list sit
+                 together. */}
+              {node.level === 'SUBPROCESS' && null}
               {/* Activity fields */}
               {node.level === 'ACTIVITY' && (
                 <>
@@ -986,7 +986,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                     disabled={isLocked}
                     placeholder="Pick a duration..."
                   />
-                  <DocField label="Inputs / Outputs" value={node.inputsOutputs || ''} onSave={(v) => onUpdate(node.id, { inputsOutputs: v })} disabled={isLocked} placeholder="What goes in and what comes out?" />
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
                   {/* Agent execution — Run button + last status */}
                   {hasAgentRoles && onRunAgent && (
@@ -1038,6 +1037,22 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   disabled={isLocked}
                 />
               )}
+            </div>
+          )}
+          {/* Free-text Inputs / Outputs note — sits directly above the
+             structured IOPanel so the description and the attached
+             assets read as one block (it used to live up among the
+             other doc fields, separated from the panel by Skills /
+             Agent rows). */}
+          {isExpanded && node.level !== 'VALUE_STREAM' && (
+            <div style={{ marginTop: 8 }}>
+              <DocField
+                label="Inputs / Outputs"
+                value={node.inputsOutputs || ''}
+                onSave={(v) => onUpdate(node.id, { inputsOutputs: v })}
+                disabled={isLocked}
+                placeholder="What goes in and what comes out?"
+              />
             </div>
           )}
           {/* Structured Inputs / Outputs panel — shows mapped data assets with owner info */}
