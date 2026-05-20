@@ -13,7 +13,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'systems': 'Systems',
   'systems-and-data': 'Systems & Data',
   'data-assets': 'Data Assets',
-  'mappings': 'Mappings',
+  'mappings': 'Process Coverage',
   'gap-detection': 'Gap Detection',
   'governance': 'Governance',
   'governance-groups': 'Governance Groups',

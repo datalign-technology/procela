@@ -23,8 +23,6 @@ interface StoredMapping {
   dataFormat?: string;
   sla?: string;
   qualityRequirement?: string;
-  sourceSystem?: string;
-  destinationSystem?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -123,7 +121,7 @@ router.get('/by-asset/:assetId', (req: Request, res: Response) => {
 /** POST /api/v1/mappings */
 router.post('/', (req: Request, res: Response) => {
   const { processStepId, dataAssetId, linkType, notes, aiSuggested, orgId,
-    criticality, dataFormat, sla, qualityRequirement, sourceSystem, destinationSystem } = req.body;
+    criticality, dataFormat, sla, qualityRequirement } = req.body;
 
   if (!processStepId) {
     res.status(400).json({ success: false, error: 'processStepId is required' });
@@ -152,8 +150,6 @@ router.post('/', (req: Request, res: Response) => {
     ...(dataFormat ? { dataFormat } : {}),
     ...(sla ? { sla } : {}),
     ...(qualityRequirement ? { qualityRequirement } : {}),
-    ...(sourceSystem ? { sourceSystem } : {}),
-    ...(destinationSystem ? { destinationSystem } : {}),
     createdBy: 'dev-user',
     createdAt: now,
     updatedAt: now,
@@ -172,7 +168,7 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   const { processStepId, dataAssetId, linkType, notes, aiSuggested, userOverridden,
-    criticality, dataFormat, sla, qualityRequirement, sourceSystem, destinationSystem } = req.body;
+    criticality, dataFormat, sla, qualityRequirement } = req.body;
   if (processStepId !== undefined) mapping.processStepId = processStepId;
   if (dataAssetId !== undefined) mapping.dataAssetId = dataAssetId;
   if (linkType !== undefined) {
@@ -189,8 +185,6 @@ router.put('/:id', (req: Request, res: Response) => {
   if (dataFormat !== undefined) mapping.dataFormat = dataFormat || undefined;
   if (sla !== undefined) mapping.sla = sla || undefined;
   if (qualityRequirement !== undefined) mapping.qualityRequirement = qualityRequirement || undefined;
-  if (sourceSystem !== undefined) mapping.sourceSystem = sourceSystem || undefined;
-  if (destinationSystem !== undefined) mapping.destinationSystem = destinationSystem || undefined;
   mapping.updatedAt = new Date().toISOString();
   saveStore('mappings', mappings);
   res.json({ success: true, data: enrichMapping(mapping) });

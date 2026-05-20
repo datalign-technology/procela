@@ -98,6 +98,11 @@ export interface ProcessNode {
   automationLevel?: string;
   estimatedDuration?: string;
   requiredSkillIds?: string[];
+  /** Systems the step (or higher-level node) runs on. First-class link
+   *  — independent of any data-asset mapping — so a step that runs on a
+   *  system without (yet) a mapped data asset is still captured.
+   *  Cascaded on system delete by the systems route. */
+  systemIds?: string[];
   // Governance vs operational classifier. Replaces the brittle
   // `name.includes('Governance')` runtime checks. Set at creation
   // (governance template → GOVERNANCE; business wizard / manual →
@@ -359,6 +364,36 @@ function cascadeDeleteMappings(stepIds: Set<string>): number {
 
 const router = Router();
 
+/** Validate a systemIds payload — must be an array of strings, each
+ *  referencing an existing system. Returns the cleaned/deduped list,
+ *  or null after writing a 400 response (caller should return). Uses
+ *  lazy-require so this module doesn't pull systems at import time. */
+function validateSystemIds(value: unknown, res: Response): string[] | null {
+  if (!Array.isArray(value)) {
+    res.status(400).json({ success: false, error: 'systemIds must be an array' });
+    return null;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems') as { systems: Array<{ id: string }> };
+  const known = new Set(systems.map((s) => s.id));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of value) {
+    if (typeof id !== 'string' || !id.trim()) {
+      res.status(400).json({ success: false, error: 'systemIds entries must be non-empty strings' });
+      return null;
+    }
+    if (!known.has(id)) {
+      res.status(400).json({ success: false, error: `Unknown system id "${id}"` });
+      return null;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 // ── HIERARCHY NODES ──
 
 /** DELETE /all — delete all process nodes and flow relationships */
@@ -447,7 +482,7 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 router.post('/nodes', (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds } = req.body;
+    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -495,6 +530,14 @@ router.post('/nodes', (req: Request, res: Response) => {
     }
   }
 
+  // Lazy-require to avoid a process-catalog ↔ systems import cycle.
+  // Returns the cleaned, deduped, validated list or null if the request
+  // referenced an unknown system id.
+  const cleanedSystemIds = systemIds === undefined
+    ? undefined
+    : validateSystemIds(systemIds, res);
+  if (cleanedSystemIds === null) return;
+
   const siblings = parentId
     ? processNodes.filter((n) => n.parentId === parentId)
     : processNodes.filter((n) => n.level === 'VALUE_STREAM');
@@ -527,6 +570,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     ...(responsibleRole ? { responsibleRole } : {}),
     ...(statusJustification ? { statusJustification } : {}),
     ...(Array.isArray(requiredSkillIds) && requiredSkillIds.length ? { requiredSkillIds } : {}),
+    ...(cleanedSystemIds && cleanedSystemIds.length ? { systemIds: cleanedSystemIds } : {}),
     domain: nodeDomain,
     createdAt: now,
     updatedAt: now,
@@ -551,7 +595,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds } = req.body;
+    responsibleRole, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
   if (version !== undefined && version !== (node.version ?? 1)) {
@@ -598,7 +642,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     || purpose !== undefined || businessOutcome !== undefined || stakeholders !== undefined
     || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined
     || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined
-    || requiredSkillIds !== undefined;
+    || requiredSkillIds !== undefined || systemIds !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = organizations.find((o) => o.id === node.orgId);
   const isAdvanced = nodeOrg?.statusMode === 'advanced';
@@ -630,6 +674,11 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   if (automationLevel !== undefined) node.automationLevel = automationLevel;
   if (estimatedDuration !== undefined) node.estimatedDuration = estimatedDuration;
   if (requiredSkillIds !== undefined) node.requiredSkillIds = Array.isArray(requiredSkillIds) ? requiredSkillIds : [];
+  if (systemIds !== undefined) {
+    const cleaned = validateSystemIds(systemIds, res);
+    if (cleaned === null) return;
+    node.systemIds = cleaned.length > 0 ? cleaned : undefined;
+  }
 
   // Validate status transition against the state machine
   if (status !== undefined && status !== node.status) {

@@ -297,12 +297,12 @@ export default function MappingsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process-Data Mappings</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process Coverage</h1>
             <InfoTip term="Mapping" />
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Link data assets to process steps to track data dependencies across your organization.
+            Flat audit view of every step ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each step in the Process Catalog — this page is for cross-process review and bulk edits.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>

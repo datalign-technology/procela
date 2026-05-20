@@ -584,6 +584,20 @@ router.delete('/:id', (req: Request, res: Response) => {
     }
   }
   if (assetRefsCleared > 0) saveStore('dataAssets', dataAssets);
+  // Cascade: drop the removed system from any process node's systemIds
+  // list. Lazy-require to avoid the systems ↔ process-catalog cycle.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
+  let nodesTouched = 0;
+  for (const n of processNodes) {
+    if (!n.systemIds || n.systemIds.length === 0) continue;
+    const kept = n.systemIds.filter((sid) => sid !== removed.id);
+    if (kept.length !== n.systemIds.length) {
+      n.systemIds = kept.length > 0 ? kept : undefined;
+      nodesTouched++;
+    }
+  }
+  if (nodesTouched > 0) saveStore('processNodes', processNodes);
   res.status(204).send();
 });
 

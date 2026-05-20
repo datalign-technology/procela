@@ -58,7 +58,6 @@ const navSections: NavSection[] = [
     label: 'Processes',
     items: [
       { to: '/processes', label: 'Processes', icon: '\u26C1' },
-      { to: '/mappings', label: 'Mappings', icon: '\u21C4' },
     ],
   },
   {
@@ -112,9 +111,10 @@ const navSections: NavSection[] = [
     // rather than under Governance where they used to sit.
     label: 'Insights',
     items: [
-      { to: '/enterprise-view', label: 'Enterprise View', icon: '\u29c9' },
-      { to: '/analysis',        label: 'Analysis',        icon: '\u229e' },
-      { to: '/reports',         label: 'Reports',         icon: '\u2630' },
+      { to: '/enterprise-view',   label: 'Enterprise View',   icon: '\u29c9' },
+      { to: '/analysis',          label: 'Analysis',          icon: '\u229e' },
+      { to: '/reports',           label: 'Reports',           icon: '\u2630' },
+      { to: '/mappings',          label: 'Process Coverage',  icon: '\u21c4' },
     ],
   },
 ];

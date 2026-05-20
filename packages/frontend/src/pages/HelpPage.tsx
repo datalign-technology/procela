@@ -71,7 +71,7 @@ export default function HelpPage() {
         <p style={pStyle}>The sidebar is organized into Dashboard plus five plain-noun buckets, so you can find pages by what they ARE rather than which DAMA phase they belong to.</p>
         <ul style={listStyle}>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
-          <li><strong>Processes</strong> &mdash; Processes, Mappings. Define the work; link it to data.</li>
+          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. (The cross-process flat-list view of step↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>People</strong> &mdash; People, Organizations, Skills, Agents.</li>
@@ -119,10 +119,10 @@ export default function HelpPage() {
           <li>Assigning an Owner or Stakeholders opens the shared <strong>person picker</strong> &mdash; search by name / title / org, or browse the org tree (Company &rarr; Division &rarr; Department) or governance groups. Every result shows the person's title and org path so two people with the same name are distinguishable. The same picker is used for owners, stewards, deputies, and group members across the app.</li>
           <li><strong>Domain-aware role assignment.</strong> Governance value streams default the person picker to the governance bodies and the <strong>Responsible Role</strong> selector to the DAMA governance roles only; operational (business) processes default to the org tree and the generic business roles, with the DAMA roles hidden. A "show all roles" toggle reveals the other set for genuine cross-overs, and a picked role from the other domain is flagged <em>Cross-domain</em>. Existing free-text role values are preserved until you re-pick.</li>
         </ul>
-        <h3 style={h3Style}>Mappings</h3>
+        <h3 style={h3Style}>Process Coverage</h3>
         <ul style={listStyle}>
-          <li>Link data assets to process activities to track which data supports which process step.</li>
-          <li>Batch Mapping Wizard: matrix interface for creating multiple mappings at once.</li>
+          <li>Flat audit / bulk-edit view of every step ↔ data-asset link in the catalog. Sortable columns, CSV/Excel export, bulk delete, and the Batch Mapping Wizard (matrix interface) for creating many mappings at once.</li>
+          <li>Day-to-day, you connect a step to its data assets <strong>inline on the Process Catalog</strong> — each node panel has Owner, Responsible Role, Systems, and Inputs/Outputs (data assets) in one place. Process Coverage is the cross-process review surface for those same links; it doesn't introduce a separate model.</li>
           <li>Mappings can be AI-suggested or user-defined; the page tracks which is which so suggestion overrides are auditable.</li>
         </ul>
       </div>
@@ -339,7 +339,7 @@ export default function HelpPage() {
           <li>Capture the current sidebar / search / group-by state on a list page under a name, then recall it later. The <strong>Views</strong> button sits in the page header next to Export.</li>
           <li>Eight list pages support saved views: Data Assets, Systems, Connections, Data Dictionary, Decision Rights, Governance Roles, Business Glossary, and People.</li>
           <li>Views are org-visible &mdash; everyone in the org sees views saved by anyone. Only the owner can delete or rename their own.</li>
-          <li>Tree-based pages (Mappings, Organizations, Process Catalog, Governance Groups) don't have saved views because their state isn't a flat filter set.</li>
+          <li>Tree-based pages (Organizations, Process Catalog, Governance Groups) don't have saved views because their state isn't a flat filter set.</li>
         </ul>
 
         <h3 style={h3Style}>Role Detail drawer</h3>
@@ -406,7 +406,7 @@ export default function HelpPage() {
           <li><strong>Shift + ?</strong> &mdash; Open the shortcuts reference modal.</li>
           <li><strong>g then d</strong> &mdash; Go to Dashboard</li>
           <li><strong>g then c</strong> &mdash; Go to Processes</li>
-          <li><strong>g then m</strong> &mdash; Go to Mappings</li>
+          <li><strong>g then m</strong> &mdash; Go to Process Coverage</li>
           <li><strong>g then a</strong> &mdash; Go to Data Assets</li>
           <li><strong>g then q</strong> &mdash; Go to Data Quality</li>
           <li><strong>g then l</strong> &mdash; Go to Data Lineage</li>

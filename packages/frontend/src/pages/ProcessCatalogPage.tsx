@@ -52,6 +52,11 @@ interface ProcessNode {
   automationLevel?: string;
   estimatedDuration?: string;
   requiredSkillIds?: string[];
+  /** First-class link to the systems this step (or higher-level node)
+   *  runs on. Captures step→system independently of the data-asset
+   *  mappings, so a step on a system without a mapped asset is still
+   *  surfaced. */
+  systemIds?: string[];
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
   children?: ProcessNode[];
 }
@@ -128,6 +133,7 @@ const ROLE_OPTIONS = [
 
 interface PersonRef { id: string; name: string; }
 interface DataAssetRef { id: string; name: string; }
+interface SystemRef { id: string; name: string; systemType?: string; }
 interface MappingInfo {
   id: string;
   processStepId: string;
@@ -137,8 +143,6 @@ interface MappingInfo {
   dataFormat?: string;
   sla?: string;
   qualityRequirement?: string;
-  sourceSystem?: string;
-  destinationSystem?: string;
   assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; healthScore: number } | null;
 }
 
@@ -469,6 +473,57 @@ function DocMultiSelect({ label, selected, options, onSave, disabled, placeholde
   );
 }
 
+// ── Systems picker — selects from registered Systems by id ─────────────────
+// Distinct from DocMultiSelect because options are id/name pairs, not
+// flat strings. Same visual treatment so it nests naturally with the
+// other Doc* fields in the node panel.
+function DocSystemsField({ selected, options, onSave, disabled }: {
+  selected: string[]; options: SystemRef[]; onSave: (ids: string[]) => void; disabled: boolean;
+}) {
+  const byId = new Map(options.map((o) => [o.id, o]));
+  const available = options.filter((o) => !selected.includes(o.id));
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 2 }}>Systems:</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', flex: 1 }}>
+        {selected.map((id) => {
+          const s = byId.get(id);
+          return (
+            <span key={id} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              padding: '1px 6px', borderRadius: 10, fontSize: 10, fontWeight: 500,
+              background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd',
+            }}>
+              {s?.name || id}
+              {!disabled && (
+                <button onClick={() => onSave(selected.filter((sid) => sid !== id))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#1e40af', padding: 0, lineHeight: 1 }}>&times;</button>
+              )}
+            </span>
+          );
+        })}
+        {!disabled && available.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => { if (e.target.value) onSave([...selected, e.target.value]); }}
+            style={{
+              fontSize: 10, border: '1px solid var(--color-border)', borderRadius: 4,
+              background: 'var(--color-surface)', cursor: 'pointer',
+              color: 'var(--color-text-muted)', padding: '2px 6px',
+            }}
+          >
+            <option value="">{selected.length === 0 ? 'Pick systems this runs on...' : '+ Add system'}</option>
+            {available.map((o) => <option key={o.id} value={o.id}>{o.name}{o.systemType ? ` (${o.systemType})` : ''}</option>)}
+          </select>
+        )}
+        {selected.length === 0 && disabled && (
+          <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', opacity: 0.6 }}>No systems linked</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Inputs / Outputs Panel — shows mapped data assets with owner info ──
 
 function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
@@ -689,7 +744,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, systemsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -700,6 +755,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   flows: FlowRelationship[];
   peopleList: PersonRef[];
   assetsList: DataAssetRef[];
+  systemsList: SystemRef[];
   mappingsByStep: Record<string, MappingInfo[]>;
   onAddMapping: (nodeId: string, assetId: string, linkType: string) => void;
   onRemoveMapping: (mappingId: string) => void;
@@ -823,6 +879,33 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {/* Documentation fields — visible when expanded */}
           {isExpanded && (
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 2 }}>
+              {/* "Where it runs" connection summary — read-only one-liner
+                 above the editable fields so the entire connection
+                 landscape (owner · role · systems · data) is visible at
+                 a glance when you open a node. Skipped for value streams
+                 where systems/assets aren't applicable. */}
+              {node.level !== 'VALUE_STREAM' && (() => {
+                const ownerName = node.ownerId ? peopleList.find((p) => p.id === node.ownerId)?.name : null;
+                const sysCount = (node.systemIds || []).length;
+                const assetCount = (mappingsByStep[node.id] || []).length;
+                const role = node.responsibleRole || null;
+                const bits: string[] = [];
+                if (ownerName) bits.push(`Owner: ${ownerName}`);
+                if (role) bits.push(`Role: ${role}`);
+                bits.push(`${sysCount} system${sysCount === 1 ? '' : 's'}`);
+                bits.push(`${assetCount} data asset${assetCount === 1 ? '' : 's'}`);
+                return (
+                  <div style={{
+                    fontSize: 10, color: 'var(--color-text-muted)',
+                    padding: '3px 8px', marginBottom: 4,
+                    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                  }}>
+                    <span style={{ fontWeight: 600, marginRight: 6 }}>Where it runs:</span>
+                    {bits.join(' · ')}
+                  </div>
+                );
+              })()}
               {/* Value Stream fields */}
               {node.level === 'VALUE_STREAM' && (
                 <>
@@ -893,6 +976,19 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Task fields — required skills */}
               {node.level === 'TASK' && (
                 <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
+              )}
+              {/* Systems this step runs on — first-class link, distinct
+                 from the data-asset mappings below (a step may run on a
+                 system even before any data asset is linked). Available
+                 on every level except value streams, where it's too
+                 abstract. */}
+              {node.level !== 'VALUE_STREAM' && (
+                <DocSystemsField
+                  selected={node.systemIds || []}
+                  options={systemsList}
+                  onSave={(ids) => onUpdate(node.id, { systemIds: ids })}
+                  disabled={isLocked}
+                />
               )}
             </div>
           )}
@@ -1101,6 +1197,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           onRemoveTag={onRemoveTag}
           peopleList={peopleList}
           assetsList={assetsList}
+          systemsList={systemsList}
           mappingsByStep={mappingsByStep}
           onAddMapping={onAddMapping}
           onRemoveMapping={onRemoveMapping}
@@ -1138,6 +1235,7 @@ export default function ProcessCatalogPage() {
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
   const [peopleList, setPeopleList] = useState<PersonRef[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
+  const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
@@ -1153,12 +1251,13 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, mappingsRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, systemsRes, mappingsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
         apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${qp}`),
+        apiClient.get<{ success: boolean; data: SystemRef[] }>(`/systems${qp}`),
         apiClient.get<{ success: boolean; data: MappingInfo[] }>(`/mappings${qp}`),
       ]);
       const byStep: Record<string, MappingInfo[]> = {};
@@ -1174,6 +1273,7 @@ export default function ProcessCatalogPage() {
       setAllTags(tagsRes.data || []);
       setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
       setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name })));
+      setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
       // Fetch agent executions and DAMA roles for agent-assigned activities
       try {
         const [execsRes, rolesRes] = await Promise.all([
@@ -1894,6 +1994,7 @@ export default function ProcessCatalogPage() {
               onRemoveTag={removeTag}
               peopleList={peopleList}
               assetsList={assetsList}
+              systemsList={systemsList}
               mappingsByStep={mappingsByStep}
               onAddMapping={addMapping}
               onRemoveMapping={removeMapping}
