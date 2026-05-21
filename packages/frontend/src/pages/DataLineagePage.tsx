@@ -633,7 +633,7 @@ export default function DataLineagePage() {
             <EmptyState
               icon={'\u21C4'}
               title="No lineage flows defined yet"
-              description="Lineage flows track how data moves between systems \u2014 which system feeds which. Define the first flow to start building the picture."
+              description="Lineage flows track how data moves between systems — which system feeds which. Define the first flow to start building the picture."
               action={{ label: '+ Add Flow', onClick: openAdd }}
             />
           ) : (
