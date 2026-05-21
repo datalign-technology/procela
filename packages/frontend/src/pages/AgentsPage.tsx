@@ -17,7 +17,6 @@ import { badgeColor } from '../lib/badgeColors';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -309,7 +308,6 @@ export default function AgentsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Agents</h1>
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {'Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.'}

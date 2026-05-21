@@ -961,6 +961,26 @@ export default function Layout() {
               <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>💬</span>
               <span>Ask AI</span>
             </button>
+            {/* Help — opens the Help guide in a separate window so the
+                user can keep it open beside whatever they're doing. A
+                named target means repeated clicks focus the same Help
+                window instead of spawning duplicates. */}
+            <button
+              onClick={() => window.open('/help', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer')}
+              aria-label="Open the Help guide in a new window"
+              title="Open the Help guide in a new window"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{'⍰'}</span>
+              <span>Help</span>
+            </button>
             {/* Notification Bell */}
             <div ref={notifWrapperRef} style={{ position: 'relative' }}>
               <button

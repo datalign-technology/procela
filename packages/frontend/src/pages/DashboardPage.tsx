@@ -5,7 +5,6 @@ import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
-import HelpIconLink from '../components/HelpIconLink';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
 import { useDomainLens } from '../stores/domainLensStore';
@@ -859,7 +858,6 @@ export default function DashboardPage() {
     return (
       <div>
         <PageHeader title="Dashboard">
-          <HelpIconLink />
         </PageHeader>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
@@ -872,7 +870,6 @@ export default function DashboardPage() {
     return (
       <div>
         <PageHeader title="Dashboard">
-          <HelpIconLink />
         </PageHeader>
         <SkeletonRows rows={6} columnWidths={[200, null, null, 90]} />
       </div>
@@ -920,7 +917,6 @@ export default function DashboardPage() {
           </button>
         ) : undefined}
       >
-        <HelpIconLink />
       </PageHeader>
 
       {showCustomize && (

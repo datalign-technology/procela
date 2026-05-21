@@ -16,7 +16,6 @@ import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ── Types ──
 
@@ -831,7 +830,6 @@ export default function PeoplePage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>People</h1>
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {people.length} people across {flatOrgs.length} organizations. Filter by organization to narrow the list.

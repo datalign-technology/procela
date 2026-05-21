@@ -11,7 +11,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
-import HelpIconLink from '../components/HelpIconLink';
 
 interface LineageLink {
   id: string;
@@ -474,7 +473,6 @@ export default function DataLineagePage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Lineage</h1>
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Track how data flows between systems — which system feeds which.

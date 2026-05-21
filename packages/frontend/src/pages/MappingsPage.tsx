@@ -12,7 +12,6 @@ import { useSortedList } from '../hooks/useSortedList';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
 import BatchMappingWizard from '../components/BatchMappingWizard';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ── Types ──
 
@@ -299,7 +298,6 @@ export default function MappingsPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process Coverage</h1>
             <InfoTip term="Mapping" />
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Flat audit view of every activity ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each activity in the Process Catalog — this page is for cross-process review and bulk edits.

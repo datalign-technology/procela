@@ -14,7 +14,6 @@ import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -740,7 +739,6 @@ export default function ConnectionsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Connections</h1>
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {filterSystem

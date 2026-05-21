@@ -12,7 +12,6 @@ import SectionCard from '../components/SectionCard';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
-import HelpIconLink from '../components/HelpIconLink';
 
 interface DamaRoleAssignment {
   id: string;
@@ -263,7 +262,6 @@ export default function DamaRolesPage() {
           <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
         </>}
       >
-        <HelpIconLink />
       </PageHeader>
 
       {!loading && (

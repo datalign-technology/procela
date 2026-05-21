@@ -13,7 +13,6 @@ import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ── Types ──
 
@@ -737,7 +736,6 @@ export default function GovernanceGroupsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Groups</h1>
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             Manage governance councils, committees, and working groups. {flatGroups.length} groups total.

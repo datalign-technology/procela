@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -452,7 +451,6 @@ export default function ScorecardPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
-          <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
       </div>
@@ -464,7 +462,6 @@ export default function ScorecardPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
-          <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
@@ -482,7 +479,6 @@ export default function ScorecardPage() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
-        <HelpIconLink />
       </div>
 
       {/* Overall Score */}

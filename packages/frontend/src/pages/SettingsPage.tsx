@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import HelpIconLink from '../components/HelpIconLink';
 import { apiClient } from '../api/client';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -221,7 +220,6 @@ export default function SettingsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Settings</h1>
-          <HelpIconLink />
         </div>
         <button
           onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}

@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import PageHeader from '../components/PageHeader';
-import HelpIconLink from '../components/HelpIconLink';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 
@@ -111,7 +110,7 @@ export default function AuditLogPage() {
   if (!activeOrgId) {
     return (
       <div>
-        <PageHeader title="Audit Log"><HelpIconLink /></PageHeader>
+        <PageHeader title="Audit Log" />
         <EmptyState
           icon="🗂"
           title="No organization selected"
@@ -143,7 +142,6 @@ export default function AuditLogPage() {
           </button>
         )}
       >
-        <HelpIconLink />
       </PageHeader>
 
       {/* Filter row */}

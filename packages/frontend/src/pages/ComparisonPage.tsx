@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ── Types ──
 
@@ -241,7 +240,6 @@ export default function ComparisonPage() {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
               Compare Value Streams
             </h1>
-            <HelpIconLink />
           </div>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
             Select two value streams to compare their hierarchies side by side.

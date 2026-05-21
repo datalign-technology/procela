@@ -5,7 +5,6 @@ import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
 import { tierLabel } from '../lib/governanceTier';
-import HelpIconLink from '../components/HelpIconLink';
 
 // ── Types ──
 
@@ -243,7 +242,6 @@ export default function GapDetectionPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Gap Detection</h1>
-        <HelpIconLink />
       </div>
       <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
         Identifies gaps in process coverage, data governance, ownership, and data quality across the organization.
