@@ -302,7 +302,7 @@ export default function MappingsPage() {
             <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Flat audit view of every step ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each step in the Process Catalog — this page is for cross-process review and bulk edits.
+            Flat audit view of every activity ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each activity in the Process Catalog — this page is for cross-process review and bulk edits.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -313,7 +313,7 @@ export default function MappingsPage() {
             <ExportMenu build={() => ({
               filenameBase: 'mappings',
               sheetName: 'Mappings',
-              headers: ['Process Step', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'],
+              headers: ['Process Activity', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'],
               rows: mappings.map((m) => [
                 m.stepInfo ? formatStepPath(m.stepInfo) : m.processStepId,
                 m.assetInfo ? m.assetInfo.assetName : m.dataAssetId,
@@ -595,7 +595,7 @@ export default function MappingsPage() {
           <EmptyState
             icon={'\u2194'}
             title="No mappings yet"
-            description="Mappings link your data assets to the process steps they support. They're how Procela knows which processes a piece of data flows through (and where the gaps are)."
+            description="Mappings link your data assets to the process activities they support. They're how Procela knows which processes a piece of data flows through (and where the gaps are)."
             action={{ label: '+ Add Mapping', onClick: openForm }}
           />
         ) : (
@@ -605,7 +605,7 @@ export default function MappingsPage() {
                 <th scope="col" style={{ ...thStyle, width: 40, textAlign: 'center' }}>
                   <input type="checkbox" checked={mappings.length > 0 && selectedIds.size === mappings.length} onChange={toggleSelectAll} />
                 </th>
-                <SortableTh sortKey="stepPath" active={sortKey} dir={sortDir} onClick={toggleSort}>Process Step</SortableTh>
+                <SortableTh sortKey="stepPath" active={sortKey} dir={sortDir} onClick={toggleSort}>Process Activity</SortableTh>
                 <SortableTh sortKey="assetName" active={sortKey} dir={sortDir} onClick={toggleSort}>Data Asset</SortableTh>
                 <SortableTh sortKey="linkType" active={sortKey} dir={sortDir} onClick={toggleSort}>Link Type</SortableTh>
                 <th scope="col" style={thStyle}>AI Suggested</th>

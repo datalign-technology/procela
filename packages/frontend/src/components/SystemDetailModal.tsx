@@ -137,8 +137,8 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
     },
     {
       title: 'Dependent Activities',
-      hint: 'Process steps that consume data from this system.',
-      emptyText: 'No process steps depend on this system yet.',
+      hint: 'Process activities that consume data from this system.',
+      emptyText: 'No process activities depend on this system yet.',
       items: data.dependentActivities.map((act) => ({
         id: act.id,
         label: act.name,

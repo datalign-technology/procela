@@ -122,7 +122,7 @@ const GAP_SECTIONS: GapSection[] = [
   {
     key: 'ungovernedAssets',
     title: 'Ungoverned Assets',
-    description: 'Uncertified data assets linked to process steps. Critical processes depend on minimally governed data.',
+    description: 'Uncertified data assets linked to process activities. Critical processes depend on minimally governed data.',
     severity: 'warning',
     icon: '\u26C1',
   },
@@ -150,7 +150,7 @@ const GAP_SECTIONS: GapSection[] = [
   {
     key: 'unlinkedAssets',
     title: 'Unlinked Assets',
-    description: 'Data assets with no mapping to any process step. It is unclear which processes these support.',
+    description: 'Data assets with no mapping to any process activity. It is unclear which processes these support.',
     severity: 'info',
     icon: '\u2194',
   },

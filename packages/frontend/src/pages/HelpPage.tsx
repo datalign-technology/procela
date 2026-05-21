@@ -12,7 +12,27 @@ const h2Style: React.CSSProperties = {
   fontWeight: 600,
   marginBottom: 12,
   color: 'var(--color-primary)',
+  // Keep the heading clear of the 56px sticky app header when an
+  // anchor link from the table of contents jumps to it.
+  scrollMarginTop: 72,
 };
+
+// Section anchors for the in-page table of contents. id values are
+// referenced both by the ToC links and the section <h2> elements.
+const HELP_SECTIONS: Array<{ id: string; label: string }> = [
+  { id: 'help-getting-started', label: '1. Getting Started' },
+  { id: 'help-navigation', label: '2. Navigation' },
+  { id: 'help-dashboard', label: '3. Dashboard' },
+  { id: 'help-processes', label: '4. Processes' },
+  { id: 'help-data', label: '5. Data' },
+  { id: 'help-systems', label: '6. Systems' },
+  { id: 'help-people', label: '7. People' },
+  { id: 'help-governance', label: '8. Governance' },
+  { id: 'help-cross-cutting', label: '9. Cross-cutting Features' },
+  { id: 'help-key-concepts', label: '10. Key Concepts' },
+  { id: 'help-faq', label: '11. Frequently Asked Questions' },
+  { id: 'help-shortcuts', label: '12. Keyboard shortcuts' },
+];
 
 const h3Style: React.CSSProperties = {
   fontSize: 15,
@@ -66,14 +86,33 @@ export default function HelpPage() {
           Replay intro
         </button>
       </div>
-      <p style={{ ...pStyle, marginBottom: 24 }}>
+      <p style={{ ...pStyle, marginBottom: 16 }}>
         Procela is a DAMA-aligned governance operating platform that helps organizations design, execute, and mature
         data governance using workflows, accountability models, and structured procedures.
       </p>
 
+      {/* On this page — anchor links so a user can jump straight to a
+          section instead of scrolling a 12-section wall of text. */}
+      <nav aria-label="Help contents" style={{ ...sectionStyle, marginBottom: 24 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 10 }}>
+          On this page
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '4px 16px' }}>
+          {HELP_SECTIONS.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              style={{ fontSize: 13, color: 'var(--color-primary)', textDecoration: 'none', padding: '2px 0' }}
+            >
+              {s.label}
+            </a>
+          ))}
+        </div>
+      </nav>
+
       {/* 1. Getting Started */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>1. Getting Started</h2>
+        <h2 id="help-getting-started" style={h2Style}>1. Getting Started</h2>
         <ol style={{ ...listStyle, listStyle: 'decimal' }}>
           <li>Sign in using dev mode or your enterprise SSO credentials</li>
           <li>Go to <strong>Organizations</strong> (top-level sidebar item) to create your company structure</li>
@@ -92,12 +131,12 @@ export default function HelpPage() {
 
       {/* 2. Navigation */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>2. Navigation</h2>
+        <h2 id="help-navigation" style={h2Style}>2. Navigation</h2>
         <p style={pStyle}>The sidebar has Dashboard at the top, Organizations right below it (your company tree), then five plain-noun buckets so you can find pages by what they ARE rather than which DAMA phase they belong to.</p>
         <ul style={listStyle}>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
           <li><strong>Organizations</strong> &mdash; The company / division / team tree your processes and data are scoped to.</li>
-          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. (The cross-process flat-list view of step↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
+          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>People</strong> &mdash; People and Skills (the humans on your team and what they're qualified for).</li>
@@ -117,7 +156,7 @@ export default function HelpPage() {
 
       {/* 3. Dashboard */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>3. Dashboard</h2>
+        <h2 id="help-dashboard" style={h2Style}>3. Dashboard</h2>
         <p style={pStyle}>The dashboard is personalized to your login. You must have a People record with your email to see personalized data.</p>
         <ul style={listStyle}>
           <li><strong>My Dashboard</strong> &mdash; Open tasks, issues, domains you own/steward, upcoming events</li>
@@ -134,7 +173,7 @@ export default function HelpPage() {
 
       {/* 4. Processes */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>4. Processes</h2>
+        <h2 id="help-processes" style={h2Style}>4. Processes</h2>
         <h3 style={h3Style}>Process Catalog</h3>
         <ul style={listStyle}>
           <li>Hierarchical process catalog: Value Stream &rarr; Process &rarr; Activity (with optional Sub-Process and Task levels for detail).</li>
@@ -147,15 +186,15 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Process Coverage</h3>
         <ul style={listStyle}>
-          <li>Flat audit / bulk-edit view of every step ↔ data-asset link in the catalog. Sortable columns, CSV/Excel export, bulk delete, and the Batch Mapping Wizard (matrix interface) for creating many mappings at once.</li>
-          <li>Day-to-day, you connect a step to its data assets <strong>inline on the Process Catalog</strong> — each node panel has Owner, Responsible Role, Systems, and Inputs/Outputs (data assets) in one place. Process Coverage is the cross-process review surface for those same links; it doesn't introduce a separate model.</li>
+          <li>Flat audit / bulk-edit view of every activity ↔ data-asset link in the catalog. Sortable columns, CSV/Excel export, bulk delete, and the Batch Mapping Wizard (matrix interface) for creating many mappings at once.</li>
+          <li>Day-to-day, you connect an activity to its data assets <strong>inline on the Process Catalog</strong> — each node panel has Owner, Responsible Role, Systems, and Inputs/Outputs (data assets) in one place. Process Coverage is the cross-process review surface for those same links; it doesn't introduce a separate model.</li>
           <li>Mappings can be AI-suggested or user-defined; the page tracks which is which so suggestion overrides are auditable.</li>
         </ul>
       </div>
 
       {/* 5. Data */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>5. Data</h2>
+        <h2 id="help-data" style={h2Style}>5. Data</h2>
         <h3 style={h3Style}>Data Assets</h3>
         <ul style={listStyle}>
           <li>Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted &mdash; DAMA mode calls these Uncertified / Managed / Certified).</li>
@@ -205,7 +244,7 @@ export default function HelpPage() {
 
       {/* 6. Systems */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>6. Systems</h2>
+        <h2 id="help-systems" style={h2Style}>6. Systems</h2>
         <h3 style={h3Style}>Systems</h3>
         <ul style={listStyle}>
           <li>Register applications and platforms. Sidebar filter by type (ERP, CRM, GIS, etc.).</li>
@@ -224,7 +263,7 @@ export default function HelpPage() {
 
       {/* 7. People */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>7. People</h2>
+        <h2 id="help-people" style={h2Style}>7. People</h2>
         <h3 style={h3Style}>People</h3>
         <ul style={listStyle}>
           <li>Team members with app roles (Super Admin, Org Admin, Editor, Contributor, Viewer).</li>
@@ -250,7 +289,7 @@ export default function HelpPage() {
 
       {/* 8. Governance */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>8. Governance</h2>
+        <h2 id="help-governance" style={h2Style}>8. Governance</h2>
         <h3 style={h3Style}>Governance Program</h3>
         <ul style={listStyle}>
           <li>4-phase setup journey with progress tracking per phase. The phase you're currently on is highlighted with a <strong>“YOU ARE HERE”</strong> marker and a larger title, so "phase N of 4" is obvious at a glance; completed phases show a check and finished ones dim back.</li>
@@ -274,7 +313,7 @@ export default function HelpPage() {
           <li><strong>Assignments tab.</strong> Role-first catalog of DAMA governance roles (CDO, Data Governance Lead, Data Owner, Stewards, etc.). The left sidebar lists <em>every</em> role with its live holder count &mdash; filled or not &mdash; and clicking one filters the page to that role. The main area always shows the full role slate: filled rows list the holders inline; unfilled rows are flagged with an <em>Unfilled</em> marker and an inline <em>+ Assign</em>. A search box matches role label, person, or organization. This page tells the same story as the Governance Groups expected-role slate &mdash; the roles always exist; assignment is what varies.</li>
           <li>Click any role chip anywhere in the app to open the <strong>Role Detail drawer</strong> &mdash; plain-language summary, day-to-day responsibilities, typical RACI authority, groups that need the role, current assignees in your org, and required skills.</li>
           <li>The drawer also covers <strong>entity-attached roles</strong> &mdash; System Owner, Deputy System Owner, System Custodian, Data Asset Owner / Steward, Data Domain Owner / Steward. The drawer shows a "Per system / asset / domain" scope badge so users understand two people can both hold the same entity-attached role for different entities without it being a RACI violation.</li>
-          <li><strong>RACI Matrix tab.</strong> Responsibility assignments per process step: Responsible, Accountable, Consulted, Informed. Auto-derived from process / asset ownership and governance group membership; click a cell to cycle R &rarr; A &rarr; C &rarr; I &rarr; clear as a manual override. Validation warnings surface RACI rule violations (no R, no A, multiple A's). Export to CSV / Excel / JSON respects active filters and hide-empty-columns setting.</li>
+          <li><strong>RACI Matrix tab.</strong> Responsibility assignments per process activity: Responsible, Accountable, Consulted, Informed. Auto-derived from process / asset ownership and governance group membership; click a cell to cycle R &rarr; A &rarr; C &rarr; I &rarr; clear as a manual override. Validation warnings surface RACI rule violations (no R, no A, multiple A's). Export to CSV / Excel / JSON respects active filters and hide-empty-columns setting.</li>
           <li>Old <code>/raci</code> deep links still work &mdash; they redirect to the RACI tab.</li>
         </ul>
         <h3 style={h3Style}>Decision Rights</h3>
@@ -328,7 +367,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>
           <li>Tabbed: <strong>Executive Report</strong> (printable / PDF), <strong>Scorecard</strong> (governance health by dimension), and <strong>Analysis</strong> — a read-only list of saved cube pivots with a link straight into the Analysis builder, so saved pivots are discoverable from the Reports home too.</li>
-          <li>Gap Detection (unmapped steps, ungoverned assets) is surfaced across domains, assets, and processes.</li>
+          <li>Gap Detection (unmapped activities, ungoverned assets) is surfaced across domains, assets, and processes.</li>
         </ul>
         <h3 style={h3Style}>Dependency Enforcement</h3>
         <p style={pStyle}>
@@ -339,7 +378,7 @@ export default function HelpPage() {
 
       {/* 9. Cross-cutting Features */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>9. Cross-cutting Features</h2>
+        <h2 id="help-cross-cutting" style={h2Style}>9. Cross-cutting Features</h2>
         <p style={pStyle}>
           A handful of components show up on every detail page so the patterns stay the same as you move around the app.
         </p>
@@ -383,7 +422,7 @@ export default function HelpPage() {
 
       {/* 10. Key Concepts */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>10. Key Concepts</h2>
+        <h2 id="help-key-concepts" style={h2Style}>10. Key Concepts</h2>
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
@@ -428,7 +467,7 @@ export default function HelpPage() {
           here was a duplicate of the formatted table further down the
           page. Removed when the L-pass appendix added the better one. */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>11. Frequently Asked Questions</h2>
+        <h2 id="help-faq" style={h2Style}>11. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
         <p style={pStyle}>
@@ -530,7 +569,7 @@ export default function HelpPage() {
           the same overlay the user gets from Shift+? globally. Keeps
           discoverability high without forcing users to know the chord. */}
       <div style={sectionStyle}>
-        <h2 style={h2Style}>12. Keyboard shortcuts</h2>
+        <h2 id="help-shortcuts" style={h2Style}>12. Keyboard shortcuts</h2>
         <p style={pStyle}>
           Procela has a small set of keyboard chords for the things you'll do most often.
           Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere

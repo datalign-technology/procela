@@ -33,9 +33,9 @@ export const GLOSSARY: Record<string, string> = {
   'Data Owner':
     'The business leader accountable for a data domain or asset. They set policy; stewards execute it.',
   'Mapping':
-    'A link between a process step and a data asset, showing which data supports which business activity.',
+    'A link between a process activity and a data asset, showing which data supports which business activity.',
   'Gap':
-    'A process step with no data assets linked, or a data asset with no governance — a risk that needs attention.',
+    'A process activity with no data assets linked, or a data asset with no governance — a risk that needs attention.',
   'DAMA':
     'The Data Management Association framework — an industry standard for organizing data governance practices.',
   'Governance Group':

@@ -215,7 +215,7 @@ export default function BatchMappingWizard({ open, onClose, orgId, onCreated }: 
                         textAlign: 'left',
                       }}
                     >
-                      Process Step
+                      Process Activity
                     </th>
                     {assets.map((a) => (
                       <th

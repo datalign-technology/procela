@@ -56,7 +56,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
     {
       icon: '⛁',
       title: 'Define your business processes',
-      description: 'Map how your organization works — value streams, processes, sub-processes, and steps. Plain business language, no technical knowledge required.',
+      description: 'Map how your organization works — value streams, processes, sub-processes, and activities. Plain business language, no technical knowledge required.',
       done: stats.processes > 0,
       ctaLabel: 'Generate processes',
       // Send first-timers to the AI wizard, not the empty catalog
@@ -586,7 +586,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
     suggestions.push({
       icon: '↔',
       title: 'Map data to processes',
-      description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process steps. Mappings reveal dependencies and gaps.`,
+      description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process activities. Mappings reveal dependencies and gaps.`,
       link: '/mappings',
     });
   }

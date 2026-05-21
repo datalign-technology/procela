@@ -25,7 +25,7 @@ const btnSecondary: React.CSSProperties = {
 
 const PHASE_INFO = [
   { num: 1, title: 'Define', description: 'Describe how your business works using a structured process hierarchy. No technical knowledge required.', color: '#3b82f6' },
-  { num: 2, title: 'Connect', description: 'Link each process step to the data and systems that support it, in plain business language.', color: '#8b5cf6' },
+  { num: 2, title: 'Connect', description: 'Link each process activity to the data and systems that support it, in plain business language.', color: '#8b5cf6' },
   { num: 3, title: 'Discover', description: 'Find gaps, monitor health, and connect to real data sources as your program matures.', color: '#22c55e' },
 ];
 

@@ -1913,8 +1913,8 @@ export default function DataAssetsPage() {
                       },
                       {
                         title: 'Supports activities',
-                        hint: 'Process steps that consume or produce this asset.',
-                        emptyText: 'Not mapped to any process step yet.',
+                        hint: 'Process activities that consume or produce this asset.',
+                        emptyText: 'Not mapped to any process activity yet.',
                         items: viewing360.mappings.map((m) => ({
                           id: m.id,
                           label: m.processPath,
