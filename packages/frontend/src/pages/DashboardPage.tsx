@@ -58,8 +58,10 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
       title: 'Define your business processes',
       description: 'Map how your organization works — value streams, processes, sub-processes, and steps. Plain business language, no technical knowledge required.',
       done: stats.processes > 0,
-      ctaLabel: 'Add processes',
-      ctaTo: '/processes',
+      ctaLabel: 'Generate processes',
+      // Send first-timers to the AI wizard, not the empty catalog
+      // table — the wizard is the fast path to a real hierarchy.
+      ctaTo: '/processes/wizard',
       doneLabel: `${stats.processes} ${stats.processes === 1 ? 'process' : 'processes'}`,
     },
     {
@@ -498,7 +500,7 @@ function useDashboardLayout() {
 }
 
 const quickActions = [
-  { icon: '☰', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
+  { icon: '✶', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
   { icon: '⛁', label: 'Data Assets', description: 'Define and manage data assets', link: '/data-assets' },
   { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
   { icon: '↔', label: 'Mappings', description: 'Link processes to data', link: '/mappings' },
@@ -589,15 +591,10 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
     });
   }
 
-  // Phase 4: Low coverage
-  if (stats.mappings > 0 && stats.coverage.percentage < 50) {
-    suggestions.push({
-      icon: '⚠',
-      title: 'Improve coverage',
-      description: `Only ${stats.coverage.percentage}% of process steps have data mapped. Review gaps to find unmapped steps.`,
-      link: '/mappings',
-    });
-  }
+  // (Low-coverage guidance intentionally lives only in the "Governance
+  // Gaps" section — its "Unmapped activities" row is the canonical
+  // place for that. A duplicate "Improve coverage" card here said the
+  // same thing twice in adjacent sections.)
 
   // Phase 5: Low health
   if (stats.dataAssets > 0 && stats.averageHealth < 80) {
@@ -869,33 +866,8 @@ export default function DashboardPage() {
     );
   }
 
-  if (!stats && !activeOrgId) {
-    return (
-      <div>
-        <PageHeader title="Dashboard">
-          <HelpIconLink />
-        </PageHeader>
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>&#9881;</div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No organization selected</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
-            Create an organization to get started with your data governance program.
-          </p>
-          <Link to="/organizations" style={{
-            display: 'inline-block', padding: '8px 20px', background: 'var(--color-primary)',
-            color: '#fff', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500,
-            textDecoration: 'none',
-          }}>
-            Go to Organizations
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
+  // No-org state is handled centrally by Layout's "Organization
+  // Required" card — the Dashboard no longer renders its own variant.
   if (!stats) {
     return (
       <div>

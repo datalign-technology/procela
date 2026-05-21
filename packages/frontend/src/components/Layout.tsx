@@ -117,6 +117,7 @@ const navSections: NavSection[] = [
       { to: '/analysis',          label: 'Analysis',          icon: '\u229e' },
       { to: '/reports',           label: 'Reports',           icon: '\u2630' },
       { to: '/mappings',          label: 'Process Coverage',  icon: '\u21c4' },
+      { to: '/gap-detection',     label: 'Gap Detection',     icon: '\u26a0' },
       { to: '/audit-log',         label: 'Audit Log',         icon: '\u29d6' },
     ],
   },
@@ -139,7 +140,7 @@ const ROUTE_GROUPS: Record<string, string[]> = {
   '/data-dictionary': ['/data-dictionary'],
   '/mappings': ['/mappings'],
   '/data-lineage': ['/data-lineage'],
-  '/governance-program': ['/governance-program', '/governance'],
+  '/governance-program': ['/governance-program'],
   '/governance-groups': ['/governance-groups'],
   '/data-domains': ['/data-domains'],
   '/data-quality': ['/data-quality'],
@@ -1037,7 +1038,7 @@ export default function Layout() {
         </header>
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
-          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' && location.pathname !== '/' ? (
+          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' ? (
             <div style={{
               textAlign: 'center', padding: '4rem 2rem',
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',

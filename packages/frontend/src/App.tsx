@@ -56,7 +56,7 @@ export default function App() {
         <Route path="/processes/compare" element={<ComparisonPage />} />
         {/* Combined pages */}
         <Route path="/systems-and-data" element={<SystemsAndDataPage />} />
-        <Route path="/governance" element={<GovernanceGroupsPage />} />
+        <Route path="/governance" element={<Navigate to="/governance-groups" replace />} />
         <Route path="/analyze" element={<AnalyzePage />} />
         {/* Legacy routes — kept for backward compatibility and deep links */}
         <Route path="/data-assets" element={<DataAssetsPage />} />
