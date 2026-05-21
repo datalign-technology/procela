@@ -58,11 +58,9 @@ const navSections: NavSection[] = [
       // putting it under "People" misled newcomers, so it now sits
       // top-level next to Dashboard.
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
-    ],
-  },
-  {
-    label: 'Processes',
-    items: [
+      // Processes has only one page, so wrapping it in an accordion
+      // section produced a pointless "Processes \u203A Processes" expand.
+      // It's a direct top-level link like Dashboard / Organizations.
       { to: '/processes', label: 'Processes', icon: '\u26C1' },
     ],
   },
