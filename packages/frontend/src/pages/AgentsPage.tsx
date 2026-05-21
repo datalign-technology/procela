@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -17,6 +17,7 @@ import { badgeColor } from '../lib/badgeColors';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import HelpIconLink from '../components/HelpIconLink';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -308,7 +309,7 @@ export default function AgentsPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Agents</h1>
-            <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none' }} aria-label="Help" title="Help">?</Link>
+            <HelpIconLink />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {'Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.'}

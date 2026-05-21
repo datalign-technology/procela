@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -13,6 +12,7 @@ import SectionCard from '../components/SectionCard';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import HelpIconLink from '../components/HelpIconLink';
 
 interface DamaRoleAssignment {
   id: string;
@@ -263,7 +263,7 @@ export default function DamaRolesPage() {
           <IconButton icon="plus" label="Assign role" variant="primary" onClick={openAdd} />
         </>}
       >
-        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
+        <HelpIconLink />
       </PageHeader>
 
       {!loading && (

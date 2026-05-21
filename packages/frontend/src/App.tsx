@@ -77,9 +77,9 @@ export default function App() {
         <Route path="/documentation" element={<DocumentationPage />} />
         <Route path="/operations-manual" element={<Navigate to="/documentation?tab=manual" replace />} />
         <Route path="/sops" element={<Navigate to="/documentation?tab=procedures" replace />} />
-        <Route path="/roles" element={<RolesPage />} />
         <Route path="/dama-roles" element={<RolesPage />} />
-        <Route path="/raci" element={<Navigate to="/roles?tab=raci" replace />} />
+        <Route path="/roles" element={<Navigate to="/dama-roles" replace />} />
+        <Route path="/raci" element={<Navigate to="/dama-roles?tab=raci" replace />} />
         <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
         <Route path="/scorecard" element={<ScorecardPage />} />
         <Route path="/report" element={<ExecutiveReportPage />} />

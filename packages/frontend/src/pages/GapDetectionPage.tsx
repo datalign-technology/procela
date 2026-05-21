@@ -1,11 +1,11 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
 import { tierLabel } from '../lib/governanceTier';
+import HelpIconLink from '../components/HelpIconLink';
 
 // ── Types ──
 
@@ -234,7 +234,7 @@ export default function GapDetectionPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Gap Detection</h1>
-        <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none' }} aria-label="Help" title="Help">?</Link>
+        <HelpIconLink />
       </div>
       <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
         Identifies gaps in process coverage, data governance, ownership, and data quality across the organization.

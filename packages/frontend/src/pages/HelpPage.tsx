@@ -590,6 +590,10 @@ export default function HelpPage() {
               ['g then m', 'Go to Process Coverage (mappings)'],
               ['g then l', 'Go to Lineage'],
               ['g then q', 'Go to Data Quality'],
+              ['g then g', 'Go to Governance Program'],
+              ['g then r', 'Go to Reports'],
+              ['g then e', 'Go to Enterprise View'],
+              ['g then h', 'Go to Help'],
               ['Escape', 'Close the palette, drawers, modals, and dropdowns'],
             ].map(([keys, what]) => (
               <tr key={keys} style={{ borderBottom: '1px solid var(--color-border)' }}>

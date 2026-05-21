@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import IconButton from '../components/IconButton';
+import HelpIconLink from '../components/HelpIconLink';
 
 interface DashboardStats {
   valueStreams: number;
@@ -142,7 +142,7 @@ export default function ExecutiveReportPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
+          <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading report data...</div>
       </div>
@@ -154,7 +154,7 @@ export default function ExecutiveReportPage() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
+          <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
@@ -186,7 +186,7 @@ export default function ExecutiveReportPage() {
       <div className="no-print" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
-          <Link to="/help" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--color-text-muted)', textDecoration: 'none', cursor: 'pointer', flexShrink: 0 }} aria-label="Help" title="Help">?</Link>
+          <HelpIconLink />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={() => window.print()} className="no-print" style={{

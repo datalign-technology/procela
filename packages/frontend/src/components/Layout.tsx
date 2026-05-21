@@ -115,10 +115,14 @@ const navSections: NavSection[] = [
     items: [
       { to: '/enterprise-view',   label: 'Enterprise View',   icon: '\u29c9' },
       { to: '/analysis',          label: 'Analysis',          icon: '\u229e' },
-      { to: '/reports',           label: 'Reports',           icon: '\u2630' },
       { to: '/mappings',          label: 'Process Coverage',  icon: '\u21c4' },
+      { to: '/reports',           label: 'Reports',           icon: '\u2630' },
       { to: '/gap-detection',     label: 'Gap Detection',     icon: '\u26a0' },
       { to: '/audit-log',         label: 'Audit Log',         icon: '\u29d6' },
+    ],
+    subGroups: [
+      { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/mappings'] },
+      { label: 'Review',  itemTos: ['/reports', '/gap-detection', '/audit-log'] },
     ],
   },
 ];
@@ -130,6 +134,15 @@ const bottomNavItems: NavItem[] = [
   { to: '/agents', label: 'Agents', icon: '\u2699' },
   { to: '/settings', label: 'Settings', icon: '\u2638' },
   { to: '/help', label: 'Help', icon: '\u003F' },
+];
+
+// The four primary destinations pinned to the mobile bottom bar; the
+// fifth slot is the "Menu" button that opens the full grouped drawer.
+const MOBILE_PRIMARY: NavItem[] = [
+  { to: '/', label: 'Dashboard', icon: '\u25A3' },
+  { to: '/processes', label: 'Processes', icon: '\u26C1' },
+  { to: '/data-assets', label: 'Data', icon: '\u2B22' },
+  { to: '/people', label: 'People', icon: '\uD83D\uDC65' },
 ];
 
 const ROUTE_GROUPS: Record<string, string[]> = {
@@ -172,6 +185,78 @@ interface Notification {
   createdAt: string;
 }
 
+// Full-screen mobile navigation drawer. Opened from the "Menu" button
+// in the bottom bar; shows the complete navigation with section
+// headings preserved, so a phone user can find any page without
+// sideways-scrolling a 30-icon strip.
+function MobileNavDrawer({ sections, bottomItems, pathname, onClose }: {
+  sections: NavSection[];
+  bottomItems: NavItem[];
+  pathname: string;
+  onClose: () => void;
+}) {
+  const isActive = (to: string) => {
+    const group = ROUTE_GROUPS[to];
+    return group
+      ? group.some((r) => pathname === r || pathname.startsWith(r + '/'))
+      : (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/'));
+  };
+  const linkRow = (item: NavItem) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      end={item.to === '/'}
+      onClick={onClose}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 20px', fontSize: 15, textDecoration: 'none',
+        color: isActive(item.to) ? 'var(--color-primary)' : 'var(--color-text)',
+        fontWeight: isActive(item.to) ? 600 : 400,
+        background: isActive(item.to) ? 'var(--color-bg)' : 'transparent',
+      }}
+    >
+      <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{textIcon(item.icon)}</span>
+      {item.label}
+    </NavLink>
+  );
+  return (
+    <div
+      role="dialog"
+      aria-label="Navigation menu"
+      style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', flexDirection: 'column', background: 'var(--color-surface)' }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 20px', borderBottom: '1px solid var(--color-border)', flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 16, fontWeight: 700 }}>Menu</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close navigation menu"
+          style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1, padding: 4 }}
+        >×</button>
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 24 }}>
+        {sections.map((section, i) => (
+          <div key={section.label || `s${i}`} style={{ paddingTop: section.label ? 8 : 0 }}>
+            {section.label && (
+              <div style={{
+                padding: '12px 20px 4px', fontSize: 11, fontWeight: 700,
+                textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)',
+              }}>{section.label}</div>
+            )}
+            {section.items.map(linkRow)}
+          </div>
+        ))}
+        <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 8, paddingTop: 8 }}>
+          {bottomItems.map(linkRow)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -192,6 +277,7 @@ export default function Layout() {
   // Sidebar collapse state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   // Accordion nav: which section is expanded (one at a time)
   const activeSectionLabel = (() => {
@@ -225,6 +311,9 @@ export default function Layout() {
       setExpandedNavSections((prev) => new Set(prev).add(activeSectionLabel));
     }
   }, [location.pathname, activeSectionLabel, expandedNavSections]);
+
+  // Close the mobile nav drawer on navigation.
+  useEffect(() => { setMobileDrawerOpen(false); }, [location.pathname]);
 
   const toggleNavSection = (label: string) => {
     setExpandedNavSections((prev) => {
@@ -337,14 +426,19 @@ export default function Layout() {
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const now = Date.now();
-      if (e.key === 'g' && !e.shiftKey) {
+      const chordActive = now - lastGRef.current < 1500;
+      if (e.key === 'g' && !e.shiftKey && !chordActive) {
+        // First `g` — arm the chord. A second `g` within the window
+        // is NOT re-armed here so that "g g" can resolve to the
+        // Governance Program shortcut below.
         lastGRef.current = now;
         return;
       }
-      if (now - lastGRef.current < 1500) {
+      if (chordActive) {
         const map: Record<string, string> = {
           d: '/', o: '/organizations', p: '/people', c: '/processes', a: '/data-assets',
           s: '/systems', q: '/data-quality', l: '/data-lineage', m: '/mappings',
+          g: '/governance-program', r: '/reports', e: '/enterprise-view', h: '/help',
         };
         const route = map[e.key];
         if (route) {
@@ -403,20 +497,31 @@ export default function Layout() {
   };
 
   // "Clear all" deletes every notification with no undo, so it's a
-  // two-click action: the first click arms the button (3s window), the
-  // second actually clears. Avoids a full modal for a minor action
-  // while still guarding against an accidental wipe.
-  const [clearAllArmed, setClearAllArmed] = useState(false);
-  const clearAllTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // two-click action: the first click arms the button, the second
+  // actually clears. The armed state shows a live countdown so a
+  // paused user isn't surprised by a silent no-op when the window
+  // lapses. Avoids a full modal for a minor action.
+  const [clearAllCountdown, setClearAllCountdown] = useState(0);
+  const clearAllTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const clearAllArmed = clearAllCountdown > 0;
+  const disarmClearAll = () => {
+    if (clearAllTimerRef.current) clearInterval(clearAllTimerRef.current);
+    clearAllTimerRef.current = null;
+    setClearAllCountdown(0);
+  };
   const handleClearAllNotifications = async () => {
     if (!clearAllArmed) {
-      setClearAllArmed(true);
-      if (clearAllTimerRef.current) clearTimeout(clearAllTimerRef.current);
-      clearAllTimerRef.current = setTimeout(() => setClearAllArmed(false), 3000);
+      setClearAllCountdown(3);
+      if (clearAllTimerRef.current) clearInterval(clearAllTimerRef.current);
+      clearAllTimerRef.current = setInterval(() => {
+        setClearAllCountdown((n) => {
+          if (n <= 1) { disarmClearAll(); return 0; }
+          return n - 1;
+        });
+      }, 1000);
       return;
     }
-    if (clearAllTimerRef.current) clearTimeout(clearAllTimerRef.current);
-    setClearAllArmed(false);
+    disarmClearAll();
     await apiClient.delete('/notifications/all');
     setNotifCount(0);
     setNotifList([]);
@@ -536,38 +641,40 @@ export default function Layout() {
         </div>
         <nav className={styles.sidebarNav}>
           {isMobile ? (
-            /* On phones the sidebar collapses to a horizontal scrolling
-               strip at the bottom of the screen. The accordion model
-               (a section *button* per cluster that expands children
-               vertically) was actively broken there — clicking a
-               section had nowhere to expand, so leaf pages (Data
-               Assets, Roles, Calendar…) were unreachable. On mobile
-               we render every leaf as a direct link instead, skipping
-               the section headers entirely. */
-            (() => {
-              const allLeaves: NavItem[] = [
-                ...visibleSections.flatMap((s) => s.items),
-                ...bottomNavItems,
-              ];
-              return allLeaves.map((item) => {
-                const groupRoutes = ROUTE_GROUPS[item.to];
-                const isGroupActive = groupRoutes
-                  ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                  : location.pathname === item.to;
+            /* On phones the sidebar is a fixed bottom bar with four
+               primary destinations plus a "Menu" button that opens a
+               full-screen drawer with the complete, section-grouped
+               navigation. The earlier flat 30-item horizontal scroll
+               strip made finding anything past the first few icons a
+               sideways-scrolling hunt. */
+            <>
+              {MOBILE_PRIMARY.map((item) => {
+                const isActive = location.pathname === item.to
+                  || (item.to !== '/' && location.pathname.startsWith(item.to + '/'));
                 return (
                   <NavLink
                     key={item.to}
                     to={item.to}
                     end={item.to === '/'}
-                    className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
+                    className={() => clsx(styles.navLink, isActive && styles.navLinkActive)}
                     title={item.label}
                   >
                     <span className={styles.navIcon}>{textIcon(item.icon)}</span>
                     <span style={{ fontSize: 10 }}>{item.label}</span>
                   </NavLink>
                 );
-              });
-            })()
+              })}
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(true)}
+                className={styles.navLink}
+                aria-label="Open navigation menu"
+                aria-expanded={mobileDrawerOpen}
+              >
+                <span className={styles.navIcon}>{'☰'}</span>
+                <span style={{ fontSize: 10 }}>Menu</span>
+              </button>
+            </>
           ) : visibleSections.map((section, sIdx) => {
             const isExpanded = section.label ? expandedNavSections.has(section.label) : true;
             const isFlyoutOpen = sidebarCollapsed && flyoutSection === section.label;
@@ -921,7 +1028,7 @@ export default function Layout() {
                           border: 'none', cursor: 'pointer', borderRadius: 4, padding: '2px 6px',
                           fontSize: 11, color: clearAllArmed ? '#fff' : 'var(--color-error, #dc2626)', fontWeight: 500,
                         }}>
-                          {clearAllArmed ? 'Click again to confirm' : 'Clear all'}
+                          {clearAllArmed ? `Click again to confirm (${clearAllCountdown})` : 'Clear all'}
                         </button>
                       )}
                     </div>
@@ -1066,6 +1173,14 @@ export default function Layout() {
           )}
         </main>
         <ChatPanel />
+        {isMobile && mobileDrawerOpen && (
+          <MobileNavDrawer
+            sections={visibleSections}
+            bottomItems={bottomNavItems}
+            pathname={location.pathname}
+            onClose={() => setMobileDrawerOpen(false)}
+          />
+        )}
         <SessionTimeout />
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
