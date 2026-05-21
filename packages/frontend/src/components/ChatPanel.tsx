@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { useOrgContext } from '../stores/orgContext';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -19,6 +20,7 @@ export default function ChatPanel() {
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+  const { activeOrgId, activeOrgName } = useOrgContext();
   // The mobile sidebar collapses to a ~60px fixed bottom strip, so the
   // floating chat bubble has to ride above it; on desktop we can pin
   // to the viewport corner like before.
@@ -57,8 +59,12 @@ export default function ChatPanel() {
     setLoading(true);
 
     try {
+      // Send the active org so the assistant answers from this
+      // organization's real catalog, assets and gaps — the backend
+      // builds the data snapshot from orgId.
       const res = await apiClient.post<ChatResponse>('/chat', {
         messages: updated,
+        orgContext: { orgId: activeOrgId, orgName: activeOrgName },
       });
       setMessages([...updated, { role: 'assistant', content: res.data.reply }]);
     } catch {

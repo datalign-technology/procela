@@ -21,7 +21,7 @@ export interface AiService {
   generateIndustryTemplate(industry: string): Promise<object>;
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
-  chat(messages: ChatMessage[], orgContext: OrgContext): Promise<string>;
+  chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
 }
 
 class AnthropicAiService implements AiService {
@@ -171,13 +171,39 @@ Guidelines:
   }
 
   /**
-   * Multi-turn conversational chat with organization-aware context.
+   * Multi-turn conversational chat, grounded in the organization's
+   * actual Procela data when a catalog summary is supplied.
    */
-  async chat(messages: ChatMessage[], orgContext: OrgContext): Promise<string> {
+  async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
+    const parts: string[] = [
+      'You are the AI assistant for Procela, a platform that connects an organization\'s '
+        + 'business processes to the data and systems that support them.',
+      `Organization: ${orgContext.orgName ?? 'Unknown'} — industry: ${orgContext.industry ?? 'General'}.`,
+    ];
+    if (catalogSummary && catalogSummary.trim()) {
+      parts.push(
+        'Below is a snapshot of THIS organization\'s current Procela data. Answer questions '
+          + 'using ONLY this snapshot — never invent value streams, processes, activities, data '
+          + 'assets, systems, or owners that do not appear here. If the answer is not in the '
+          + 'data, say so plainly and suggest where the user could define it.',
+        catalogSummary.trim(),
+      );
+    } else {
+      parts.push(
+        'This organization has no catalog data yet. If asked about specific processes, assets, '
+          + 'or gaps, explain that nothing has been defined and point the user to the relevant '
+          + 'page (Process Catalog, Data Assets, Systems).',
+      );
+    }
+    parts.push(
+      'Keep answers concise and actionable. Name specific processes, assets, and gaps rather '
+        + 'than speaking generally. Do not fabricate.',
+    );
+
     const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: `You are an AI assistant for the Procela platform, helping with business process mapping and data governance. Organization: ${orgContext.orgName ?? 'Unknown'}, Industry: ${orgContext.industry ?? 'General'}.`,
+      system: parts.join('\n\n'),
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
