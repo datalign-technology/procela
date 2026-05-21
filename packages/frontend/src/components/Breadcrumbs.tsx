@@ -1,5 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 
+// Segment → label. Where a segment is a top-level nav destination the
+// label MUST match the sidebar item exactly — a breadcrumb that
+// disagrees with the menu the user just clicked ("Roles" in the nav,
+// "Governance Roles" in the trail) is disorienting. Sub-route-only
+// segments (wizard, visualization…) have no sidebar entry and are
+// labelled here freely.
 const ROUTE_LABELS: Record<string, string> = {
   '': 'Dashboard',
   'processes': 'Processes',
@@ -16,19 +22,19 @@ const ROUTE_LABELS: Record<string, string> = {
   'mappings': 'Process Coverage',
   'gap-detection': 'Gap Detection',
   'governance': 'Governance',
-  'governance-groups': 'Governance Groups',
+  'governance-groups': 'Groups',
   'governance-program': 'Program',
-  'data-domains': 'Data Domains',
-  'dama-roles': 'Governance Roles',
+  'data-domains': 'Domains',
+  'dama-roles': 'Roles',
   'analyze': 'Analyze',
   'scorecard': 'Scorecard',
   'report': 'Executive Report',
   'raci': 'RACI Matrix',
-  'data-lineage': 'Data Lineage',
+  'data-lineage': 'Lineage',
   'data-quality': 'Data Quality',
   'control-tower': 'Control Tower',
-  'governance-policies': 'Policies & Controls',
-  'governance-work': 'Governance Work',
+  'governance-policies': 'Policies',
+  'governance-work': 'Tasks & Issues',
   'enterprise-view': 'Enterprise View',
   'reports': 'Reports',
   'branding': 'Branding',
@@ -38,13 +44,13 @@ const ROUTE_LABELS: Record<string, string> = {
   'governance-calendar': 'Calendar',
   'decision-rights': 'Decision Rights',
   'sops': 'Procedures',
-  'business-glossary': 'Business Glossary',
+  'business-glossary': 'Glossary',
   'data-dictionary': 'Data Dictionary',
 };
 
 const containerStyle: React.CSSProperties = {
   fontSize: 12,
-  color: '#9ca3af',
+  color: '#6b7280',
   marginBottom: 16,
   display: 'flex',
   alignItems: 'center',
@@ -53,7 +59,7 @@ const containerStyle: React.CSSProperties = {
 };
 
 const linkStyle: React.CSSProperties = {
-  color: '#9ca3af',
+  color: '#6b7280',
   textDecoration: 'none',
 };
 

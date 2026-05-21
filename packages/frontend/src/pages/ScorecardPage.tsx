@@ -451,7 +451,7 @@ export default function ScorecardPage() {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Governance Maturity Scorecard</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
           <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
@@ -463,7 +463,7 @@ export default function ScorecardPage() {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Governance Maturity Scorecard</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
           <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
@@ -481,7 +481,7 @@ export default function ScorecardPage() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600 }}>Governance Maturity Scorecard</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
         <HelpIconLink />
       </div>
 

@@ -72,7 +72,7 @@ export default function HelpPage() {
   return (
     <div style={{ maxWidth: 820, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 8 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600 }}>Help Guide</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Help Guide</h1>
         <button
           onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
           style={{

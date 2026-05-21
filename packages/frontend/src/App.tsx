@@ -20,8 +20,6 @@ import GovernanceGroupDetailPage from '@/pages/GovernanceGroupDetailPage';
 import DataDomainsPage from '@/pages/DataDomainsPage';
 import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
 import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
-import ScorecardPage from '@/pages/ScorecardPage';
-import ExecutiveReportPage from '@/pages/ExecutiveReportPage';
 import ComparisonPage from '@/pages/ComparisonPage';
 import DataLineagePage from '@/pages/DataLineagePage';
 import DataQualityPage from '@/pages/DataQualityPage';
@@ -81,8 +79,8 @@ export default function App() {
         <Route path="/roles" element={<Navigate to="/dama-roles" replace />} />
         <Route path="/raci" element={<Navigate to="/dama-roles?tab=raci" replace />} />
         <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
-        <Route path="/scorecard" element={<ScorecardPage />} />
-        <Route path="/report" element={<ExecutiveReportPage />} />
+        <Route path="/scorecard" element={<Navigate to="/reports?tab=scorecard" replace />} />
+        <Route path="/report" element={<Navigate to="/reports?tab=executive" replace />} />
         <Route path="/data-lineage" element={<DataLineagePage />} />
         <Route path="/data-quality" element={<DataQualityPage />} />
         <Route path="/connections" element={<ConnectionsPage />} />

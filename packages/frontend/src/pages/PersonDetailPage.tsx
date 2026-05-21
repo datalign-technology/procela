@@ -271,7 +271,7 @@ export default function PersonDetailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 11, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 4 }}>Person</div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>{p.name}</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>{p.name}</h1>
           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
             {p.email && <span>{p.email}</span>}
             {p.title && <span>{p.email ? ' \u2022 ' : ''}{p.title}</span>}

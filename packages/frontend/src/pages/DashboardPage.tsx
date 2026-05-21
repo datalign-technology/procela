@@ -926,8 +926,11 @@ export default function DashboardPage() {
       {showCustomize && (
         <div style={{
           ...cardStyle, marginBottom: 24, padding: 16,
-          background: 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)',
-          border: '1px solid #93c5fd',
+          // Theme tokens, not hardcoded blues — the panel was rendering
+          // a fixed light-blue gradient that clashed on re-branded /
+          // dark-themed tenants.
+          background: 'var(--color-bg)',
+          border: '1px solid var(--color-primary)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Customize Dashboard</div>

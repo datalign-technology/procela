@@ -141,7 +141,7 @@ export default function ExecutiveReportPage() {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Executive Report</h1>
           <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-text-muted)' }}>Loading report data...</div>
@@ -153,7 +153,7 @@ export default function ExecutiveReportPage() {
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Executive Report</h1>
           <HelpIconLink />
         </div>
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
@@ -185,7 +185,7 @@ export default function ExecutiveReportPage() {
       {/* Print Button */}
       <div className="no-print" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600 }}>Executive Report</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Executive Report</h1>
           <HelpIconLink />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

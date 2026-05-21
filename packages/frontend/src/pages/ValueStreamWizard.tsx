@@ -146,7 +146,7 @@ export default function ValueStreamWizard() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 4 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>
             {activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
           </h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>

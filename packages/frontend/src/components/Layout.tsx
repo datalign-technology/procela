@@ -491,6 +491,7 @@ export default function Layout() {
   };
 
   const handleMarkAllRead = async () => {
+    disarmClearAll();
     await apiClient.put('/notifications/read-all');
     setNotifCount(0);
     setNotifList((list) => list.map((n) => ({ ...n, read: true })));
@@ -526,6 +527,12 @@ export default function Layout() {
     setNotifCount(0);
     setNotifList([]);
   };
+
+  // Abort an armed "Clear all" whenever the notification panel closes
+  // (toggle, outside-click, Escape, or following a notification) — so
+  // an accidental first click is cancelled by any normal interaction,
+  // not only by waiting out the countdown.
+  useEffect(() => { if (!notifOpen) disarmClearAll(); }, [notifOpen]);
 
   const handleDismissNotification = async (id: string) => {
     setNotifList((list) => list.filter((n) => n.id !== id));
