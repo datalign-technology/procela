@@ -61,9 +61,9 @@ export default function HelpPage() {
             borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
             flexShrink: 0,
           }}
-          title="Show the three-phase intro screen again"
+          title="Show the three-phase Define / Connect / Discover intro again"
         >
-          Restart guided tour
+          Replay intro
         </button>
       </div>
       <p style={{ ...pStyle, marginBottom: 24 }}>

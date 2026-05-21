@@ -208,17 +208,33 @@ export default function Layout() {
     }
     return null;
   })();
-  const [expandedNavSection, setExpandedNavSection] = useState<string | null>(activeSectionLabel);
+  // Set of expanded accordion sections. Multi-open: navigating to a
+  // section *adds* it to the open set rather than replacing the
+  // previous one, so bouncing People → Data → People no longer
+  // collapses the section you came from. The user can still close any
+  // section by clicking its header.
+  const [expandedNavSections, setExpandedNavSections] = useState<Set<string>>(
+    () => new Set(activeSectionLabel ? [activeSectionLabel] : []),
+  );
   const prevPathnameRef = useRef(location.pathname);
 
-  // Auto-expand section only when navigating to a different section
+  // Auto-expand the active section when navigating; never auto-close.
   useEffect(() => {
     if (location.pathname === prevPathnameRef.current) return;
     prevPathnameRef.current = location.pathname;
-    if (activeSectionLabel && activeSectionLabel !== expandedNavSection) {
-      setExpandedNavSection(activeSectionLabel);
+    if (activeSectionLabel && !expandedNavSections.has(activeSectionLabel)) {
+      setExpandedNavSections((prev) => new Set(prev).add(activeSectionLabel));
     }
-  }, [location.pathname, activeSectionLabel, expandedNavSection]);
+  }, [location.pathname, activeSectionLabel, expandedNavSections]);
+
+  const toggleNavSection = (label: string) => {
+    setExpandedNavSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
 
   // Flyout for collapsed sidebar
   const [flyoutSection, setFlyoutSection] = useState<string | null>(null);
@@ -285,7 +301,25 @@ export default function Layout() {
     const match = allItems
       .filter((i) => path === i.to || path.startsWith(i.to + '/'))
       .sort((a, b) => b.to.length - a.to.length)[0];
-    document.title = match ? `${match.label} · Procela` : 'Procela';
+    // Append a sub-route label so deep pages aren't all "Processes ·
+    // Procela". Keyed by the trailing path segment after the matched
+    // nav route.
+    let suffix = '';
+    if (match && path.length > match.to.length) {
+      const tail = path.slice(match.to.length).replace(/^\/+/, '').split('/')[0];
+      const SUBROUTE_LABELS: Record<string, string> = {
+        wizard: 'Wizard',
+        visualization: 'Map',
+        compare: 'Compare',
+        new: 'New',
+        edit: 'Edit',
+      };
+      // Use a colon, not " — ": brandingStore appends the customer's
+      // company name with " — " and derives the base via split(' — '),
+      // so an em-dash here would be swallowed when branding re-applies.
+      if (tail) suffix = `: ${SUBROUTE_LABELS[tail] || tail.charAt(0).toUpperCase() + tail.slice(1)}`;
+    }
+    document.title = match ? `${match.label}${suffix} · Procela` : 'Procela';
   }, [location.pathname]);
 
   // Global keyboard shortcuts. Cmd/Ctrl+K and `/` both open the command
@@ -369,7 +403,21 @@ export default function Layout() {
     setNotifList((list) => list.map((n) => ({ ...n, read: true })));
   };
 
+  // "Clear all" deletes every notification with no undo, so it's a
+  // two-click action: the first click arms the button (3s window), the
+  // second actually clears. Avoids a full modal for a minor action
+  // while still guarding against an accidental wipe.
+  const [clearAllArmed, setClearAllArmed] = useState(false);
+  const clearAllTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleClearAllNotifications = async () => {
+    if (!clearAllArmed) {
+      setClearAllArmed(true);
+      if (clearAllTimerRef.current) clearTimeout(clearAllTimerRef.current);
+      clearAllTimerRef.current = setTimeout(() => setClearAllArmed(false), 3000);
+      return;
+    }
+    if (clearAllTimerRef.current) clearTimeout(clearAllTimerRef.current);
+    setClearAllArmed(false);
     await apiClient.delete('/notifications/all');
     setNotifCount(0);
     setNotifList([]);
@@ -522,7 +570,7 @@ export default function Layout() {
               });
             })()
           ) : visibleSections.map((section, sIdx) => {
-            const isExpanded = section.label ? expandedNavSection === section.label : true;
+            const isExpanded = section.label ? expandedNavSections.has(section.label) : true;
             const isFlyoutOpen = sidebarCollapsed && flyoutSection === section.label;
             const sectionHasActive = section.items.some((item) => {
               const groupRoutes = ROUTE_GROUPS[item.to];
@@ -563,7 +611,7 @@ export default function Layout() {
                       if (sidebarCollapsed) {
                         setFlyoutSection(isFlyoutOpen ? null : section.label);
                       } else {
-                        setExpandedNavSection(isExpanded ? null : section.label!);
+                        toggleNavSection(section.label!);
                       }
                     }}
                     aria-expanded={!sidebarCollapsed ? isExpanded : isFlyoutOpen}
@@ -621,24 +669,38 @@ export default function Layout() {
                       onMouseLeave={() => { flyoutTimeoutRef.current = setTimeout(() => setFlyoutSection(null), 150); }}
                     >
                       <div className={styles.navFlyoutLabel}>{section.label}</div>
-                      {section.items.map((item) => {
-                        const groupRoutes = ROUTE_GROUPS[item.to];
-                        const isGroupActive = groupRoutes
-                          ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                          : location.pathname === item.to;
-                        return (
-                          <NavLink
-                            key={item.to}
-                            to={item.to}
-                            end={item.to === '/'}
-                            className={() => clsx(styles.navFlyoutLink, isGroupActive && styles.navFlyoutLinkActive)}
-                            onClick={() => setFlyoutSection(null)}
-                          >
-                            <span className={styles.navIcon}>{textIcon(item.icon)}</span>
-                            {item.label}
-                          </NavLink>
-                        );
-                      })}
+                      {(() => {
+                        const renderFlyoutItem = (item: NavItem) => {
+                          const groupRoutes = ROUTE_GROUPS[item.to];
+                          const isGroupActive = groupRoutes
+                            ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
+                            : location.pathname === item.to;
+                          return (
+                            <NavLink
+                              key={item.to}
+                              to={item.to}
+                              end={item.to === '/'}
+                              className={() => clsx(styles.navFlyoutLink, isGroupActive && styles.navFlyoutLinkActive)}
+                              onClick={() => setFlyoutSection(null)}
+                            >
+                              <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                              {item.label}
+                            </NavLink>
+                          );
+                        };
+                        // Mirror the expanded panel: when the section has
+                        // sub-clusters (Governance: Set up / Operate),
+                        // show the same dividers in the flyout instead of
+                        // a flat list that loses the structure.
+                        if (!section.subGroups) return section.items.map(renderFlyoutItem);
+                        const byTo = new Map(section.items.map((i) => [i.to, i]));
+                        return section.subGroups.map((sg) => (
+                          <div key={sg.label}>
+                            <div className={styles.navFlyoutLabel} style={{ opacity: 0.7 }}>{sg.label}</div>
+                            {sg.itemTos.map((to) => byTo.get(to)).filter(Boolean).map((i) => renderFlyoutItem(i as NavItem))}
+                          </div>
+                        ));
+                      })()}
                     </div>
                   )}
                 </>
@@ -856,10 +918,11 @@ export default function Layout() {
                       )}
                       {notifList.length > 0 && (
                         <button onClick={handleClearAllNotifications} style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          fontSize: 11, color: 'var(--color-error, #dc2626)', fontWeight: 500,
+                          background: clearAllArmed ? 'var(--color-error, #dc2626)' : 'none',
+                          border: 'none', cursor: 'pointer', borderRadius: 4, padding: '2px 6px',
+                          fontSize: 11, color: clearAllArmed ? '#fff' : 'var(--color-error, #dc2626)', fontWeight: 500,
                         }}>
-                          Clear all
+                          {clearAllArmed ? 'Click again to confirm' : 'Clear all'}
                         </button>
                       )}
                     </div>

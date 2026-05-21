@@ -257,7 +257,7 @@ export default function ChatPanel() {
                   handleSend();
                 }
               }}
-              placeholder="Type a message..."
+              placeholder="Ask about a process, asset, gap, or owner…"
               style={{
                 flex: 1,
                 padding: '8px 12px',

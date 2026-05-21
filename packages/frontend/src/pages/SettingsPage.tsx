@@ -230,9 +230,9 @@ export default function SettingsPage() {
             color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
             borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
           }}
-          title="Show the three-phase intro screen again"
+          title="Show the three-phase Define / Connect / Discover intro again"
         >
-          Restart guided tour
+          Replay intro
         </button>
       </div>
 

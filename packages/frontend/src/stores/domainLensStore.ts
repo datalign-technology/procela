@@ -18,9 +18,26 @@ export type DomainValue = 'GOVERNANCE' | 'OPERATIONAL';
 export type DomainLens = 'ALL' | DomainValue;
 
 const STORAGE_KEY = 'procela:domain-lens-by-page';
+// Marker that lives in sessionStorage (cleared when the tab/window
+// closes). Its presence means "the lens blob in localStorage belongs
+// to the current browsing session" — see readInitial below.
+const SESSION_KEY = 'procela:domain-lens-session';
 
 function readInitial(): Record<string, DomainLens> {
+  // The lens is persisted to localStorage so it survives an in-session
+  // reload, but a non-default lens that quietly outlives the session is
+  // a trap: a user comes back next week, lands on Data Assets, sees far
+  // fewer rows than they remember, and never notices the small filter
+  // banner. So at the start of each *browser session* (no sessionStorage
+  // marker yet) we drop the persisted lenses and start fresh at ALL.
+  // Within a session, navigation and reloads keep the user's choice.
   try {
+    const sameSession = sessionStorage.getItem(SESSION_KEY) === '1';
+    if (!sameSession) {
+      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.setItem(SESSION_KEY, '1');
+      return {};
+    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);

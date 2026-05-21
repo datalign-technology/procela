@@ -934,6 +934,8 @@ export default function DashboardPage() {
         actions={!isEmptyOrg ? (
           <button
             onClick={() => setShowCustomize((v) => !v)}
+            aria-expanded={showCustomize}
+            title="Reorder or hide dashboard sections"
             style={{
               padding: '5px 12px', fontSize: 11, fontWeight: 500,
               background: showCustomize ? 'var(--color-primary)' : 'var(--color-surface)',
@@ -967,16 +969,20 @@ export default function DashboardPage() {
                 border: '1px solid var(--color-border)', borderRadius: 4,
                 opacity: layout.hidden.has(key) ? 0.5 : 1,
               }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <button
                     onClick={() => layout.moveUp(key)}
                     disabled={idx === 0}
-                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 10, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
+                    aria-label={`Move ${SECTION_LABELS[key]} up`}
+                    title={`Move ${SECTION_LABELS[key]} up`}
+                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', fontSize: 11, color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', width: 24, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
                   >{'▲'}</button>
                   <button
                     onClick={() => layout.moveDown(key)}
                     disabled={idx === layout.order.length - 1}
-                    style={{ background: 'none', border: 'none', cursor: idx === layout.order.length - 1 ? 'default' : 'pointer', fontSize: 10, color: idx === layout.order.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
+                    aria-label={`Move ${SECTION_LABELS[key]} down`}
+                    title={`Move ${SECTION_LABELS[key]} down`}
+                    style={{ background: 'none', border: 'none', cursor: idx === layout.order.length - 1 ? 'default' : 'pointer', fontSize: 11, color: idx === layout.order.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', width: 24, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }}
                   >{'▼'}</button>
                 </div>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{SECTION_LABELS[key]}</span>
@@ -1001,12 +1007,59 @@ export default function DashboardPage() {
       {isEmptyOrg ? (
         <GettingStartedCard stats={stats} />
       ) : (
-        layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
-          <React.Fragment key={key}>
-            {sectionMap[key]}
-          </React.Fragment>
-        ))
+        <>
+          <SetupCompleteBanner stats={stats} orgId={activeOrgId} />
+          {layout.order.filter((key) => !layout.hidden.has(key)).map((key) => (
+            <React.Fragment key={key}>
+              {sectionMap[key]}
+            </React.Fragment>
+          ))}
+        </>
       )}
+    </div>
+  );
+}
+
+// One-time congratulations once all four setup steps (processes,
+// systems, data assets, people) have data. The GettingStartedCard
+// disappears the moment the org stops being empty, so without this
+// the user never gets an "you're set up" signal — they just silently
+// graduate to the full dashboard. Dismissal is keyed by orgId so each
+// org celebrates once.
+function SetupCompleteBanner({ stats, orgId }: { stats: DashboardStats; orgId: string | null }) {
+  const complete = stats.processes > 0 && stats.systems > 0 && stats.dataAssets > 0 && stats.people > 0;
+  const flag = orgId ? `procela:setup-celebrated:${orgId}` : '';
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try { return !flag || localStorage.getItem(flag) === 'true'; } catch { return true; }
+  });
+  if (!complete || dismissed) return null;
+  const dismiss = () => {
+    try { if (flag) localStorage.setItem(flag, 'true'); } catch { /* */ }
+    setDismissed(true);
+  };
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px', marginBottom: 20,
+        background: '#dcfce7', border: '1px solid #86efac',
+        borderRadius: 'var(--radius-md)', fontSize: 13, color: '#166534',
+      }}
+    >
+      <span aria-hidden="true" style={{ fontSize: 16 }}>✓</span>
+      <span>
+        <strong>Setup complete.</strong> Processes, systems, data assets and people are all in place — use <strong>Customize</strong> above to arrange this dashboard around what you watch most.
+      </span>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss setup-complete message"
+        style={{
+          marginLeft: 'auto', background: 'transparent', border: 'none',
+          color: '#166534', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4,
+        }}
+      >×</button>
     </div>
   );
 }
