@@ -38,8 +38,8 @@ type NavSection = {
 // icons so the OS renders them as text glyphs, not coloured emoji.
 // Without this, Windows substitutes Segoe UI Emoji for codepoints
 // like U+2638 (Wheel of Dharma, the Settings icon) and paints them
-// in colour. Surrogate-pair icons (e.g. the 📋 clipboard used for
-// Policies) are intentional emoji and are passed through unchanged.
+// in colour. The nav icon set is now all monochrome BMP symbols — no
+// emoji — so every glyph renders in one consistent text style.
 function textIcon(s: string): string {
   return [...s].length === 1 && s.charCodeAt(0) < 0xD800 ? s + '︎' : s;
 }
@@ -85,7 +85,7 @@ const navSections: NavSection[] = [
   {
     label: 'People',
     items: [
-      { to: '/people', label: 'People', icon: '\uD83D\uDC65' },
+      { to: '/people', label: 'People', icon: '\u263B' },
       { to: '/skills', label: 'Skills', icon: '\u2605' },
     ],
   },
@@ -95,7 +95,7 @@ const navSections: NavSection[] = [
       { to: '/governance-program', label: 'Program', icon: '\u2637' },
       { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
       { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
-      { to: '/governance-policies', label: 'Policies', icon: '\uD83D\uDCCB' },
+      { to: '/governance-policies', label: 'Policies', icon: '\u00A7' },
       { to: '/decision-rights', label: 'Decision Rights', icon: '\u2696' },
       { to: '/documentation', label: 'Documentation', icon: '\u2611' },
       { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },
@@ -141,8 +141,8 @@ const bottomNavItems: NavItem[] = [
 const MOBILE_PRIMARY: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: '\u25A3' },
   { to: '/processes', label: 'Processes', icon: '\u26C1' },
-  { to: '/data-assets', label: 'Data', icon: '\u2B22' },
-  { to: '/people', label: 'People', icon: '\uD83D\uDC65' },
+  { to: '/data-assets', label: 'Assets', icon: '\u2B22' },
+  { to: '/people', label: 'People', icon: '\u263B' },
 ];
 
 const ROUTE_GROUPS: Record<string, string[]> = {

@@ -34,21 +34,23 @@ export default function DomainLensActiveBanner({
       role="status"
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '6px 12px', marginBottom: 10,
-        background: '#fef3c7', border: '1px solid #fde68a',
-        borderRadius: 'var(--radius-md)', fontSize: 12, color: '#92400e',
+        padding: '10px 14px', marginBottom: 14,
+        background: '#fef3c7', border: '1px solid #f59e0b',
+        borderLeft: '4px solid #f59e0b',
+        borderRadius: 'var(--radius-md)', fontSize: 13, color: '#92400e',
       }}
     >
-      <span style={{ fontWeight: 600 }}>Filter active:</span>
-      <span>Showing {which} {entityLabel} only.</span>
+      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>⚠</span>
+      <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 11 }}>Filter active</span>
+      <span>Showing <strong>{which} {entityLabel}</strong> only — some {entityLabel} are hidden.</span>
       <button
         type="button"
         onClick={() => setLens(pageKey, 'ALL')}
         style={{
           marginLeft: 'auto',
-          background: 'transparent', border: '1px solid #b45309',
-          color: '#92400e', borderRadius: 4,
-          padding: '2px 10px', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+          background: '#b45309', border: '1px solid #b45309',
+          color: '#fff', borderRadius: 4,
+          padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
         }}
       >
         Show all

@@ -503,7 +503,7 @@ const quickActions = [
   { icon: '✶', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
   { icon: '⛁', label: 'Data Assets', description: 'Define and manage data assets', link: '/data-assets' },
   { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
-  { icon: '↔', label: 'Mappings', description: 'Link processes to data', link: '/mappings' },
+  { icon: '↔', label: 'Process Coverage', description: 'Link data to process activities', link: '/mappings' },
   { icon: '▨', label: 'Enterprise View', description: 'Full cross-entity visibility', link: '/enterprise-view' },
   { icon: '⊞', label: 'Analysis', description: 'Pivot the catalog (systems × domains, roles × people…)', link: '/analysis' },
 ];
@@ -586,7 +586,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
     suggestions.push({
       icon: '↔',
       title: 'Map data to processes',
-      description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process activities. Mappings reveal dependencies and gaps.`,
+      description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process activities. Process Coverage reveals dependencies and gaps.`,
       link: '/mappings',
     });
   }
