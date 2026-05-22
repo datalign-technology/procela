@@ -44,6 +44,14 @@ function textIcon(s: string): string {
   return [...s].length === 1 && s.charCodeAt(0) < 0xD800 ? s + '︎' : s;
 }
 
+// Opens the Help guide in a separate window. Shared by the top-bar
+// Help button and the sidebar Help item so both behave identically.
+// The named target means repeated clicks focus the same window
+// instead of spawning duplicates.
+function openHelpWindow() {
+  window.open('/help', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
+}
+
 // Five plain-noun buckets so users can find things by what they ARE,
 // not by which DAMA phase they belong to. Order maps to Procela's
 // three layers (Business / Data / Systems / People) with Governance
@@ -201,24 +209,42 @@ function MobileNavDrawer({ sections, bottomItems, pathname, onClose }: {
       ? group.some((r) => pathname === r || pathname.startsWith(r + '/'))
       : (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/'));
   };
-  const linkRow = (item: NavItem) => (
-    <NavLink
-      key={item.to}
-      to={item.to}
-      end={item.to === '/'}
-      onClick={onClose}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '12px 20px', fontSize: 15, textDecoration: 'none',
-        color: isActive(item.to) ? 'var(--color-primary)' : 'var(--color-text)',
-        fontWeight: isActive(item.to) ? 600 : 400,
-        background: isActive(item.to) ? 'var(--color-bg)' : 'transparent',
-      }}
-    >
-      <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{textIcon(item.icon)}</span>
-      {item.label}
-    </NavLink>
-  );
+  const rowStyle = (active: boolean): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '12px 20px', fontSize: 15, textDecoration: 'none',
+    color: active ? 'var(--color-primary)' : 'var(--color-text)',
+    fontWeight: active ? 600 : 400,
+    background: active ? 'var(--color-bg)' : 'transparent',
+  });
+  const linkRow = (item: NavItem) => {
+    // Help opens the guide in a separate window, matching the top-bar
+    // Help button — not in-app navigation.
+    if (item.to === '/help') {
+      return (
+        <button
+          key={item.to}
+          type="button"
+          onClick={() => { onClose(); openHelpWindow(); }}
+          style={{ ...rowStyle(false), width: '100%', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+        >
+          <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{textIcon(item.icon)}</span>
+          {item.label}
+        </button>
+      );
+    }
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.to === '/'}
+        onClick={onClose}
+        style={rowStyle(isActive(item.to))}
+      >
+        <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{textIcon(item.icon)}</span>
+        {item.label}
+      </NavLink>
+    );
+  };
   return (
     <div
       role="dialog"
@@ -851,17 +877,32 @@ export default function Layout() {
               <div className={styles.navSpacer} />
               <div className={styles.navDivider} />
               {bottomNavItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    clsx(styles.navLink, isActive && styles.navLinkActive)
-                  }
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <span className={styles.navIcon}>{textIcon(item.icon)}</span>
-                  {!sidebarCollapsed && item.label}
-                </NavLink>
+                item.to === '/help' ? (
+                  // Help opens the guide in a separate window, matching
+                  // the top-bar Help button — not in-app navigation.
+                  <button
+                    key={item.to}
+                    type="button"
+                    onClick={openHelpWindow}
+                    className={styles.navLink}
+                    title={sidebarCollapsed ? item.label : undefined}
+                  >
+                    <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                    {!sidebarCollapsed && item.label}
+                  </button>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      clsx(styles.navLink, isActive && styles.navLinkActive)
+                    }
+                    title={sidebarCollapsed ? item.label : undefined}
+                  >
+                    <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                    {!sidebarCollapsed && item.label}
+                  </NavLink>
+                )
               ))}
             </>
           )}
@@ -966,7 +1007,7 @@ export default function Layout() {
                 named target means repeated clicks focus the same Help
                 window instead of spawning duplicates. */}
             <button
-              onClick={() => window.open('/help', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer')}
+              onClick={openHelpWindow}
               aria-label="Open the Help guide in a new window"
               title="Open the Help guide in a new window"
               style={{
