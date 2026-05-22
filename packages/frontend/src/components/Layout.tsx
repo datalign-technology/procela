@@ -44,6 +44,32 @@ function textIcon(s: string): string {
   return [...s].length === 1 && s.charCodeAt(0) < 0xD800 ? s + '︎' : s;
 }
 
+// People gets a real head-and-shoulders SVG rather than a text glyph —
+// no BMP symbol reads cleanly as "person", and an inline stroke icon
+// (same treatment as the header notification bell) stays crisp at any
+// size and inherits the link colour via currentColor.
+function PeopleNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <circle cx="12" cy="8.2" r="3.7" />
+      <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
+    </svg>
+  );
+}
+
+// Resolve a nav item's icon to a renderable node: the People SVG for
+// the People entry, the text glyph for everything else.
+function navIconNode(item: NavItem | undefined): React.ReactNode {
+  if (!item) return '';
+  if (item.to === '/people') return <PeopleNavIcon />;
+  return textIcon(item.icon);
+}
+
 // Opens the Help guide in a separate window. Shared by the top-bar
 // Help button and the sidebar Help item so both behave identically.
 // The named target means repeated clicks focus the same window
@@ -227,7 +253,7 @@ function MobileNavDrawer({ sections, bottomItems, pathname, onClose }: {
           onClick={() => { onClose(); openHelpWindow(); }}
           style={{ ...rowStyle(false), width: '100%', border: 'none', cursor: 'pointer', textAlign: 'left' }}
         >
-          <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{textIcon(item.icon)}</span>
+          <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{navIconNode(item)}</span>
           {item.label}
         </button>
       );
@@ -240,7 +266,7 @@ function MobileNavDrawer({ sections, bottomItems, pathname, onClose }: {
         onClick={onClose}
         style={rowStyle(isActive(item.to))}
       >
-        <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{textIcon(item.icon)}</span>
+        <span style={{ width: 22, textAlign: 'center', fontSize: 16 }}>{navIconNode(item)}</span>
         {item.label}
       </NavLink>
     );
@@ -692,7 +718,7 @@ export default function Layout() {
                     className={() => clsx(styles.navLink, isActive && styles.navLinkActive)}
                     title={item.label}
                   >
-                    <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                    <span className={styles.navIcon}>{navIconNode(item)}</span>
                     <span style={{ fontSize: 10 }}>{item.label}</span>
                   </NavLink>
                 );
@@ -758,7 +784,7 @@ export default function Layout() {
                     style={{ cursor: 'pointer', userSelect: 'none', width: '100%', textAlign: 'left', background: 'transparent', font: 'inherit', color: 'inherit', border: 'none' }}
                     title={sidebarCollapsed ? section.label : undefined}
                   >
-                    <span className={styles.navIcon}>{textIcon(section.items[0]?.icon || '')}</span>
+                    <span className={styles.navIcon}>{navIconNode(section.items[0])}</span>
                     {!sidebarCollapsed && (
                       <>
                         <span style={{ flex: 1 }}>{section.label}</span>
@@ -781,7 +807,7 @@ export default function Layout() {
                           end={item.to === '/'}
                           className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
                         >
-                          <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                          <span className={styles.navIcon}>{navIconNode(item)}</span>
                           {item.label}
                         </NavLink>
                       );
@@ -822,7 +848,7 @@ export default function Layout() {
                               className={() => clsx(styles.navFlyoutLink, isGroupActive && styles.navFlyoutLinkActive)}
                               onClick={() => setFlyoutSection(null)}
                             >
-                              <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                              <span className={styles.navIcon}>{navIconNode(item)}</span>
                               {item.label}
                             </NavLink>
                           );
@@ -858,7 +884,7 @@ export default function Layout() {
                       className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
                       title={sidebarCollapsed ? item.label : undefined}
                     >
-                      <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                      <span className={styles.navIcon}>{navIconNode(item)}</span>
                       {!sidebarCollapsed && item.label}
                     </NavLink>
                   );
@@ -887,7 +913,7 @@ export default function Layout() {
                     className={styles.navLink}
                     title={sidebarCollapsed ? item.label : undefined}
                   >
-                    <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                    <span className={styles.navIcon}>{navIconNode(item)}</span>
                     {!sidebarCollapsed && item.label}
                   </button>
                 ) : (
@@ -899,7 +925,7 @@ export default function Layout() {
                     }
                     title={sidebarCollapsed ? item.label : undefined}
                   >
-                    <span className={styles.navIcon}>{textIcon(item.icon)}</span>
+                    <span className={styles.navIcon}>{navIconNode(item)}</span>
                     {!sidebarCollapsed && item.label}
                   </NavLink>
                 )
