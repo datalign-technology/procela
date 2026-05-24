@@ -62,11 +62,34 @@ function PeopleNavIcon() {
   );
 }
 
-// Resolve a nav item's icon to a renderable node: the People SVG for
-// the People entry, the text glyph for everything else.
+// Skills uses an award medallion with ribbon tails — same inline-SVG
+// treatment as People, since no BMP glyph reads cleanly as "earned
+// capability" and the existing star (U+2605) collided with Tasks &
+// Issues. The two ribbon tails sit above a circular medal so the
+// silhouette is unambiguous at the 18px nav size.
+function SkillsNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <path d="M8.5 3 L7 9.5" />
+      <path d="M15.5 3 L17 9.5" />
+      <path d="M12 4.2 L10.5 8" />
+      <path d="M12 4.2 L13.5 8" />
+      <circle cx="12" cy="15" r="5.2" />
+    </svg>
+  );
+}
+
+// Resolve a nav item's icon to a renderable node: the People and
+// Skills SVGs for those entries, the text glyph for everything else.
 function navIconNode(item: NavItem | undefined): React.ReactNode {
   if (!item) return '';
   if (item.to === '/people') return <PeopleNavIcon />;
+  if (item.to === '/skills') return <SkillsNavIcon />;
   return textIcon(item.icon);
 }
 
@@ -120,7 +143,10 @@ const navSections: NavSection[] = [
     label: 'People',
     items: [
       { to: '/people', label: 'People', icon: '\u263B' },
-      { to: '/skills', label: 'Skills', icon: '\u2605' },
+      // Icon is rendered by SkillsNavIcon (inline SVG medal); the
+      // string here is only a fallback for any consumer that bypasses
+      // navIconNode, so it must not collide with another nav entry.
+      { to: '/skills', label: 'Skills', icon: '\u2727' },
     ],
   },
   {
