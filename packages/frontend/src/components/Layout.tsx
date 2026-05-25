@@ -22,7 +22,11 @@ import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 
-type NavItem = { to: string; label: string; icon: string };
+// `label` is what shows in the sidebar; `titleLabel`, when set,
+// overrides the browser tab title so a short sidebar label (e.g.
+// "Structure" inside the Organizations section) can still produce a
+// meaningful tab title ("Organizations").
+type NavItem = { to: string; label: string; icon: string; titleLabel?: string };
 // `items` is always the flat source of truth (active-state, flyout,
 // collapsed icon). `subGroups`, when present, only adds labelled
 // dividers in the expanded accordion so a heavy section (Governance)
@@ -106,12 +110,91 @@ function DataAssetsNavIcon() {
   );
 }
 
-// Resolve a nav item's icon to a renderable node: the People, Skills
-// and Data Assets SVGs for those entries, the text glyph for
-// everything else.
+// Top-tier nav icons (Dashboard, Processes, Organizations, Agents)
+// share the same stroke-1.9 / 24×24 inline-SVG language as People,
+// Skills and Data Assets so the sidebar stops mixing filled symbol
+// glyphs with line-art icons in the same column.
+function DashboardNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function ProcessesNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <rect x="2.5" y="9" width="7" height="6" rx="1.2" />
+      <path d="M9.5 12 L15 12" />
+      <path d="M13 9.8 L15 12 L13 14.2" />
+      <rect x="15" y="9" width="6.5" height="6" rx="1.2" />
+    </svg>
+  );
+}
+
+function OrganizationsNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <rect x="9" y="2.8" width="6" height="5" rx="1" />
+      <path d="M12 7.8 L12 11.5" />
+      <path d="M4.5 11.5 L19.5 11.5" />
+      <path d="M4.5 11.5 L4.5 14.5" />
+      <path d="M19.5 11.5 L19.5 14.5" />
+      <path d="M12 11.5 L12 14.5" />
+      <rect x="1.5" y="14.5" width="6" height="5" rx="1" />
+      <rect x="9" y="14.5" width="6" height="5" rx="1" />
+      <rect x="16.5" y="14.5" width="6" height="5" rx="1" />
+    </svg>
+  );
+}
+
+function AgentsNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <path d="M12 2.5 L12 4.8" />
+      <circle cx="12" cy="2.2" r="0.9" />
+      <rect x="4.5" y="6.5" width="15" height="11" rx="2.2" />
+      <circle cx="9" cy="11.5" r="1.1" />
+      <circle cx="15" cy="11.5" r="1.1" />
+      <path d="M9.5 14.5 L14.5 14.5" />
+    </svg>
+  );
+}
+
+// Resolve a nav item's icon to a renderable node: a hand-drawn SVG
+// for the top-tier entries (so the sidebar reads as one consistent
+// icon set), the text glyph fallback for everything else.
 function navIconNode(item: NavItem | undefined): React.ReactNode {
   if (!item) return '';
+  if (item.to === '/') return <DashboardNavIcon />;
+  if (item.to === '/processes') return <ProcessesNavIcon />;
+  if (item.to === '/organizations') return <OrganizationsNavIcon />;
   if (item.to === '/people') return <PeopleNavIcon />;
+  if (item.to === '/agents') return <AgentsNavIcon />;
   if (item.to === '/skills') return <SkillsNavIcon />;
   if (item.to === '/data-assets') return <DataAssetsNavIcon />;
   return textIcon(item.icon);
@@ -151,7 +234,11 @@ const navSections: NavSection[] = [
     // less misleading.
     label: 'Organizations',
     items: [
-      { to: '/organizations', label: 'Organizations', icon: '\u2616' },
+      // Label is "Structure" inside the Organizations section so it
+      // doesn't echo the section title \u2014 the destination is still the
+      // org tree at /organizations, and the browser tab still reads
+      // "Organizations \u00b7 Procela" via titleLabel.
+      { to: '/organizations', label: 'Structure', icon: '\u2616', titleLabel: 'Organizations' },
       { to: '/people', label: 'People', icon: '\u263B' },
       { to: '/agents', label: 'Agents', icon: '\u2699' },
       // Icon is rendered by SkillsNavIcon (inline SVG medal); the
@@ -513,7 +600,7 @@ export default function Layout() {
       // so an em-dash here would be swallowed when branding re-applies.
       if (tail) suffix = `: ${SUBROUTE_LABELS[tail] || tail.charAt(0).toUpperCase() + tail.slice(1)}`;
     }
-    document.title = match ? `${match.label}${suffix} · Procela` : 'Procela';
+    document.title = match ? `${match.titleLabel || match.label}${suffix} · Procela` : 'Procela';
   }, [location.pathname]);
 
   // Global keyboard shortcuts. Cmd/Ctrl+K and `/` both open the command
