@@ -84,12 +84,36 @@ function SkillsNavIcon() {
   );
 }
 
-// Resolve a nav item's icon to a renderable node: the People and
-// Skills SVGs for those entries, the text glyph for everything else.
+// Data Assets uses the canonical stacked-cylinders "database" silhouette
+// rather than the hexagon glyph (U+2B22), which read as a generic shape
+// rather than "data" and gave the Data section header no distinct
+// identity. Same inline-SVG treatment as People and Skills so it scales
+// crisply and inherits the link colour. The Data section's collapsed
+// header takes its icon from the first item, so this also becomes the
+// section's icon.
+function DataAssetsNavIcon() {
+  return (
+    <svg
+      width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ display: 'inline-block', verticalAlign: 'middle' }}
+    >
+      <ellipse cx="12" cy="5.2" rx="7" ry="2.4" />
+      <path d="M5 5.2 V12 C5 13.33 8.13 14.4 12 14.4 C15.87 14.4 19 13.33 19 12 V5.2" />
+      <path d="M5 12 V18.8 C5 20.13 8.13 21.2 12 21.2 C15.87 21.2 19 20.13 19 18.8 V12" />
+    </svg>
+  );
+}
+
+// Resolve a nav item's icon to a renderable node: the People, Skills
+// and Data Assets SVGs for those entries, the text glyph for
+// everything else.
 function navIconNode(item: NavItem | undefined): React.ReactNode {
   if (!item) return '';
   if (item.to === '/people') return <PeopleNavIcon />;
   if (item.to === '/skills') return <SkillsNavIcon />;
+  if (item.to === '/data-assets') return <DataAssetsNavIcon />;
   return textIcon(item.icon);
 }
 
