@@ -137,7 +137,6 @@
 .navLinkActive {
   background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text-active);
-  font-weight: 500;
 }
 
 .navLinkChild {
@@ -146,13 +145,9 @@
 
 .navIcon {
   width: 20px;
-  text-align: center;
-  font-size: 16px;
-  /* Force text-style rendering for symbol glyphs. Without this, Windows
-   * substitutes Segoe UI Emoji for codepoints like U+2638 (Wheel of
-   * Dharma, used by Settings) and paints them as coloured pictographs. */
-  font-family: 'Segoe UI Symbol', 'Apple Symbols', 'Symbola', sans-serif;
-  font-variant-emoji: text;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── Flyout panel (collapsed sidebar) ── */
@@ -182,7 +177,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-sidebar-text);
   transition: background-color 0.12s;
   white-space: nowrap;
@@ -196,7 +191,6 @@
 .navFlyoutLinkActive {
   background-color: var(--color-sidebar-hover);
   color: var(--color-sidebar-text-active);
-  font-weight: 500;
 }
 
 /* ── Main area ── */
@@ -401,13 +395,12 @@
   .navDivider { display: none; }
   .navLink {
     padding: 8px 12px;
-    font-size: 11px;
+    font-size: 13px;
     flex-direction: column;
     gap: 2px;
     white-space: nowrap;
     min-width: auto;
   }
-  .navIcon { font-size: 18px; }
   .main { padding-bottom: 60px; }
   .header { flex-wrap: wrap; gap: 8px; height: auto; padding: 8px 12px; }
   .content { padding: 12px; }
