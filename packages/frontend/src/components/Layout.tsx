@@ -126,31 +126,38 @@ function openHelpWindow() {
 }
 
 // Plain-noun buckets so users can find things by what they ARE, not
-// by which DAMA phase they belong to. People and Skills are promoted
-// into the top no-label group, with People sitting directly under
-// Organizations: personnel belong to the org structure, so the two
-// read as a pair. Skills is a one-item leaf (no longer worth its own
-// accordion section) and stays adjacent to People to keep that
-// pairing visible. Data / Systems / Governance / Insights follow.
+// by which DAMA phase they belong to. The Organizations section is
+// the "who" of the platform \u2014 the company structure plus the humans
+// and AI agents that act within it, along with the skills those
+// actors carry. Data / Systems / Governance / Insights follow as the
+// other domains.
 const navSections: NavSection[] = [
   {
     label: null,
     items: [
       { to: '/', label: 'Dashboard', icon: '\u25A3' },
-      // Organizations is the company / division / team tree the user
-      // builds during onboarding. It's structural, not personnel \u2014
-      // putting it under "People" misled newcomers, so it now sits
-      // top-level next to Dashboard.
+      // Processes has only one page, so wrapping it in an accordion
+      // section produced a pointless "Processes \u203A Processes" expand.
+      // It's a direct top-level link like Dashboard.
+      { to: '/processes', label: 'Processes', icon: '\u26C1' },
+    ],
+  },
+  {
+    // "Organizations" reads as the cross-cutting "who" of the platform:
+    // the structural org tree plus the people, AI agents and skills
+    // that live within it. Agents was previously parked next to
+    // Settings to avoid being missed under a "People" heading; the
+    // broader "Organizations" label makes the AI-bot/human pairing
+    // less misleading.
+    label: 'Organizations',
+    items: [
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
       { to: '/people', label: 'People', icon: '\u263B' },
+      { to: '/agents', label: 'Agents', icon: '\u2699' },
       // Icon is rendered by SkillsNavIcon (inline SVG medal); the
       // string here is only a fallback for any consumer that bypasses
       // navIconNode, so it must not collide with another nav entry.
       { to: '/skills', label: 'Skills', icon: '\u2727' },
-      // Processes has only one page, so wrapping it in an accordion
-      // section produced a pointless "Processes \u203A Processes" expand.
-      // It's a direct top-level link like Dashboard / Organizations.
-      { to: '/processes', label: 'Processes', icon: '\u26C1' },
     ],
   },
   {
@@ -210,10 +217,9 @@ const navSections: NavSection[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
-  // Agents is the AI-bot registry kept next to Settings rather than
-  // under 'People' alongside humans, where it was easy to miss and
-  // conceptually misleading.
-  { to: '/agents', label: 'Agents', icon: '\u2699' },
+  // Agents moved into the Organizations section alongside People \u2014
+  // the bottom cluster now holds only the cross-cutting platform
+  // controls (Settings, Help).
   { to: '/settings', label: 'Settings', icon: '\u2638' },
   { to: '/help', label: 'Help', icon: '\u003F' },
 ];
