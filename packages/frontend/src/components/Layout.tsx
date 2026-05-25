@@ -125,13 +125,13 @@ function openHelpWindow() {
   window.open('/help', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
-// Five plain-noun buckets so users can find things by what they ARE,
-// not by which DAMA phase they belong to. People sits directly under
-// the top no-label group (Dashboard / Organizations / Processes)
-// because personnel are conceptually adjacent to the org structure
-// they belong to \u2014 the prior position under Systems forced users to
-// scan past two unrelated sections to reach a high-traffic page.
-// Data / Systems / Governance / Insights then follow.
+// Plain-noun buckets so users can find things by what they ARE, not
+// by which DAMA phase they belong to. People and Skills are promoted
+// into the top no-label group, with People sitting directly under
+// Organizations: personnel belong to the org structure, so the two
+// read as a pair. Skills is a one-item leaf (no longer worth its own
+// accordion section) and stays adjacent to People to keep that
+// pairing visible. Data / Systems / Governance / Insights follow.
 const navSections: NavSection[] = [
   {
     label: null,
@@ -142,20 +142,15 @@ const navSections: NavSection[] = [
       // putting it under "People" misled newcomers, so it now sits
       // top-level next to Dashboard.
       { to: '/organizations', label: 'Organizations', icon: '\u2616' },
-      // Processes has only one page, so wrapping it in an accordion
-      // section produced a pointless "Processes \u203A Processes" expand.
-      // It's a direct top-level link like Dashboard / Organizations.
-      { to: '/processes', label: 'Processes', icon: '\u26C1' },
-    ],
-  },
-  {
-    label: 'People',
-    items: [
       { to: '/people', label: 'People', icon: '\u263B' },
       // Icon is rendered by SkillsNavIcon (inline SVG medal); the
       // string here is only a fallback for any consumer that bypasses
       // navIconNode, so it must not collide with another nav entry.
       { to: '/skills', label: 'Skills', icon: '\u2727' },
+      // Processes has only one page, so wrapping it in an accordion
+      // section produced a pointless "Processes \u203A Processes" expand.
+      // It's a direct top-level link like Dashboard / Organizations.
+      { to: '/processes', label: 'Processes', icon: '\u26C1' },
     ],
   },
   {
