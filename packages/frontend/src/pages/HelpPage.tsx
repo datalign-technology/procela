@@ -26,7 +26,7 @@ const HELP_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'help-processes', label: '4. Processes' },
   { id: 'help-data', label: '5. Data' },
   { id: 'help-systems', label: '6. Systems' },
-  { id: 'help-people', label: '7. People' },
+  { id: 'help-organizations', label: '7. Organizations' },
   { id: 'help-governance', label: '8. Governance' },
   { id: 'help-cross-cutting', label: '9. Cross-cutting Features' },
   { id: 'help-key-concepts', label: '10. Key Concepts' },
@@ -115,8 +115,8 @@ export default function HelpPage() {
         <h2 id="help-getting-started" style={h2Style}>1. Getting Started</h2>
         <ol style={{ ...listStyle, listStyle: 'decimal' }}>
           <li>Sign in using dev mode or your enterprise SSO credentials</li>
-          <li>Go to <strong>Organizations</strong> (top-level sidebar item) to create your company structure</li>
-          <li>Go to <strong>People &rarr; People</strong> to add team members and assign roles</li>
+          <li>Go to <strong>Organizations &rarr; Structure</strong> to create your company / division / team tree</li>
+          <li>Go to <strong>Organizations &rarr; People</strong> to add team members and assign roles</li>
           <li>Go to <strong>Governance &rarr; Program</strong> to begin the 4-phase governance setup journey</li>
           <li>Follow the phase recommendations to build your governance foundation</li>
         </ol>
@@ -132,18 +132,17 @@ export default function HelpPage() {
       {/* 2. Navigation */}
       <div style={sectionStyle}>
         <h2 id="help-navigation" style={h2Style}>2. Navigation</h2>
-        <p style={pStyle}>The sidebar has Dashboard at the top, Organizations right below it (your company tree), then five plain-noun buckets so you can find pages by what they ARE rather than which DAMA phase they belong to.</p>
+        <p style={pStyle}>The sidebar opens with the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.</p>
         <ul style={listStyle}>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
-          <li><strong>Organizations</strong> &mdash; The company / division / team tree your processes and data are scoped to.</li>
-          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
+          <li><strong>Organizations</strong> &mdash; Accordion covering the "who" of the platform: <strong>Structure</strong> (your company / division / team tree), <strong>People</strong> (the humans on your team), <strong>Agents</strong> (AI agents that hold governance roles and run automation), and <strong>Skills</strong> (the competencies your roles need).</li>
+          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
-          <li><strong>People</strong> &mdash; People and Skills (the humans on your team and what they're qualified for).</li>
           <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
           <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports, Process Coverage. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
-        <p style={pStyle}>Agents (your AI workers), Settings and Help sit at the bottom of the sidebar.</p>
+        <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
         <h3 style={h3Style}>Header controls</h3>
         <ul style={listStyle}>
@@ -261,29 +260,33 @@ export default function HelpPage() {
         </ul>
       </div>
 
-      {/* 7. People */}
+      {/* 7. Organizations */}
       <div style={sectionStyle}>
-        <h2 id="help-people" style={h2Style}>7. People</h2>
+        <h2 id="help-organizations" style={h2Style}>7. Organizations</h2>
+        <p style={pStyle}>
+          The "who" of the platform. The Organizations accordion gathers the four things that act on (or are acted on by) your data: the company tree itself, the humans, the AI agents, and the competencies those actors carry.
+        </p>
+        <h3 style={h3Style}>Structure</h3>
+        <ul style={listStyle}>
+          <li>Hierarchical company tree (company &rarr; division &rarr; department &rarr; team) that scopes every other page.</li>
+          <li>Import from CSV / JSON, tree visualization, "Working in" selector in the header picks the active branch.</li>
+          <li>The sidebar label is <em>Structure</em> but the page route is still <code>/organizations</code> and the browser tab reads "Organizations · Procela".</li>
+        </ul>
         <h3 style={h3Style}>People</h3>
         <ul style={listStyle}>
           <li>Team members with app roles (Super Admin, Org Admin, Editor, Contributor, Viewer).</li>
           <li>Import from CSV (per organization). Each row needs name, email, role, title.</li>
           <li>Click any role chip on a person's profile to open the Role Detail drawer.</li>
         </ul>
-        <h3 style={h3Style}>Organizations</h3>
+        <h3 style={h3Style}>Agents</h3>
         <ul style={listStyle}>
-          <li>Hierarchical structure (company &rarr; division &rarr; department &rarr; team).</li>
-          <li>Import from CSV / JSON, tree visualization, "Working in" selector scopes the rest of the app.</li>
+          <li>AI agent registry for governance execution &mdash; pipelines, bots, service accounts.</li>
+          <li>Agents can hold governance roles too (e.g., an automated DQ agent as Data Quality Analyst), which is why they sit alongside People rather than in a separate "automation" bucket.</li>
         </ul>
         <h3 style={h3Style}>Skills</h3>
         <ul style={listStyle}>
           <li>Catalog of competencies attached to people. Seed standard DAMA-aligned skills with one click.</li>
           <li>The Role Detail drawer reads from this catalog to show "Skills typically needed" for each governance role &mdash; chips appear solid when the skill is in your org's catalog, dashed if not yet seeded.</li>
-        </ul>
-        <h3 style={h3Style}>Agents</h3>
-        <ul style={listStyle}>
-          <li>AI agent registry for governance execution &mdash; pipelines, bots, service accounts.</li>
-          <li>Agents can hold governance roles too (e.g., an automated DQ agent as Data Quality Analyst).</li>
         </ul>
       </div>
 
