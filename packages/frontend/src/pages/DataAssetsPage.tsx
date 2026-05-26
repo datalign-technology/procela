@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
+import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
+import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { apiClient } from '../api/client';
 import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -40,6 +42,10 @@ interface DataAssetEntity {
   name: string;
   description: string;
   systemId: string;
+  // Owning org. Asset is editable only when this matches the active
+  // "Working in..." scope; otherwise the row renders an OwnerBadge
+  // and gates every edit surface with isInheritedAsset.
+  orgId?: string;
   /** @deprecated free-text owner; prefer ownerPersonId */
   owner?: string;
   ownerPersonId?: string | null;
@@ -309,6 +315,9 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
 
 export default function DataAssetsPage() {
   const { activeOrgId } = useOrgContext();
+  // Resolves a row's orgId to a display name so the OwnerBadge can
+  // render "Owned by Tidewater Utilities" on inherited rows.
+  const { getOrgName } = useOrgNameLookup();
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
@@ -1541,11 +1550,18 @@ export default function DataAssetsPage() {
                 const connName = binding ? connectionNameById[binding.connectionId] : undefined;
                 const isExpanded = expandedAssetId === asset.id;
                 const cols = columnsMap[asset.id] || [];
+                // Rows whose orgId differs from the active scope are
+                // inherited from above (or rolled up from below) — every
+                // edit surface in the row is gated by this flag.
+                const inherited = isInheritedAsset(asset.orgId, activeOrgId);
+                const inheritedHint = inherited
+                  ? `Owned at ${getOrgName(asset.orgId)}. Switch the "Working in..." scope to ${getOrgName(asset.orgId)} to edit.`
+                  : '';
                 return (
                   <React.Fragment key={asset.id}>
                   <tr id={`row-${asset.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(asset.id) ? '#f0f9ff' : '' }} onMouseEnter={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = 'var(--color-bg)'; }} onMouseLeave={(e) => { if (!selectedIds.has(asset.id)) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                      <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelect(asset.id)} />
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
+                      <input type="checkbox" checked={selectedIds.has(asset.id)} disabled={inherited} onChange={() => toggleSelect(asset.id)} />
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1577,12 +1593,13 @@ export default function DataAssetsPage() {
                             {asset.name}
                           </button>
                           <OriginBadge origin={asset.origin} />
+                          <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
                         </div>
                       </div>
                     </td>
                     {isVisible('description') && (
-                      <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }}>
-                        {canWrite ? (
+                      <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }} title={inherited ? inheritedHint : undefined}>
+                        {canWrite && !inherited ? (
                           <InlineCellEdit
                             value={asset.description || ''}
                             onSave={(v) => inlineSaveField(asset.id, 'description', v)}
@@ -1611,9 +1628,9 @@ export default function DataAssetsPage() {
                       </td>
                     )}
                     {isVisible('tier') && (
-                      <td style={tdStyle}>
+                      <td style={tdStyle} title={inherited ? inheritedHint : undefined}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {canWrite ? (
+                          {canWrite && !inherited ? (
                             <select
                               value={asset.governanceTier || 'BRONZE'}
                               onChange={(e) => inlineSaveField(asset.id, 'governanceTier', e.target.value)}
@@ -1624,7 +1641,7 @@ export default function DataAssetsPage() {
                           ) : (
                             <span>{tierLabel(asset.governanceTier)}</span>
                           )}
-                          {canWrite && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
+                          {canWrite && !inherited && asset.suggestedTier && compareTier(asset.suggestedTier, asset.governanceTier) > 0 && (
                             <button
                               onClick={() => inlineSaveField(asset.id, 'governanceTier', asset.suggestedTier!)}
                               title={`This asset meets the criteria for ${tierLabel(asset.suggestedTier)}. Click to promote.`}
@@ -1641,8 +1658,8 @@ export default function DataAssetsPage() {
                       </td>
                     )}
                     {isVisible('health') && (
-                      <td style={tdStyle}>
-                        {canWrite ? (
+                      <td style={tdStyle} title={inherited ? inheritedHint : undefined}>
+                        {canWrite && !inherited ? (
                           <InlineCellEdit
                             value={asset.healthScore != null ? String(asset.healthScore) : ''}
                             onSave={(v) => inlineSaveField(asset.id, 'healthScore', v)}
@@ -1681,9 +1698,13 @@ export default function DataAssetsPage() {
                             <IconButton size="sm" icon="search" label="Suggest source" onClick={() => openSuggestSource(asset)} />
                           </>
                         )}
-                        {canWrite && <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(asset)} />}
-                        {canWrite && <IconButton size="sm" icon="copy" label="Duplicate" onClick={() => openDuplicate(asset)} />}
-                        {canWrite && <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(asset.id)} />}
+                        {canWrite && (
+                          <>
+                            <IconButton size="sm" icon="edit" label={inheritedHint || 'Edit'} disabled={inherited} onClick={() => openEdit(asset)} />
+                            <IconButton size="sm" icon="copy" label={inheritedHint || 'Duplicate'} disabled={inherited} onClick={() => openDuplicate(asset)} />
+                            <IconButton size="sm" icon="trash" label={inheritedHint || 'Delete'} variant="danger" disabled={inherited} onClick={() => setConfirmDelete(asset.id)} />
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1862,17 +1883,32 @@ export default function DataAssetsPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {canWrite && (
-                      <button
-                        onClick={() => {
-                          const asset = assets.find((a) => a.id === viewing360.asset.id);
-                          if (asset) { setViewing360(null); openEdit(asset); }
-                        }}
-                        style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
-                      >
-                        Edit
-                      </button>
-                    )}
+                    {canWrite && (() => {
+                      const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
+                      const ownerName = getOrgName(viewing360.asset.orgId);
+                      return (
+                        <>
+                          <OwnerBadge assetOrgId={viewing360.asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+                          <button
+                            onClick={() => {
+                              const asset = assets.find((a) => a.id === viewing360.asset.id);
+                              if (asset) { setViewing360(null); openEdit(asset); }
+                            }}
+                            disabled={detailInherited}
+                            title={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
+                            style={{
+                              background: detailInherited ? 'var(--color-bg)' : 'var(--color-primary)',
+                              color: detailInherited ? 'var(--color-text-muted)' : '#fff',
+                              border: detailInherited ? '1px solid var(--color-border)' : 'none',
+                              borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 500,
+                              cursor: detailInherited ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </>
+                      );
+                    })()}
                     <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
                   </div>
                 </div>

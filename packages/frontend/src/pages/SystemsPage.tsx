@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
+import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import { useTerm } from '../lib/terminology';
@@ -95,6 +97,10 @@ interface SystemEntity {
    *  INTEGRATED, otherwise mirrors the connectivity intent. */
   connectionStatus?: 'CONNECTED' | 'ERROR' | 'UNTESTED' | 'NOT_CONNECTED' | 'MANUAL' | 'EXTERNAL';
   connectionCount?: number;
+  // Owning org. System is editable only when this matches the active
+  // "Working in..." scope; otherwise the row renders an OwnerBadge
+  // and gates every edit surface with isInheritedAsset.
+  orgId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -433,6 +439,9 @@ const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible
 
 export default function SystemsPage() {
   const { activeOrgId } = useOrgContext();
+  // Resolves a row's orgId to a display name so the OwnerBadge can
+  // render "Owned by Tidewater Utilities" on inherited rows.
+  const { getOrgName } = useOrgNameLookup();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1370,12 +1379,19 @@ export default function SystemsPage() {
               {sorted.map((sys) => {
                 const sysConnections = connections.filter((c) => connSystemIds(c).includes(sys.id));
                 const connectedCount = sysConnections.filter((c) => c.status === 'CONNECTED').length;
+                // Rows whose orgId differs from the active scope are
+                // inherited from above (or rolled up from below) — every
+                // edit surface in the row is gated by this flag.
+                const inherited = isInheritedAsset(sys.orgId, activeOrgId);
+                const inheritedHint = inherited
+                  ? `Owned at ${getOrgName(sys.orgId)}. Switch the "Working in..." scope to ${getOrgName(sys.orgId)} to edit.`
+                  : '';
                 return (
                   <tr key={sys.id} id={`row-${sys.id}`} style={{ transition: 'background 0.1s', background: selectedIds.has(sys.id) ? '#f0f9ff' : '' }}
                     onMouseEnter={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { if (!selectedIds.has(sys.id)) e.currentTarget.style.background = ''; }}>
-                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }}>
-                      <input type="checkbox" checked={selectedIds.has(sys.id)} onChange={() => toggleSelect(sys.id)} />
+                    <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
+                      <input type="checkbox" checked={selectedIds.has(sys.id)} disabled={inherited} onChange={() => toggleSelect(sys.id)} />
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 500 }}>
                       {/* Clicking the name opens the detail modal, matching
@@ -1383,24 +1399,27 @@ export default function SystemsPage() {
                        *  is still possible via the row's Edit pencil button -
                        *  but it's no longer a tap-target hazard on a column
                        *  users naturally want to click. */}
-                      <button
-                        type="button"
-                        onClick={() => setViewingSystemId(sys.id)}
-                        title="Click to view details"
-                        style={{
-                          background: 'none', border: 'none', padding: 0,
-                          color: 'var(--color-primary)', cursor: 'pointer',
-                          font: 'inherit', fontWeight: 500, textAlign: 'left',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                      >
-                        {sys.name}
-                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => setViewingSystemId(sys.id)}
+                          title="Click to view details"
+                          style={{
+                            background: 'none', border: 'none', padding: 0,
+                            color: 'var(--color-primary)', cursor: 'pointer',
+                            font: 'inherit', fontWeight: 500, textAlign: 'left',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                        >
+                          {sys.name}
+                        </button>
+                        <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+                      </div>
                     </td>
                     {systemCols.isVisible('type') && (
-                      <td style={tdStyle}>
-                        {systemTypes.length > 0 ? (
+                      <td style={tdStyle} title={inherited ? inheritedHint : undefined}>
+                        {systemTypes.length > 0 && !inherited ? (
                           <InlineCellEdit
                             value={sys.systemType || ''}
                             onSave={(v) => inlineSaveField(sys.id, 'systemType', v)}
@@ -1445,8 +1464,8 @@ export default function SystemsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                         <IconButton size="sm" icon="eye" label="View details" onClick={() => setViewingSystemId(sys.id)} />
-                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(sys)} />
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
+                        <IconButton size="sm" icon="edit" label={inheritedHint || 'Edit'} disabled={inherited} onClick={() => openEdit(sys)} />
+                        <IconButton size="sm" icon="trash" label={inheritedHint || 'Delete'} variant="danger" disabled={inherited} onClick={async () => {
                           try {
                             const res = await apiClient.get<{ success: boolean; data: { assets: number; connections: number; mappings: number } }>(`/systems/${sys.id}/impact`);
                             setDeleteImpact(res.data || null);

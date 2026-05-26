@@ -211,6 +211,7 @@ export default function HelpPage() {
           <li>Bulk set Trust Level / owner / steward.</li>
           <li><strong>Where Used</strong> in the detail modal shows every process, mapping, and policy referencing the asset.</li>
           <li><strong>Operational / Governance lens.</strong> The same <em>All · Operational · Governance</em> control used on the Process Catalog. Governance-template placeholder assets are classified governance; everything else is operational. The lens is <strong>per page</strong> and persisted — Data Assets remembers your choice independently of other pages.</li>
+          <li><strong>Org scope and inheritance.</strong> Each asset is owned by one org (company or division). When you're scoped to a division, the list shows division-owned assets <em>plus</em> assets owned at the parent company — the parent-owned ones carry a small <em>Owned by &lt;Company&gt;</em> badge and their edit / delete / inline-cell affordances are disabled with a "Switch the Working in&hellip; scope to &lt;Company&gt; to edit" tooltip. Conversely, a company-scoped user sees everything below (a rollup view) with the same badge on division-owned rows. Sibling divisions don't see each other's assets.</li>
         </ul>
         <h3 style={h3Style}>Business Glossary</h3>
         <ul style={listStyle}>
@@ -258,6 +259,7 @@ export default function HelpPage() {
           <li>Clicking a system name opens the detail modal; inline editing is reserved for the Type column. Rename via the row's Edit pencil.</li>
           <li>Owner, Deputy Owner, and Operators (DAMA: Custodians) per system &mdash; the people on the hook day-to-day. Clicking any of those role badges opens the Role Detail drawer for that entity-attached role, so users see the same definition / responsibilities / required-skills view as for DAMA roles.</li>
           <li>Where Used panel shows every data asset, connection, and process touching the system. A Discussion (comments) and Activity section sit at the bottom of the modal.</li>
+          <li><strong>Org scope and inheritance.</strong> Same rule as Data Assets — each system is owned by one org (company or division). Rows whose owner doesn't match the active <em>Working in&hellip;</em> scope carry an <em>Owned by &lt;Org&gt;</em> badge and have their edit / delete affordances disabled with a switch-scope tooltip.</li>
         </ul>
         <h3 style={h3Style}>Connections</h3>
         <ul style={listStyle}>
