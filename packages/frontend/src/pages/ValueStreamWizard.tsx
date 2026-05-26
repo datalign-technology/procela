@@ -89,19 +89,30 @@ export default function ValueStreamWizard() {
     loadOrgIndustry();
   }, [activeOrgId]);
 
-  // Auto-generate when industry is resolved from org
-  const handleGenerate = useCallback(async (ind: string) => {
+  // Where the current template came from — set after a successful
+  // generate call. `cached: true` means the backend served the
+  // stored version (instant); `cached: false` means it called
+  // Claude and stashed a fresh copy. Drives the small badge on the
+  // review screen plus the "Regenerate from AI" button.
+  const [templateSource, setTemplateSource] = useState<{ cached: boolean; generatedAt: string } | null>(null);
+
+  // Auto-generate when industry is resolved from org.
+  // `refresh: true` bypasses the per-industry cache on the server,
+  // used by the "Regenerate from AI" button on the review screen.
+  const handleGenerate = useCallback(async (ind: string, refresh: boolean = false) => {
     if (!ind || loading) return;
     setLoading(true);
     setError('');
     setTemplate(null);
+    setTemplateSource(null);
     try {
-      const res = await apiClient.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] } }>(
-        '/ai/generate-template', { industry: ind }
+      const res = await apiClient.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] }; cached?: boolean; generatedAt?: string }>(
+        '/ai/generate-template', { industry: ind, refresh },
       );
       if (res.data) {
         setTemplate({ valueStreams: res.data.valueStreams.map((vs) => ({ ...vs, selected: true })) });
         setExpandedStreams(new Set([0]));
+        setTemplateSource({ cached: !!res.cached, generatedAt: res.generatedAt || new Date().toISOString() });
       } else {
         setError('Unexpected response format. Please try again.');
       }
@@ -321,7 +332,26 @@ export default function ValueStreamWizard() {
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Review & Apply</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Review & Apply
+                {templateSource && (
+                  <span
+                    title={templateSource.cached
+                      ? `Loaded from the industry template cache (generated ${new Date(templateSource.generatedAt).toLocaleDateString()}). Use "Regenerate from AI" to ask Claude for a fresh version.`
+                      : `Generated fresh by Claude at ${new Date(templateSource.generatedAt).toLocaleString()}. Subsequent runs of this industry will return the same cached output unless you regenerate.`}
+                    style={{
+                      padding: '1px 8px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 600,
+                      background: templateSource.cached ? '#dbeafe' : '#fef3c7',
+                      color: templateSource.cached ? '#1e40af' : '#92400e',
+                      border: `1px solid ${templateSource.cached ? '#93c5fd' : '#fcd34d'}`,
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}
+                  >
+                    {templateSource.cached ? 'Cached' : 'Fresh from AI'}
+                  </span>
+                )}
+              </h2>
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                 {selectedCount} value streams, {totalProcesses} processes, {totalActivities} activities selected
               </p>
@@ -330,8 +360,21 @@ export default function ValueStreamWizard() {
               <button style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }} onClick={selectAll}>
                 {template.valueStreams.every((vs) => vs.selected) ? 'Deselect All' : 'Select All'}
               </button>
-              <button style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }} onClick={() => { setTemplate(null); }}>
+              {/* "Regenerate" keeps the cached path — clears the
+                  template locally so the next call hits the cache
+                  again (same input, same output). "Regenerate from
+                  AI" forces a fresh Claude call and replaces the
+                  cached entry server-side. Two buttons because the
+                  cost / latency difference matters. */}
+              <button style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }} onClick={() => { setTemplate(null); setTemplateSource(null); }}>
                 Regenerate
+              </button>
+              <button
+                style={{ ...btnSecondary, fontSize: 12, padding: '6px 14px' }}
+                onClick={() => handleGenerate(orgIndustry || industry, true)}
+                title="Bypass the cache and ask Claude for a fresh template. Replaces the stored version for this industry."
+              >
+                Regenerate from AI
               </button>
             </div>
           </div>

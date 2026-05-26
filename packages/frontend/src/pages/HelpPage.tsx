@@ -176,7 +176,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Process Catalog</h3>
         <ul style={listStyle}>
           <li>Hierarchical process catalog: Value Stream &rarr; Process &rarr; Activity (with optional Sub-Process and Task levels for detail).</li>
-          <li>AI-powered Value Stream Wizard generates industry-specific process hierarchies; one-click clone across divisions.</li>
+          <li>AI-powered Value Stream Wizard generates industry-specific process hierarchies; one-click clone across divisions. The wizard's output is <strong>cached per industry</strong> on the server, so the first user to pick "Utilities" pays the 10–30 second Claude call and every subsequent run for the same industry returns the same template instantly. A <em>Cached</em> / <em>Fresh from AI</em> badge on the review screen tells you which version you're looking at; a <em>Regenerate from AI</em> button next to the standard <em>Regenerate</em> bypasses the cache and replaces the stored copy with a brand-new Claude generation.</li>
           <li>Level-specific attributes: frequency, risk level, responsible role, automation level.</li>
           <li>Status lifecycle: Draft &rarr; Active &rarr; Deprecated.</li>
           <li><strong>Operational / Governance lens.</strong> A segmented control (<em>All · Operational · Governance</em>) at the top filters which value streams show. Governance value streams (created by the governance template) carry a persisted domain classifier; business value streams are operational. The lens is <strong>per page</strong> — the Process Catalog always opens on <strong>All</strong>, and your choice here is independent of the lens on other pages (so it can't reset what you picked on Data Assets).</li>
