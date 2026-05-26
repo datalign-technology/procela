@@ -21,9 +21,16 @@ import { useOrgContext } from '../stores/orgContext';
 // Also returns the parent org's display name so callers can render
 // a "Generating processes for X in Y" breadcrumb without each
 // surface re-fetching the parent.
+export interface DivisionRef {
+  id: string;
+  name: string;
+}
+
 export interface ValueStreamScope {
   parentName: string;
-  divisions: string[];
+  // Subtree-wide divisions, returned as { id, name } so callers can
+  // wire one-click "switch to this division" UI without a second lookup.
+  divisions: DivisionRef[];
   wrongLevel: boolean;
   companyWithDivisions: boolean;
   blocked: boolean;
@@ -32,7 +39,7 @@ export interface ValueStreamScope {
 export function useValueStreamScope(): ValueStreamScope {
   const { activeOrgId, activeOrgType, canCreateValueStreams } = useOrgContext();
   const [parentName, setParentName] = useState('');
-  const [divisions, setDivisions] = useState<string[]>([]);
+  const [divisions, setDivisions] = useState<DivisionRef[]>([]);
 
   useEffect(() => {
     if (!activeOrgId) { setParentName(''); return; }
@@ -57,7 +64,7 @@ export function useValueStreamScope(): ValueStreamScope {
         setDivisions(
           (res.data || [])
             .filter((o) => o.id !== activeOrgId && o.type === 'division')
-            .map((o) => o.name),
+            .map((o) => ({ id: o.id, name: o.name })),
         );
       })
       .catch(() => setDivisions([]));

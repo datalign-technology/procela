@@ -607,7 +607,7 @@ export default function Layout() {
   // re-fetching on mount here keeps the shell in sync when an admin updates
   // branding without requiring a full reload.
   useEffect(() => { fetchBranding(); }, [fetchBranding]);
-  const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; label: string }>>([]);
+  const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; parentId: string | null; label: string }>>([]);
 
   // Sidebar collapse state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -896,13 +896,15 @@ export default function Layout() {
 
   const fetchOrgs = useCallback(async () => {
     try {
-      // Fetch accessible orgs for the current user (filtered by role/assignment)
-      const accessRes = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; type: string }> }>('/auth/accessible-orgs');
+      // Fetch accessible orgs for the current user (filtered by role/assignment).
+      // parentId is included so the header dropdown can group divisions under
+      // their parent company without a second round-trip.
+      const accessRes = await apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; type: string; parentId?: string | null }> }>('/auth/accessible-orgs');
       const accessible = accessRes.data || [];
 
       const options = accessible.map((o) => {
         const typeLabel = o.type.charAt(0).toUpperCase() + o.type.slice(1);
-        return { id: o.id, name: o.name, type: o.type, label: `${o.name} (${typeLabel})` };
+        return { id: o.id, name: o.name, type: o.type, parentId: o.parentId ?? null, label: `${o.name} (${typeLabel})` };
       });
       // Sort so company comes first, then divisions — ensures the broadest scope is the default
       const typeOrder: Record<string, number> = { company: 0, division: 1, department: 2, team: 3, unit: 4 };
@@ -911,21 +913,24 @@ export default function Layout() {
       setOrgOptions(options);
       setOrgs(options.map((o) => ({ id: o.id, name: o.name, type: o.type })));
 
-      // Filter to top-level companies only for the selector
-      const companies = options.filter((o) => o.type === 'company');
-
-      // If active org is no longer accessible, clear it
-      if (activeOrgId && !companies.find((o) => o.id === activeOrgId)) {
-        if (companies.length > 0) {
-          setActiveOrg(companies[0].id, companies[0].name, companies[0].type);
+      // If the active org is no longer accessible, fall back to any reachable
+      // org (preferring a company so the user lands on the broadest scope).
+      // The old behaviour fell back only to companies, which broke users who
+      // genuinely only have a division-level grant.
+      const reachable = options;
+      if (activeOrgId && !reachable.find((o) => o.id === activeOrgId)) {
+        const fallback = reachable.find((o) => o.type === 'company') || reachable[0];
+        if (fallback) {
+          setActiveOrg(fallback.id, fallback.name, fallback.type);
         } else {
           clearActiveOrg();
         }
       }
 
-      // Auto-select first company if none is selected
-      if (!activeOrgId && companies.length > 0) {
-        setActiveOrg(companies[0].id, companies[0].name, companies[0].type);
+      // Auto-select the broadest reachable org if none is selected yet.
+      if (!activeOrgId && reachable.length > 0) {
+        const first = reachable.find((o) => o.type === 'company') || reachable[0];
+        setActiveOrg(first.id, first.name, first.type);
       }
     } catch { /* */ }
   }, [activeOrgId, setOrgs, clearActiveOrg, setActiveOrg, refreshKey]);
@@ -1256,16 +1261,34 @@ export default function Layout() {
               </span>
             </button>
             {(() => {
-              const companies = orgOptions.filter((o) => o.type === 'company');
-              if (companies.length === 0) return (
+              if (orgOptions.length === 0) return (
                 <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>No organization defined</span>
               );
-              if (companies.length === 1) return (
+              // Single-tier setup (one company, no divisions accessible): show
+              // a static label, no picker — there's nowhere else to switch to.
+              if (orgOptions.length === 1) return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>Organization:</span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>{companies[0].name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>{orgOptions[0].name}</span>
                 </div>
               );
+              // Multi-org picker. Group divisions under their parent company
+              // so a multi-division enterprise (Tidewater Utilities ▸
+              // Electric / Water) is selectable from a single dropdown
+              // rather than needing a separate place to pick the division.
+              // Companies appear as both an <optgroup> header (label) and
+              // the first selectable option inside that group; orphan
+              // divisions whose parent the user can't see go into an
+              // "Other" group at the end.
+              const companies = orgOptions.filter((o) => o.type === 'company');
+              const divisionsByParent = new Map<string, typeof orgOptions>();
+              for (const o of orgOptions) {
+                if (o.type !== 'division') continue;
+                const key = o.parentId || '__orphan__';
+                if (!divisionsByParent.has(key)) divisionsByParent.set(key, []);
+                divisionsByParent.get(key)!.push(o);
+              }
+              const orphanDivisions = divisionsByParent.get('__orphan__') || [];
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>Organization:</span>
@@ -1277,12 +1300,33 @@ export default function Layout() {
                       border: '1px solid var(--color-border)', borderRadius: 4,
                       background: 'var(--color-surface)',
                       color: 'var(--color-text)',
-                      minWidth: 180, cursor: 'pointer',
+                      minWidth: 220, cursor: 'pointer',
                     }}
                   >
-                    {companies.map((opt) => (
-                      <option key={opt.id} value={opt.id}>{opt.name}</option>
-                    ))}
+                    {companies.map((co) => {
+                      const childDivs = (divisionsByParent.get(co.id) || []).filter((d) => d.parentId === co.id);
+                      // If the company has no accessible divisions, render
+                      // it as a plain top-level option so the dropdown
+                      // doesn't show a one-item optgroup.
+                      if (childDivs.length === 0) {
+                        return <option key={co.id} value={co.id}>{co.name}</option>;
+                      }
+                      return (
+                        <optgroup key={co.id} label={co.name}>
+                          <option value={co.id}>{co.name} (all)</option>
+                          {childDivs.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                    {orphanDivisions.length > 0 && (
+                      <optgroup label="Other divisions">
+                        {orphanDivisions.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
               );

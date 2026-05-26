@@ -423,7 +423,7 @@ router.get('/accessible-orgs', authenticateToken, (req: AuthenticatedRequest, re
       seen.add(key);
       return true;
     });
-    res.json({ success: true, data: deduped.map((o) => ({ id: o.id, name: o.name, type: o.type })) });
+    res.json({ success: true, data: deduped.map((o) => ({ id: o.id, name: o.name, type: o.type, parentId: o.parentId ?? null })) });
     return;
   }
 

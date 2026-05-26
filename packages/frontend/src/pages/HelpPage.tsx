@@ -147,7 +147,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Header controls</h3>
         <ul style={listStyle}>
           <li><strong>Search box (Cmd/Ctrl + K or /)</strong> &mdash; Universal command palette. Searches processes, data assets, systems, people, domains, and groups in your active org. Results are ranked and link directly to the matching item.</li>
-          <li><strong>Working in &hellip;</strong> &mdash; Organization selector. Scopes every page to the selected org.</li>
+          <li><strong>Working in &hellip;</strong> &mdash; Organization selector. Scopes every page to the selected org. Divisions are listed nested under their parent company (Tidewater Utilities ▸ Electric / Water), so you can drop into a division-scoped view without leaving the page. Single-tier companies render as a flat list.</li>
           <li><strong>Plain / DAMA toggle</strong> &mdash; Flips jargon-heavy labels (Custodian &harr; Operator, Governance Tier &harr; Trust Level, Uncertified/Managed/Certified &harr; Untrusted/Managed/Trusted). Plain is the default; preference persists in your browser.</li>
           <li><strong>Cozy / Compact toggle</strong> &mdash; Row density. Compact halves vertical padding for power-user table scanning. Persists in your browser.</li>
         </ul>
@@ -185,7 +185,7 @@ export default function HelpPage() {
           <li><strong>Where value streams can be created.</strong> Streams attach to the active org in the <em>Working in&hellip;</em> header, but only at the <strong>company</strong> or <strong>division</strong> level. Two cases block the create UI (the <em>+ Add value stream</em> button, the wizard wand, the governance-template wand, and the empty-state buttons all hide; Visualize / Compare / Export stay available):
             <ul style={{ ...listStyle, marginTop: 6, marginBottom: 6 }}>
               <li><strong>Wrong level.</strong> The active org is a department, team, or anything below division. Pick a parent org from <em>Working in&hellip;</em>.</li>
-              <li><strong>Multi-division company.</strong> The active org is a company that has at least one division anywhere in its subtree (e.g. Tidewater Utilities → Electric / Water, or Company → Region → Division). Generating at the parent would silently create one shared catalog the divisions don't actually share. The block points you at the division picker and lists the divisions by name. Single-tier companies (no divisions) keep working normally at the company level.</li>
+              <li><strong>Multi-division company.</strong> The active org is a company that has at least one division anywhere in its subtree (e.g. Tidewater Utilities → Electric / Water, or Company → Region → Division). Generating at the parent would silently create one shared catalog the divisions don't actually share. The banner lists the divisions as one-click <em>Switch to:</em> chips, so you can drop into one without leaving the page. Single-tier companies (no divisions) keep working normally at the company level.</li>
             </ul>
             The same guard applies to both the Process Wizard and the catalog's manual create path so it can't be sidestepped.
           </li>
@@ -502,7 +502,7 @@ export default function HelpPage() {
         </p>
         <ul style={listStyle}>
           <li><strong>The active org is a department or team.</strong> Pick a parent (company or division) from the <em>Working in&hellip;</em> header.</li>
-          <li><strong>The active org is a multi-division company</strong> (e.g. Tidewater Utilities with Electric / Water). Generating at the parent would silently create one shared catalog the divisions don't actually share. Pick a specific division from <em>Working in&hellip;</em> instead. A banner on the page names the divisions so you know what to switch to.</li>
+          <li><strong>The active org is a multi-division company</strong> (e.g. Tidewater Utilities with Electric / Water). Generating at the parent would silently create one shared catalog the divisions don't actually share. The banner on the page lists the divisions as one-click <em>Switch to:</em> chips, so you can drop into one without going back to the header. The <em>Working in&hellip;</em> dropdown also lists divisions nested under their parent company.</li>
         </ul>
         <p style={pStyle}>
           Read-only surfaces (Visualize, Compare, Export) stay available even when create is blocked. Single-tier companies with no divisions keep working normally at the company level. The same guard applies to the Process Wizard, so navigating to <code>/processes/wizard</code> with a blocked scope shows the same banner there.

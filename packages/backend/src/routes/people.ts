@@ -57,12 +57,12 @@ function getAncestorOrgs(orgId: string, levels: string[]): string[] {
 
 const WORKING_LEVELS = ['company', 'division'];
 
-export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string; name: string; type: string }> {
+export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string; name: string; type: string; parentId: string | null }> {
   const allWorkingOrgs = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
 
   // SUPER_ADMIN: everything
   if (person.role === 'SUPER_ADMIN') {
-    return allWorkingOrgs.map((o) => ({ id: o.id, name: o.name, type: o.type }));
+    return allWorkingOrgs.map((o) => ({ id: o.id, name: o.name, type: o.type, parentId: o.parentId ?? null }));
   }
 
   const computed = new Set<string>();
@@ -109,9 +109,9 @@ export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string;
   return Array.from(computed)
     .map((id) => {
       const org = organizations.find((o) => o.id === id);
-      return org ? { id: org.id, name: org.name, type: org.type } : null;
+      return org ? { id: org.id, name: org.name, type: org.type, parentId: org.parentId ?? null } : null;
     })
-    .filter((o): o is { id: string; name: string; type: string } => {
+    .filter((o): o is { id: string; name: string; type: string; parentId: string | null } => {
       if (!o) return false;
       const key = `${o.name.toLowerCase()}|${o.type}`;
       if (seen.has(key)) return false;

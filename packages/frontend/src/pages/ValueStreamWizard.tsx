@@ -35,7 +35,7 @@ const btnSecondary: React.CSSProperties = {
 
 export default function ValueStreamWizard() {
   const navigate = useNavigate();
-  const { activeOrgId, activeOrgName, activeOrgType } = useOrgContext();
+  const { activeOrgId, activeOrgName, activeOrgType, setActiveOrg } = useOrgContext();
   // parentName / divisions / blocked all come from the shared scope
   // hook so this surface and the Process Catalog's manual create
   // path can't drift apart.
@@ -204,18 +204,32 @@ export default function ValueStreamWizard() {
       {/* Top-level-blocking hint: company that has divisions. We
           stop here rather than generating because the alternative —
           one shared catalog at the parent — is almost always not what
-          a multi-division company wants and is messy to unwind. */}
+          a multi-division company wants and is messy to unwind.
+          Division names render as one-click chips that switch the
+          active org without forcing the user back to the header
+          dropdown. */}
       {isCompanyWithDivisions && (
         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, lineHeight: 1.55 }}>
           <div style={{ color: '#991b1b', fontWeight: 600, marginBottom: 4 }}>Pick a division first.</div>
           <div style={{ color: '#7f1d1d' }}>
-            <strong>{activeOrgName}</strong> has{' '}
-            {childDivisions.length === 1
-              ? <>a division (<em>{childDivisions[0]}</em>)</>
-              : <>{childDivisions.length} divisions ({childDivisions.slice(0, 3).map((n, i) => <em key={n}>{i > 0 ? ', ' : ''}{n}</em>)}{childDivisions.length > 3 ? <span>, &hellip;</span> : null})</>
-            }. Value streams almost always live at the division level so each division gets its own process catalog instead of sharing one.
-            <br />
-            Change <em>Working in&hellip;</em> in the header to a division to continue. Use the company level only if every division genuinely shares the same end-to-end processes.
+            <strong>{activeOrgName}</strong> has {childDivisions.length === 1 ? 'a division' : `${childDivisions.length} divisions`}. Value streams almost always live at the division level so each division gets its own process catalog instead of sharing one.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            <span style={{ color: '#7f1d1d', fontSize: 12, alignSelf: 'center', marginRight: 2 }}>Switch to:</span>
+            {childDivisions.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setActiveOrg(d.id, d.name, 'division')}
+                style={{
+                  padding: '4px 10px', fontSize: 12, fontWeight: 500,
+                  background: '#fff', color: '#991b1b',
+                  border: '1px solid #fca5a5', borderRadius: 999, cursor: 'pointer',
+                }}
+              >
+                {d.name}
+              </button>
+            ))}
           </div>
         </div>
       )}

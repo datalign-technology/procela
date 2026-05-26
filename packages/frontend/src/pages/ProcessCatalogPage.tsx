@@ -1389,7 +1389,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
 
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
-  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
+  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams, setActiveOrg } = useOrgContext();
   // Block "create value stream" entry points when the active org is a
   // multi-division company (e.g. Tidewater Utilities → Electric /
   // Water). The wizard already enforces this; the manual create
@@ -1962,11 +1962,26 @@ export default function ProcessCatalogPage() {
       )}
       {activeOrgId && canCreateValueStreams && companyWithDivisions && (
         <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-          <strong>{activeOrgName}</strong> has{' '}
-          {subtreeDivisions.length === 1
-            ? <>a division (<em>{subtreeDivisions[0]}</em>)</>
-            : <>{subtreeDivisions.length} divisions ({subtreeDivisions.slice(0, 3).map((n, i) => <em key={n}>{i > 0 ? ', ' : ''}{n}</em>)}{subtreeDivisions.length > 3 ? <span>, &hellip;</span> : null})</>
-          }. Value streams almost always live at the division level so each division gets its own process catalog. Pick a division from the "Working in" dropdown to add or generate value streams here.
+          <div>
+            <strong>{activeOrgName}</strong> has {subtreeDivisions.length === 1 ? 'a division' : `${subtreeDivisions.length} divisions`}. Value streams almost always live at the division level so each division gets its own process catalog.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            <span style={{ fontSize: 12, alignSelf: 'center', marginRight: 2 }}>Switch to:</span>
+            {subtreeDivisions.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setActiveOrg(d.id, d.name, 'division')}
+                style={{
+                  padding: '4px 10px', fontSize: 12, fontWeight: 500,
+                  background: '#fff', color: '#92400e',
+                  border: '1px solid #f59e0b', borderRadius: 999, cursor: 'pointer',
+                }}
+              >
+                {d.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
