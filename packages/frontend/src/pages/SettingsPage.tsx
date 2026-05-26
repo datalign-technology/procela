@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useOrgContext } from '../stores/orgContext';
 
 interface AuthConfigData {
   provider: string;
@@ -36,6 +37,33 @@ function backendToDisplayProvider(backendProvider: string, issuerUrl: string): D
 export default function SettingsPage() {
   const navigate = useNavigate();
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+  // Org-level lifecycle mode (Simple = 3 statuses, Advanced = 6).
+  // The toggle used to live on the Organizations page but it
+  // governs how non-org entities (processes, assets, policies)
+  // move through their statuses — wrong page for the audience.
+  // It's a one-time configuration so Settings is the right home.
+  const { activeOrgId, activeOrgName } = useOrgContext();
+  const [lifecycleMode, setLifecycleMode] = useState<'simple' | 'advanced'>('simple');
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'advanced' | null>(null);
+  const [lifecycleMigrationMsg, setLifecycleMigrationMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeOrgId) return;
+    apiClient
+      .get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`)
+      .then((res) => setLifecycleMode((res.data?.statusMode as 'simple' | 'advanced') || 'simple'))
+      .catch(() => { /* leave default */ });
+  }, [activeOrgId]);
+  const applyLifecycle = async (newMode: 'simple' | 'advanced') => {
+    if (!activeOrgId || lifecycleBusy) return;
+    setLifecycleBusy(true);
+    try {
+      const res = await apiClient.post<{ success: boolean; message?: string; migrated?: number }>(`/organizations/${activeOrgId}/status-mode`, { mode: newMode });
+      setLifecycleMode(newMode);
+      setLifecycleMigrationMsg(res.message || null);
+    } catch { /* toast handled by client */ }
+    finally { setLifecycleBusy(false); setConfirmLifecycle(null); }
+  };
 
   // Auth settings state
   const [currentProvider, setCurrentProvider] = useState<DisplayProvider>('dev');
@@ -251,6 +279,64 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Process & Asset Lifecycle — org-level workflow shape.
+          Drives the status dropdowns on the Process Catalog, Data
+          Assets, Policies / Governance Documents, and anywhere else
+          a row carries a Draft / Active / Deprecated status. Simple
+          is right for most orgs; Advanced adds Proposed / Under
+          Review / Approved gates between Draft and Active for
+          highly-regulated environments. */}
+      <div style={sectionStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={sectionTitleStyle}>Process & Asset Lifecycle</h2>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+              Decides which workflow statuses appear on processes, data assets, policies and other governed entities in <strong>{activeOrgName || 'this org'}</strong>. A one-time setup for most organizations — change it carefully because items in statuses the new mode doesn't have will be migrated.
+            </p>
+            <ul style={{ fontSize: 12, color: 'var(--color-text-secondary)', paddingLeft: 18, listStyle: 'disc', marginBottom: 8 }}>
+              <li><strong>Simple</strong> (3 statuses): Draft → Active → Deprecated. The default — right for most teams.</li>
+              <li><strong>Advanced</strong> (6 statuses): Draft → Proposed → Under Review → Approved → Active → Deprecated. For regulated environments that need explicit review gates before items go live.</li>
+            </ul>
+            {lifecycleMigrationMsg && (
+              <div style={{ fontSize: 12, color: '#065f46', background: '#d1fae5', border: '1px solid #6ee7b7', borderRadius: 4, padding: '6px 10px', marginTop: 4 }}>
+                {lifecycleMigrationMsg}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{lifecycleMode === 'advanced' ? 'Advanced' : 'Simple'}</span>
+            </div>
+            <button
+              onClick={() => setConfirmLifecycle(lifecycleMode === 'advanced' ? 'simple' : 'advanced')}
+              disabled={!activeOrgId || lifecycleBusy}
+              style={{
+                padding: '8px 14px', fontSize: 13, fontWeight: 500,
+                background: activeOrgId ? 'var(--color-surface)' : 'var(--color-bg)',
+                border: '1px solid var(--color-primary)',
+                color: activeOrgId ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                borderRadius: 6, cursor: activeOrgId ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {lifecycleBusy ? 'Switching…' : `Switch to ${lifecycleMode === 'advanced' ? 'Simple' : 'Advanced'}`}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={!!confirmLifecycle}
+        title={`Switch to ${confirmLifecycle === 'advanced' ? 'Advanced' : 'Simple'} lifecycle?`}
+        message={confirmLifecycle === 'simple'
+          ? 'Items currently in Proposed, Under Review, or Approved will be moved to Draft. Active and Deprecated items are unaffected. This setting takes effect immediately across every page that uses status (Process Catalog, Data Assets, Policies, etc.).'
+          : 'This adds Proposed, Under Review, and Approved steps between Draft and Active. Existing Draft / Active / Deprecated items keep their status. Once enabled, new items created at higher tiers will go through the review gates.'}
+        confirmLabel={`Switch to ${confirmLifecycle === 'advanced' ? 'Advanced' : 'Simple'}`}
+        variant="primary"
+        onConfirm={async () => { if (confirmLifecycle) await applyLifecycle(confirmLifecycle); }}
+        onCancel={() => setConfirmLifecycle(null)}
+      />
 
       {/* Authentication Section */}
       <div style={sectionStyle}>

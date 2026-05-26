@@ -219,7 +219,6 @@ export default function OrganizationsPage() {
 
   // Org state
   const [tree, setTree] = useState<OrgNode[]>([]);
-  const [orgStatusMode, setOrgStatusMode] = useState<'simple' | 'advanced'>('simple');
   const [flatOrgs, setFlatOrgs] = useState<OrgFlat[]>([]);
   const [orgTypes, setOrgTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,13 +258,6 @@ export default function OrganizationsPage() {
         for (const oid of p.orgIds || []) counts[oid] = (counts[oid] || 0) + 1;
       }
       setPeopleCounts(counts);
-      // Fetch org's status mode
-      if (activeOrgId) {
-        try {
-          const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
-          setOrgStatusMode((orgRes.data?.statusMode as 'simple' | 'advanced') || 'simple');
-        } catch { /* */ }
-      }
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -651,43 +643,6 @@ export default function OrganizationsPage() {
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={expandAll}>Expand All</button>
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-primary)' }} onClick={() => setExpanded(new Set())}>Collapse All</button>
         </div>
-
-        {/* Status Mode toggle — org-level setting */}
-        {activeOrgId && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', flexWrap: 'wrap',
-            background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)',
-            fontSize: 11,
-          }}>
-            <span style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>Lifecycle:</span>
-            <span style={{ fontWeight: 600, fontSize: 11 }}>
-              {orgStatusMode === 'advanced' ? 'Advanced' : 'Simple'}
-            </span>
-            <button
-              onClick={async () => {
-                const newMode = orgStatusMode === 'advanced' ? 'simple' : 'advanced';
-                const confirm = window.confirm(
-                  newMode === 'simple'
-                    ? 'Switch to Simple mode (3 statuses)? Items currently in Proposed, Under Review, or Approved will be moved to Draft.'
-                    : 'Switch to Advanced mode (6 statuses)? This adds Proposed, Under Review, and Approved steps between Draft and Active.',
-                );
-                if (!confirm) return;
-                try {
-                  const res = await apiClient.post<{ success: boolean; message?: string; migrated?: number }>(`/organizations/${activeOrgId}/status-mode`, { mode: newMode });
-                  setOrgStatusMode(newMode);
-                  if (res.message) alert(res.message);
-                } catch { /* */ }
-              }}
-              style={{
-                marginLeft: 'auto', padding: '2px 10px', fontSize: 10, fontWeight: 500,
-                background: 'transparent', border: '1px solid var(--color-border)',
-                borderRadius: 4, cursor: 'pointer', color: 'var(--color-primary)',
-              }}
-            >
-              Switch to {orgStatusMode === 'advanced' ? 'Simple' : 'Advanced'}
-            </button>
-          </div>
-        )}
 
         {/* Tree — uses full page width. No inner scroll container:
             the page itself scrolls, which avoids the double-scrollbar

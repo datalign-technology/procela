@@ -1932,6 +1932,34 @@ export default function ProcessCatalogPage() {
                 );
               })}
             </div>
+            {/* Read-only indicator for the org's status lifecycle
+                mode. The actual toggle lives in Settings — pinning
+                it here would confuse users into thinking it's
+                page-local. Tooltip links to where to change it. */}
+            <span
+              title={`Status lifecycle for ${statusMode === 'advanced' ? 'this org is Advanced (6 statuses: Draft → Proposed → Under Review → Approved → Active → Deprecated)' : 'this org is Simple (3 statuses: Draft → Active → Deprecated)'}. Change in Settings → Process & Asset Lifecycle.`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '4px 10px', borderRadius: 999,
+                fontSize: 11, fontWeight: 500,
+                background: 'var(--color-bg)', color: 'var(--color-text-muted)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              Lifecycle: <strong style={{ color: 'var(--color-text)', fontWeight: 600 }}>{statusMode === 'advanced' ? 'Advanced' : 'Simple'}</strong>
+              <button
+                type="button"
+                onClick={() => navigate('/settings')}
+                title="Change lifecycle mode in Settings"
+                style={{
+                  padding: 0, marginLeft: 2, background: 'transparent',
+                  border: 'none', cursor: 'pointer',
+                  color: 'var(--color-primary)', fontSize: 11, fontWeight: 500,
+                }}
+              >
+                Change
+              </button>
+            </span>
           </div>
         </div>
         {canCreateValueStreams && (
