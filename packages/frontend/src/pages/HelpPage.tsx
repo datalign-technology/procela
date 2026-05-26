@@ -285,7 +285,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>People</h3>
         <ul style={listStyle}>
           <li>Team members with app roles (Super Admin, Org Admin, Editor, Contributor, Viewer).</li>
-          <li>Import from CSV (per organization). Each row needs name, email, role, title.</li>
+          <li>Import from CSV. Columns: Name (required), Email, Role, Title, Org (optional). An <em>Org</em> value on a row lands that person in the named org — either a full path (<code>Tidewater Utilities &gt; Tidewater Electric &gt; Power Generation</code>) or a single unique name; rows without the column fall back to the "Default org" picked in the import dialog. The People export emits the same Org column so a single-file enterprise-wide round-trip preserves which org each person belongs to.</li>
           <li>Click any role chip on a person's profile to open the Role Detail drawer.</li>
         </ul>
         <h3 style={h3Style}>Agents</h3>

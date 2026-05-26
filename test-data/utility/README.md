@@ -56,6 +56,19 @@ understand quoted commas. Descriptions and titles here avoid commas
 for that reason. If you edit the files, keep that in mind or the row
 will silently skip or land in the wrong column.
 
+### People CSV: optional `Org` column
+
+The People import accepts an optional 5th column, `Org`, that
+lets a single CSV land rows in different organizations. The value
+can be either a full path (`Tidewater Utilities > Tidewater
+Electric > Power Generation`) or a single unique org name. Rows
+without the column — or with an unrecognised value — fall back
+to the "Default org" picked in the import dialog. The People
+export uses this column too, so an enterprise-wide
+export → re-import round-trip preserves which org each person
+belonged to. The per-department files in this directory don't
+need the column because each file targets one specific org.
+
 ## Governance role coverage
 
 The data is seeded so that every organization level — the enterprise,

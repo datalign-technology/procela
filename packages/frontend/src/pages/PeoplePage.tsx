@@ -27,6 +27,27 @@ interface OrgFlat {
   id: string; parentId: string | null; name: string; type: string;
   industry: string; description: string; headCount: number;
 }
+
+// Build a "Parent > Child > Grandchild" path string for the
+// People export's Org column. Walks parentId up to the root and
+// joins the names with " > " — the import endpoint splits on the
+// same separator. Returns empty string when the org isn't in the
+// caller's visible set (which keeps the column blank rather than
+// emitting half a path).
+function buildOrgPath(orgId: string, orgs: OrgFlat[]): string {
+  if (!orgId) return '';
+  const parts: string[] = [];
+  let cur: OrgFlat | undefined = orgs.find((o) => o.id === orgId);
+  if (!cur) return '';
+  // Cap the walk at 16 hops so a corrupt parentId loop can't hang
+  // the export.
+  for (let i = 0; i < 16 && cur; i++) {
+    parts.unshift(cur.name);
+    cur = cur.parentId ? orgs.find((o) => o.id === cur!.parentId) : undefined;
+  }
+  return parts.join(' > ');
+}
+
 interface Person {
   id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
   syncConnectionId?: string | null; syncStatus?: string | null;
@@ -796,10 +817,11 @@ export default function PeoplePage() {
     try {
       const body: any = { orgId };
       if (peopleImportFormat === 'csv') body.csv = peopleImportText; else body.people = JSON.parse(peopleImportText);
-      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; skippedEmails?: string[]; data?: any[] }>('/people/import', body);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; skippedEmails?: string[]; warnings?: string[]; data?: any[] }>('/people/import', body);
       const count = result.data?.length || 0;
       const skipped = result.skipped || 0;
       const skippedEmails = result.skippedEmails || [];
+      const warnings = result.warnings || [];
 
       if (skipped > 0 && count === 0) {
         addToast('info', `All ${skipped} ${skipped === 1 ? 'person already exists' : 'people already exist'} in Procela: ${skippedEmails.join(', ')}`);
@@ -808,6 +830,16 @@ export default function PeoplePage() {
         addToast('success', `Imported ${count} new ${count === 1 ? 'person' : 'people'}`);
       } else {
         addToast('success', `Imported ${count} ${count === 1 ? 'person' : 'people'}`);
+      }
+      // Per-row Org column resolution warnings: when a row's Org
+      // value didn't match an org (typo, renamed org, ambiguous
+      // single name) the backend resolved it to the dialog's
+      // default. Surface the count and the first warning so the
+      // user can notice and fix the CSV.
+      if (warnings.length > 0) {
+        const preview = warnings.slice(0, 2).join(' · ');
+        const more = warnings.length > 2 ? ` (+${warnings.length - 2} more)` : '';
+        addToast('info', `${warnings.length} row${warnings.length === 1 ? '' : 's'} fell back to the default org: ${preview}${more}`);
       }
       setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId('');
       fetchData();
@@ -897,9 +929,17 @@ export default function PeoplePage() {
                     <ExportMenu build={() => ({
                       filenameBase: 'people',
                       sheetName: 'People',
-                      headers: ['Name', 'Email', 'Role', 'Title'],
+                      // The Org column carries the full path (Parent >
+                      // Child > Grandchild) so a single-file
+                      // enterprise-wide export can round-trip without
+                      // losing which org each person belongs to. The
+                      // import endpoint resolves it per row and falls
+                      // back to the dialog's org if the column is
+                      // missing or the path doesn't match.
+                      headers: ['Name', 'Email', 'Role', 'Title', 'Org'],
                       rows: filteredPeople.map((p) => [
                         p.name, p.email, ROLE_LABELS[p.role] || p.role, p.title,
+                        buildOrgPath(p.orgIds[0] || '', flatOrgs),
                       ]),
                     })} />
                   )}
@@ -1153,7 +1193,7 @@ export default function PeoplePage() {
                     <button onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, fontWeight: 500 }}>Organization *</label>
+                    <label style={{ fontSize: 11, fontWeight: 500 }}>Default org *</label>
                     <select
                       style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 12 }}
                       value={peopleImportOrgId}
@@ -1165,9 +1205,9 @@ export default function PeoplePage() {
                     <FilePicker accept=".csv,.json,.txt" onFileRead={(content, fn) => { setPeopleImportText(content); if (fn.endsWith('.json')) setPeopleImportFormat('json'); else setPeopleImportFormat('csv'); }} />
                   </div>
                   <textarea style={{ ...inputStyle, minHeight: 80, fontFamily: 'var(--font-mono)', fontSize: 11 }} value={peopleImportText} onChange={(e) => setPeopleImportText(e.target.value)}
-                    placeholder={'Name,Email,Role,Title\nJane Smith,jane@co.com,EDITOR,Director of Operations'} />
+                    placeholder={'Name,Email,Role,Title,Org\nJane Smith,jane@co.com,EDITOR,Director of Operations,Tidewater Utilities > Tidewater Electric'} />
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>CSV columns: Name (required), Email, Role, Title</span>
+                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)', flex: 1 }}>Columns: Name (required), Email, Role, Title, Org. Rows with an Org column land in that org (full path "Parent &gt; Child" or unique name); rows without it use the Default org above.</span>
                     <button style={btnSecondary} onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }}>Cancel</button>
                     <button
                       style={{ ...btnPrimary, opacity: (!peopleImportText.trim() || !peopleImportOrgId) ? 0.6 : 1, cursor: (!peopleImportText.trim() || !peopleImportOrgId) ? 'not-allowed' : 'pointer' }}

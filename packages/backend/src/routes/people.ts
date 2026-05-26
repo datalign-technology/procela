@@ -423,10 +423,19 @@ router.delete('/:id', (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/people/import
- * Import people from CSV or JSON. orgId is required.
+ * Import people from CSV or JSON. orgId is required as a fallback —
+ * rows that include their own Org (CSV) or orgPath (JSON) override
+ * it, so a single-file enterprise-wide round-trip preserves which
+ * org each person belongs to. Org values can be either a full path
+ * ("Tidewater Utilities > Tidewater Electric > Power Generation")
+ * or a single name; single names are resolved as long as they're
+ * unambiguous (one matching org).
  *
- * JSON: { orgId: string, people: [{ name, email?, role?, title? }, ...] }
- * CSV:  { orgId: string, csv: "Name,Email,Role,Title\nJohn,john@co.com,VIEWER,Manager" }
+ * JSON: { orgId: string, people: [{ name, email?, role?, title?, orgPath? }, ...] }
+ * CSV:  { orgId: string, csv: "Name,Email,Role,Title,Org\nJohn,john@co.com,VIEWER,Manager,Tidewater Utilities > Tidewater Electric" }
+ *
+ * Backward-compatible: 4-column CSVs without an Org column still
+ * work — every row falls back to the dialog's orgId.
  */
 router.post('/import', (req: Request, res: Response) => {
   try {
@@ -442,7 +451,7 @@ router.post('/import', (req: Request, res: Response) => {
       return;
     }
 
-    let rows: Array<{ name: string; email?: string; role?: string; title?: string }> = [];
+    let rows: Array<{ name: string; email?: string; role?: string; title?: string; orgPath?: string }> = [];
 
     if (csv && typeof csv === 'string') {
       const lines = csv.trim().split('\n');
@@ -451,6 +460,9 @@ router.post('/import', (req: Request, res: Response) => {
       const emailIdx = header.indexOf('email');
       const roleIdx = header.indexOf('role');
       const titleIdx = header.indexOf('title');
+      // "Org" column is optional. When absent, every row falls back
+      // to the dialog's orgId, matching the original behaviour.
+      const orgIdx = header.indexOf('org');
 
       if (nameIdx === -1) {
         res.status(400).json({ success: false, error: 'CSV must have a "Name" column' });
@@ -465,6 +477,7 @@ router.post('/import', (req: Request, res: Response) => {
           email: emailIdx >= 0 ? cols[emailIdx] : undefined,
           role: roleIdx >= 0 ? cols[roleIdx] : undefined,
           title: titleIdx >= 0 ? cols[titleIdx] : undefined,
+          orgPath: orgIdx >= 0 ? cols[orgIdx] : undefined,
         });
       }
     } else if (Array.isArray(peopleList)) {
@@ -478,6 +491,46 @@ router.post('/import', (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'No people to import' });
       return;
     }
+
+    // Resolve a row's Org column value to an actual org id. Accepts
+    // a full path ("Parent > Child > Grandchild") or a single name.
+    // Names are matched case-insensitively. Paths walk the tree
+    // from the root down. Returns the fallback orgId on miss and
+    // records a warning so the response can tell the user which
+    // rows landed at the default.
+    const warnings: string[] = [];
+    const resolveOrgForRow = (raw: string | undefined, rowLabel: string): string => {
+      if (!raw || !raw.trim()) return orgId;
+      const path = raw.trim();
+      const lc = (s: string) => s.toLowerCase();
+
+      if (path.includes('>')) {
+        const segments = path.split('>').map((s) => s.trim()).filter(Boolean);
+        let parentId: string | null = null;
+        let current: typeof organizations[number] | undefined;
+        for (const seg of segments) {
+          current = organizations.find((o) => o.parentId === parentId && lc(o.name) === lc(seg));
+          if (!current) {
+            warnings.push(`"${rowLabel}": no org matching path "${path}" — fell back to ${org.name}`);
+            return orgId;
+          }
+          parentId = current.id;
+        }
+        return current!.id;
+      }
+
+      // Single-name shortcut. Unambiguous match required; if two orgs
+      // share the name (e.g. two "Customer Service" departments) we
+      // refuse to guess and fall back.
+      const matches = organizations.filter((o) => lc(o.name) === lc(path));
+      if (matches.length === 1) return matches[0].id;
+      if (matches.length === 0) {
+        warnings.push(`"${rowLabel}": no org named "${path}" — fell back to ${org.name}`);
+      } else {
+        warnings.push(`"${rowLabel}": "${path}" is ambiguous (${matches.length} matches) — fell back to ${org.name}; use a full path to disambiguate`);
+      }
+      return orgId;
+    };
 
     const validRoles = ROLES as readonly string[];
     const created: StoredPerson[] = [];
@@ -495,8 +548,9 @@ router.post('/import', (req: Request, res: Response) => {
         }
       }
       const role = row.role && validRoles.includes(row.role.toUpperCase()) ? row.role.toUpperCase() : 'VIEWER';
+      const rowOrgId = resolveOrgForRow(row.orgPath, row.email || row.name);
       const person: StoredPerson = {
-        id: uuid(), orgIds: [orgId], name: row.name,
+        id: uuid(), orgIds: [rowOrgId], name: row.name,
         email: row.email || '', role,
         title: row.title || '',
         accessibleOrgIds: [],
@@ -508,15 +562,17 @@ router.post('/import', (req: Request, res: Response) => {
     }
 
     saveStore('people', people);
-    logger.info({ created: created.length, skipped: skipped.length, orgId, orgName: org.name }, 'Imported people');
+    logger.info({ created: created.length, skipped: skipped.length, warnings: warnings.length, defaultOrg: org.name }, 'Imported people');
+    const parts: string[] = [`Imported ${created.length}`];
+    if (skipped.length > 0) parts.push(`skipped ${skipped.length} duplicate${skipped.length === 1 ? '' : 's'}`);
+    if (warnings.length > 0) parts.push(`${warnings.length} fell back to ${org.name}`);
     res.status(201).json({
       success: true,
       data: created,
       skipped: skipped.length,
       skippedEmails: skipped,
-      message: skipped.length > 0
-        ? `Imported ${created.length}, skipped ${skipped.length} (duplicate email: ${skipped.join(', ')})`
-        : `Imported ${created.length} people`,
+      warnings,
+      message: parts.join(', '),
     });
   } catch (err) {
     logger.error({ err }, 'People import failed');
