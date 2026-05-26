@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
+import { parseCsv } from '../lib/csv';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
@@ -494,13 +495,13 @@ router.post('/import', (req: Request, res: Response) => {
     let rows: ImportRow[] = [];
 
     if (csv && typeof csv === 'string') {
-      const lines = csv.trim().split('\n');
-      if (lines.length < 2) {
+      const parsed = parseCsv(csv);
+      if (parsed.length < 2) {
         res.status(400).json({ success: false, error: 'CSV must have a header row and at least one data row' });
         return;
       }
-      const header = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
-      const idx = (...names: string[]) => header.findIndex((h: string) => names.includes(h));
+      const header = parsed[0].map((h) => h.trim().toLowerCase());
+      const idx = (...names: string[]) => header.findIndex((h) => names.includes(h));
       const termIdx = idx('term', 'name');
       const defIdx = idx('definition');
       const catIdx = idx('category');
@@ -514,8 +515,8 @@ router.post('/import', (req: Request, res: Response) => {
         return;
       }
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c: string) => c.trim());
+      for (let i = 1; i < parsed.length; i++) {
+        const cols = parsed[i].map((c) => c.trim());
         if (!cols[termIdx]) continue;
         rows.push({
           term: cols[termIdx],

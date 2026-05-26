@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { AuthenticatedRequest } from '../middleware/auth';
 // Lazy-required inside handlers to avoid the circular import with
@@ -788,9 +789,12 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
     let rows: Array<{ name: string; parentName?: string; type?: string; industry?: string; description?: string }> = [];
 
     if (csv && typeof csv === 'string') {
-      // Parse CSV
-      const lines = csv.trim().split('\n');
-      const header = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
+      const parsed = parseCsv(csv);
+      if (parsed.length === 0) {
+        res.status(400).json({ success: false, error: 'CSV appears to be empty' });
+        return;
+      }
+      const header = parsed[0].map((h) => h.trim().toLowerCase());
       const nameIdx = header.indexOf('name');
       const parentIdx = header.indexOf('parent');
       const typeIdx = header.indexOf('type');
@@ -802,8 +806,8 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
         return;
       }
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c: string) => c.trim());
+      for (let i = 1; i < parsed.length; i++) {
+        const cols = parsed[i].map((c) => c.trim());
         if (!cols[nameIdx]) continue;
         rows.push({
           name: cols[nameIdx],

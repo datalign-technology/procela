@@ -51,10 +51,13 @@ subsidiaries, sized to exercise most of Procela's entity model:
 
 ## Format notes
 
-The backend CSV parser uses a naive comma split — it does **not**
-understand quoted commas. Descriptions and titles here avoid commas
-for that reason. If you edit the files, keep that in mind or the row
-will silently skip or land in the wrong column.
+The backend CSV parser is RFC-4180-compliant — it understands
+double-quoted cells (`"Smith, John"`), the `""` escape inside a
+quoted cell, and both LF and CRLF line endings. That means any
+CSV the in-app **Export** button emits round-trips cleanly back
+through **Import** (the exporter quotes every cell, including
+the header). The CSVs in this directory deliberately don't use
+quoted cells just to stay grep-friendly.
 
 ### People CSV: optional `Org` column
 

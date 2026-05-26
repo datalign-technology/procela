@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { people } from './people';
 import { systems } from './systems';
@@ -179,12 +180,12 @@ async function fetchUrlRows(
 
   // CSV_URL
   const text = await resp.text();
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  const headerRow = lines[0].split(',').map((h) => h.trim());
+  const parsed = parseCsv(text);
+  if (parsed.length < 2) return [];
+  const headerRow = parsed[0].map((h) => h.trim());
   const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map((c) => c.trim());
+  for (let i = 1; i < parsed.length; i++) {
+    const cols = parsed[i].map((c) => c.trim());
     const row: Record<string, string> = {};
     for (let j = 0; j < headerRow.length; j++) {
       row[headerRow[j]] = cols[j] || '';

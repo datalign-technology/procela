@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
+import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
 import { governanceGroups } from './governance-groups';
@@ -454,8 +455,12 @@ router.post('/import', (req: Request, res: Response) => {
     let rows: Array<{ name: string; email?: string; role?: string; title?: string; orgPath?: string }> = [];
 
     if (csv && typeof csv === 'string') {
-      const lines = csv.trim().split('\n');
-      const header = lines[0].split(',').map((h: string) => h.trim().toLowerCase());
+      const parsed = parseCsv(csv);
+      if (parsed.length === 0) {
+        res.status(400).json({ success: false, error: 'CSV appears to be empty' });
+        return;
+      }
+      const header = parsed[0].map((h) => h.trim().toLowerCase());
       const nameIdx = header.indexOf('name');
       const emailIdx = header.indexOf('email');
       const roleIdx = header.indexOf('role');
@@ -469,8 +474,8 @@ router.post('/import', (req: Request, res: Response) => {
         return;
       }
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c: string) => c.trim());
+      for (let i = 1; i < parsed.length; i++) {
+        const cols = parsed[i].map((c) => c.trim());
         if (!cols[nameIdx]) continue;
         rows.push({
           name: cols[nameIdx],
