@@ -1056,7 +1056,7 @@ export default function Layout() {
                     }}
                     aria-expanded={!sidebarCollapsed ? isExpanded : isFlyoutOpen}
                     aria-label={sidebarCollapsed ? section.label || undefined : undefined}
-                    style={{ cursor: 'pointer', userSelect: 'none', width: '100%', textAlign: 'left', background: 'transparent', font: 'inherit', color: 'inherit', border: 'none' }}
+                    style={{ cursor: 'pointer', userSelect: 'none', width: '100%', textAlign: 'left', background: 'transparent', fontFamily: 'inherit', color: 'inherit', border: 'none' }}
                     title={sidebarCollapsed ? section.label : undefined}
                   >
                     <span className={styles.navIcon}>{navIconNode(section.items[0])}</span>
