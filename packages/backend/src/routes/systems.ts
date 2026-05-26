@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import logger from '../lib/logger';
 import { dataAssets } from './data-assets';
 import { connections, connectionSystemLinks, connectionsForSystem } from './connections';
@@ -500,6 +500,13 @@ router.post('/', (req: Request, res: Response) => {
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (connectivity && !VALID_CONNECTIVITY.includes(connectivity)) {
     res.status(400).json({ success: false, error: `connectivity must be one of ${VALID_CONNECTIVITY.join(', ')}` });
+    return;
+  }
+  // Ownership-level guard: systems attach to one org, but only at
+  // the company or division level. Skip when no orgId was supplied
+  // so the DEV_ORG_ID fallback path keeps working unchanged.
+  if (orgId && !isOwnershipLevel(orgId)) {
+    res.status(400).json({ success: false, error: 'Systems can only be owned at the company or division level. Pick a different org from "Working in...".' });
     return;
   }
   const newId = uuid();

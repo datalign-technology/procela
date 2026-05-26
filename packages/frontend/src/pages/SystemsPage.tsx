@@ -438,10 +438,16 @@ const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible
 ];
 
 export default function SystemsPage() {
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
   const { getOrgName } = useOrgNameLookup();
+  // Ownership-level guard. canCreateValueStreams is the store's
+  // canonical "this org can own scoped artefacts" boolean — same
+  // rule applies to data assets and systems, so we reuse it
+  // directly. Departments / teams can't own; only company /
+  // division can.
+  const canOwnHere = canCreateValueStreams;
   const { addToast } = useToastStore();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -807,9 +813,22 @@ export default function SystemsPage() {
           <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
           <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
           <ColumnPicker state={systemCols} />
-          <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
+          {canOwnHere && (
+            <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
+          )}
         </div>
       </div>
+
+      {/* Wrong-level banner. Systems can only be owned by companies
+          or divisions; if the active scope is a department or team
+          the Add button is hidden and this banner explains why.
+          The list itself still renders so users can read inherited
+          rows from above. */}
+      {activeOrgId && !canOwnHere && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+          Systems can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Pick a company or division from the "Working in" dropdown to add or edit systems here.
+        </div>
+      )}
 
       {/* Two-column layout: System Types sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
@@ -1357,7 +1376,7 @@ export default function SystemsPage() {
             icon={'\u2699'}
             title="No systems defined yet"
             description="Systems are the applications and platforms where your data lives — ERP, CRM, GIS, and so on. Define them first so you can connect and map data assets to each one."
-            action={{ label: '+ Add System', onClick: openAdd }}
+            action={canOwnHere ? { label: '+ Add System', onClick: openAdd } : undefined}
             secondaryAction={{ label: 'Import from CSV', onClick: () => setShowImport(true) }}
           />
         ) : (

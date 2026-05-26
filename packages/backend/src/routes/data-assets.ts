@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { systems } from './systems';
@@ -635,6 +635,15 @@ router.post('/', (req: Request, res: Response) => {
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (origin && !VALID_ORIGINS.includes(origin)) {
     res.status(400).json({ success: false, error: `origin must be one of ${VALID_ORIGINS.join(', ')}` });
+    return;
+  }
+  // Ownership-level guard: data assets attach to one org, but only
+  // at the company or division level. A department or team can't
+  // be the owner — it inherits visibility from above. Skip when no
+  // orgId was supplied so the DEV_ORG_ID fallback path keeps
+  // working unchanged.
+  if (orgId && !isOwnershipLevel(orgId)) {
+    res.status(400).json({ success: false, error: 'Data assets can only be owned at the company or division level. Pick a different org from "Working in...".' });
     return;
   }
   // Trust an explicit origin from the caller (governance template, sync,

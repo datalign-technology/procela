@@ -314,10 +314,16 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
 }
 
 export default function DataAssetsPage() {
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
   // Resolves a row's orgId to a display name so the OwnerBadge can
   // render "Owned by Tidewater Utilities" on inherited rows.
   const { getOrgName } = useOrgNameLookup();
+  // Ownership-level guard. canCreateValueStreams is the store's
+  // canonical "this org can own scoped artefacts" boolean — same
+  // rule applies to data assets and systems, so we reuse it
+  // directly. Departments / teams can't own; only company /
+  // division can.
+  const canOwnHere = canCreateValueStreams;
   const { canWrite } = usePermissions();
   const { addToast } = useToastStore();
   const navigate = useNavigate();
@@ -956,11 +962,22 @@ export default function DataAssetsPage() {
             })} />
           )}
           <ColumnPicker state={colPicker} />
-          {canWrite && (
+          {canWrite && canOwnHere && (
             <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
           )}
         </div>
       </div>
+
+      {/* Wrong-level banner. Data assets can only be owned by
+          companies or divisions; if the active scope is a
+          department or team the Add button is hidden and this banner
+          explains why. The list itself still renders so users can
+          read inherited rows from above. */}
+      {activeOrgId && !canOwnHere && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+          Data assets can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Pick a company or division from the "Working in" dropdown to add or edit assets here.
+        </div>
+      )}
 
       {/* Two-column layout: Categories sidebar + content (mirrors Systems page) */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
@@ -1523,7 +1540,7 @@ export default function DataAssetsPage() {
             icon={'\u26C1'}
             title="No data assets yet"
             description="Data assets are business-level concepts — Customer Accounts, Billing Records, Inventory Levels — not the underlying tables, files, or columns. Define them in plain business language, then link each one to its physical source via a Binding on the row."
-            action={{ label: '+ Add Data Asset', onClick: openAdd }}
+            action={canOwnHere ? { label: '+ Add Data Asset', onClick: openAdd } : undefined}
           />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

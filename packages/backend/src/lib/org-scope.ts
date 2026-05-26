@@ -1,5 +1,20 @@
 import { organizations } from '../routes/organizations';
 
+// Org types that are allowed to own scoped governance artefacts —
+// value streams, data assets, systems. Departments and teams
+// inherit visibility from their parent company/division but can't
+// themselves be owners. Lives here so every route enforcing the
+// rule reads from one place rather than redefining ['company',
+// 'division'] locally.
+export const OWNERSHIP_LEVELS: readonly string[] = ['company', 'division'];
+
+export function isOwnershipLevel(orgId: string | null | undefined): boolean {
+  if (!orgId) return false;
+  const org = organizations.find((o) => o.id === orgId);
+  if (!org) return false;
+  return OWNERSHIP_LEVELS.includes(org.type);
+}
+
 /**
  * Returns the set of org IDs visible from a given scope org, including:
  * - The org itself
