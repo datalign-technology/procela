@@ -16,6 +16,9 @@ subsidiaries, sized to exercise most of Procela's entity model:
 | `systems.csv` | Electric + water operational systems (SCADA, GIS, CIS, AMI, hydraulic modeling) + shared corporate systems. | Import second. |
 | `people-executives.csv` | C-suite and division presidents, plus the enterprise Data Governance Lead. | Assign to **Tidewater Utilities** on import. |
 | `people-data-owners.csv` | Division-level Data Owners (Electric / Water / Shared Services). | Assign to **Tidewater Utilities** on import. Once imported, assign each person a `DATA_OWNER` governance role scoped to their respective division. |
+| `people-electric.csv` | Division-level governance lead for Tidewater Electric. | Assign to **Tidewater Electric** (the division itself, not one of its departments). |
+| `people-water.csv` | Division-level governance lead for Tidewater Water. | Assign to **Tidewater Water**. |
+| `people-shared-services.csv` | Division-level governance lead for Shared Services. | Assign to **Shared Services**. |
 | `people-electric-generation.csv` | Generation operations department. | Assign to **Power Generation**. |
 | `people-electric-td.csv` | Transmission & Distribution. | Assign to **Transmission & Distribution**. |
 | `people-electric-customer.csv` | Electric customer ops. | Assign to **Electric Customer Service**. |
@@ -55,10 +58,22 @@ will silently skip or land in the wrong column.
 
 ## Governance role coverage
 
-The data is seeded so that every governance role in Procela maps to at
-least one real person with a matching job title. Useful when
-demonstrating the Role Detail drawer, RACI matrix, and governance
-group memberships.
+The data is seeded so that every organization level — the enterprise,
+each division, and each department — has at least one person directly
+attached whose job title is a governance role. That way the
+"Working in&hellip;" picker always lands you on a scope that has a
+real person to look at, and the Role Detail drawer / RACI matrix /
+governance group memberships have something to show at every level.
+
+| Level | Where the governance-titled person lives |
+|---|---|
+| **Enterprise** (Tidewater Utilities) | Chief Data Officer + Data Governance Lead in `people-executives.csv`; Data Owners in `people-data-owners.csv`. |
+| **Division** (Electric / Water / Shared Services) | One Director Data Stewardship per division in `people-electric.csv` / `people-water.csv` / `people-shared-services.csv`. |
+| **Department** (everything below the divisions) | A `Data Steward <Domain>` per department, in the matching `people-<dept>.csv` file. |
+
+The role-to-person matrix below is unchanged; it documents which
+DAMA role each named person plays. Useful when demonstrating the
+Role Detail drawer, RACI matrix, and governance group memberships.
 
 | Role | Person | File | Scope it's normally assigned at |
 |---|---|---|---|
