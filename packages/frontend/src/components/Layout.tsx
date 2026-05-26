@@ -996,8 +996,22 @@ export default function Layout() {
           <button
             type="button"
             onClick={() => {
-              if (window.history.length > 1) navigate(-1);
-              else navigate('/');
+              // The Help guide is opened by openHelpWindow() in its
+              // own browser window via window.open, so closing it
+              // should close that window — not just navigate inside
+              // it. window.close() works for script-opened windows
+              // in every modern browser even with noopener, but if
+              // it's somehow blocked (deep link in the same tab, an
+              // odd embedded context) fall back to in-app navigation
+              // so the user isn't stranded on a content-only page
+              // with no chrome.
+              window.close();
+              setTimeout(() => {
+                if (!window.closed) {
+                  if (window.history.length > 1) navigate(-1);
+                  else navigate('/');
+                }
+              }, 100);
             }}
             style={{
               padding: '6px 14px', fontSize: 13, fontWeight: 500,
@@ -1005,7 +1019,7 @@ export default function Layout() {
               border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
-            title="Close the help guide and return to the app"
+            title="Close the help guide window"
           >
             × Close
           </button>
