@@ -413,7 +413,7 @@ const navSections: NavSection[] = [
       { to: '/governance-program', label: 'Program', icon: '\u2637' },
       { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
       { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
-      { to: '/governance-policies', label: 'Policies', icon: '\u00A7' },
+      { to: '/governance-policies', label: 'Documents', icon: '\u00A7', titleLabel: 'Governance Documents' },
       { to: '/decision-rights', label: 'Decision Rights', icon: '\u2696' },
       { to: '/documentation', label: 'Documentation', icon: '\u2611' },
       { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },

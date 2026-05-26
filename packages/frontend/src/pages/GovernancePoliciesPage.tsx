@@ -20,6 +20,9 @@ interface Policy {
   status: string; ownerAssignmentId: string | null; ownerName: string | null;
   category: string; reviewFrequency: string; nextReviewDate: string | null;
   content: string; createdAt: string; updatedAt: string;
+  // CHARTER / FRAMEWORK / STANDARD / POLICY. Drives form variant
+  // (charters skip the Controls panel, etc.) and gets a badge.
+  documentType: 'CHARTER' | 'FRAMEWORK' | 'STANDARD' | 'POLICY';
 }
 
 interface Control {
@@ -33,6 +36,7 @@ interface Person { id: string; name: string; }
 interface PolicyForm {
   name: string; description: string; category: string; status: string;
   ownerAssignmentId: string; reviewFrequency: string; content: string;
+  documentType: 'CHARTER' | 'FRAMEWORK' | 'STANDARD' | 'POLICY';
 }
 
 interface ControlForm {
@@ -43,6 +47,25 @@ interface ControlForm {
 const emptyPolicyForm: PolicyForm = {
   name: '', description: '', category: 'GENERAL', status: 'DRAFT',
   ownerAssignmentId: '', reviewFrequency: 'ANNUAL', content: '',
+  documentType: 'POLICY',
+};
+
+const DOCUMENT_TYPES = ['CHARTER', 'FRAMEWORK', 'STANDARD', 'POLICY'] as const;
+type DocumentType = typeof DOCUMENT_TYPES[number];
+
+// Plain-English labels for the badge / filter / type selector.
+const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
+  CHARTER:   'Charter',
+  FRAMEWORK: 'Framework',
+  STANDARD:  'Standard',
+  POLICY:    'Policy',
+};
+
+const DOCUMENT_TYPE_COLORS: Record<DocumentType, { bg: string; color: string }> = {
+  CHARTER:   { bg: '#e0e7ff', color: '#3730a3' },
+  FRAMEWORK: { bg: '#dbeafe', color: '#1e40af' },
+  STANDARD:  { bg: '#fef3c7', color: '#92400e' },
+  POLICY:    { bg: '#d1fae5', color: '#065f46' },
 };
 
 const emptyControlForm: ControlForm = {
@@ -130,6 +153,9 @@ export default function GovernancePoliciesPage() {
   const [controls, setControls] = useState<Control[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
+  // documentType filter for the segmented control above the list.
+  // 'ALL' shows everything; the four document types narrow the view.
+  const [typeFilter, setTypeFilter] = useState<DocumentType | 'ALL'>('ALL');
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -169,7 +195,8 @@ export default function GovernancePoliciesPage() {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyPolicyForm); setEditingId(null); setShowForm(true); };
   const openEdit = (p: Policy) => {
     setForm({ name: p.name, description: p.description, category: p.category, status: p.status,
-      ownerAssignmentId: p.ownerAssignmentId || '', reviewFrequency: p.reviewFrequency, content: p.content });
+      ownerAssignmentId: p.ownerAssignmentId || '', reviewFrequency: p.reviewFrequency, content: p.content,
+      documentType: p.documentType || 'POLICY' });
     setEditingId(p.id); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyPolicyForm); };
@@ -268,15 +295,39 @@ export default function GovernancePoliciesPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Policies & Controls</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Documents</h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Define governance policies and the controls that enforce them.
+            Charters, frameworks, standards, and policies — every formal governance document with a lifecycle. Controls hang off Policies specifically (the rule-shaped subset).
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <ColumnPicker state={policyCols} />
-          {canWrite && <IconButton icon="plus" label="Add policy" variant="primary" onClick={openAdd} />}
+          {canWrite && <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} />}
         </div>
+      </div>
+
+      {/* documentType filter — segmented control. "All" is the
+          default so the page still reads as one combined list. */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+        {(['ALL', ...DOCUMENT_TYPES] as const).map((t) => {
+          const active = typeFilter === t;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTypeFilter(t)}
+              style={{
+                padding: '4px 12px', fontSize: 12, fontWeight: 500,
+                borderRadius: 999, cursor: 'pointer',
+                background: active ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: active ? '#fff' : 'var(--color-text)',
+                border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+              }}
+            >
+              {t === 'ALL' ? 'All' : DOCUMENT_TYPE_LABEL[t]}
+            </button>
+          );
+        })}
       </div>
 
       <ConfirmDialog open={confirmDelete !== null} title="Delete Policy?"
@@ -301,6 +352,12 @@ export default function GovernancePoliciesPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>
               <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </div>
+            <div>
+              <label style={labelStyle}>Document Type</label>
+              <select style={selectStyle} value={form.documentType} onChange={(e) => setForm({ ...form, documentType: e.target.value as DocumentType })}>
+                {DOCUMENT_TYPES.map((t) => <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>)}
+              </select>
             </div>
             <div>
               <label style={labelStyle}>Category</label>
@@ -373,9 +430,9 @@ export default function GovernancePoliciesPage() {
         {loading ? (
           <SkeletonRows rows={5} columns={8} />
         ) : policies.length === 0 && !showForm ? (
-          <EmptyState icon={'📋'} title="No governance policies yet"
-            description="Policies define the rules and standards for data governance. Create your first policy to get started."
-            action={canWrite ? { label: '+ Add Policy', onClick: openAdd } : undefined} />
+          <EmptyState icon={'📋'} title="No governance documents yet"
+            description="Charters set the program's scope, policies set the rules, standards set the conventions, and frameworks set the structure. Create your first document to get started."
+            action={canWrite ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -394,9 +451,10 @@ export default function GovernancePoliciesPage() {
               </tr>
             </thead>
             <tbody>
-              {policies.map((pol) => {
+              {policies.filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter).map((pol) => {
                 const policyControls = controlsForPolicy(pol.id);
                 const isExpanded = expandedPolicyId === pol.id;
+                const docType = pol.documentType || 'POLICY';
                 return (
                   <tr key={pol.id} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -406,7 +464,10 @@ export default function GovernancePoliciesPage() {
                       <input type="checkbox" checked={selectedIds.has(pol.id)} onChange={() => toggleSelect(pol.id)} />
                     </td>
                     {policyCols.isVisible('code') && <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'monospace', fontSize: 12 }}>{pol.code}</td>}
-                    {policyCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>{pol.name}</td>}
+                    {policyCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
+                      <span>{pol.name}</span>
+                      <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
+                    </td>}
                     {policyCols.isVisible('category') && <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>}
                     {policyCols.isVisible('status') && <td style={tdStyle}><span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span></td>}
                     {policyCols.isVisible('owner') && <td style={tdStyle}>{pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</td>}
@@ -426,8 +487,11 @@ export default function GovernancePoliciesPage() {
         )}
       </div>
 
-      {/* Expanded Controls Section */}
-      {expandedPolicyId && (
+      {/* Expanded Controls Section — only shown for documentType
+          POLICY. Charters, frameworks and standards don't have
+          rule-shaped controls hanging off them, so the panel
+          would be empty + misleading. */}
+      {expandedPolicyId && (policies.find((p) => p.id === expandedPolicyId)?.documentType ?? 'POLICY') === 'POLICY' && (
         <div style={{ marginTop: 16, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600 }}>

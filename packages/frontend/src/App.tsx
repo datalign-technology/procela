@@ -86,6 +86,12 @@ export default function App() {
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/governance-work" element={<GovernanceWorkPage />} />
         <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
+        {/* Canonical alias — the page now covers Charter / Framework /
+            Standard / Policy, so the broader URL reads honestly. The
+            /governance-policies path is kept indefinitely as a
+            back-compat alias since existing deep links and the
+            sidebar still point at it. */}
+        <Route path="/governance-documents" element={<GovernancePoliciesPage />} />
         <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
         <Route path="/decision-rights" element={<DecisionRightsPage />} />
         <Route path="/business-glossary" element={<BusinessGlossaryPage />} />

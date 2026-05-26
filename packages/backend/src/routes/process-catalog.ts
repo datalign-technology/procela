@@ -1296,140 +1296,68 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
   saveStore('processNodes', processNodes);
   saveStore('flowRelationships', flowRelationships);
 
-  // ── Create placeholder governance data assets and mappings ──
-  // DAMA defines standard inputs/outputs for governance processes.
-  // We create these as real data assets and link them so the IOPanel
-  // is pre-populated. Users can modify, delete, or add more.
+  // ── Seed governance documents (Charter, Policies, Standards, ACL) ──
+  // The old governance template created 15 "Data Assets" as
+  // standard inputs/outputs for the governance processes. In
+  // practice almost none of those rows were real data assets —
+  // most were governance documents (Charter, Standards, Access
+  // Control Policies) that don't have columns / health / tier /
+  // source bindings, or were duplicates of entities that already
+  // have a dedicated home in Procela (Glossary, Domains, Lineage,
+  // DQ Rules, Issues, Tasks).
+  //
+  // Now we only seed the four document-shaped rows, and we plant
+  // them in governancePolicies with the right documentType so they
+  // get the lifecycle + review-cadence + ownership treatment they
+  // actually need. The other 11 rows are not created — the
+  // corresponding entities already exist (or get created via
+  // their own templates), and process-activity outputs that aren't
+  // stored entities (reports, communications) are dropped.
+  //
+  // The startup migration in src/migrations/2026-05-governance-docs.ts
+  // also cleans up the old assets for orgs that ran the previous
+  // template.
   try {
-    const { dataAssets } = require('./data-assets');
-    const { mappings } = require('./mappings');
+    const { governancePolicies } = require('./governance-policies');
 
-    const govAssetDefs = [
-      { name: 'Data Governance Charter', description: 'Mission, vision, principles, decision rights, and scope of the governance program', governanceTier: 'GOLD', dataClassification: 'INTERNAL' },
-      { name: 'Data Policies', description: 'Enterprise policies for data quality, security, privacy, retention, and sharing', governanceTier: 'GOLD', dataClassification: 'INTERNAL' },
-      { name: 'Data Standards', description: 'Naming conventions, data type standards, formatting rules, and reference data', governanceTier: 'SILVER', dataClassification: 'INTERNAL' },
-      { name: 'Quality Rule Definitions', description: 'Measurable quality criteria, thresholds, and measurement methodology per data asset', governanceTier: 'SILVER', dataClassification: 'INTERNAL' },
-      { name: 'Quality Scores & Reports', description: 'Quality assessment results, trend data, scorecards, and executive dashboards', governanceTier: 'SILVER', dataClassification: 'INTERNAL' },
-      { name: 'Root Cause Analysis Records', description: 'Investigation findings, source identification, and remediation recommendations', governanceTier: 'BRONZE', dataClassification: 'INTERNAL' },
-      { name: 'Data Domain Catalog', description: 'Domain definitions, scope boundaries, owner assignments, and coverage reports', governanceTier: 'GOLD', dataClassification: 'INTERNAL' },
-      { name: 'Business Glossary', description: 'Agreed-upon definitions for key business terms, synonyms, and relationships', governanceTier: 'SILVER', dataClassification: 'INTERNAL' },
-      { name: 'Data Lineage Maps', description: 'Source-to-consumption data flow documentation, transformation rules, and impact paths', governanceTier: 'SILVER', dataClassification: 'INTERNAL' },
-      { name: 'Data Classification Register', description: 'Sensitivity levels, handling requirements, and labeling standards per data asset', governanceTier: 'GOLD', dataClassification: 'CONFIDENTIAL' },
-      { name: 'Access Control Policies', description: 'Role-based access matrix, approval workflows, and access request procedures', governanceTier: 'GOLD', dataClassification: 'CONFIDENTIAL' },
-      { name: 'Access Compliance Reports', description: 'Audit findings, violation alerts, and compliance verification records', governanceTier: 'SILVER', dataClassification: 'CONFIDENTIAL' },
-      { name: 'Data Issue Log', description: 'Reported data problems with context, impact assessment, priority, and resolution status', governanceTier: 'BRONZE', dataClassification: 'INTERNAL' },
-      { name: 'Change Request Records', description: 'Approved changes, implementation plans, test results, and rollback procedures', governanceTier: 'BRONZE', dataClassification: 'INTERNAL' },
-      { name: 'Stakeholder Communications', description: 'Policy change notifications, training materials, resolution notices, and lessons learned', governanceTier: 'BRONZE', dataClassification: 'INTERNAL' },
+    const docDefs: Array<{ name: string; description: string; documentType: 'CHARTER' | 'FRAMEWORK' | 'STANDARD' | 'POLICY'; category: string }> = [
+      { name: 'Data Governance Charter', description: 'Mission, vision, principles, decision rights, and scope of the governance program', documentType: 'CHARTER', category: 'GOVERNANCE' },
+      { name: 'Data Policies',           description: 'Enterprise policies for data quality, security, privacy, retention, and sharing',     documentType: 'POLICY',   category: 'GENERAL' },
+      { name: 'Data Standards',          description: 'Naming conventions, data type standards, formatting rules, and reference data',       documentType: 'STANDARD', category: 'GOVERNANCE' },
+      { name: 'Access Control Policies', description: 'Role-based access matrix, approval workflows, and access request procedures',         documentType: 'POLICY',   category: 'ACCESS' },
     ];
-
-    // Create assets, skipping ones that already exist *for this org*.
-    // The dedup must be org-scoped: the placeholder names are generic
-    // ("Data Policies", "Business Glossary", …) so a global name match
-    // means the second and every later company reuses the first org's
-    // asset records and never gets its own. Its mappings then point at
-    // another org's assets — the names still resolve on the Mappings
-    // page (asset lookup is global) but the org-scoped Data Assets page
-    // shows nothing. Scoping the dedup to templateOrgId gives every org
-    // its own copy and keeps mappings same-org.
-    const orgAssets = dataAssets.filter((a: any) => a.orgId === templateOrgId);
-    const existingByName = new Map<string, any>(
-      orgAssets.map((a: any) => [a.name.toLowerCase(), a]),
-    );
-    const createdAssets: Record<string, string> = {}; // name → id
-    for (const def of govAssetDefs) {
-      const existing = existingByName.get(def.name.toLowerCase());
-      if (existing) {
-        createdAssets[def.name] = existing.id;
-        continue;
-      }
-      const asset = {
-        id: uuid(), orgId: templateOrgId, name: def.name, description: def.description,
-        systemId: '', owner: '', stewardIds: [],
-        governanceTier: def.governanceTier, healthScore: 0,
-        dataClassification: def.dataClassification,
-        category: 'GOVERNANCE',
-        origin: 'GOVERNANCE_TEMPLATE',
-        createdAt: now, updatedAt: now,
-      };
-      dataAssets.push(asset);
-      createdAssets[def.name] = asset.id;
-    }
-    saveStore('dataAssets', dataAssets);
-
-    // Define activity → asset mappings
-    // Format: [activityName, assetName, linkType, criticality]
-    const ioMappings: [string, string, string, string][] = [
-      // Data Strategy & Policy
-      ['Define Data Governance Charter', 'Data Governance Charter', 'produces', 'REQUIRED'],
-      ['Establish Data Policies', 'Data Governance Charter', 'consumes', 'REQUIRED'],
-      ['Establish Data Policies', 'Data Policies', 'produces', 'REQUIRED'],
-      ['Define Data Standards', 'Data Policies', 'consumes', 'REQUIRED'],
-      ['Define Data Standards', 'Data Standards', 'produces', 'REQUIRED'],
-      ['Review and Update Policies', 'Data Policies', 'transforms', 'REQUIRED'],
-      ['Communicate Policy Changes', 'Data Policies', 'consumes', 'REQUIRED'],
-      ['Communicate Policy Changes', 'Stakeholder Communications', 'produces', 'REQUIRED'],
-      // Data Quality Management
-      ['Define Quality Rules & Thresholds', 'Data Domain Catalog', 'consumes', 'REQUIRED'],
-      ['Define Quality Rules & Thresholds', 'Quality Rule Definitions', 'produces', 'REQUIRED'],
-      ['Execute Quality Assessments', 'Quality Rule Definitions', 'consumes', 'REQUIRED'],
-      ['Execute Quality Assessments', 'Quality Scores & Reports', 'produces', 'REQUIRED'],
-      ['Analyze Quality Results', 'Quality Scores & Reports', 'consumes', 'REQUIRED'],
-      ['Investigate Root Causes', 'Quality Scores & Reports', 'consumes', 'REQUIRED'],
-      ['Investigate Root Causes', 'Data Lineage Maps', 'consumes', 'OPTIONAL'],
-      ['Investigate Root Causes', 'Root Cause Analysis Records', 'produces', 'REQUIRED'],
-      ['Implement Remediation', 'Root Cause Analysis Records', 'consumes', 'REQUIRED'],
-      ['Report Quality Metrics', 'Quality Scores & Reports', 'consumes', 'REQUIRED'],
-      // Data Domain Management
-      ['Define Data Domains', 'Data Domain Catalog', 'produces', 'REQUIRED'],
-      ['Assign Domain Owners', 'Data Domain Catalog', 'transforms', 'REQUIRED'],
-      ['Assign Data Stewards', 'Data Domain Catalog', 'transforms', 'REQUIRED'],
-      ['Map Assets to Domains', 'Data Domain Catalog', 'transforms', 'REQUIRED'],
-      ['Review Domain Coverage', 'Data Domain Catalog', 'consumes', 'REQUIRED'],
-      // Metadata & Catalog Management
-      ['Maintain Data Catalog', 'Data Domain Catalog', 'transforms', 'REQUIRED'],
-      ['Define Business Glossary Terms', 'Business Glossary', 'produces', 'REQUIRED'],
-      ['Map Data Lineage', 'Data Lineage Maps', 'produces', 'REQUIRED'],
-      ['Review Catalog Completeness', 'Data Domain Catalog', 'consumes', 'REQUIRED'],
-      // Data Access & Security
-      ['Classify Data Sensitivity', 'Data Classification Register', 'produces', 'REQUIRED'],
-      ['Define Access Policies', 'Data Classification Register', 'consumes', 'REQUIRED'],
-      ['Define Access Policies', 'Access Control Policies', 'produces', 'REQUIRED'],
-      ['Review Access Requests', 'Access Control Policies', 'consumes', 'REQUIRED'],
-      ['Audit Access Compliance', 'Access Control Policies', 'consumes', 'REQUIRED'],
-      ['Audit Access Compliance', 'Access Compliance Reports', 'produces', 'REQUIRED'],
-      // Issue & Change Management
-      ['Log Data Issues', 'Data Issue Log', 'produces', 'REQUIRED'],
-      ['Prioritize Issues', 'Data Issue Log', 'transforms', 'REQUIRED'],
-      ['Assign and Resolve Issues', 'Data Issue Log', 'transforms', 'REQUIRED'],
-      ['Implement Changes', 'Change Request Records', 'produces', 'REQUIRED'],
-      ['Communicate Resolutions', 'Data Issue Log', 'consumes', 'REQUIRED'],
-      ['Communicate Resolutions', 'Stakeholder Communications', 'produces', 'REQUIRED'],
-    ];
-
-    // Create mappings by matching activity names to created node IDs
-    const nodeByName = new Map(created.filter((n) => n.level === 'ACTIVITY').map((n) => [n.name, n.id]));
-    let mappingCount = 0;
-    for (const [actName, assetName, linkType, criticality] of ioMappings) {
-      const actId = nodeByName.get(actName);
-      const assetId = createdAssets[assetName];
-      if (!actId || !assetId) continue;
-      // Skip if mapping already exists
-      if (mappings.some((m: any) => m.processStepId === actId && m.dataAssetId === assetId && m.linkType === linkType)) continue;
-      mappings.push({
-        id: uuid(), orgId: templateOrgId,
-        processStepId: actId, dataAssetId: assetId,
-        linkType, notes: '', aiSuggested: false, userOverridden: false,
-        criticality, dataFormat: 'Database',
-        createdBy: 'governance-template', createdAt: now, updatedAt: now,
+    const orgPolicies = governancePolicies.filter((p: any) => p.orgId === templateOrgId);
+    const existingByName = new Map<string, any>(orgPolicies.map((p: any) => [p.name.toLowerCase(), p]));
+    const codePrefix: Record<string, string> = { CHARTER: 'CHA', FRAMEWORK: 'FRW', STANDARD: 'STD', POLICY: 'POL' };
+    let createdDocs = 0;
+    for (const def of docDefs) {
+      if (existingByName.has(def.name.toLowerCase())) continue;
+      const seq = governancePolicies.filter((p: any) => p.documentType === def.documentType).length + 1;
+      governancePolicies.push({
+        id: uuid(),
+        orgId: templateOrgId,
+        code: `${codePrefix[def.documentType]}-${String(seq).padStart(3, '0')}`,
+        name: def.name,
+        description: def.description,
+        documentType: def.documentType,
+        status: 'DRAFT',
+        ownerAssignmentId: null,
+        category: def.category,
+        reviewFrequency: 'ANNUAL',
+        lastReviewDate: null,
+        nextReviewDate: null,
+        effectiveDate: null,
+        content: '',
+        createdAt: now,
+        updatedAt: now,
       });
-      mappingCount++;
+      createdDocs++;
     }
-    if (mappingCount > 0) saveStore('mappings', mappings);
-    logger.info({ assets: Object.keys(createdAssets).length, mappings: mappingCount }, 'Created governance placeholder assets and mappings');
+    if (createdDocs > 0) saveStore('governancePolicies', governancePolicies);
+    logger.info({ docs: createdDocs }, 'Seeded governance documents (Charter / Policies / Standards / ACL) under templateOrgId');
   } catch (err) {
-    logger.error({ err }, 'Failed to create governance placeholder assets (non-fatal)');
+    logger.error({ err }, 'Failed to seed governance documents (non-fatal)');
   }
-
   logger.info({ created: created.length, orgId: templateOrgId }, 'Applied governance process template');
   const companyName = organizations.find((o) => o.id === templateOrgId)?.name || '';
   res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes at ${companyName} (company level)` });

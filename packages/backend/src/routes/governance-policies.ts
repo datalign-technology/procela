@@ -11,6 +11,13 @@ export interface StoredGovernancePolicy {
   code: string;
   name: string;
   description: string;
+  // The "Policies" surface in the app is actually the home for the
+  // full family of governance documents — charters, frameworks,
+  // standards, and policies — since they share lifecycle, owner,
+  // review cadence and audit needs. documentType decides which
+  // form variant + code prefix the row uses; existing rows
+  // default to POLICY.
+  documentType: 'CHARTER' | 'FRAMEWORK' | 'STANDARD' | 'POLICY';
   status: 'DRAFT' | 'ACTIVE' | 'UNDER_REVIEW' | 'DEPRECATED';
   ownerAssignmentId: string | null;
   category: 'DATA_QUALITY' | 'SECURITY' | 'PRIVACY' | 'RETENTION' | 'ACCESS' | 'CLASSIFICATION' | 'GOVERNANCE' | 'GENERAL';
@@ -23,11 +30,40 @@ export interface StoredGovernancePolicy {
   updatedAt: string;
 }
 
-export const governancePolicies: StoredGovernancePolicy[] = loadStore<StoredGovernancePolicy>('governancePolicies');
+export const VALID_DOCUMENT_TYPES: StoredGovernancePolicy['documentType'][] = ['CHARTER', 'FRAMEWORK', 'STANDARD', 'POLICY'];
 
-function generateCode(): string {
-  const seq = governancePolicies.length + 1;
-  return `POL-${String(seq).padStart(3, '0')}`;
+// Back-fill documentType on stored rows that pre-date the field so
+// the migration can run idempotently and the API always returns a
+// consistent shape. Charters and standards seeded by the old
+// governance template land under names that include those words —
+// pattern-match on the name for the back-fill, fall back to POLICY.
+function inferDocumentType(name: string): StoredGovernancePolicy['documentType'] {
+  const n = (name || '').toLowerCase();
+  if (n.includes('charter')) return 'CHARTER';
+  if (n.includes('framework')) return 'FRAMEWORK';
+  if (n.includes('standard')) return 'STANDARD';
+  return 'POLICY';
+}
+
+export const governancePolicies: StoredGovernancePolicy[] = loadStore<StoredGovernancePolicy>('governancePolicies').map((p) => ({
+  ...p,
+  documentType: p.documentType || inferDocumentType(p.name),
+}));
+
+// Code prefix per documentType so a charter coded "POL-001" stops
+// reading as a misnamed policy. Sequence is per-type: CHA-001,
+// CHA-002, STD-001, etc. — counts existing rows of the same type
+// so re-importing doesn't collide across types.
+const CODE_PREFIX: Record<StoredGovernancePolicy['documentType'], string> = {
+  CHARTER: 'CHA',
+  FRAMEWORK: 'FRW',
+  STANDARD: 'STD',
+  POLICY: 'POL',
+};
+function generateCode(documentType: StoredGovernancePolicy['documentType']): string {
+  const prefix = CODE_PREFIX[documentType];
+  const seq = governancePolicies.filter((p) => p.documentType === documentType).length + 1;
+  return `${prefix}-${String(seq).padStart(3, '0')}`;
 }
 
 function resolveOwnerName(ownerAssignmentId: string | null): string | null {
@@ -38,13 +74,14 @@ function resolveOwnerName(ownerAssignmentId: string | null): string | null {
 
 const router = Router();
 
-/** GET /api/v1/governance-policies — list policies */
+/** GET /api/v1/governance-policies — list policies / charters / frameworks / standards */
 router.get('/', (req: Request, res: Response) => {
-  const { orgId, status, category } = req.query;
+  const { orgId, status, category, documentType } = req.query;
   let filtered = [...governancePolicies];
   if (orgId) filtered = filtered.filter((p) => p.orgId === orgId);
   if (status) filtered = filtered.filter((p) => p.status === status);
   if (category) filtered = filtered.filter((p) => p.category === category);
+  if (documentType) filtered = filtered.filter((p) => p.documentType === documentType);
 
   const enriched = filtered.map((p) => ({
     ...p,
@@ -101,17 +138,19 @@ router.get('/:id', (req: Request, res: Response) => {
 /** POST /api/v1/governance-policies — create policy */
 router.post('/', (req: Request, res: Response) => {
   const { name, orgId, description, status, ownerAssignmentId, category, reviewFrequency,
-          lastReviewDate, nextReviewDate, effectiveDate, content } = req.body;
+          lastReviewDate, nextReviewDate, effectiveDate, content, documentType } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'Organization (orgId) is required' }); return; }
+  const finalDocumentType: StoredGovernancePolicy['documentType'] = VALID_DOCUMENT_TYPES.includes(documentType) ? documentType : 'POLICY';
 
   const now = new Date().toISOString();
   const policy: StoredGovernancePolicy = {
     id: uuid(),
     orgId,
-    code: generateCode(),
+    code: generateCode(finalDocumentType),
     name,
     description: description || '',
+    documentType: finalDocumentType,
     status: status || 'DRAFT',
     ownerAssignmentId: ownerAssignmentId || null,
     category: category || 'GENERAL',

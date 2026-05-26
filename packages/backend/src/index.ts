@@ -219,6 +219,13 @@ const stores = {
   skills: () => skills,
   agentExecutions: () => agentExecutions,
 };
+// One-time data migrations. Each one is responsible for its own
+// flag-file gating so they only run once per environment, and for
+// catching its own errors so the server still starts even if a
+// migration is buggy.
+import { runGovernanceDocsMigration } from './migrations/2026-05-governance-docs';
+runGovernanceDocsMigration();
+
 const autoSaveHandle = startAutoSave(stores);
 
 // ---------------------------------------------------------------------------

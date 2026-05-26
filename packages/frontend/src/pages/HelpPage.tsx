@@ -336,10 +336,14 @@ export default function HelpPage() {
           <li>Rows are collapsible: default view shows decision + category + decider, click a row to reveal the full R / A / C / I and escalation panel.</li>
           <li>10 seed decisions (approve policy, grant exception, close issue, etc.) ship out of the box.</li>
         </ul>
-        <h3 style={h3Style}>Policies</h3>
+        <h3 style={h3Style}>Governance Documents (was Policies)</h3>
         <ul style={listStyle}>
-          <li>Governance policies with auto-generated codes (POL-001), review cycles (quarterly &hellip; biennial), and linked controls.</li>
+          <li>The unified home for every formal governance document with a lifecycle — <strong>Charter</strong> (program scope / principles), <strong>Framework</strong> (overarching structure), <strong>Standard</strong> (naming conventions / data type rules), and <strong>Policy</strong> (the rule-shaped subset). A segmented filter at the top of the page lets you focus on one type or see all.</li>
+          <li>Each row carries a <em>documentType</em> badge plus the existing status, review cadence, owner, and category. Codes are auto-generated and per-type — <code>CHA-001</code>, <code>FRW-001</code>, <code>STD-001</code>, <code>POL-001</code> — so the code itself tells you what kind of document you're looking at.</li>
+          <li><strong>Controls hang off Policies only.</strong> The expanded controls panel only opens for rows with <em>documentType: Policy</em> — charters and frameworks don't have rule-shaped controls and the panel stays hidden for them.</li>
           <li>Controls have a type (Preventive / Detective / Corrective) and an automation mode (Human / Agent / Hybrid).</li>
+          <li>This used to be called <em>Policies</em> and was scoped to rules only. The old <code>/governance-policies</code> URL still works as a back-compat alias; the canonical path is <code>/governance-documents</code>. Sidebar label is now <strong>Documents</strong> under the Governance section.</li>
+          <li>If you previously ran the <em>Generate governance processes</em> wand, it used to seed 15 "governance Data Assets" — Charter, Policies, Standards, Glossary, Domain Catalog, etc. A one-time startup migration moves the four real documents (Charter, Data Policies, Data Standards, Access Control Policies) into Governance Documents with the right type, and deletes the rest because they were either duplicates of existing entities (Glossary, Domains, Lineage, DQ Rules, Issues, Tasks) or generated outputs (reports, communications) that were never really stored data.</li>
         </ul>
         <h3 style={h3Style}>Documentation (Manual + Procedures)</h3>
         <ul style={listStyle}>
