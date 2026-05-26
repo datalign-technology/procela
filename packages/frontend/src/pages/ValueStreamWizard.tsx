@@ -44,6 +44,10 @@ export default function ValueStreamWizard() {
   const [industry, setIndustry] = useState('');
   const [orgIndustry, setOrgIndustry] = useState('');
   const [industrySource, setIndustrySource] = useState<'own' | 'inherited' | ''>('');
+  // Active org's description — fed to the AI prompt so generated
+  // value streams reflect this specific org rather than the generic
+  // industry. Empty string when the org has no description.
+  const [orgDescription, setOrgDescription] = useState('');
   const [template, setTemplate] = useState<GeneratedTemplate | null>(null);
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -68,8 +72,9 @@ export default function ValueStreamWizard() {
     if (!activeOrgId) return;
     async function loadOrgIndustry() {
       try {
-        const res = await apiClient.get<{ success: boolean; data: { industry?: string; parentId?: string | null } }>(`/organizations/${activeOrgId}`);
+        const res = await apiClient.get<{ success: boolean; data: { industry?: string; description?: string; parentId?: string | null } }>(`/organizations/${activeOrgId}`);
         const org = res.data;
+        if (org?.description) setOrgDescription(org.description);
         if (org?.industry) {
           setOrgIndustry(org.industry);
           setIndustry(org.industry);
@@ -92,13 +97,21 @@ export default function ValueStreamWizard() {
   // Where the current template came from — set after a successful
   // generate call. `cached: true` means the backend served the
   // stored version (instant); `cached: false` means it called
-  // Claude and stashed a fresh copy. Drives the small badge on the
-  // review screen plus the "Regenerate from AI" button.
-  const [templateSource, setTemplateSource] = useState<{ cached: boolean; generatedAt: string } | null>(null);
+  // Claude and stashed a fresh copy. `specializedFor` carries the
+  // org name the template was tailored to, so a Tidewater Electric
+  // run shows "Cached · specialised for Tidewater Electric" and
+  // users know they got electric-utility content, not generic
+  // utilities. Drives the small badge on the review screen plus
+  // the "Regenerate from AI" button.
+  const [templateSource, setTemplateSource] = useState<{ cached: boolean; generatedAt: string; specializedFor?: string } | null>(null);
 
   // Auto-generate when industry is resolved from org.
-  // `refresh: true` bypasses the per-industry cache on the server,
-  // used by the "Regenerate from AI" button on the review screen.
+  // `refresh: true` bypasses the cache on the server, used by the
+  // "Regenerate from AI" button on the review screen. The active
+  // org's name, description and type ride along so the AI prompt
+  // can specialise (Tidewater Electric -> SCADA / outage management,
+  // not generic Utilities content). The backend keys the cache on
+  // industry + orgName so each org caches independently.
   const handleGenerate = useCallback(async (ind: string, refresh: boolean = false) => {
     if (!ind || loading) return;
     setLoading(true);
@@ -106,13 +119,21 @@ export default function ValueStreamWizard() {
     setTemplate(null);
     setTemplateSource(null);
     try {
-      const res = await apiClient.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] }; cached?: boolean; generatedAt?: string }>(
-        '/ai/generate-template', { industry: ind, refresh },
+      const body: any = { industry: ind, refresh };
+      if (activeOrgName) body.orgName = activeOrgName;
+      if (orgDescription) body.orgDescription = orgDescription;
+      if (activeOrgType) body.orgType = activeOrgType;
+      const res = await apiClient.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] }; cached?: boolean; generatedAt?: string; specializedFor?: string }>(
+        '/ai/generate-template', body,
       );
       if (res.data) {
         setTemplate({ valueStreams: res.data.valueStreams.map((vs) => ({ ...vs, selected: true })) });
         setExpandedStreams(new Set([0]));
-        setTemplateSource({ cached: !!res.cached, generatedAt: res.generatedAt || new Date().toISOString() });
+        setTemplateSource({
+          cached: !!res.cached,
+          generatedAt: res.generatedAt || new Date().toISOString(),
+          specializedFor: res.specializedFor,
+        });
       } else {
         setError('Unexpected response format. Please try again.');
       }
@@ -121,7 +142,7 @@ export default function ValueStreamWizard() {
     } finally {
       setLoading(false);
     }
-  }, [loading]);
+  }, [loading, activeOrgName, orgDescription, activeOrgType]);
 
   // No auto-generate — user must explicitly click Generate
 
@@ -332,13 +353,13 @@ export default function ValueStreamWizard() {
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
-              <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 Review & Apply
                 {templateSource && (
                   <span
                     title={templateSource.cached
-                      ? `Loaded from the industry template cache (generated ${new Date(templateSource.generatedAt).toLocaleDateString()}). Use "Regenerate from AI" to ask Claude for a fresh version.`
-                      : `Generated fresh by Claude at ${new Date(templateSource.generatedAt).toLocaleString()}. Subsequent runs of this industry will return the same cached output unless you regenerate.`}
+                      ? `Loaded from the template cache (generated ${new Date(templateSource.generatedAt).toLocaleDateString()}). Use "Regenerate from AI" to ask Claude for a fresh version.`
+                      : `Generated fresh by Claude at ${new Date(templateSource.generatedAt).toLocaleString()}. Subsequent runs for the same scope will return this cached output unless you regenerate.`}
                     style={{
                       padding: '1px 8px', borderRadius: 999,
                       fontSize: 10, fontWeight: 600,
@@ -349,6 +370,19 @@ export default function ValueStreamWizard() {
                     }}
                   >
                     {templateSource.cached ? 'Cached' : 'Fresh from AI'}
+                  </span>
+                )}
+                {templateSource?.specializedFor && (
+                  <span
+                    title={`The AI prompt was specialised for ${templateSource.specializedFor} (not just generic ${orgIndustry || industry}). Output reflects this org's specific operations.`}
+                    style={{
+                      padding: '1px 8px', borderRadius: 999,
+                      fontSize: 10, fontWeight: 600,
+                      background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd',
+                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}
+                  >
+                    Specialised: {templateSource.specializedFor}
                   </span>
                 )}
               </h2>

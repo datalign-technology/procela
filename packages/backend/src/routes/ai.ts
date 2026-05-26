@@ -32,15 +32,26 @@ const aiTemplateCache: CachedTemplate[] = loadStore<CachedTemplate>('aiTemplateC
 
 /**
  * POST /api/v1/ai/generate-template
- * Generate an industry-specific value stream hierarchy.
+ * Generate an industry-specific (and optionally division-specific)
+ * value stream hierarchy.
  *
- * Body: { industry: string, refresh?: boolean }
+ * Body: {
+ *   industry: string,
+ *   refresh?: boolean,
+ *   // Optional division / department specialisation. When supplied,
+ *   // the AI tailors the template to that sub-org instead of the
+ *   // generic industry. Tidewater Electric gets SCADA / outage
+ *   // management; Tidewater Water gets treatment plants / wastewater.
+ *   orgName?: string,
+ *   orgDescription?: string,
+ *   orgType?: string,
+ * }
  * Query: ?refresh=true (alt way to bypass the cache)
- * Returns: { success: true, data: <generated hierarchy>, cached: boolean, generatedAt: string }
+ * Returns: { success: true, data: <generated hierarchy>, cached: boolean, generatedAt: string, specializedFor?: string }
  */
 router.post('/generate-template', async (req: Request, res: Response) => {
   try {
-    const { industry } = req.body;
+    const { industry, orgName, orgDescription, orgType } = req.body;
     const refresh = req.query.refresh === 'true' || req.body.refresh === true;
 
     if (!industry || !INDUSTRIES.includes(industry as Industry)) {
@@ -51,27 +62,43 @@ router.post('/generate-template', async (req: Request, res: Response) => {
       return;
     }
 
-    const key = String(industry).trim().toLowerCase();
+    // Cache key includes the specialisation org name so each
+    // division caches independently. Old industry-only entries
+    // (key like "utilities") and new specialised entries (key like
+    // "utilities|tidewater electric") coexist without colliding.
+    const specialization = typeof orgName === 'string' && orgName.trim()
+      ? { orgName: orgName.trim(), orgDescription: typeof orgDescription === 'string' ? orgDescription : undefined, orgType: typeof orgType === 'string' ? orgType : undefined }
+      : undefined;
+    const industryKey = String(industry).trim().toLowerCase();
+    const key = specialization
+      ? `${industryKey}|${specialization.orgName.toLowerCase()}`
+      : industryKey;
 
     if (!refresh) {
       const hit = aiTemplateCache.find((c) => c.industry === key);
       if (hit) {
-        logger.info({ industry, cachedAt: hit.generatedAt }, 'Returning cached industry template');
-        res.json({ success: true, data: hit.data, cached: true, generatedAt: hit.generatedAt });
+        logger.info({ industry, specialization: specialization?.orgName, cachedAt: hit.generatedAt }, 'Returning cached industry template');
+        res.json({ success: true, data: hit.data, cached: true, generatedAt: hit.generatedAt, specializedFor: specialization?.orgName });
         return;
       }
     }
 
-    const template = await aiService.generateIndustryTemplate(industry);
+    const template = await aiService.generateIndustryTemplate(industry, specialization);
     const now = new Date().toISOString();
-    const entry: CachedTemplate = { industry: key, industryLabel: industry, data: template, generatedAt: now };
+    const labelSuffix = specialization ? ` — ${specialization.orgName}` : '';
+    const entry: CachedTemplate = {
+      industry: key,
+      industryLabel: `${industry}${labelSuffix}`,
+      data: template,
+      generatedAt: now,
+    };
     const existingIdx = aiTemplateCache.findIndex((c) => c.industry === key);
     if (existingIdx >= 0) aiTemplateCache[existingIdx] = entry;
     else aiTemplateCache.push(entry);
     saveStore('aiTemplateCache', aiTemplateCache);
-    logger.info({ industry, refresh }, 'Cached fresh industry template');
+    logger.info({ industry, specialization: specialization?.orgName, refresh }, 'Cached fresh industry template');
 
-    res.json({ success: true, data: template, cached: false, generatedAt: now });
+    res.json({ success: true, data: template, cached: false, generatedAt: now, specializedFor: specialization?.orgName });
   } catch (err) {
     logger.error({ err }, 'Template generation failed');
     res.status(500).json({

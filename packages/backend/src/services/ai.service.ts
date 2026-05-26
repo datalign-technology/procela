@@ -17,8 +17,22 @@ function getClient(): Anthropic {
   return _client;
 }
 
+export interface IndustryTemplateSpecialization {
+  /** The active org's name (e.g. "Tidewater Electric"). When set,
+   *  the AI specialises the template to this division / department
+   *  instead of returning a generic industry template. */
+  orgName: string;
+  /** Optional description from the org record. Helps Claude pick
+   *  the right sub-specialty when names are ambiguous ("Northwest
+   *  Region" vs "Tidewater Electric"). */
+  orgDescription?: string;
+  /** Org type — company / division / department / team. Passes
+   *  through to the prompt so Claude can scope appropriately. */
+  orgType?: string;
+}
+
 export interface AiService {
-  generateIndustryTemplate(industry: string): Promise<object>;
+  generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object>;
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
@@ -26,9 +40,19 @@ export interface AiService {
 
 class AnthropicAiService implements AiService {
   /**
-   * Generate a starter value-stream / process template for a given industry.
+   * Generate a starter value-stream / process template for a given
+   * industry. When `specialization` is supplied the template is
+   * tailored to that specific org — e.g. Tidewater Electric gets
+   * electric-utility processes (SCADA, outage management,
+   * transmission & distribution) instead of generic "Utilities"
+   * content that mixes electric, water and gas. Without a
+   * specialization the prompt is industry-only, preserving the
+   * original behaviour.
    */
-  async generateIndustryTemplate(industry: string): Promise<object> {
+  async generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object> {
+    const userMessage = specialization
+      ? `Generate a standard process hierarchy for the "${industry}" industry, specialised for the **${specialization.orgName}** ${specialization.orgType || 'division'}${specialization.orgDescription ? ` (${specialization.orgDescription})` : ''}. The hierarchy should reflect the specific operations, terminology and processes of this sub-organization rather than the generic industry. Include value streams, processes, and activities.`
+      : `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`;
     const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 8192,
@@ -83,7 +107,7 @@ Guidelines:
       messages: [
         {
           role: 'user',
-          content: `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`,
+          content: userMessage,
         },
       ],
     });
