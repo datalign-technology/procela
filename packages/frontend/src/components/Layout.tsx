@@ -969,6 +969,54 @@ export default function Layout() {
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
+  // Focused reading mode for the Help guide: when the route is
+  // /help we strip the sidebar, header, chat panel and every other
+  // bit of app chrome so the user gets a clean, single-purpose
+  // reading view. Only a thin top bar remains, with the Procela
+  // logo and a Close button. Close prefers history.back() so the
+  // user returns to wherever they came from, but falls back to "/"
+  // when help was opened cold from a deep link.
+  if (location.pathname === '/help') {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
+        <header style={{
+          height: 56, background: 'var(--color-surface)',
+          borderBottom: '1px solid var(--color-border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 24px', flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img
+              src={branding.logoUrl || '/procela-icon.png'}
+              alt={branding.companyName || 'Procela'}
+              style={{ height: 32, width: 'auto' }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Help Guide</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1);
+              else navigate('/');
+            }}
+            style={{
+              padding: '6px 14px', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-surface)', color: 'var(--color-text)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+            title="Close the help guide and return to the app"
+          >
+            × Close
+          </button>
+        </header>
+        <main id="main-content" style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.shell}>
       {/* Skip-to-content - first focusable element so Tab from the
