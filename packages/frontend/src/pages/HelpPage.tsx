@@ -441,6 +441,16 @@ export default function HelpPage() {
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
           structure, roles, and processes align with DAMA best practices.
         </p>
+        <h3 style={h3Style}>Org scoping and inheritance</h3>
+        <p style={pStyle}>
+          Every value stream, data asset, and system is owned by exactly one org. Only the <strong>company</strong> and <strong>division</strong> levels can own — departments and teams inherit visibility from above but can't themselves be owners. The org you pick in the <em>Working in&hellip;</em> header decides which artefacts you see and which you can edit, following the same rule everywhere in the app.
+        </p>
+        <ul style={listStyle}>
+          <li><strong>Visibility rolls down, never sideways.</strong> Scoping to <em>Tidewater Water</em> shows Water-owned artefacts plus everything owned at <em>Tidewater Utilities</em> (the parent company). Sibling divisions (Electric, Shared Services) don't show up. Scoping to the parent company shows the full rollup view — Water, Electric, Shared Services and the company-owned artefacts together.</li>
+          <li><strong>Editing is local.</strong> A row whose owner doesn't match the active scope renders with an <em>Owned by &lt;Org&gt;</em> badge and its edit / delete / inline-cell affordances are disabled with a <em>Switch the Working in&hellip; scope to &lt;Org&gt; to edit</em> tooltip. The same rule applies whether the row is inherited from above (a Water user seeing a corporate asset) or rolled up from below (a corporate user seeing a Water asset).</li>
+          <li><strong>Create flows enforce the rule on both ends.</strong> The <em>+ Add value stream</em>, <em>+ Add data asset</em>, and <em>+ Add system</em> buttons hide when the active scope is a department or team, and the backend rejects a direct API call with a non-owning <code>orgId</code> with a 400. For value streams there's a second guard: generating at a multi-division company is blocked entirely (with one-click <em>Switch to: &lt;Division&gt;</em> chips in the warning) because each division should own its own process catalog.</li>
+          <li><strong>Cross-division links warn before saving.</strong> Linking a Water activity to an Electric asset (sibling divisions, neither an ancestor of the other) pops a confirm — the reference almost always means the wrong asset was picked. Cross-axis links to shared parent-company assets (a Water activity using the corporate Customer Master) go through silently because the asset is in scope by inheritance.</li>
+        </ul>
         <h3 style={h3Style}>Plain English vs. DAMA terminology</h3>
         <p style={pStyle}>
           The header has a <strong>Plain / DAMA</strong> toggle that flips jargon-heavy labels between business-friendly and canonical DAMA wording. Plain is the default so business users aren't met with unfamiliar terms; data professionals can switch to DAMA mode for the formal vocabulary.
@@ -509,6 +519,16 @@ export default function HelpPage() {
         </ul>
         <p style={pStyle}>
           Read-only surfaces (Visualize, Compare, Export) stay available even when create is blocked. Single-tier companies with no divisions keep working normally at the company level. The same guard applies to the Process Wizard, so navigating to <code>/processes/wizard</code> with a blocked scope shows the same banner there.
+        </p>
+
+        <h3 style={h3Style}>Why can't I edit this data asset (or system)?</h3>
+        <p style={pStyle}>
+          The row carries an <em>Owned by &lt;Org&gt;</em> badge — its owner is a different org from the one you're scoped to. The list shows it because visibility rolls down (corporate assets are visible to every division) and up (the parent rolls up everything below), but edits are local: you can only edit a row from the scope where it's owned. Hover the disabled Edit pencil for a switch-scope tooltip, or use the <em>Working in&hellip;</em> dropdown directly. Sibling divisions never see each other's rows, so if you're scoped to Tidewater Water you'll never see a Tidewater Electric asset at all.
+        </p>
+
+        <h3 style={h3Style}>Why am I being warned about a cross-division link?</h3>
+        <p style={pStyle}>
+          You're linking a process activity to a data asset whose owner org is on a different vertical axis from the activity's value-stream org — typically a Water activity reaching for an Electric asset when both are scoped from the parent company. Cross-division references almost always mean the wrong asset was picked; the warning is your chance to pick again. Confirming the warning creates the link normally (it's a <strong>warn, not block</strong>), so genuine shared dependencies can still be modelled. Same-axis links — a Water activity using the corporate Customer Master at the parent company — don't trigger the warning because the asset is in scope by inheritance.
         </p>
 
         <h3 style={h3Style}>Where did Control Tower go?</h3>
