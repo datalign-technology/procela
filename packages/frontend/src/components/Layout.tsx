@@ -356,10 +356,6 @@ const navSections: NavSection[] = [
     label: null,
     items: [
       { to: '/', label: 'Dashboard', icon: '\u25A3' },
-      // Processes has only one page, so wrapping it in an accordion
-      // section produced a pointless "Processes \u203A Processes" expand.
-      // It's a direct top-level link like Dashboard.
-      { to: '/processes', label: 'Processes', icon: '\u26C1' },
     ],
   },
   {
@@ -379,6 +375,18 @@ const navSections: NavSection[] = [
       { to: '/people', label: 'People', icon: '\u263B' },
       { to: '/agents', label: 'Agents', icon: '\u2699' },
       { to: '/skills', label: 'Skills', icon: '\u2727' },
+    ],
+  },
+  {
+    // Processes sits in its own unlabelled row between the "who"
+    // (Organizations) and the "what runs through them" (Data /
+    // Systems / Governance / Insights). It's the verb that connects
+    // the actors above to the artefacts below. Only one destination,
+    // so a labelled accordion section would just produce a pointless
+    // "Processes \u203A Processes" expand.
+    label: null,
+    items: [
+      { to: '/processes', label: 'Processes', icon: '\u26C1' },
     ],
   },
   {
