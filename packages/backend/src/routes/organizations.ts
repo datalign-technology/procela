@@ -244,6 +244,22 @@ router.get('/:id/impact', (req: AuthenticatedRequest, res: Response) => {
   const matchOrg = (item: any) => orgIds.has(item.orgId);
   const matchOrgIds = (item: any) => (item.orgIds || []).some((id: string) => orgIds.has(id));
 
+  // Up to 3 sample names per category — turns "47 mappings" into
+  // "47 mappings — Bills→Customer Master, Outages→SCADA, +44 more"
+  // in the delete dialog so users see what they're actually about
+  // to delete, not just a count.
+  const SAMPLE_LIMIT = 3;
+  const samplesOf = <T,>(items: T[], pick: (i: T) => string): string[] =>
+    items.slice(0, SAMPLE_LIMIT).map(pick).filter(Boolean);
+  const mappingLabel = (m: any) => {
+    const node = processNodes.find((n: any) => n.id === m.processStepId);
+    const asset = dataAssets.find((a: any) => a.id === m.dataAssetId);
+    return `${node?.name || '?'} → ${asset?.name || '?'}`;
+  };
+  const childOrgsList = [...orgIds].filter((id) => id !== org.id)
+    .map((id) => organizations.find((o) => o.id === id))
+    .filter((o) => !!o);
+
   res.json({
     success: true,
     data: {
@@ -264,6 +280,101 @@ router.get('/:id/impact', (req: AuthenticatedRequest, res: Response) => {
       sops: sops.filter(matchOrg).length,
       calendarEvents: calendarEvents.filter(matchOrg).length,
       decisionRights: decisionRights.filter(matchOrg).length,
+      samples: {
+        childOrgs:        samplesOf(childOrgsList, (o: any) => o.name),
+        people:           samplesOf(people.filter(matchOrgIds), (p: any) => p.name),
+        processes:        samplesOf(processNodes.filter((n: any) => (n.orgIds || []).some((id: string) => orgIds.has(id)) || orgIds.has(n.orgId)), (n: any) => n.name),
+        dataAssets:       samplesOf(dataAssets.filter(matchOrg), (a: any) => a.name),
+        systems:          samplesOf(systems.filter(matchOrg), (s: any) => s.name),
+        dataDomains:      samplesOf(dataDomains.filter(matchOrg), (d: any) => d.name),
+        mappings:         samplesOf(mappings.filter(matchOrg), mappingLabel),
+        governanceGroups: samplesOf(governanceGroups.filter(matchOrg), (g: any) => g.name),
+        damaRoles:        samplesOf(damaRoles.filter((r: any) => orgIds.has(r.scopeId)), (r: any) => r.roleLabel || r.roleType || r.id),
+        tasks:            samplesOf(governanceTasks.filter(matchOrg), (t: any) => t.title || t.name || t.id),
+        issues:           samplesOf(governanceIssues.filter(matchOrg), (i: any) => i.title || i.name || i.id),
+        policies:         samplesOf(governancePolicies.filter(matchOrg), (p: any) => p.name),
+        controls:         samplesOf(governanceControls.filter(matchOrg), (c: any) => c.name),
+        glossaryTerms:    samplesOf(glossaryTerms.filter(matchOrg), (g: any) => g.term || g.name),
+        sops:             samplesOf(sops.filter(matchOrg), (s: any) => s.title || s.name),
+        calendarEvents:   samplesOf(calendarEvents.filter(matchOrg), (e: any) => e.title || e.name || e.id),
+        decisionRights:   samplesOf(decisionRights.filter(matchOrg), (d: any) => d.decision || d.name || d.id),
+      },
+    },
+  });
+});
+
+// GET /api/v1/organizations/:id/snapshot — full JSON dump of every
+// entity the delete would touch. Used by the "Export org snapshot"
+// button in the delete dialog so a user has a recovery archive
+// before they pull the trigger.
+router.get('/:id/snapshot', (req: AuthenticatedRequest, res: Response) => {
+  const org = organizations.find((o) => o.id === req.params.id);
+  if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
+  const { canAccessOrg } = accessHelpers();
+  if (!canAccessOrg(req.user, org.id)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this organization' });
+    return;
+  }
+  const orgIds = new Set<string>([org.id]);
+  const walk = (parentId: string) => {
+    for (const child of organizations.filter((o) => o.parentId === parentId)) {
+      orgIds.add(child.id); walk(child.id);
+    }
+  };
+  walk(org.id);
+
+  // Defensive requires mirror the impact endpoint — keep both in
+  // sync if more categories are added.
+  const reqStore = (path: string, key: string): any[] => {
+    try { return require(path)[key] || []; } catch { return []; }
+  };
+  const people = reqStore('./people', 'people');
+  const processNodes = reqStore('./process-catalog', 'processNodes');
+  const dataAssets = reqStore('./data-assets', 'dataAssets');
+  const systems = reqStore('./systems', 'systems');
+  const dataDomains = reqStore('./data-domains', 'dataDomains');
+  const mappings = reqStore('./mappings', 'mappings');
+  const governanceGroups = reqStore('./governance-groups', 'governanceGroups');
+  const damaRoles = reqStore('./dama-roles', 'damaRoles');
+  const governanceTasks = reqStore('./governance-tasks', 'governanceTasks');
+  const governanceIssues = reqStore('./governance-issues', 'governanceIssues');
+  const governancePolicies = reqStore('./governance-policies', 'governancePolicies');
+  const governanceControls = reqStore('./governance-controls', 'governanceControls');
+  const glossaryTerms = reqStore('./business-glossary', 'glossaryTerms');
+  const sops = reqStore('./sops', 'sops');
+  const calendarEvents = reqStore('./governance-calendar', 'calendarEvents');
+  const decisionRights = reqStore('./decision-rights', 'decisionRights');
+
+  const matchOrg = (item: any) => orgIds.has(item.orgId);
+  const matchOrgIds = (item: any) => (item.orgIds || []).some((id: string) => orgIds.has(id));
+
+  res.json({
+    success: true,
+    snapshot: {
+      generatedAt: new Date().toISOString(),
+      rootOrgId: org.id,
+      rootOrgName: org.name,
+      subtreeOrgIds: [...orgIds],
+      // Every entity that would be touched by DELETE /:id (default
+      // cascade). Re-importing this archive is not yet wired — the
+      // file is a manual recovery aid for now.
+      organizations: organizations.filter((o) => orgIds.has(o.id)),
+      people: people.filter(matchOrgIds),
+      processNodes: processNodes.filter((n: any) => (n.orgIds || []).some((id: string) => orgIds.has(id)) || orgIds.has(n.orgId)),
+      dataAssets: dataAssets.filter(matchOrg),
+      systems: systems.filter(matchOrg),
+      dataDomains: dataDomains.filter(matchOrg),
+      mappings: mappings.filter(matchOrg),
+      governanceGroups: governanceGroups.filter(matchOrg),
+      damaRoles: damaRoles.filter((r: any) => orgIds.has(r.scopeId)),
+      governanceTasks: governanceTasks.filter(matchOrg),
+      governanceIssues: governanceIssues.filter(matchOrg),
+      governancePolicies: governancePolicies.filter(matchOrg),
+      governanceControls: governanceControls.filter(matchOrg),
+      glossaryTerms: glossaryTerms.filter(matchOrg),
+      sops: sops.filter(matchOrg),
+      calendarEvents: calendarEvents.filter(matchOrg),
+      decisionRights: decisionRights.filter(matchOrg),
     },
   });
 });

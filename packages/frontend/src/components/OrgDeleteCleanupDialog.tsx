@@ -64,11 +64,34 @@ const GROUP_LABELS: Record<GroupKey, string> = {
 
 const GROUP_ORDER: GroupKey[] = ['structure', 'identity', 'catalog', 'governance'];
 
-interface ImpactCounts { [k: string]: number }
+// Impact payload can be either the bare counts (legacy callers) or
+// counts + a samples map keyed by the same category names. Samples
+// are optional — when absent the dialog falls back to the old
+// count-only rendering.
+interface ImpactCounts { [k: string]: number | string[] | undefined }
 interface OrgOption { id: string; name: string; type: string }
+
+// Severity thresholds applied to (totalEntities, childOrgCount).
+// Catastrophic requires both — a 500-entity single division is
+// big but recoverable; an enterprise tree with 200+ entities is
+// the deleting-the-customer scenario.
+type Severity = 'small' | 'medium' | 'large' | 'catastrophic';
+function computeSeverity(total: number, childOrgs: number): Severity {
+  if (childOrgs >= 2 && total > 200) return 'catastrophic';
+  if (total > 200) return 'large';
+  if (total > 50) return 'medium';
+  return 'small';
+}
+const SEVERITY_STYLE: Record<Severity, { label: string; bg: string; color: string; border: string }> = {
+  small:        { label: 'Small',        bg: '#dcfce7', color: '#166534', border: '#86efac' },
+  medium:       { label: 'Medium',       bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
+  large:        { label: 'Large',        bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
+  catastrophic: { label: 'Catastrophic', bg: '#7f1d1d', color: '#fff',    border: '#7f1d1d' },
+};
 
 interface Props {
   open: boolean;
+  orgId: string;
   orgName: string;
   impact: ImpactCounts | null;
   /** Orgs the user can pick as a Move target (already filtered to accessible). */
@@ -81,7 +104,7 @@ interface Props {
 }
 
 export default function OrgDeleteCleanupDialog({
-  open, orgName, impact, accessibleOrgs, excludedTargetIds, busy, onCancel, onConfirm,
+  open, orgId, orgName, impact, accessibleOrgs, excludedTargetIds, busy, onCancel, onConfirm,
 }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [defaultAction, setDefaultAction] = useState<ActionType>('delete');
@@ -106,12 +129,68 @@ export default function OrgDeleteCleanupDialog({
     [accessibleOrgs, excludedTargetIds],
   );
 
+  // Counts and sample names are on the same impact object — counts
+  // are numbers on the category key, samples are an optional sibling
+  // map under impact.samples. Tolerates the legacy shape (no
+  // samples) by treating samples as an empty array per category.
+  const countOf = (key: CategoryKey): number => {
+    const v = impact?.[key];
+    return typeof v === 'number' ? v : 0;
+  };
+  const samplesOf = (key: CategoryKey): string[] => {
+    const s = (impact as any)?.samples?.[key];
+    return Array.isArray(s) ? s : [];
+  };
+
   // Only show categories that actually have data (count > 0). If impact
   // hasn't loaded yet we show nothing (the parent gates open=true on impact).
   const visibleCategories = useMemo(() => {
     if (!impact) return [];
-    return CATEGORIES.filter((c) => (impact[c.key] || 0) > 0);
+    return CATEGORIES.filter((c) => countOf(c.key) > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [impact]);
+
+  // Total entity count drives the severity badge. Sum every visible
+  // category — childOrgs participates so a "delete a whole division
+  // subtree" trips Catastrophic even without 200+ leaf entities.
+  const severity = useMemo<Severity>(() => {
+    if (!impact) return 'small';
+    const total = CATEGORIES.reduce((sum, c) => sum + countOf(c.key), 0);
+    return computeSeverity(total, countOf('childOrgs'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [impact]);
+
+  // "Export snapshot" — pull a full archive of every entity the
+  // delete would touch and trigger a browser download. Cheap
+  // recovery option for "I clicked Delete and regretted it."
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const handleExportSnapshot = async () => {
+    if (snapshotBusy) return;
+    setSnapshotBusy(true);
+    try {
+      // Built dynamically so the dialog doesn't have to know about
+      // the api-client import path at module load — keeps the
+      // component drop-in for stories / tests.
+      const { apiClient } = await import('../api/client');
+      const res = await apiClient.get<{ success: boolean; snapshot: any }>(`/organizations/${orgId}/snapshot`);
+      const blob = new Blob([JSON.stringify(res.snapshot, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const safeName = orgName.replace(/[^A-Za-z0-9._-]+/g, '_');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `procela-snapshot-${safeName}-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      // Swallow — the parent's apiClient error toast will surface
+      // the failure if any. Snapshot is non-blocking insurance.
+    } finally {
+      setSnapshotBusy(false);
+    }
+  };
 
   // Resolved action for a given category — explicit override > default.
   const getAction = (key: CategoryKey): CleanupAction => {
@@ -146,7 +225,7 @@ export default function OrgDeleteCleanupDialog({
     let deleted = 0, moved = 0, orphaned = 0, missingTarget = 0;
     if (!impact) return { deleted, moved, orphaned, missingTarget };
     for (const c of visibleCategories) {
-      const count = impact[c.key] || 0;
+      const count = countOf(c.key);
       const a = getAction(c.key);
       if (a.type === 'move') {
         if (!a.targetOrgId) missingTarget += 1; // count categories not rows
@@ -201,14 +280,43 @@ export default function OrgDeleteCleanupDialog({
           display: 'flex', flexDirection: 'column',
         }}
       >
+        {/* Destructive banner — the most prominent thing in the
+            modal. Red bar across the top so users read "cannot be
+            undone" before they read anything else. */}
+        <div style={{
+          padding: '12px 24px',
+          background: '#7f1d1d', color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>{'⚠'}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>This action cannot be undone.</div>
+            <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>
+              Deleting an organization cascades to every entity owned by it. Review the impact below before confirming.
+            </div>
+          </div>
+        </div>
         {/* Header */}
         <div style={{ padding: '20px 24px 12px', borderBottom: '1px solid var(--color-border)' }}>
-          <h3 id="org-cleanup-title" style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#111827' }}>
-            Delete &ldquo;{orgName}&rdquo;
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h3 id="org-cleanup-title" style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#111827' }}>
+              Delete &ldquo;{orgName}&rdquo;
+            </h3>
+            <span
+              title={`Severity: ${SEVERITY_STYLE[severity].label} — based on entity count and child-org count`}
+              style={{
+                padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                background: SEVERITY_STYLE[severity].bg,
+                color: SEVERITY_STYLE[severity].color,
+                border: `1px solid ${SEVERITY_STYLE[severity].border}`,
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+              }}
+            >
+              {SEVERITY_STYLE[severity].label}
+            </span>
+          </div>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
-            Choose what should happen to data linked to this organization. Anything you don&rsquo;t
-            move will be deleted permanently.
+            Choose what should happen to data linked to this organization. Anything you don&rsquo;t move will be deleted permanently.
           </p>
         </div>
 
@@ -283,8 +391,10 @@ export default function OrgDeleteCleanupDialog({
                   }}>
                     {inGroup.map((c, idx) => {
                       const a = getAction(c.key);
-                      const count = impact?.[c.key] || 0;
+                      const count = countOf(c.key);
+                      const samples = samplesOf(c.key);
                       const moveMissing = a.type === 'move' && !a.targetOrgId;
+                      const more = Math.max(0, count - samples.length);
                       return (
                         <div
                           key={c.key}
@@ -297,9 +407,16 @@ export default function OrgDeleteCleanupDialog({
                             background: moveMissing ? '#fff7ed' : '#fff',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-                            <span style={{ fontSize: 13, fontWeight: 500 }}>{c.label}</span>
-                            <span style={{ fontSize: 11, color: '#6b7280' }}>{count}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 500 }}>{c.label}</span>
+                              <span style={{ fontSize: 11, color: '#6b7280' }}>{count}</span>
+                            </div>
+                            {samples.length > 0 && (
+                              <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {samples.join(', ')}{more > 0 ? `, +${more} more` : ''}
+                              </div>
+                            )}
                           </div>
                           <select
                             value={a.type}
@@ -388,32 +505,52 @@ export default function OrgDeleteCleanupDialog({
         {/* Footer */}
         <div style={{
           padding: '12px 24px', borderTop: '1px solid var(--color-border)',
-          display: 'flex', justifyContent: 'flex-end', gap: 8,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
+          {/* Recovery insurance — pulls every entity the delete
+              would touch into a JSON file. Doesn't change behaviour
+              or block the dialog, so left-aligned and styled as a
+              secondary action. */}
           <button
-            onClick={onCancel}
-            disabled={busy}
+            onClick={handleExportSnapshot}
+            disabled={busy || snapshotBusy}
+            title="Download a JSON archive of every entity this delete would touch. Recommended before any Large or Catastrophic delete."
             style={{
-              padding: '8px 16px', fontSize: 13, background: '#fff',
+              padding: '8px 14px', fontSize: 12,
+              background: '#fff', color: '#374151',
               border: '1px solid var(--color-border)', borderRadius: 6,
-              color: '#374151', cursor: busy ? 'not-allowed' : 'pointer',
+              cursor: (busy || snapshotBusy) ? 'not-allowed' : 'pointer',
+              opacity: (busy || snapshotBusy) ? 0.6 : 1,
             }}
           >
-            Cancel
+            {snapshotBusy ? 'Exporting…' : '↓ Export org snapshot first'}
           </button>
-          <button
-            onClick={async () => { if (canConfirm) await onConfirm(buildPayload()); }}
-            disabled={!canConfirm}
-            style={{
-              padding: '8px 16px', fontSize: 13,
-              background: canConfirm ? '#dc2626' : '#e5e7eb',
-              border: 'none', borderRadius: 6,
-              color: canConfirm ? '#fff' : '#9ca3af', fontWeight: 500,
-              cursor: canConfirm ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {busy ? 'Deleting…' : 'Delete and Clean Up'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onCancel}
+              disabled={busy}
+              style={{
+                padding: '8px 16px', fontSize: 13, background: '#fff',
+                border: '1px solid var(--color-border)', borderRadius: 6,
+                color: '#374151', cursor: busy ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => { if (canConfirm) await onConfirm(buildPayload()); }}
+              disabled={!canConfirm}
+              style={{
+                padding: '8px 16px', fontSize: 13,
+                background: canConfirm ? '#dc2626' : '#e5e7eb',
+                border: 'none', borderRadius: 6,
+                color: canConfirm ? '#fff' : '#9ca3af', fontWeight: 500,
+                cursor: canConfirm ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {busy ? 'Deleting…' : 'Delete and Clean Up'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

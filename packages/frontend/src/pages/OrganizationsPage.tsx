@@ -301,7 +301,11 @@ export default function OrganizationsPage() {
     setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData(); triggerRefresh();
   };
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<string | null>(null);
-  const [deleteOrgImpact, setDeleteOrgImpact] = useState<Record<string, number> | null>(null);
+  // Impact payload from GET /:id/impact. Counts are numbers on the
+  // category keys; samples is an optional sibling map keyed by the
+  // same names, used by the delete dialog to render "47 mappings —
+  // Bills→Customer, Outages→SCADA, +44 more" instead of just a count.
+  const [deleteOrgImpact, setDeleteOrgImpact] = useState<Record<string, number | string[] | undefined> | null>(null);
   const [deleteOrgBusy, setDeleteOrgBusy] = useState(false);
 
   const promptDeleteOrg = async (id: string) => {
@@ -614,6 +618,7 @@ export default function OrganizationsPage() {
 
       <OrgDeleteCleanupDialog
         open={confirmDeleteOrg !== null}
+        orgId={confirmDeleteOrg || ''}
         orgName={(() => {
           const o = flatOrgs.find((x) => x.id === confirmDeleteOrg);
           return o?.name || 'this organization';
