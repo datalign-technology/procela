@@ -5,6 +5,7 @@ import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
 import { useOrgContext } from '../stores/orgContext';
 import { useValueStreamScope } from '../hooks/useValueStreamScope';
+import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -158,7 +159,7 @@ const ROLE_OPTIONS = [
 ];
 
 interface PersonRef { id: string; name: string; }
-interface DataAssetRef { id: string; name: string; }
+interface DataAssetRef { id: string; name: string; orgId?: string }
 interface SystemRef { id: string; name: string; systemType?: string; }
 interface MappingInfo {
   id: string;
@@ -1399,6 +1400,11 @@ export default function ProcessCatalogPage() {
   // available.
   const { divisions: subtreeDivisions, companyWithDivisions } = useValueStreamScope();
   const canCreateHere = canCreateValueStreams && !companyWithDivisions;
+  // Used by addMapping to detect cross-division links — when an
+  // activity's value-stream org and the data asset's owner org are
+  // on different vertical axes (e.g. Tidewater Water activity ↔
+  // Tidewater Electric asset), pop a confirm before linking.
+  const { getOrgName, isOrgInScope } = useOrgNameLookup();
   const { canWrite, canContribute } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const [tree, setTree] = useState<ProcessNode[]>([]);
@@ -1420,6 +1426,16 @@ export default function ProcessCatalogPage() {
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
+  // When the user picks an asset whose owner org is on a different
+  // vertical axis from the process node's value-stream org (e.g.
+  // a Water activity reaching for an Electric asset, sibling
+  // divisions), addMapping defers the POST and surfaces a
+  // ConfirmDialog. Holds the link details until the user
+  // confirms or cancels.
+  const [pendingCrossLink, setPendingCrossLink] = useState<
+    | { nodeId: string; assetId: string; linkType: string; nodeName: string; assetName: string; assetOrgName: string; nodeOrgName: string }
+    | null
+  >(null);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
   const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
   const [showLevelGuide, setShowLevelGuide] = useState(false);
@@ -1569,7 +1585,10 @@ export default function ProcessCatalogPage() {
     }
   };
 
-  const addMapping = async (nodeId: string, assetId: string, linkType: string) => {
+  // Performs the actual link POST. Split out from addMapping so the
+  // cross-division confirm path can call it directly after the
+  // user accepts.
+  const submitMapping = async (nodeId: string, assetId: string, linkType: string) => {
     try {
       await apiClient.post('/mappings', {
         processStepId: nodeId,
@@ -1581,6 +1600,38 @@ export default function ProcessCatalogPage() {
       });
       fetchData();
     } catch { /* */ }
+  };
+
+  // Entry point used by IOPanel. Runs the cross-division guard
+  // before POSTing — if the asset's owner org is on a different
+  // vertical axis from any of the process node's orgIds (i.e.
+  // sibling divisions), pop a confirm. Same-axis (parent <->
+  // child, or identical) links go through silently.
+  const addMapping = async (nodeId: string, assetId: string, linkType: string) => {
+    const node = findNodeInTree(tree, nodeId);
+    const asset = assetsList.find((a) => a.id === assetId);
+    const nodeOrgIds = node?.orgIds ?? [];
+    const assetOrgId = asset?.orgId;
+    // The link is "in scope" if asset.orgId is on the same axis as
+    // any of the node's orgIds. If not, it's cross-division.
+    const onSameAxis = nodeOrgIds.length === 0 || !assetOrgId
+      ? true
+      : nodeOrgIds.some((nodeOrg) => isOrgInScope(assetOrgId, nodeOrg));
+    if (!onSameAxis) {
+      const nodeOrgName = getOrgName(nodeOrgIds[0]);
+      const assetOrgName = getOrgName(assetOrgId);
+      setPendingCrossLink({
+        nodeId,
+        assetId,
+        linkType,
+        nodeName: node?.name || 'this activity',
+        assetName: asset?.name || 'the asset',
+        assetOrgName: assetOrgName || 'a different division',
+        nodeOrgName: nodeOrgName || 'this division',
+      });
+      return;
+    }
+    await submitMapping(nodeId, assetId, linkType);
   };
 
   const removeMapping = async (mappingId: string) => {
@@ -2095,6 +2146,30 @@ export default function ProcessCatalogPage() {
         confirmLabel="Delete Selected"
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDeleteNodes(); }}
         onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      {/* Cross-division link confirm. Fires when the asset's owner
+          org isn't on the same vertical axis as the process node's
+          org — i.e. Tidewater Water activity linking to a Tidewater
+          Electric asset. Default is "warn" not "block": confirming
+          creates the link normally, but the user has to acknowledge
+          the cross-division reference first because it almost
+          always means the wrong asset was picked. */}
+      <ConfirmDialog
+        open={!!pendingCrossLink}
+        title="Link across divisions?"
+        message={pendingCrossLink
+          ? `${pendingCrossLink.assetName} is owned by ${pendingCrossLink.assetOrgName}, but ${pendingCrossLink.nodeName} sits in ${pendingCrossLink.nodeOrgName}. Cross-division links usually mean the wrong asset was picked — pick again, or confirm if this is genuinely a shared dependency.`
+          : ''}
+        confirmLabel="Link anyway"
+        variant="primary"
+        onConfirm={async () => {
+          if (!pendingCrossLink) return;
+          const { nodeId, assetId, linkType } = pendingCrossLink;
+          setPendingCrossLink(null);
+          await submitMapping(nodeId, assetId, linkType);
+        }}
+        onCancel={() => setPendingCrossLink(null)}
       />
 
       {/* Bulk Status Dialog */}
