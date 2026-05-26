@@ -416,6 +416,27 @@ export default function DataDomainsPage() {
       {/* Main content: dictionary layout */}
       {loading ? (
         <SkeletonRows rows={5} columns={4} />
+      ) : generating && !showGeneratePreview ? (
+        /* AI generation is in-flight. Without this card the only
+           visible feedback is the header IconButton's tooltip
+           changing — invisible on hover-less touch and easy to
+           miss anywhere else. Mirrors the ValueStreamWizard's
+           spinner pattern so users get the same "AI is working,
+           expect 10–30s" signal across both wizards. */
+        <div style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: 'var(--radius-md)',
+          padding: '3rem',
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12, animation: 'procelaDomainGenSpin 2s linear infinite' }}>⚙</div>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>Generating data domains…</h2>
+          <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+            AI is suggesting domains based on your industry. This usually takes 10–30 seconds.
+          </p>
+          <style>{`@keyframes procelaDomainGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        </div>
       ) : domains.length === 0 && !showForm ? (
         <EmptyState icon={'☷'} title="No data domains defined yet"
           description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies."
