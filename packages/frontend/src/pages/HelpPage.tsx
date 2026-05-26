@@ -182,6 +182,13 @@ export default function HelpPage() {
           <li><strong>Operational / Governance lens.</strong> A segmented control (<em>All · Operational · Governance</em>) at the top filters which value streams show. Governance value streams (created by the governance template) carry a persisted domain classifier; business value streams are operational. The lens is <strong>per page</strong> — the Process Catalog always opens on <strong>All</strong>, and your choice here is independent of the lens on other pages (so it can't reset what you picked on Data Assets).</li>
           <li>Assigning an Owner or Stakeholders opens the shared <strong>person picker</strong> &mdash; search by name / title / org, or browse the org tree (Company &rarr; Division &rarr; Department) or governance groups. Every result shows the person's title and org path so two people with the same name are distinguishable. The same picker is used for owners, stewards, deputies, and group members across the app.</li>
           <li><strong>Domain-aware role assignment.</strong> Governance value streams default the person picker to the governance bodies and the <strong>Responsible Role</strong> selector to the DAMA governance roles only; operational (business) processes default to the org tree and the generic business roles, with the DAMA roles hidden. A "show all roles" toggle reveals the other set for genuine cross-overs, and a picked role from the other domain is flagged <em>Cross-domain</em>. Existing free-text role values are preserved until you re-pick.</li>
+          <li><strong>Where value streams can be created.</strong> Streams attach to the active org in the <em>Working in&hellip;</em> header, but only at the <strong>company</strong> or <strong>division</strong> level. Two cases block the create UI (the <em>+ Add value stream</em> button, the wizard wand, the governance-template wand, and the empty-state buttons all hide; Visualize / Compare / Export stay available):
+            <ul style={{ ...listStyle, marginTop: 6, marginBottom: 6 }}>
+              <li><strong>Wrong level.</strong> The active org is a department, team, or anything below division. Pick a parent org from <em>Working in&hellip;</em>.</li>
+              <li><strong>Multi-division company.</strong> The active org is a company that has at least one division anywhere in its subtree (e.g. Tidewater Utilities → Electric / Water, or Company → Region → Division). Generating at the parent would silently create one shared catalog the divisions don't actually share. The block points you at the division picker and lists the divisions by name. Single-tier companies (no divisions) keep working normally at the company level.</li>
+            </ul>
+            The same guard applies to both the Process Wizard and the catalog's manual create path so it can't be sidestepped.
+          </li>
         </ul>
         <h3 style={h3Style}>Process Coverage</h3>
         <ul style={listStyle}>
@@ -487,6 +494,18 @@ export default function HelpPage() {
         <h3 style={h3Style}>How do SOPs work?</h3>
         <p style={pStyle}>
           Open <strong>Governance &rarr; Documentation</strong> and switch to the <em>Procedures</em> tab. Standard Operating Procedures are step-by-step guides for common governance activities. You can seed 5 standard SOPs or create your own. Each step includes a description and estimated time.
+        </p>
+
+        <h3 style={h3Style}>Why is "Add value stream" or the Process Wizard hidden?</h3>
+        <p style={pStyle}>
+          The Process Catalog only lets you create value streams at the <strong>company</strong> or <strong>division</strong> level, and it blocks the parent if the company has divisions in its subtree. The two cases:
+        </p>
+        <ul style={listStyle}>
+          <li><strong>The active org is a department or team.</strong> Pick a parent (company or division) from the <em>Working in&hellip;</em> header.</li>
+          <li><strong>The active org is a multi-division company</strong> (e.g. Tidewater Utilities with Electric / Water). Generating at the parent would silently create one shared catalog the divisions don't actually share. Pick a specific division from <em>Working in&hellip;</em> instead. A banner on the page names the divisions so you know what to switch to.</li>
+        </ul>
+        <p style={pStyle}>
+          Read-only surfaces (Visualize, Compare, Export) stay available even when create is blocked. Single-tier companies with no divisions keep working normally at the company level. The same guard applies to the Process Wizard, so navigating to <code>/processes/wizard</code> with a blocked scope shows the same banner there.
         </p>
 
         <h3 style={h3Style}>Where did Control Tower go?</h3>
