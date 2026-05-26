@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
 import { useOrgContext } from '../stores/orgContext';
+import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { usePolling } from '../hooks/usePolling';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -1389,6 +1390,15 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
 export default function ProcessCatalogPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, activeOrgType, canCreateValueStreams } = useOrgContext();
+  // Block "create value stream" entry points when the active org is a
+  // multi-division company (e.g. Tidewater Utilities → Electric /
+  // Water). The wizard already enforces this; the manual create
+  // surfaces on this page enforce it too so users can't sidestep the
+  // guard via the "+ Add value stream" header button or the empty
+  // state. Read-only surfaces (Visualize, Compare, Export) stay
+  // available.
+  const { divisions: subtreeDivisions, companyWithDivisions } = useValueStreamScope();
+  const canCreateHere = canCreateValueStreams && !companyWithDivisions;
   const { canWrite, canContribute } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
   const [tree, setTree] = useState<ProcessNode[]>([]);
@@ -1874,12 +1884,12 @@ export default function ProcessCatalogPage() {
               <IconButton icon="refresh" label="Compare value streams"
                 onClick={() => navigate('/processes/compare')} />
             )}
-            {canWrite && (
+            {canWrite && canCreateHere && (
               <IconButton icon="wand"
                 label="Generate from industry template"
                 onClick={() => navigate('/processes/wizard')} />
             )}
-            {canWrite && (
+            {canWrite && canCreateHere && (
               <IconButton icon="users"
                 variant="secondary"
                 label={
@@ -1894,7 +1904,7 @@ export default function ProcessCatalogPage() {
             {totalNodes > 0 && (
               <ExportMenu build={buildProcessExport} label="Export process hierarchy" />
             )}
-            {canContribute && (
+            {canContribute && canCreateHere && (
               <IconButton icon="plus" label="Add value stream" variant="primary"
                 onClick={() => setAddingTo('__root__')} />
             )}
@@ -1948,6 +1958,15 @@ export default function ProcessCatalogPage() {
       {activeOrgId && !canCreateValueStreams && (
         <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
           Value streams can only be created at the <strong>company or division</strong> level. <strong>{activeOrgName}</strong> is a {activeOrgType}. Select a company or division from the "Working in" dropdown.
+        </div>
+      )}
+      {activeOrgId && canCreateValueStreams && companyWithDivisions && (
+        <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+          <strong>{activeOrgName}</strong> has{' '}
+          {subtreeDivisions.length === 1
+            ? <>a division (<em>{subtreeDivisions[0]}</em>)</>
+            : <>{subtreeDivisions.length} divisions ({subtreeDivisions.slice(0, 3).map((n, i) => <em key={n}>{i > 0 ? ', ' : ''}{n}</em>)}{subtreeDivisions.length > 3 ? <span>, &hellip;</span> : null})</>
+          }. Value streams almost always live at the division level so each division gets its own process catalog. Pick a division from the "Working in" dropdown to add or generate value streams here.
         </div>
       )}
 
@@ -2205,7 +2224,7 @@ export default function ProcessCatalogPage() {
               Start simple, then add optional levels (Domain, Capability, Sub-Process, Task, Execution) as you need more detail.
             </p>
 
-            {canCreateValueStreams ? (
+            {canCreateHere ? (
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 <button onClick={() => navigate('/processes/wizard')}
                   style={{ padding: '10px 24px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
@@ -2218,7 +2237,9 @@ export default function ProcessCatalogPage() {
               </div>
             ) : (
               <p style={{ color: '#92400e', fontSize: 13 }}>
-                Select a <strong>company or division</strong> from the "Working in" dropdown to get started.
+                {companyWithDivisions
+                  ? <>Pick a division from the "Working in" dropdown to add value streams here.</>
+                  : <>Select a <strong>company or division</strong> from the "Working in" dropdown to get started.</>}
               </p>
             )}
           </div>

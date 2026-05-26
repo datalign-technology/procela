@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { INDUSTRIES } from '../types';
 import { apiClient } from '../api/client';
-import { useOrgContext, VALUE_STREAM_LEVELS } from '../stores/orgContext';
+import { useOrgContext } from '../stores/orgContext';
+import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -35,6 +36,10 @@ const btnSecondary: React.CSSProperties = {
 export default function ValueStreamWizard() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, activeOrgType } = useOrgContext();
+  // parentName / divisions / blocked all come from the shared scope
+  // hook so this surface and the Process Catalog's manual create
+  // path can't drift apart.
+  const { parentName, divisions: childDivisions, wrongLevel, companyWithDivisions: isCompanyWithDivisions, blocked } = useValueStreamScope();
   const addToast = useToastStore((s) => s.addToast);
   const [industry, setIndustry] = useState('');
   const [orgIndustry, setOrgIndustry] = useState('');
@@ -46,16 +51,6 @@ export default function ValueStreamWizard() {
   const [expandedStreams, setExpandedStreams] = useState<Set<number>>(new Set());
   const [confirmIndustry, setConfirmIndustry] = useState('');
   const [existingCount, setExistingCount] = useState(0);
-  // Parent org for the breadcrumb banner ("in Tidewater Utilities").
-  const [parentName, setParentName] = useState('');
-  // Immediate child divisions of the active org. When the active org is
-  // a company with divisions, planting value streams at the company
-  // level is almost always wrong — the divisions (Electric, Water…)
-  // have genuinely different processes and should not share one
-  // catalog. We block generation in that case and point the user at
-  // the division picker. Single-tier companies (no divisions) still
-  // work fine at the company level.
-  const [childDivisions, setChildDivisions] = useState<string[]>([]);
 
   // Check existing value stream count to warn about duplicates
   useEffect(() => {
@@ -65,10 +60,12 @@ export default function ValueStreamWizard() {
       .catch(() => { /* */ });
   }, [activeOrgId]);
 
-  // Fetch org's industry (and capture parent's display name for the
-  // breadcrumb in the context banner).
+  // Fetch the org's industry (and fall back to the parent's industry
+  // if the active org has none of its own). Parent name and child
+  // divisions for the scope banner live in useValueStreamScope so
+  // this effect only deals with industry.
   useEffect(() => {
-    if (!activeOrgId) { setParentName(''); return; }
+    if (!activeOrgId) return;
     async function loadOrgIndustry() {
       try {
         const res = await apiClient.get<{ success: boolean; data: { industry?: string; parentId?: string | null } }>(`/organizations/${activeOrgId}`);
@@ -77,38 +74,19 @@ export default function ValueStreamWizard() {
           setOrgIndustry(org.industry);
           setIndustry(org.industry);
           setIndustrySource('own');
-        }
-        if (org?.parentId) {
+        } else if (org?.parentId) {
           try {
-            const parentRes = await apiClient.get<{ success: boolean; data: { industry?: string; name?: string } }>(`/organizations/${org.parentId}`);
-            if (parentRes.data?.name) setParentName(parentRes.data.name);
-            if (!org.industry && parentRes.data?.industry) {
+            const parentRes = await apiClient.get<{ success: boolean; data: { industry?: string } }>(`/organizations/${org.parentId}`);
+            if (parentRes.data?.industry) {
               setOrgIndustry(parentRes.data.industry);
               setIndustry(parentRes.data.industry);
               setIndustrySource('inherited');
             }
           } catch { /* */ }
-        } else {
-          setParentName('');
         }
       } catch { /* */ }
     }
     loadOrgIndustry();
-  }, [activeOrgId]);
-
-  // Fetch the active org's subtree so we can detect immediate child
-  // divisions. Used by the top-level-blocking hint below.
-  useEffect(() => {
-    if (!activeOrgId) { setChildDivisions([]); return; }
-    apiClient
-      .get<{ success: boolean; data: Array<{ id: string; name: string; type: string; parentId?: string | null }> }>(`/organizations?scopeOrgId=${activeOrgId}`)
-      .then((res) => {
-        const divisions = (res.data || [])
-          .filter((o) => o.parentId === activeOrgId && o.type === 'division')
-          .map((o) => o.name);
-        setChildDivisions(divisions);
-      })
-      .catch(() => { setChildDivisions([]); });
   }, [activeOrgId]);
 
   // Auto-generate when industry is resolved from org
@@ -171,19 +149,6 @@ export default function ValueStreamWizard() {
   const totalProcesses = template ? template.valueStreams.filter((vs) => vs.selected).reduce((sum, vs) => sum + vs.processes.length, 0) : 0;
   const totalActivities = template ? template.valueStreams.filter((vs) => vs.selected).reduce((sum, vs) => sum + vs.processes.reduce((s, p) => s + (p.activities || []).length, 0), 0) : 0;
 
-  // Scope guards. The wizard plants value streams under the active
-  // org, so we need to stop two misuses up front:
-  //   1. The active org is below the value-stream tier (department,
-  //      team…). VALUE_STREAM_LEVELS already encodes which levels can
-  //      host streams, so anything not in that list is blocked.
-  //   2. The active org is a multi-division company (e.g. Tidewater
-  //      Utilities with Electric / Water divisions). Generating at the
-  //      parent in that case silently creates one shared catalog the
-  //      divisions don't actually share. Single-tier companies (no
-  //      divisions) keep working normally.
-  const isCompanyWithDivisions = activeOrgType === 'company' && childDivisions.length > 0;
-  const wrongLevel = !!activeOrgType && !VALUE_STREAM_LEVELS.includes(activeOrgType);
-  const blocked = isCompanyWithDivisions || wrongLevel;
   const prettyType = (t: string) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 
   return (
