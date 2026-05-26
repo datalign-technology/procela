@@ -962,8 +962,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                  above the editable fields so the entire connection
                  landscape (owner · role · systems · data) is visible at
                  a glance when you open a node. Skipped for value streams
-                 where systems/assets aren't applicable. */}
-              {node.level !== 'VALUE_STREAM' && (() => {
+                 where systems/assets aren't applicable, and for
+                 governance nodes where the system / data-asset counts
+                 are inherently zero — governance happens in policies,
+                 decisions and meetings, not on systems. */}
+              {node.level !== 'VALUE_STREAM' && node.domain !== 'GOVERNANCE' && (() => {
                 const ownerName = node.ownerId ? peopleList.find((p) => p.id === node.ownerId)?.name : null;
                 const sysCount = (node.systemIds || []).length;
                 const assetCount = (mappingsByStep[node.id] || []).length;
@@ -1136,9 +1139,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Systems this step runs on — first-class link, distinct
                  from the data-asset mappings below (a step may run on a
                  system even before any data asset is linked). Available
-                 on every level except value streams, where it's too
-                 abstract. */}
-              {node.level !== 'VALUE_STREAM' && (
+                 on every level except value streams (too abstract) and
+                 governance nodes (a Data Governance Council meeting
+                 isn't really "running on" the corporate ERP — governance
+                 outputs are policies and decisions, not system flows). */}
+              {node.level !== 'VALUE_STREAM' && node.domain !== 'GOVERNANCE' && (
                 <DocSystemsField
                   selected={node.systemIds || []}
                   options={systemsList}
