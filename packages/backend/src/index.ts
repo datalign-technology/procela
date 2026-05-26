@@ -224,7 +224,9 @@ const stores = {
 // catching its own errors so the server still starts even if a
 // migration is buggy.
 import { runGovernanceDocsMigration } from './migrations/2026-05-governance-docs';
+import { runResponsibleRoleCdoMigration } from './migrations/2026-05-responsible-role-cdo';
 runGovernanceDocsMigration();
+runResponsibleRoleCdoMigration();
 
 const autoSaveHandle = startAutoSave(stores);
 
