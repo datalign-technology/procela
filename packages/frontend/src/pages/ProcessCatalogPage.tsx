@@ -1035,8 +1035,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                 const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
                 return (
                   <>
-                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    {/* Purpose sits above Owner on processes for the
+                        same reason as value streams — the strategic
+                        framing comes before accountability for it.
+                        Sub-Process / Activity / Task levels keep
+                        Owner-first since they're execution units
+                        without a strategic purpose of their own. */}
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
+                    <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
                     {viewMode === 'advanced' && (
                       <>
