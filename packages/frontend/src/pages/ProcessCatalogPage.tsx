@@ -1400,6 +1400,15 @@ export default function ProcessCatalogPage() {
   // available.
   const { divisions: subtreeDivisions, companyWithDivisions } = useValueStreamScope();
   const canCreateHere = canCreateValueStreams && !companyWithDivisions;
+  // Governance value streams are exempt from the multi-division
+  // block. Corporate governance (policies, decision rights, the
+  // overall data-governance program) is intentionally one
+  // enterprise-wide program — duplicating it into every division
+  // and reconciling later is the wrong model. So the "Generate
+  // governance processes" wand needs the level guard
+  // (canCreateValueStreams) but not the
+  // !companyWithDivisions guard.
+  const canCreateGovernanceHere = canCreateValueStreams;
   // Used by addMapping to detect cross-division links — when an
   // activity's value-stream org and the data asset's owner org are
   // on different vertical axes (e.g. Tidewater Water activity ↔
@@ -1940,7 +1949,7 @@ export default function ProcessCatalogPage() {
                 label="Generate from industry template"
                 onClick={() => navigate('/processes/wizard')} />
             )}
-            {canWrite && canCreateHere && (
+            {canWrite && canCreateGovernanceHere && (
               <IconButton icon="users"
                 variant="secondary"
                 label={
@@ -2014,7 +2023,7 @@ export default function ProcessCatalogPage() {
       {activeOrgId && canCreateValueStreams && companyWithDivisions && (
         <div style={{ background: '#fef3c7', border: '1px solid #f59e0b33', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
           <div>
-            <strong>{activeOrgName}</strong> has {subtreeDivisions.length === 1 ? 'a division' : `${subtreeDivisions.length} divisions`}. Value streams almost always live at the division level so each division gets its own process catalog.
+            <strong>{activeOrgName}</strong> has {subtreeDivisions.length === 1 ? 'a division' : `${subtreeDivisions.length} divisions`}. <strong>Operational</strong> value streams almost always live at the division level so each division gets its own process catalog. <strong>Governance</strong> processes are the exception — they stay corporate (one enterprise-wide program), so the <em>Generate governance processes</em> wand still works here.
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
             <span style={{ fontSize: 12, alignSelf: 'center', marginRight: 2 }}>Switch to:</span>
