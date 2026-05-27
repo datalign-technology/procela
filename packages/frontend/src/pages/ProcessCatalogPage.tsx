@@ -1189,9 +1189,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Process fields */}
               {node.level === 'PROCESS' && (() => {
                 const isGov = node.domain === 'GOVERNANCE';
-                const govNamesEligible = new Set(
-                  peopleList.filter((p) => governanceHolderIds.has(p.id)).map((p) => p.name),
-                );
                 const noHolders = governanceHolderIds.size === 0;
                 const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
                 return (
@@ -1204,7 +1201,17 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         without a strategic purpose of their own. */}
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                     <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
-                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    {/* Stakeholders is intentionally absent at the
+                        Process level. It lives only on Value Streams
+                        — the strategic level where "who cares about
+                        this end-to-end flow" is a useful quick
+                        answer. At Process and below, the RACI Matrix
+                        is the structured home for who-needs-to-be-
+                        informed-or-consulted; a parallel free-text
+                        Stakeholders field there just drifted from
+                        RACI. Existing process rows with a stored
+                        stakeholders value keep it on the record
+                        (it's just not edited from the panel). */}
                     {viewMode === 'advanced' && (
                       <>
                         <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
