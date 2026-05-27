@@ -177,14 +177,50 @@ export default function GovernanceGroupDetailPage() {
         apiClient.get<{ success: boolean; data: DecisionRight[] }>(`/decision-rights${orgQuery}`),
         apiClient.get<{ success: boolean; data: Policy[] }>(`/governance-policies${orgQuery}`),
         apiClient.get<{ success: boolean; data: CalendarEvent[] }>(`/governance-calendar${orgQuery}`),
-        apiClient.get<{ success: boolean; data: { rows: RaciRow[] } }>(`/dashboard/raci${orgQuery}`).catch(() => ({ data: { rows: [] } })),
+        // /dashboard/raci returns a matrix-shaped payload
+        // (rows × columns × matrix cells), not the flat
+        // row-with-assignments shape this page wants. We reshape
+        // on read so groupRaciRows can filter by member id.
+        apiClient.get<{
+          success: boolean;
+          data: {
+            rows: Array<{ id: string; name: string; level: string; parentName: string | null }>;
+            columns: Array<{ personId: string; name: string }>;
+            matrix: Record<string, Record<string, 'R' | 'A' | 'C' | 'I' | undefined>>;
+          };
+        }>(`/dashboard/raci${orgQuery}`).catch(() => ({ data: { rows: [], columns: [], matrix: {} } })),
       ]);
       setGroup(groupRes.data);
       setDamaRoles(damaRes.data || []);
       setDecisionRights(drRes.data || []);
       setPolicies(polRes.data || []);
       setCalendarEvents(calRes.data || []);
-      setRaciRows((raciRes as any).data?.rows || []);
+
+      // Reshape /dashboard/raci into RaciRow[]. The backend ships
+      // a matrix keyed by node id × person id; we materialise an
+      // assignments[] per row so the rest of the page can stay
+      // shape-agnostic.
+      const raciData = (raciRes as any).data || { rows: [], columns: [], matrix: {} };
+      const personNameById: Record<string, string> = {};
+      for (const c of (raciData.columns || [])) personNameById[c.personId] = c.name;
+      const reshapedRaci: RaciRow[] = (raciData.rows || []).map((r: any) => {
+        const cell = raciData.matrix?.[r.id] || {};
+        const assignments: RaciRow['assignments'] = Object.entries(cell)
+          .filter(([, raci]) => raci === 'R' || raci === 'A' || raci === 'C' || raci === 'I')
+          .map(([personId, raci]) => ({
+            personId,
+            personName: personNameById[personId] || personId,
+            raci: raci as 'R' | 'A' | 'C' | 'I',
+          }));
+        return {
+          nodeId: r.id,
+          nodeName: r.name,
+          nodePath: r.parentName ? `${r.parentName} > ${r.name}` : r.name,
+          level: r.level,
+          assignments,
+        };
+      });
+      setRaciRows(reshapedRaci);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load group');
     } finally {
@@ -238,7 +274,10 @@ export default function GovernanceGroupDetailPage() {
     return raciRows
       .map((row) => ({
         ...row,
-        assignments: row.assignments.filter((a) => memberIds.has(a.personId)),
+        // Defensive (|| []) — if the response shape ever drifts
+        // and a row arrives without assignments, we skip it
+        // instead of crashing the whole page.
+        assignments: (row.assignments || []).filter((a) => memberIds.has(a.personId)),
       }))
       .filter((row) => row.assignments.length > 0)
       .slice(0, 25);  // keep the snapshot compact; full matrix link covers the rest
