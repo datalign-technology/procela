@@ -615,18 +615,26 @@ function DocSystemsField({ selected, options, onSave, disabled }: {
 
 export type AddMappingTarget = { kind: 'asset' | 'policy' | 'attachment'; id: string };
 
-function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, onAdd, onRemove }: {
+function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove }: {
   nodeId: string;
   mappings: MappingInfo[];
   assetsList: DataAssetRef[];
   policiesList: PolicyRef[];
   disabled: boolean;
   orgId: string;
+  // Governance activities never produce or consume operational
+  // data assets — their inputs/outputs are documents (charters,
+  // policies, standards) and attachments. The Data Asset tab in
+  // the picker is hidden for them, and the default add-kind
+  // shifts to 'policy'. Asset rows that already exist on a
+  // governance node (e.g. legacy data from before this rule)
+  // still render — the rule only governs new additions.
+  isGovernance: boolean;
   onAdd: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemove: (mappingId: string) => void;
 }) {
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
-  const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment'>('asset');
+  const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment'>(isGovernance ? 'policy' : 'asset');
   const [pickedAsset, setPickedAsset] = useState('');
   const [pickedPolicy, setPickedPolicy] = useState('');
   const [pickedFile, setPickedFile] = useState<File | null>(null);
@@ -808,13 +816,21 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
       || (addKind === 'attachment' && !!pickedFile && !uploading);
     return (
       <div style={{ marginTop: 6, padding: '6px 8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Segmented control — pick WHAT kind of target first. */}
+        {/* Segmented control — pick WHAT kind of target first.
+            Governance activities lose the Data Asset tab; their
+            I/O is documents and attachments only. */}
         <div role="tablist" aria-label="Link target kind" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-bg)', alignSelf: 'flex-start' }}>
-          {([
-            { value: 'asset',      label: 'Data Asset' },
-            { value: 'policy',     label: 'Document' },
-            { value: 'attachment', label: 'Upload' },
-          ] as const).map((opt) => {
+          {(isGovernance
+            ? [
+                { value: 'policy',     label: 'Document' },
+                { value: 'attachment', label: 'Upload' },
+              ] as const
+            : [
+                { value: 'asset',      label: 'Data Asset' },
+                { value: 'policy',     label: 'Document' },
+                { value: 'attachment', label: 'Upload' },
+              ] as const
+          ).map((opt) => {
             const active = addKind === opt.value;
             return (
               <button
@@ -1339,6 +1355,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               policiesList={policiesList}
               orgId={activePageOrgId}
               disabled={isLocked}
+              isGovernance={node.domain === 'GOVERNANCE'}
               onAdd={onAddMapping}
               onRemove={onRemoveMapping}
             />
