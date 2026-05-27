@@ -89,14 +89,20 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   if (assets.length > MAX_ASSET_LINES) lines.push(`  …(${assets.length - MAX_ASSET_LINES} more)`);
 
   // Process ↔ data mappings.
+  // Mapping rows can target a Data Asset, a Policy, or an
+  // Attachment; the chat-context summary only describes the
+  // asset-shaped ones because they're the most useful for "what
+  // data does this activity use" questions. Policy and attachment
+  // mappings are skipped here.
+  const assetMaps = maps.filter((m) => !!m.dataAssetId);
   lines.push('', '## PROCESS COVERAGE (activity → data asset links)');
-  if (maps.length === 0) lines.push('  (no data mapped to any activity yet)');
-  maps.slice(0, MAX_MAPPING_LINES).forEach((m) => {
+  if (assetMaps.length === 0) lines.push('  (no data mapped to any activity yet)');
+  assetMaps.slice(0, MAX_MAPPING_LINES).forEach((m) => {
     const act = nodeById.get(m.processStepId)?.name ?? 'unknown activity';
-    const asset = assetById.get(m.dataAssetId)?.name ?? 'unknown asset';
+    const asset = assetById.get(m.dataAssetId!)?.name ?? 'unknown asset';
     lines.push(`  - "${act}" ${m.linkType ?? 'uses'} "${asset}"`);
   });
-  if (maps.length > MAX_MAPPING_LINES) lines.push(`  …(${maps.length - MAX_MAPPING_LINES} more)`);
+  if (assetMaps.length > MAX_MAPPING_LINES) lines.push(`  …(${assetMaps.length - MAX_MAPPING_LINES} more)`);
 
   // Gaps — the things the user most often asks about.
   const mappedActivityIds = new Set(maps.map((m) => m.processStepId));
@@ -105,7 +111,7 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   const ownerlessProcesses = nodes.filter(
     (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId,
   );
-  const linkedAssetIds = new Set(maps.map((m) => m.dataAssetId));
+  const linkedAssetIds = new Set(assetMaps.map((m) => m.dataAssetId!));
   const ungovernedAssets = assets.filter(
     (a) => a.governanceTier === 'BRONZE' && linkedAssetIds.has(a.id),
   );

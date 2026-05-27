@@ -7,14 +7,26 @@ import logger from '../lib/logger';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { people } from './people';
+import { governancePolicies } from './governance-policies';
+import { attachments } from './attachments';
 
 // ── Types ──
 
+// A mapping row connects a process activity to one of three target
+// kinds — a Data Asset (operational I/O), a Policy / Governance
+// Document (charter, standard, policy that the activity produces
+// or consumes), or an Attachment (an uploaded file or URL bound
+// to the same activity node). Exactly one of dataAssetId /
+// policyId / attachmentId must be set; the others are undefined.
+// Existing rows in storage only carry dataAssetId — they keep
+// working unchanged.
 interface StoredMapping {
   id: string;
   orgId: string;
   processStepId: string;
-  dataAssetId: string;
+  dataAssetId?: string;
+  policyId?: string;
+  attachmentId?: string;
   linkType: string;
   notes: string;
   aiSuggested: boolean;
@@ -58,7 +70,8 @@ function findStepInfo(stepId: string) {
   };
 }
 
-function findAssetInfo(assetId: string) {
+function findAssetInfo(assetId: string | undefined) {
+  if (!assetId) return null;
   const asset = dataAssets.find((a) => a.id === assetId);
   if (!asset) return null;
   const owner = asset.owner ? people.find((p) => p.id === asset.owner) : null;
@@ -78,11 +91,41 @@ function findAssetInfo(assetId: string) {
   };
 }
 
+function findPolicyInfo(policyId: string | undefined) {
+  if (!policyId) return null;
+  const policy = governancePolicies.find((p) => p.id === policyId);
+  if (!policy) return null;
+  return {
+    policyId: policy.id,
+    policyName: policy.name,
+    policyCode: policy.code,
+    documentType: policy.documentType,
+    status: policy.status,
+  };
+}
+
+function findAttachmentInfo(attachmentId: string | undefined) {
+  if (!attachmentId) return null;
+  const att = attachments.find((a) => a.id === attachmentId);
+  if (!att) return null;
+  return {
+    attachmentId: att.id,
+    name: att.name,
+    type: att.type,
+    fileName: att.fileName,
+    url: att.url,
+    mimeType: att.mimeType,
+    fileSize: att.fileSize,
+  };
+}
+
 function enrichMapping(m: StoredMapping) {
   return {
     ...m,
     stepInfo: findStepInfo(m.processStepId),
     assetInfo: findAssetInfo(m.dataAssetId),
+    policyInfo: findPolicyInfo(m.policyId),
+    attachmentInfo: findAttachmentInfo(m.attachmentId),
   };
 }
 
@@ -120,15 +163,23 @@ router.get('/by-asset/:assetId', (req: Request, res: Response) => {
 
 /** POST /api/v1/mappings */
 router.post('/', (req: Request, res: Response) => {
-  const { processStepId, dataAssetId, linkType, notes, aiSuggested, orgId,
+  const { processStepId, dataAssetId, policyId, attachmentId, linkType, notes, aiSuggested, orgId,
     criticality, dataFormat, sla, qualityRequirement } = req.body;
 
   if (!processStepId) {
     res.status(400).json({ success: false, error: 'processStepId is required' });
     return;
   }
-  if (!dataAssetId) {
-    res.status(400).json({ success: false, error: 'dataAssetId is required' });
+  // Exactly one target kind must be provided. Three nullable
+  // fields beat one polymorphic "targetType + targetId" because
+  // existing rows already speak dataAssetId.
+  const targets = [dataAssetId, policyId, attachmentId].filter((t) => typeof t === 'string' && t);
+  if (targets.length === 0) {
+    res.status(400).json({ success: false, error: 'One of dataAssetId, policyId, or attachmentId is required' });
+    return;
+  }
+  if (targets.length > 1) {
+    res.status(400).json({ success: false, error: 'A mapping row can target only one of dataAssetId / policyId / attachmentId, not multiple' });
     return;
   }
   if (linkType && !VALID_LINK_TYPES.includes(linkType)) {
@@ -141,7 +192,9 @@ router.post('/', (req: Request, res: Response) => {
     id: uuid(),
     orgId: orgId || DEV_ORG_ID,
     processStepId,
-    dataAssetId,
+    ...(dataAssetId ? { dataAssetId } : {}),
+    ...(policyId ? { policyId } : {}),
+    ...(attachmentId ? { attachmentId } : {}),
     linkType: linkType || 'references',
     notes: notes || '',
     aiSuggested: aiSuggested === true,

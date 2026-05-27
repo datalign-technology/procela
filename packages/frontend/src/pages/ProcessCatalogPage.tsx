@@ -161,16 +161,26 @@ const ROLE_OPTIONS = [
 interface PersonRef { id: string; name: string; }
 interface DataAssetRef { id: string; name: string; orgId?: string }
 interface SystemRef { id: string; name: string; systemType?: string; }
+interface PolicyRef { id: string; name: string; code: string; documentType: string; orgId?: string }
 interface MappingInfo {
   id: string;
   processStepId: string;
-  dataAssetId: string;
+  // Exactly one of these three is set per mapping row. dataAssetId
+  // is the operational case (asset I/O); policyId is the governance
+  // case (charter / policy / standard the activity produces or
+  // consumes); attachmentId is an uploaded file or URL bound to
+  // the activity.
+  dataAssetId?: string;
+  policyId?: string;
+  attachmentId?: string;
   linkType: string;
   criticality?: string;
   dataFormat?: string;
   sla?: string;
   qualityRequirement?: string;
   assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; healthScore: number } | null;
+  policyInfo: { policyId: string; policyName: string; policyCode: string; documentType: string; status: string } | null;
+  attachmentInfo: { attachmentId: string; name: string; type: 'FILE' | 'URL'; fileName?: string; url?: string; mimeType?: string; fileSize?: number } | null;
 }
 
 const DATA_FORMAT_OPTIONS = ['API', 'CSV', 'JSON', 'XML', 'Database', 'File Transfer', 'Manual Entry', 'Spreadsheet', 'Real-time Stream', 'Batch', 'Paper', 'Other'];
@@ -592,18 +602,35 @@ function DocSystemsField({ selected, options, onSave, disabled }: {
   );
 }
 
-// ── Inputs / Outputs Panel — shows mapped data assets with owner info ──
+// ── Inputs / Outputs Panel — connects an activity to its inputs
+//    and outputs. A row can target one of three kinds:
+//      * Data Asset — operational I/O (the legacy case)
+//      * Policy / Governance Document — charter, standard, policy
+//        the activity produces or consumes (the governance case)
+//      * Attachment — an uploaded file or URL bound to this
+//        activity (ad-hoc evidence, the actual signed Charter PDF,
+//        a process diagram, etc.)
+//    The link picker is segmented across the three kinds so the
+//    user picks WHAT first, then the specific target.
 
-function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
+export type AddMappingTarget = { kind: 'asset' | 'policy' | 'attachment'; id: string };
+
+function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, onAdd, onRemove }: {
   nodeId: string;
   mappings: MappingInfo[];
   assetsList: DataAssetRef[];
+  policiesList: PolicyRef[];
   disabled: boolean;
-  onAdd: (nodeId: string, assetId: string, linkType: string) => void;
+  orgId: string;
+  onAdd: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemove: (mappingId: string) => void;
 }) {
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
+  const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment'>('asset');
   const [pickedAsset, setPickedAsset] = useState('');
+  const [pickedPolicy, setPickedPolicy] = useState('');
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [expandedMapping, setExpandedMapping] = useState<string | null>(null);
   const [localMappings, setLocalMappings] = useState(mappings);
   useEffect(() => { setLocalMappings(mappings); }, [mappings]);
@@ -612,11 +639,45 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
   const outputs = localMappings.filter((m) => m.linkType === 'produces');
   const transforms = localMappings.filter((m) => m.linkType === 'transforms');
 
-  const handleAdd = (linkType: string) => {
-    if (!pickedAsset) return;
-    onAdd(nodeId, pickedAsset, linkType);
-    setPickedAsset('');
-    setShowAdd(null);
+  const resetAdd = () => {
+    setPickedAsset(''); setPickedPolicy(''); setPickedFile(null);
+    setShowAdd(null); setAddKind('asset');
+  };
+
+  const handleAdd = async (linkType: string) => {
+    if (addKind === 'asset') {
+      if (!pickedAsset) return;
+      onAdd(nodeId, { kind: 'asset', id: pickedAsset }, linkType);
+      resetAdd();
+      return;
+    }
+    if (addKind === 'policy') {
+      if (!pickedPolicy) return;
+      onAdd(nodeId, { kind: 'policy', id: pickedPolicy }, linkType);
+      resetAdd();
+      return;
+    }
+    if (addKind === 'attachment') {
+      if (!pickedFile) return;
+      setUploading(true);
+      try {
+        // Upload first, then create the mapping row with the
+        // returned attachment id. Two round-trips, but it keeps
+        // the mapping store flat (no half-uploaded rows).
+        const params = new URLSearchParams({
+          entityType: 'ProcessNode',
+          entityId: nodeId,
+          name: pickedFile.name,
+          description: '',
+        });
+        if (orgId) params.set('orgId', orgId);
+        const uploaded = await apiClient.upload<{ success: boolean; data: { id: string } }>(`/attachments/upload?${params.toString()}`, pickedFile);
+        const id = uploaded.data?.id;
+        if (id) onAdd(nodeId, { kind: 'attachment', id }, linkType);
+        resetAdd();
+      } catch { /* parent toast handles errors */ }
+      finally { setUploading(false); }
+    }
   };
 
   const updateMapping = async (mappingId: string, updates: Record<string, any>) => {
@@ -627,21 +688,59 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
   };
 
   const renderRow = (m: MappingInfo) => {
-    if (!m.assetInfo) return null;
-    const tierC = badgeColor('tier', m.assetInfo.governanceTier);
-    const tierBg = tierC.bg;
-    const tierColor = tierC.color;
+    // The row presentation depends on which kind of target this
+    // mapping points at. Exactly one of *Info fields is set.
     const isExp = expandedMapping === m.id;
+    let head: React.ReactNode = null;
+    if (m.assetInfo) {
+      const tierC = badgeColor('tier', m.assetInfo.governanceTier);
+      head = (
+        <>
+          <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierC.bg, color: tierC.color }}>
+            {tierLabel(m.assetInfo.governanceTier)}
+          </span>
+          {m.assetInfo.ownerName && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Owner: {m.assetInfo.ownerName}</span>
+          )}
+        </>
+      );
+    } else if (m.policyInfo) {
+      head = (
+        <>
+          <a href="/governance-documents" style={{ fontWeight: 500, color: 'var(--color-primary)', textDecoration: 'none' }} title={`${m.policyInfo.documentType} — open Governance Documents`}>
+            {m.policyInfo.policyName}
+          </a>
+          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{m.policyInfo.policyCode}</span>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6' }}>
+            {m.policyInfo.documentType}
+          </span>
+        </>
+      );
+    } else if (m.attachmentInfo) {
+      const isFile = m.attachmentInfo.type === 'FILE';
+      const href = isFile ? `/api/v1/attachments/${m.attachmentInfo.attachmentId}/download` : (m.attachmentInfo.url || '#');
+      head = (
+        <>
+          <a href={href} target={isFile ? undefined : '_blank'} rel={isFile ? undefined : 'noopener noreferrer'} download={isFile ? (m.attachmentInfo.fileName || m.attachmentInfo.name) : undefined} style={{ fontWeight: 500, color: 'var(--color-primary)', textDecoration: 'none' }}>
+            {m.attachmentInfo.name}
+          </a>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#dbeafe', color: '#1e40af' }}>
+            {isFile ? 'File' : 'URL'}
+          </span>
+        </>
+      );
+    } else {
+      // Orphaned row — target was deleted out from under it.
+      head = <span style={{ fontStyle: 'italic', color: 'var(--color-text-muted)' }}>Linked target no longer exists</span>;
+    }
     return (
       <div key={m.id}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '3px 0', flexWrap: 'wrap' }}>
           <span onClick={() => setExpandedMapping(isExp ? null : m.id)} style={{ cursor: 'pointer', fontSize: 8, color: 'var(--color-text-muted)' }}>
             {isExp ? '▼' : '▶'}
           </span>
-          <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
-          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierBg, color: tierColor }}>
-            {tierLabel(m.assetInfo.governanceTier)}
-          </span>
+          {head}
           {m.criticality && (
             <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: m.criticality === 'REQUIRED' ? '#fee2e2' : '#f1f5f9', color: m.criticality === 'REQUIRED' ? '#991b1b' : '#64748b' }}>
               {m.criticality}
@@ -649,9 +748,6 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
           )}
           {m.dataFormat && (
             <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#e0e7ff', color: '#3730a3' }}>{m.dataFormat}</span>
-          )}
-          {m.assetInfo.ownerName && (
-            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Owner: {m.assetInfo.ownerName}</span>
           )}
           {!disabled && (
             <button onClick={() => onRemove(m.id)}
@@ -699,31 +795,78 @@ function IOPanel({ nodeId, mappings, assetsList, disabled, onAdd, onRemove }: {
   };
 
   const renderAddRow = (linkType: 'consumes' | 'produces') => {
-    if (showAdd === (linkType === 'consumes' ? 'input' : 'output')) {
+    if (showAdd !== (linkType === 'consumes' ? 'input' : 'output')) {
       return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, marginTop: 4 }}>
-          <select value={pickedAsset} onChange={(e) => setPickedAsset(e.target.value)}
-            autoFocus
+        <button onClick={() => setShowAdd(linkType === 'consumes' ? 'input' : 'output')}
+          style={{ fontSize: 10, padding: '2px 8px', marginTop: 4, background: 'transparent', border: '1px dashed var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+          + Add {linkType === 'consumes' ? 'Input' : 'Output'}
+        </button>
+      );
+    }
+    const canSave = (addKind === 'asset' && !!pickedAsset)
+      || (addKind === 'policy' && !!pickedPolicy)
+      || (addKind === 'attachment' && !!pickedFile && !uploading);
+    return (
+      <div style={{ marginTop: 6, padding: '6px 8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Segmented control — pick WHAT kind of target first. */}
+        <div role="tablist" aria-label="Link target kind" style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 999, overflow: 'hidden', background: 'var(--color-bg)', alignSelf: 'flex-start' }}>
+          {([
+            { value: 'asset',      label: 'Data Asset' },
+            { value: 'policy',     label: 'Document' },
+            { value: 'attachment', label: 'Upload' },
+          ] as const).map((opt) => {
+            const active = addKind === opt.value;
+            return (
+              <button
+                key={opt.value}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setAddKind(opt.value)}
+                style={{
+                  padding: '3px 10px', fontSize: 10, fontWeight: active ? 600 : 400,
+                  border: 'none', cursor: 'pointer',
+                  background: active ? 'var(--color-primary)' : 'transparent',
+                  color: active ? '#fff' : 'var(--color-text)',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Picker per kind. */}
+        {addKind === 'asset' && (
+          <select value={pickedAsset} onChange={(e) => setPickedAsset(e.target.value)} autoFocus
             style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
             <option value="">-- Select data asset --</option>
             {assetsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
-          <button onClick={() => handleAdd(linkType)} disabled={!pickedAsset}
-            style={{ fontSize: 10, padding: '2px 8px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, cursor: pickedAsset ? 'pointer' : 'not-allowed', opacity: pickedAsset ? 1 : 0.5 }}>
-            Save
+        )}
+        {addKind === 'policy' && (
+          <select value={pickedPolicy} onChange={(e) => setPickedPolicy(e.target.value)} autoFocus
+            style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
+            <option value="">-- Select governance document --</option>
+            {policiesList.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+          </select>
+        )}
+        {addKind === 'attachment' && (
+          <input
+            type="file"
+            onChange={(e) => setPickedFile(e.target.files?.[0] || null)}
+            style={{ fontSize: 11 }}
+          />
+        )}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={() => handleAdd(linkType)} disabled={!canSave}
+            style={{ fontSize: 10, padding: '2px 8px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, cursor: canSave ? 'pointer' : 'not-allowed', opacity: canSave ? 1 : 0.5 }}>
+            {uploading ? 'Uploading…' : 'Save'}
           </button>
-          <button onClick={() => { setShowAdd(null); setPickedAsset(''); }}
+          <button onClick={resetAdd}
             style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer' }}>
             Cancel
           </button>
         </div>
-      );
-    }
-    return (
-      <button onClick={() => setShowAdd(linkType === 'consumes' ? 'input' : 'output')}
-        style={{ fontSize: 10, padding: '2px 8px', marginTop: 4, background: 'transparent', border: '1px dashed var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
-        + Add {linkType === 'consumes' ? 'Input' : 'Output'}
-      </button>
+      </div>
     );
   };
 
@@ -812,7 +955,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, systemsList, mappingsByStep, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -823,9 +966,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   flows: FlowRelationship[];
   peopleList: PersonRef[];
   assetsList: DataAssetRef[];
+  policiesList: PolicyRef[];
   systemsList: SystemRef[];
   mappingsByStep: Record<string, MappingInfo[]>;
-  onAddMapping: (nodeId: string, assetId: string, linkType: string) => void;
+  activePageOrgId: string;
+  onAddMapping: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemoveMapping: (mappingId: string) => void;
   statusMode: 'simple' | 'advanced';
   siblingIndex: number;
@@ -1182,12 +1327,17 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               />
             </div>
           )}
-          {/* Structured Inputs / Outputs panel — shows mapped data assets with owner info */}
+          {/* Structured Inputs / Outputs panel — rows can target a
+              data asset, a governance document (policy), or an
+              uploaded attachment. Picker is segmented across the
+              three kinds. */}
           {isExpanded && node.level !== 'VALUE_STREAM' && (
             <IOPanel
               nodeId={node.id}
               mappings={mappingsByStep[node.id] || []}
               assetsList={assetsList}
+              policiesList={policiesList}
+              orgId={activePageOrgId}
               disabled={isLocked}
               onAdd={onAddMapping}
               onRemove={onRemoveMapping}
@@ -1387,8 +1537,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           onRemoveTag={onRemoveTag}
           peopleList={peopleList}
           assetsList={assetsList}
+          policiesList={policiesList}
           systemsList={systemsList}
           mappingsByStep={mappingsByStep}
+          activePageOrgId={activePageOrgId}
           onAddMapping={onAddMapping}
           onRemoveMapping={onRemoveMapping}
           statusMode={statusMode}
@@ -1451,6 +1603,7 @@ export default function ProcessCatalogPage() {
   const [allTags, setAllTags] = useState<TagEntry[]>([]);
   const [peopleList, setPeopleList] = useState<PersonRef[]>([]);
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
+  const [policiesList, setPoliciesList] = useState<PolicyRef[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
   // When the user picks an asset whose owner org is on a different
@@ -1460,7 +1613,7 @@ export default function ProcessCatalogPage() {
   // ConfirmDialog. Holds the link details until the user
   // confirms or cancels.
   const [pendingCrossLink, setPendingCrossLink] = useState<
-    | { nodeId: string; assetId: string; linkType: string; nodeName: string; assetName: string; assetOrgName: string; nodeOrgName: string }
+    | { nodeId: string; target: AddMappingTarget; linkType: string; nodeName: string; assetName: string; assetOrgName: string; nodeOrgName: string }
     | null
   >(null);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
@@ -1498,12 +1651,16 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, systemsRes, mappingsRes, rolesRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
         apiClient.get<{ success: boolean; data: PersonRef[] }>('/people'),
         apiClient.get<{ success: boolean; data: DataAssetRef[] }>(`/data-assets${qp}`),
+        // Pulled for the IOPanel governance-document picker so a
+        // governance activity can be linked to the charter / policy
+        // it produces or consumes.
+        apiClient.get<{ success: boolean; data: PolicyRef[] }>(`/governance-policies${qp}`),
         apiClient.get<{ success: boolean; data: SystemRef[] }>(`/systems${qp}`),
         apiClient.get<{ success: boolean; data: MappingInfo[] }>(`/mappings${qp}`),
         apiClient.get<{ success: boolean; data: RoleAssignment[] }>(`/dama-roles${qp}`),
@@ -1520,7 +1677,8 @@ export default function ProcessCatalogPage() {
       setFlows(flowsRes.data || []);
       setAllTags(tagsRes.data || []);
       setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
-      setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name })));
+      setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name, orgId: a.orgId })));
+      setPoliciesList((policiesRes.data || []).map((p: any) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
       setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
       setRoleAssignments((rolesRes.data || []).map((r: any) => ({ personId: r.personId, roleType: r.roleType })));
       // Fetch agent executions and DAMA roles for agent-assigned activities
@@ -1614,51 +1772,64 @@ export default function ProcessCatalogPage() {
 
   // Performs the actual link POST. Split out from addMapping so the
   // cross-division confirm path can call it directly after the
-  // user accepts.
-  const submitMapping = async (nodeId: string, assetId: string, linkType: string) => {
+  // user accepts. Polymorphic on target kind — exactly one of
+  // dataAssetId / policyId / attachmentId is sent.
+  const submitMapping = async (nodeId: string, target: AddMappingTarget, linkType: string) => {
     try {
-      await apiClient.post('/mappings', {
+      const body: Record<string, any> = {
         processStepId: nodeId,
-        dataAssetId: assetId,
         linkType,
         notes: '',
         aiSuggested: false,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
-      });
+      };
+      if (target.kind === 'asset') body.dataAssetId = target.id;
+      else if (target.kind === 'policy') body.policyId = target.id;
+      else if (target.kind === 'attachment') body.attachmentId = target.id;
+      await apiClient.post('/mappings', body);
       fetchData();
     } catch { /* */ }
   };
 
   // Entry point used by IOPanel. Runs the cross-division guard
-  // before POSTing — if the asset's owner org is on a different
+  // before POSTing — if the target's owner org is on a different
   // vertical axis from any of the process node's orgIds (i.e.
   // sibling divisions), pop a confirm. Same-axis (parent <->
-  // child, or identical) links go through silently.
-  const addMapping = async (nodeId: string, assetId: string, linkType: string) => {
+  // child, or identical) links go through silently. The guard
+  // covers data-asset and policy targets; attachments are scoped
+  // to the node directly so there's no cross-org concern.
+  const addMapping = async (nodeId: string, target: AddMappingTarget, linkType: string) => {
     const node = findNodeInTree(tree, nodeId);
-    const asset = assetsList.find((a) => a.id === assetId);
     const nodeOrgIds = node?.orgIds ?? [];
-    const assetOrgId = asset?.orgId;
-    // The link is "in scope" if asset.orgId is on the same axis as
-    // any of the node's orgIds. If not, it's cross-division.
-    const onSameAxis = nodeOrgIds.length === 0 || !assetOrgId
+    let targetOrgId: string | undefined;
+    let targetName = '';
+    if (target.kind === 'asset') {
+      const asset = assetsList.find((a) => a.id === target.id);
+      targetOrgId = asset?.orgId;
+      targetName = asset?.name || 'the asset';
+    } else if (target.kind === 'policy') {
+      const policy = policiesList.find((p) => p.id === target.id);
+      targetOrgId = policy?.orgId;
+      targetName = policy?.name || 'the document';
+    }
+    const onSameAxis = target.kind === 'attachment' || nodeOrgIds.length === 0 || !targetOrgId
       ? true
-      : nodeOrgIds.some((nodeOrg) => isOrgInScope(assetOrgId, nodeOrg));
+      : nodeOrgIds.some((nodeOrg) => isOrgInScope(targetOrgId, nodeOrg));
     if (!onSameAxis) {
       const nodeOrgName = getOrgName(nodeOrgIds[0]);
-      const assetOrgName = getOrgName(assetOrgId);
+      const targetOrgName = getOrgName(targetOrgId);
       setPendingCrossLink({
         nodeId,
-        assetId,
+        target,
         linkType,
         nodeName: node?.name || 'this activity',
-        assetName: asset?.name || 'the asset',
-        assetOrgName: assetOrgName || 'a different division',
+        assetName: targetName,
+        assetOrgName: targetOrgName || 'a different division',
         nodeOrgName: nodeOrgName || 'this division',
       });
       return;
     }
-    await submitMapping(nodeId, assetId, linkType);
+    await submitMapping(nodeId, target, linkType);
   };
 
   const removeMapping = async (mappingId: string) => {
@@ -2220,9 +2391,9 @@ export default function ProcessCatalogPage() {
         variant="primary"
         onConfirm={async () => {
           if (!pendingCrossLink) return;
-          const { nodeId, assetId, linkType } = pendingCrossLink;
+          const { nodeId, target, linkType } = pendingCrossLink;
           setPendingCrossLink(null);
-          await submitMapping(nodeId, assetId, linkType);
+          await submitMapping(nodeId, target, linkType);
         }}
         onCancel={() => setPendingCrossLink(null)}
       />
@@ -2408,8 +2579,10 @@ export default function ProcessCatalogPage() {
               onRemoveTag={removeTag}
               peopleList={peopleList}
               assetsList={assetsList}
+              policiesList={policiesList}
               systemsList={systemsList}
               mappingsByStep={mappingsByStep}
+              activePageOrgId={activeOrgId || ''}
               onAddMapping={addMapping}
               onRemoveMapping={removeMapping}
               statusMode={statusMode}

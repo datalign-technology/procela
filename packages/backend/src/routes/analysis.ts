@@ -156,6 +156,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   const assetById = new Map(dataAssets.map((a) => [a.id, a]));
   for (const m of mappings) {
     if (!inOrg(m)) continue;
+    if (!m.dataAssetId) continue; // skip policy / attachment-shaped rows
     const asset = assetById.get(m.dataAssetId);
     emit(facts, {
       factId: `mapping:${m.id}`,

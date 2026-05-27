@@ -400,7 +400,7 @@ router.get('/:id/360', (req: Request, res: Response) => {
   const seenActivity = new Set<string>();
   const dependentActivities: Array<{ id: string; name: string; path: string }> = [];
   for (const m of mappings) {
-    if (!assetIdSet.has(m.dataAssetId)) continue;
+    if (!m.dataAssetId || !assetIdSet.has(m.dataAssetId)) continue;
     if (seenActivity.has(m.processStepId)) continue;
     seenActivity.add(m.processStepId);
     const node = processNodes.find((n) => n.id === m.processStepId);
@@ -603,7 +603,7 @@ router.get('/:id/impact', (req: Request, res: Response) => {
   const assetsCount = dataAssets.filter((a) => a.systemId === id).length;
   const connectionsCount = profilesForSystem(id).length;
   const assetIds = new Set(dataAssets.filter((a) => a.systemId === id).map((a) => a.id));
-  const mappingsCount = mappings.filter((m) => assetIds.has(m.dataAssetId)).length;
+  const mappingsCount = mappings.filter((m) => !!m.dataAssetId && assetIds.has(m.dataAssetId)).length;
 
   res.json({ success: true, data: { assets: assetsCount, connections: connectionsCount, mappings: mappingsCount } });
 });

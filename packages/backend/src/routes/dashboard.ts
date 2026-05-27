@@ -79,8 +79,9 @@ router.get('/stats', (req: Request, res: Response) => {
       ? Math.round(filteredAssets.reduce((sum, a) => sum + a.healthScore, 0) / filteredAssets.length)
       : 0;
 
-  // Gaps
-  const linkedAssetIds = new Set(filteredMappings.map((m) => m.dataAssetId));
+  // Gaps. Only data-asset-shaped mapping rows count here; policy
+  // and attachment rows aren't "assets that have been linked".
+  const linkedAssetIds = new Set(filteredMappings.filter((m) => !!m.dataAssetId).map((m) => m.dataAssetId!));
   const ungovernedAssets = filteredAssets.filter(
     (a) => a.governanceTier === 'BRONZE' && linkedAssetIds.has(a.id),
   ).length;
@@ -316,6 +317,7 @@ router.get('/raci', (req: Request, res: Response) => {
     : mappings;
   const assetsByNode: Record<string, string[]> = {};
   for (const m of filteredMappings) {
+    if (!m.dataAssetId) continue; // policy / attachment rows aren't assets
     if (!assetsByNode[m.processStepId]) assetsByNode[m.processStepId] = [];
     assetsByNode[m.processStepId].push(m.dataAssetId);
   }
