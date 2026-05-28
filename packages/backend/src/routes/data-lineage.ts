@@ -182,6 +182,34 @@ router.get('/visualization', (req: Request, res: Response) => {
   res.json({ success: true, data: { nodes, links } });
 });
 
+/** GET /api/v1/data-lineage/asset-edges?orgId= - enriched with asset
+ *  names and an isStale flag (true when lastSeenAt is older than the
+ *  STALE_AFTER threshold). Manual edges are never marked stale: the
+ *  threshold only applies to edges whose source carries a freshness
+ *  expectation (today: just 'dbt').
+ *
+ *  Must be declared before the '/:id' route below — otherwise Express
+ *  matches 'asset-edges' as an :id and returns a 404. */
+router.get('/asset-edges', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const filtered = orgId ? assetLineageEdges.filter((e) => e.orgId === orgId) : assetLineageEdges;
+  const now = Date.now();
+  const enriched = filtered.map((e) => {
+    const src = dataAssets.find((a) => a.id === e.sourceAssetId);
+    const tgt = dataAssets.find((a) => a.id === e.targetAssetId);
+    const ageMs = now - new Date(e.lastSeenAt).getTime();
+    const isStale = e.source === 'dbt' && ageMs > STALE_AFTER_MS;
+    return {
+      ...e,
+      sourceAssetName: src?.name || null,
+      targetAssetName: tgt?.name || null,
+      isStale,
+      staleAfterDays: STALE_AFTER_MS / (24 * 60 * 60 * 1000),
+    };
+  });
+  res.json({ success: true, data: enriched });
+});
+
 /** GET /api/v1/data-lineage/:id — single link */
 router.get('/:id', (req: Request, res: Response) => {
   const link = dataLineageLinks.find((l) => l.id === req.params.id);
@@ -276,31 +304,6 @@ router.delete('/:id', (req: Request, res: Response) => {
  *  refreshed in a month" without producing noise from a missed weekly
  *  schedule. Configurable per-org in a future PR. */
 const STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
-
-/** GET /api/v1/data-lineage/asset-edges?orgId= - enriched with asset
- *  names and an isStale flag (true when lastSeenAt is older than the
- *  STALE_AFTER threshold). Manual edges are never marked stale: the
- *  threshold only applies to edges whose source carries a freshness
- *  expectation (today: just 'dbt'). */
-router.get('/asset-edges', (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = orgId ? assetLineageEdges.filter((e) => e.orgId === orgId) : assetLineageEdges;
-  const now = Date.now();
-  const enriched = filtered.map((e) => {
-    const src = dataAssets.find((a) => a.id === e.sourceAssetId);
-    const tgt = dataAssets.find((a) => a.id === e.targetAssetId);
-    const ageMs = now - new Date(e.lastSeenAt).getTime();
-    const isStale = e.source === 'dbt' && ageMs > STALE_AFTER_MS;
-    return {
-      ...e,
-      sourceAssetName: src?.name || null,
-      targetAssetName: tgt?.name || null,
-      isStale,
-      staleAfterDays: STALE_AFTER_MS / (24 * 60 * 60 * 1000),
-    };
-  });
-  res.json({ success: true, data: enriched });
-});
 
 // ── dbt manifest types (loosely typed — we only read a few fields) ─────────
 
