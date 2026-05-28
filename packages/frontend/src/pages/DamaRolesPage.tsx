@@ -12,6 +12,16 @@ import SectionCard from '../components/SectionCard';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { GOVERNANCE_ROLES } from '../types';
+
+// Required governance roles (CDO, Data Governance Lead, Data Owner,
+// Business Data Steward). A required role with zero holders is a
+// staffing gap worth shouting about, so its card gets the red
+// treatment; optional roles stay quiet when empty.
+const REQUIRED_ROLE_TYPES = new Set(GOVERNANCE_ROLES.filter((r) => r.required).map((r) => r.roleType));
+
+// Category display order for the grouped By-Role view.
+const CATEGORY_ORDER = ['Executive', 'Business', 'Technical'] as const;
 
 interface DamaRoleAssignment {
   id: string;
@@ -483,54 +493,103 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
   const ordered = Object.keys(ROLE_TYPE_LABELS)
     .filter((rt) => catalogSet.has(rt))
     .filter((rt) => !filterRoleType || rt === filterRoleType);
-  return (
-    <div>
-      {ordered.map((rt) => {
-        const list = (byRole.get(rt) || []).slice().sort((a, b) => a.personName.localeCompare(b.personName));
-        const filled = list.length > 0;
-        return (
-          <div key={rt} style={{ borderBottom: '1px solid var(--color-border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--color-bg)' }}>
-              <button
-                type="button"
-                onClick={() => openRoleDrawer(rt)}
-                title="Learn about this role"
-                style={{ ...roleBadge(rt), border: 'none', cursor: 'pointer', font: 'inherit', padding: '3px 10px' }}
-              >
-                {ROLE_TYPE_LABELS[rt] || rt}
-              </button>
-              {filled ? (
-                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{list.length} held</span>
-              ) : (
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unfilled</span>
-              )}
-              <button
-                type="button"
-                onClick={() => onAssign(rt)}
-                style={{ marginLeft: 'auto', background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--color-primary)' }}
-              >
-                + Assign
-              </button>
-            </div>
-            {filled ? (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {list.map((r) => (
-                  <li key={r.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
-                    <span style={{ fontWeight: 500 }}>{r.personName}</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{scopeName(r.scopeId)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
-                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div style={{ padding: '8px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                No one holds this role yet.
-              </div>
-            )}
+  // Render a single role as a card. Coloured left border keys it to
+  // the role's badge palette; required roles with no holders go red.
+  const renderRoleCard = (rt: string) => {
+    const list = (byRole.get(rt) || []).slice().sort((a, b) => a.personName.localeCompare(b.personName));
+    const filled = list.length > 0;
+    const required = REQUIRED_ROLE_TYPES.has(rt);
+    const criticalGap = required && !filled;
+    const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
+    return (
+      <div
+        key={rt}
+        style={{
+          border: `1px solid ${criticalGap ? '#fca5a5' : 'var(--color-border)'}`,
+          borderLeft: `4px solid ${criticalGap ? '#dc2626' : c.color}`,
+          borderRadius: 'var(--radius-md)',
+          background: criticalGap ? '#fef2f2' : 'var(--color-surface)',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+          <button
+            type="button"
+            onClick={() => openRoleDrawer(rt)}
+            title="Learn about this role"
+            style={{ ...roleBadge(rt), border: 'none', cursor: 'pointer', font: 'inherit', padding: '3px 10px' }}
+          >
+            {ROLE_TYPE_LABELS[rt] || rt}
+          </button>
+          {filled ? (
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{list.length} {list.length === 1 ? 'holder' : 'holders'}</span>
+          ) : criticalGap ? (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Unfilled — required
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unfilled</span>
+          )}
+          <button
+            type="button"
+            onClick={() => onAssign(rt)}
+            style={criticalGap
+              ? { marginLeft: 'auto', background: '#dc2626', border: 'none', borderRadius: 4, padding: '3px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: '#fff' }
+              : { marginLeft: 'auto', background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--color-primary)' }}
+          >
+            + Assign
+          </button>
+        </div>
+        {filled ? (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--color-border)' }}>
+            {list.map((r) => (
+              <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  background: c.bg, color: c.color,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700,
+                }}>
+                  {(r.personName || '?').charAt(0).toUpperCase()}
+                </span>
+                <span style={{ fontWeight: 500 }}>{r.personName}</span>
+                <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>{scopeName(r.scopeId)}</span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
+                <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div style={{ padding: '4px 14px 10px', fontSize: 12, color: criticalGap ? '#7f1d1d' : 'var(--color-text-muted)' }}>
+            {criticalGap ? 'This role is required and has no holder — assign someone to close the gap.' : 'No one holds this role yet.'}
           </div>
-        );
-      })}
+        )}
+      </div>
+    );
+  };
+
+  // Group the ordered role list under Executive / Business /
+  // Technical headers so the page reads as a staffing chart, not a
+  // flat list. When a single-role filter is active we drop the
+  // headers (one role, no need for a section title).
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {filterRoleType
+        ? ordered.map(renderRoleCard)
+        : CATEGORY_ORDER.map((cat) => {
+            const inCat = ordered.filter((rt) => ROLE_CATEGORIES[rt] === cat);
+            if (inCat.length === 0) return null;
+            return (
+              <div key={cat}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                  {cat}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {inCat.map(renderRoleCard)}
+                </div>
+              </div>
+            );
+          })}
     </div>
   );
 }
