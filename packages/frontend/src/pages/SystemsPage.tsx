@@ -561,14 +561,19 @@ export default function SystemsPage() {
     // routes below.
     const { connectionIds: requestedConnIds, ...systemBody } = form;
     let savedId: string | null = editingId;
-    if (editingId) {
-      await apiClient.put(`/systems/${editingId}`, systemBody);
-    } else {
-      const res = await apiClient.post<{ success: boolean; data: { id: string } }>(
-        '/systems',
-        { ...systemBody, ...(activeOrgId ? { orgId: activeOrgId } : {}) },
-      );
-      savedId = res?.data?.id || null;
+    try {
+      if (editingId) {
+        await apiClient.put(`/systems/${editingId}`, systemBody);
+      } else {
+        const res = await apiClient.post<{ success: boolean; data: { id: string } }>(
+          '/systems',
+          { ...systemBody, ...(activeOrgId ? { orgId: activeOrgId } : {}) },
+        );
+        savedId = res?.data?.id || null;
+      }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to save system');
+      return;
     }
 
     if (savedId && form.connectivity === 'INTEGRATED') {
@@ -603,7 +608,12 @@ export default function SystemsPage() {
 
   const handleDelete = async (id: string) => {
     const sys = systems.find((s) => s.id === id);
-    await apiClient.delete(`/systems/${id}`);
+    try {
+      await apiClient.delete(`/systems/${id}`);
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete system');
+      return;
+    }
     fetchData();
     if (sys) {
       addToast('success', `"${sys.name}" deleted`, {
@@ -699,7 +709,13 @@ export default function SystemsPage() {
     // Snapshot the systems we're about to delete so we can offer Undo.
     const toDelete = systems.filter((s) => selectedIds.has(s.id));
     const count = toDelete.length;
-    await Promise.all(toDelete.map((s) => apiClient.delete(`/systems/${s.id}`)));
+    try {
+      await Promise.all(toDelete.map((s) => apiClient.delete(`/systems/${s.id}`)));
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
+      fetchData();
+      return;
+    }
     setSelectedIds(new Set());
     fetchData();
     addToast('success', `Deleted ${count} system${count === 1 ? '' : 's'}`, {

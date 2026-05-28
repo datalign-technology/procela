@@ -109,6 +109,7 @@ export default function EnterpriseViewPage() {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [expandedCols, setExpandedCols] = useState<Set<string>>(new Set());
   const [activeView, setActiveView] = useState<string>('all');
@@ -123,7 +124,10 @@ export default function EnterpriseViewPage() {
         setEdges(res.data.edges || []);
       }
       setSummary(res.summary || null);
-    } catch { /* */ }
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load enterprise view');
+    }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -199,6 +203,28 @@ export default function EnterpriseViewPage() {
       <div>
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
           <SkeletonRows rows={5} columns={4} />
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 12 }}>Enterprise View</h1>
+        <div style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>{'⚠'}</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Couldn't load enterprise view</div>
+          <div style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>{loadError}</div>
+          <button
+            onClick={() => { setLoading(true); fetchData(); }}
+            style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
         </div>
       </div>
     );

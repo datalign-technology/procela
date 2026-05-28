@@ -520,12 +520,17 @@ export default function GovernanceGroupsPage() {
       ...(activeOrgId ? { orgId: activeOrgId } : {}),
     };
     let res: any;
-    if (editingId) {
-      res = await apiClient.put(`/governance-groups/${editingId}`, payload);
-      addToast('success', 'Governance group updated');
-    } else {
-      res = await apiClient.post('/governance-groups', payload);
-      addToast('success', 'Governance group created');
+    try {
+      if (editingId) {
+        res = await apiClient.put(`/governance-groups/${editingId}`, payload);
+        addToast('success', 'Governance group updated');
+      } else {
+        res = await apiClient.post('/governance-groups', payload);
+        addToast('success', 'Governance group created');
+      }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to save governance group');
+      return;
     }
     setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null);
     fetchGroups();
@@ -537,22 +542,31 @@ export default function GovernanceGroupsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    await apiClient.delete(`/governance-groups/${id}`);
-    if (selectedGroupId === id) { setSelectedGroupId(null); setSelectedGroupDetail(null); }
-    addToast('success', 'Governance group deleted');
-    fetchGroups();
+    try {
+      await apiClient.delete(`/governance-groups/${id}`);
+      if (selectedGroupId === id) { setSelectedGroupId(null); setSelectedGroupDetail(null); }
+      addToast('success', 'Governance group deleted');
+      fetchGroups();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete governance group');
+    }
   };
 
   const handleBulkDelete = async () => {
     const ids = Array.from(checkedIds);
-    await Promise.all(ids.map((id) => apiClient.delete(`/governance-groups/${id}`)));
-    addToast('success', `Deleted ${ids.length} governance group${ids.length === 1 ? '' : 's'}`);
-    setCheckedIds(new Set());
-    if (selectedGroupId && checkedIds.has(selectedGroupId)) {
-      setSelectedGroupId(null);
-      setSelectedGroupDetail(null);
+    try {
+      await Promise.all(ids.map((id) => apiClient.delete(`/governance-groups/${id}`)));
+      addToast('success', `Deleted ${ids.length} governance group${ids.length === 1 ? '' : 's'}`);
+      setCheckedIds(new Set());
+      if (selectedGroupId && checkedIds.has(selectedGroupId)) {
+        setSelectedGroupId(null);
+        setSelectedGroupDetail(null);
+      }
+      fetchGroups();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
+      fetchGroups();
     }
-    fetchGroups();
   };
 
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null); };

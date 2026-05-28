@@ -135,6 +135,7 @@ export default function MappingsPage() {
   const [allNodes, setAllNodes] = useState<FlatNode[]>([]);
   const [dataAssets, setDataAssets] = useState<DataAsset[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -161,8 +162,9 @@ export default function MappingsPage() {
       setMappings(mappingsRes.data || []);
       setAllNodes(nodesRes.data || []);
       setDataAssets(assetsRes.data || []);
-    } catch {
-      /* API may not be running */
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load mappings');
     } finally {
       setLoading(false);
     }
@@ -221,24 +223,32 @@ export default function MappingsPage() {
 
   const handleSave = async () => {
     if (!selectedStepId || !selectedAssetId) return;
-    await apiClient.post('/mappings', {
-      processStepId: selectedStepId,
-      dataAssetId: selectedAssetId,
-      linkType,
-      notes,
-      aiSuggested: false,
-      ...(activeOrgId ? { orgId: activeOrgId } : {}),
-    });
-    addToast('success', 'Mapping created');
-    setShowForm(false);
-    resetForm();
-    fetchData();
+    try {
+      await apiClient.post('/mappings', {
+        processStepId: selectedStepId,
+        dataAssetId: selectedAssetId,
+        linkType,
+        notes,
+        aiSuggested: false,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
+      });
+      addToast('success', 'Mapping created');
+      setShowForm(false);
+      resetForm();
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to create mapping');
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await apiClient.delete(`/mappings/${id}`);
-    addToast('success', 'Mapping deleted');
-    fetchData();
+    try {
+      await apiClient.delete(`/mappings/${id}`);
+      addToast('success', 'Mapping deleted');
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete mapping');
+    }
   };
 
   const toggleSelect = (id: string) => {
@@ -259,9 +269,16 @@ export default function MappingsPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/mappings/${id}`)));
-    setSelectedIds(new Set());
-    fetchData();
+    const count = selectedIds.size;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/mappings/${id}`)));
+      addToast('success', `Deleted ${count} mapping${count === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
+      fetchData();
+    }
   };
 
   // Stats
@@ -589,6 +606,13 @@ export default function MappingsPage() {
       >
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
+        ) : loadError && mappings.length === 0 ? (
+          <EmptyState
+            icon={'\u26a0'}
+            title="Couldn't load mappings"
+            description={loadError}
+            action={{ label: 'Retry', onClick: () => { setLoading(true); fetchData(); } }}
+          />
         ) : mappings.length === 0 && !showForm ? (
           <EmptyState
             icon={'\u2194'}

@@ -692,11 +692,17 @@ export default function DataAssetsPage() {
       : null;
     const assetFields = { ...rest, retentionDuration };
     let savedId = editingId;
-    if (editingId) {
-      await apiClient.put(`/data-assets/${editingId}`, assetFields);
-    } else {
-      const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/data-assets', { ...assetFields, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
-      savedId = res.data?.id || null;
+    try {
+      if (editingId) {
+        await apiClient.put(`/data-assets/${editingId}`, assetFields);
+      } else {
+        const res = await apiClient.post<{ success: boolean; data: { id: string } }>('/data-assets', { ...assetFields, ...(activeOrgId ? { orgId: activeOrgId } : {}) });
+        savedId = res.data?.id || null;
+      }
+      addToast('success', editingId ? 'Data asset updated' : 'Data asset created');
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to save data asset');
+      return;
     }
     // Update domain assignment if changed
     if (savedId && domainId) {
@@ -740,7 +746,12 @@ export default function DataAssetsPage() {
 
   const handleDelete = async (id: string) => {
     const asset = assets.find((a) => a.id === id);
-    await apiClient.delete(`/data-assets/${id}`);
+    try {
+      await apiClient.delete(`/data-assets/${id}`);
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete data asset');
+      return;
+    }
     fetchData();
     if (asset) {
       addToast('success', `"${asset.name}" deleted`, {
@@ -848,9 +859,16 @@ export default function DataAssetsPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-assets/${id}`)));
-    setSelectedIds(new Set());
-    fetchData();
+    const count = selectedIds.size;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/data-assets/${id}`)));
+      addToast('success', `Deleted ${count} asset${count === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (err) {
+      errorToast(err, 'Bulk delete failed');
+      fetchData();
+    }
   };
 
   const bulkSetTier = async (tier: string) => {

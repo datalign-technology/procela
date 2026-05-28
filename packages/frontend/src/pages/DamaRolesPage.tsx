@@ -202,9 +202,13 @@ export default function DamaRolesPage() {
   };
 
   const handleRemove = async (id: string) => {
-    await apiClient.delete(`/dama-roles/${id}`);
-    addToast('success', 'Governance role removed');
-    fetchData();
+    try {
+      await apiClient.delete(`/dama-roles/${id}`);
+      addToast('success', 'Governance role removed');
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to remove role');
+    }
   };
 
   const handleCancel = () => { setShowForm(false); setError(''); setForm(emptyForm); };

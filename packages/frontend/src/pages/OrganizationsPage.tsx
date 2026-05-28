@@ -288,8 +288,14 @@ export default function OrganizationsPage() {
   const openEditOrg = (org: OrgFlat) => { setOrgForm({ name: org.name, parentId: org.parentId, type: org.type, industry: org.industry, description: org.description }); setEditingOrgId(org.id); setShowOrgForm(true); };
   const handleSaveOrg = async () => {
     if (!orgForm.name.trim()) return;
-    if (editingOrgId) await apiClient.put(`/organizations/${editingOrgId}`, orgForm);
-    else await apiClient.post('/organizations', orgForm);
+    try {
+      if (editingOrgId) await apiClient.put(`/organizations/${editingOrgId}`, orgForm);
+      else await apiClient.post('/organizations', orgForm);
+      addToast('success', editingOrgId ? 'Organization updated' : 'Organization created');
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to save organization');
+      return;
+    }
     setShowOrgForm(false); setEditingOrgId(null); setOrgForm(emptyOrgForm); fetchData(); triggerRefresh();
   };
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<string | null>(null);

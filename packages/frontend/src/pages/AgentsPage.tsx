@@ -220,13 +220,22 @@ export default function AgentsPage() {
     try {
       if (editingId) await apiClient.put(`/agents/${editingId}`, form);
       else await apiClient.post('/agents', form);
+      addToast('success', editingId ? 'Agent updated' : 'Agent created');
       handleCancel();
       fetchData();
-    } catch { /* */ }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to save agent');
+    }
   };
   const handleDelete = async (id: string) => {
-    try { await apiClient.delete(`/agents/${id}`); setConfirmDelete(null); fetchData(); }
-    catch { /* */ }
+    try {
+      await apiClient.delete(`/agents/${id}`);
+      addToast('success', 'Agent deleted');
+      setConfirmDelete(null);
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete agent');
+    }
   };
 
   const toggleOrgAssignment = (orgId: string) => {
@@ -250,9 +259,16 @@ export default function AgentsPage() {
   };
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/agents/${id}`)));
-    setSelectedIds(new Set());
-    fetchData();
+    const count = selectedIds.size;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/agents/${id}`)));
+      addToast('success', `Deleted ${count} agent${count === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
+      fetchData();
+    }
   };
 
   // ── Import handlers ──

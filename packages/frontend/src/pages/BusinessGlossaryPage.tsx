@@ -193,6 +193,7 @@ export default function BusinessGlossaryPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -274,7 +275,10 @@ export default function BusinessGlossaryPage() {
       setTerms(termsRes.data || []);
       setPeople(pplRes.data || []);
       setDomains(domRes.data || []);
-    } catch { /* API may not be running */ }
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load glossary');
+    }
     finally { setLoading(false); }
   }, [activeOrgId]);
 
@@ -872,6 +876,10 @@ export default function BusinessGlossaryPage() {
           <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
             {loading ? (
               <SkeletonRows rows={5} columns={6} />
+            ) : loadError && terms.length === 0 ? (
+              <EmptyState icon={'⚠'} title="Couldn't load glossary"
+                description={loadError}
+                action={{ label: 'Retry', onClick: () => { setLoading(true); fetchData(); } }} />
             ) : terms.length === 0 && !showForm ? (
               <EmptyState icon={'📖'} title="No glossary terms yet"
                 description="The business glossary is a shared dictionary of agreed-upon terms. Define terms so everyone speaks the same language."

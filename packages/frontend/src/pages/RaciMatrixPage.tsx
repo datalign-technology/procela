@@ -2,6 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
+import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import IconButton from '../components/IconButton';
@@ -72,6 +73,7 @@ const tdStyle: React.CSSProperties = {
 
 export default function RaciMatrixPage() {
   const { activeOrgId } = useOrgContext();
+  const addToast = useToastStore((s) => s.addToast);
   const deps = useDependencyChecks();
   const [data, setData] = useState<RaciData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -201,7 +203,9 @@ export default function RaciMatrixPage() {
       const orgParam = activeOrgId ? `?orgId=${activeOrgId}` : '';
       const res = await apiClient.get<{ success: boolean; data: RaciData }>(`/dashboard/raci${orgParam}`);
       setData(res.data);
-    } catch { /* */ }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to update assignment');
+    }
   };
 
   const hasData = data && data.rows.length > 0 && data.columns.length > 0;

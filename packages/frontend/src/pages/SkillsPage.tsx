@@ -160,20 +160,27 @@ export default function SkillsPage() {
     try {
       if (editingId) {
         await apiClient.put(`/skills/${editingId}`, form);
+        addToast('success', 'Skill updated');
       } else {
         await apiClient.post('/skills', { ...form, orgId: activeOrgId });
+        addToast('success', 'Skill created');
       }
       handleCancel();
       fetchData();
-    } catch { /* */ }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to save skill');
+    }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await apiClient.delete(`/skills/${id}`);
+      addToast('success', 'Skill deleted');
       setConfirmDelete(null);
       fetchData();
-    } catch { /* */ }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete skill');
+    }
   };
 
   const handleSeed = async () => {
@@ -207,9 +214,16 @@ export default function SkillsPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/skills/${id}`)));
-    setSelectedIds(new Set());
-    fetchData();
+    const count = selectedIds.size;
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => apiClient.delete(`/skills/${id}`)));
+      addToast('success', `Deleted ${count} skill${count === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Bulk delete failed');
+      fetchData();
+    }
   };
 
   // ── Export ──

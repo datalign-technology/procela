@@ -338,7 +338,9 @@ export default function PeoplePage() {
       addToast('success', `${quickName.trim()} added`);
       setQuickName(''); setQuickEmail(''); setQuickTitle('');
       fetchData();
-    } catch { /* */ }
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to add person');
+    }
     finally { setQuickSaving(false); }
   };
 
@@ -553,7 +555,12 @@ export default function PeoplePage() {
   };
   const handleDeletePerson = async (id: string) => {
     const person = people.find((p) => p.id === id);
-    await apiClient.delete(`/people/${id}`);
+    try {
+      await apiClient.delete(`/people/${id}`);
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete person');
+      return;
+    }
     fetchData();
     if (person) {
       addToast('success', `"${person.name}" deleted`, {
