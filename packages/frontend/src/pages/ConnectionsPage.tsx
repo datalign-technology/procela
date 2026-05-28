@@ -14,6 +14,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import { clickable } from '../lib/a11y';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -217,6 +219,7 @@ export default function ConnectionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   // Local-file upload staging — the File is attached to the form but not sent
   // until Save (we need the connection id the POST/PUT returns).
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -339,7 +342,7 @@ export default function ConnectionsPage() {
 
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    if (!form.name.trim()) return;
+    if (!validation.validateAll(form)) return;
     try {
       setUploading(!!pendingFile);
       let savedId: string | null = editingId;
@@ -463,7 +466,7 @@ export default function ConnectionsPage() {
     } catch { addToast('error', 'Bulk delete failed'); }
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null); setFormTestResult(null); };
+  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setPendingFile(null); setFormTestResult(null); validation.clearErrors(); };
 
   // -----------------------------------------------------------------------
   // Test
@@ -806,7 +809,7 @@ export default function ConnectionsPage() {
             Connection Types
           </div>
           <div
-            onClick={() => setFilterConnType('')}
+            {...clickable(() => setFilterConnType(''), { pressed: !filterConnType })}
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterConnType ? 600 : 400,
@@ -826,7 +829,7 @@ export default function ConnectionsPage() {
             return (
               <div
                 key={t}
-                onClick={() => setFilterConnType(isActive ? '' : t)}
+                {...clickable(() => setFilterConnType(isActive ? '' : t), { pressed: isActive })}
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
@@ -904,7 +907,13 @@ export default function ConnectionsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Connection Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Production DB, CRM API" />
+              <input autoFocus
+                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={form.name}
+                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+                placeholder="e.g. Production DB, CRM API" />
+              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
@@ -1184,6 +1193,7 @@ export default function ConnectionsPage() {
               <h3 style={{ fontSize: 16, fontWeight: 600 }}>Discovered Assets — {discoverModal.systemName}</h3>
               <button
                 onClick={() => { setDiscoverModal(null); setDiscoveredAssets([]); setExpandedAssets(new Set()); }}
+                aria-label="Close"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}
               >
                 &times;

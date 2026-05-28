@@ -12,6 +12,8 @@ import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
 import { SkeletonRows } from '../components/Skeleton';
+import { activateOnKey } from '../lib/a11y';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ── Types ──
 
@@ -151,13 +153,21 @@ function OrgTreeNode({ node, depth, onEdit, onDelete, onAddChild, expanded, togg
           title={isRoot ? 'Cannot select the root organization' : !canEdit ? 'Read-only' : 'Select for bulk delete'}
           style={{ flexShrink: 0, width: 14, height: 14, cursor: isRoot || !canEdit ? 'not-allowed' : 'pointer', opacity: isRoot ? 0 : 1 }}
         />
-        <span onClick={() => { if (hasChildren) toggleExpand(node.id); }}
+        <span
+          onClick={() => { if (hasChildren) toggleExpand(node.id); }}
+          {...(hasChildren ? { role: 'button', tabIndex: 0, 'aria-label': isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`, 'aria-expanded': isExpanded, onKeyDown: activateOnKey(() => toggleExpand(node.id)) } : {})}
           style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none', flexShrink: 0 }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span onClick={(e) => { e.stopPropagation(); onSelect(node.id); }} style={{ fontWeight: 500, fontSize: 13, cursor: 'pointer', color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={`View ${node.name}`}
+              onClick={(e) => { e.stopPropagation(); onSelect(node.id); }}
+              onKeyDown={activateOnKey(() => onSelect(node.id))}
+              style={{ fontWeight: 500, fontSize: 13, cursor: 'pointer', color: isActive ? 'var(--color-primary)' : undefined }}>{node.name}</span>
             <span style={typeBadge(node.type)}>{node.type}</span>
             {node.industry && (
               <span style={{ fontSize: 10, color: 'var(--color-text-muted)', background: '#f8fafc', padding: '1px 6px', borderRadius: 3, border: '1px solid #e2e8f0' }}>
@@ -227,6 +237,7 @@ export default function OrganizationsPage() {
   const [showOrgForm, setShowOrgForm] = useState(false);
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [orgForm, setOrgForm] = useState<OrgFormData>(emptyOrgForm);
+  const orgValidation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [importText, setImportText] = useState('');
@@ -288,7 +299,7 @@ export default function OrganizationsPage() {
   const openAddOrg = (parentId: string | null = null) => { setOrgForm({ ...emptyOrgForm, parentId }); setEditingOrgId(null); setShowOrgForm(true); };
   const openEditOrg = (org: OrgFlat) => { setOrgForm({ name: org.name, parentId: org.parentId, type: org.type, industry: org.industry, description: org.description }); setEditingOrgId(org.id); setShowOrgForm(true); };
   const handleSaveOrg = async () => {
-    if (!orgForm.name.trim()) return;
+    if (!orgValidation.validateAll(orgForm)) return;
     try {
       if (editingOrgId) await apiClient.put(`/organizations/${editingOrgId}`, orgForm);
       else await apiClient.post('/organizations', orgForm);
@@ -516,7 +527,13 @@ export default function OrganizationsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} placeholder="Organization name" />
+              <input autoFocus
+                style={{ ...inputStyle, border: orgValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={orgForm.name}
+                onChange={(e) => { const v = e.target.value; setOrgForm({ ...orgForm, name: v }); if (orgValidation.touched.name) orgValidation.validateField('name', v, orgForm); }}
+                onBlur={() => { orgValidation.touch('name'); orgValidation.validateField('name', orgForm.name, orgForm); }}
+                placeholder="Organization name" />
+              {orgValidation.fieldError('name') && <div style={fieldErrorStyle}>{orgValidation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
@@ -546,7 +563,7 @@ export default function OrganizationsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-            <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); }}>Cancel</button>
+            <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</button>
             <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
               {editingOrgId ? 'Save' : 'Add'}
             </button>
@@ -693,7 +710,13 @@ export default function OrganizationsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-                    <input autoFocus style={inputStyle} value={orgForm.name} onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })} placeholder="Organization name" />
+                    <input autoFocus
+                style={{ ...inputStyle, border: orgValidation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={orgForm.name}
+                onChange={(e) => { const v = e.target.value; setOrgForm({ ...orgForm, name: v }); if (orgValidation.touched.name) orgValidation.validateField('name', v, orgForm); }}
+                onBlur={() => { orgValidation.touch('name'); orgValidation.validateField('name', orgForm.name, orgForm); }}
+                placeholder="Organization name" />
+              {orgValidation.fieldError('name') && <div style={fieldErrorStyle}>{orgValidation.fieldError('name')}</div>}
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
@@ -723,7 +746,7 @@ export default function OrganizationsPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
-                  <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); }}>Cancel</button>
+                  <button style={btnSecondary} onClick={() => { setShowOrgForm(false); setEditingOrgId(null); orgValidation.clearErrors(); }}>Cancel</button>
                   <button style={{ ...btnPrimary, opacity: !orgForm.name.trim() ? 0.6 : 1, cursor: !orgForm.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!orgForm.name.trim()} onClick={handleSaveOrg}>
                     {editingOrgId ? 'Save' : 'Add'}
                   </button>

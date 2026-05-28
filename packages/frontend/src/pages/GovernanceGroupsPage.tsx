@@ -6,6 +6,8 @@ import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
+import { activateOnKey, activateOnKeyStop } from '../lib/a11y';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
@@ -280,11 +282,17 @@ function GroupTreeNode({ node, depth, onEdit, onDelete, onAddChild, onSelect, se
           cursor: 'pointer', transition: 'background 0.1s',
           minWidth: 0,
         }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Select ${node.name}`}
         onClick={() => onSelect(node.id)}
+        onKeyDown={activateOnKey(() => onSelect(node.id))}
         onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
         onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}
       >
-        <span onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(node.id); }}
+        <span
+          onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(node.id); }}
+          {...(hasChildren ? { role: 'button', tabIndex: 0, 'aria-label': isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`, 'aria-expanded': isExpanded, onKeyDown: activateOnKeyStop(() => toggleExpand(node.id)) } : {})}
           style={{ width: 14, fontSize: 10, color: 'var(--color-text-muted)', cursor: hasChildren ? 'pointer' : 'default', userSelect: 'none' }}>
           {hasChildren ? (isExpanded ? '\u25BC' : '\u25B6') : '\u2022'}
         </span>
@@ -374,6 +382,7 @@ export default function GovernanceGroupsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<GroupFormData>(emptyForm);
+  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   // When adding a child, restrict the type dropdown to valid child types
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
@@ -514,7 +523,7 @@ export default function GovernanceGroupsPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.type) return;
+    if (!validation.validateAll(form) || !form.type) return;
     const payload = {
       ...form,
       ...(activeOrgId ? { orgId: activeOrgId } : {}),
@@ -569,7 +578,7 @@ export default function GovernanceGroupsPage() {
     }
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null); };
+  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setAllowedTypes(null); validation.clearErrors(); };
 
   // ── Member handlers ──
 
@@ -891,7 +900,13 @@ export default function GovernanceGroupsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Data Governance Council" />
+              <input autoFocus
+                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={form.name}
+                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+                placeholder="e.g. Data Governance Council" />
+              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type *</label>

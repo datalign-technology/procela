@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import SkillPicker from '../components/SkillPicker';
 import { formatPersonLabel } from '../lib/personLabel';
 import { badgeColor } from '../lib/badgeColors';
@@ -137,6 +138,7 @@ export default function AgentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -213,10 +215,10 @@ export default function AgentsPage() {
     setEditingId(a.id);
     setShowForm(true);
   };
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    if (!form.name.trim() || form.orgIds.length === 0) return;
+    if (!validation.validateAll(form) || form.orgIds.length === 0) return;
     try {
       if (editingId) await apiClient.put(`/agents/${editingId}`, form);
       else await apiClient.post('/agents', form);
@@ -447,7 +449,13 @@ export default function AgentsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nightly Billing ETL" />
+              <input autoFocus
+                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={form.name}
+                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+                placeholder="e.g. Nightly Billing ETL" />
+              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>

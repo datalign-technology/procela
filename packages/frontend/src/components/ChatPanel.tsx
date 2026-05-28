@@ -122,6 +122,8 @@ export default function ChatPanel() {
           ((e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-primary)')
         }
         title={open ? 'Close chat' : 'Open AI assistant'}
+        aria-label={open ? 'Close chat' : 'Open AI assistant'}
+        aria-expanded={open}
       >
         {open ? '\u2715' : '\u2753'}
       </button>

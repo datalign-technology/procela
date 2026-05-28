@@ -19,6 +19,8 @@ import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
+import { clickable } from '../lib/a11y';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
@@ -464,6 +466,7 @@ export default function SystemsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [connectingSystem, setConnectingSystem] = useState<SystemEntity | null>(null);
@@ -549,11 +552,11 @@ export default function SystemsPage() {
 
   const { isDirty, markDirty, markClean, confirmIfDirty } = useUnsavedChanges();
 
-  const closeForm = () => { markClean(); setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const closeForm = () => { markClean(); setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
   const setFormDirty = (update: FormData | ((prev: FormData) => FormData)) => { markDirty(); setForm(update); };
 
   const handleSave = async (keepOpen: boolean = false) => {
-    if (!form.name.trim()) return;
+    if (!validation.validateAll(form)) return;
 
     // Save the system itself, then reconcile the connection links.
     // Strip connectionIds from the body — the systems route doesn't
@@ -865,7 +868,7 @@ export default function SystemsPage() {
             System Types
           </div>
           <div
-            onClick={() => setFilterType('')}
+            {...clickable(() => setFilterType(''), { pressed: !filterType })}
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterType ? 600 : 400,
@@ -884,7 +887,7 @@ export default function SystemsPage() {
             return (
               <div
                 key={t}
-                onClick={() => setFilterType(isActive ? '' : t)}
+                {...clickable(() => setFilterType(isActive ? '' : t), { pressed: isActive })}
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
@@ -902,7 +905,7 @@ export default function SystemsPage() {
           })}
           {systems.filter((s) => !s.systemType).length > 0 && (
             <div
-              onClick={() => setFilterType('__none__')}
+              {...clickable(() => setFilterType('__none__'), { pressed: filterType === '__none__' })}
               style={{
                 padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                 fontWeight: filterType === '__none__' ? 600 : 400,
@@ -995,7 +998,13 @@ export default function SystemsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setFormDirty({ ...form, name: e.target.value })} placeholder="e.g. SAP ERP, Salesforce CRM" />
+              <input autoFocus
+                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={form.name}
+                onChange={(e) => { const v = e.target.value; setFormDirty({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+                placeholder="e.g. SAP ERP, Salesforce CRM" />
+              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System Type</label>

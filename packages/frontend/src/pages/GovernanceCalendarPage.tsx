@@ -10,6 +10,7 @@ import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
+import { clickable } from '../lib/a11y';
 
 // ── Types ──
 
@@ -766,7 +767,7 @@ export default function GovernanceCalendarPage() {
                           const colors = EVENT_TYPE_COLORS[ev.eventType] || EVENT_TYPE_COLORS.CUSTOM;
                           return (
                             <div key={ev.id} title={`${ev.name} (${formatTypeLabel(ev.eventType)}) — ${ev.timeOfDay}`}
-                              onClick={() => openEdit(ev)}
+                              {...clickable(() => openEdit(ev), { label: `Edit ${ev.name}` })}
                               style={{
                                 fontSize: 10, fontWeight: 500, padding: '1px 4px', borderRadius: 3, cursor: 'pointer',
                                 background: colors.bg, color: colors.color,

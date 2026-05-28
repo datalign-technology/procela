@@ -12,6 +12,7 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ── Types ──
 
@@ -160,6 +161,7 @@ export default function GovernancePoliciesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PolicyForm>(emptyPolicyForm);
+  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   const [expandedPolicyId, setExpandedPolicyId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -199,10 +201,10 @@ export default function GovernancePoliciesPage() {
       documentType: p.documentType || 'POLICY' });
     setEditingId(p.id); setShowForm(true);
   };
-  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyPolicyForm); };
+  const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyPolicyForm); validation.clearErrors(); };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
+    if (!validation.validateAll(form)) return;
     try {
       const payload = { ...form, ownerAssignmentId: form.ownerAssignmentId || null,
         ...(activeOrgId ? { orgId: activeOrgId } : {}) };
@@ -361,7 +363,13 @@ export default function GovernancePoliciesPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Data Classification Policy" />
+              <input autoFocus
+                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={form.name}
+                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+                placeholder="e.g. Data Classification Policy" />
+              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Description</label>

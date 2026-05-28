@@ -26,6 +26,7 @@ import BulkSelectHint from '../components/BulkSelectHint';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import { errorToast } from '../lib/errorToast';
+import { clickable } from '../lib/a11y';
 import LinkConnectionModal from '../components/LinkConnectionModal';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
@@ -1010,7 +1011,7 @@ export default function DataAssetsPage() {
             Data Types
           </div>
           <div
-            onClick={() => setFilterCategory('')}
+            {...clickable(() => setFilterCategory(''), { pressed: !filterCategory })}
             style={{
               padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
               fontWeight: !filterCategory ? 600 : 400,
@@ -1035,7 +1036,7 @@ export default function DataAssetsPage() {
             return (
               <div
                 key={key}
-                onClick={() => setFilterCategory(isActive ? '' : key)}
+                {...clickable(() => setFilterCategory(isActive ? '' : key), { pressed: isActive })}
                 style={{
                   padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                   fontWeight: isActive ? 600 : 400,
@@ -1053,7 +1054,7 @@ export default function DataAssetsPage() {
           })}
           {assets.filter((a) => !a.dataType).length > 0 && (
             <div
-              onClick={() => setFilterCategory(filterCategory === '__none__' ? '' : '__none__')}
+              {...clickable(() => setFilterCategory(filterCategory === '__none__' ? '' : '__none__'), { pressed: filterCategory === '__none__' })}
               style={{
                 padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
                 fontWeight: filterCategory === '__none__' ? 600 : 400,
@@ -1246,6 +1247,7 @@ export default function DataAssetsPage() {
                         {person?.name || sid}
                         <button
                           onClick={() => setForm((prev) => ({ ...prev, stewardIds: prev.stewardIds.filter((id) => id !== sid) }))}
+                          aria-label={`Remove steward ${person?.name || sid}`}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'inherit', padding: 0, lineHeight: 1 }}
                         >&times;</button>
                       </span>

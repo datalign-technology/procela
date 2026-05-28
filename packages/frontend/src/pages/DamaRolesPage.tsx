@@ -13,6 +13,7 @@ import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/u
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
+import { clickable } from '../lib/a11y';
 import { GOVERNANCE_ROLES } from '../types';
 
 // Required governance roles (CDO, Data Governance Lead, Data Owner,
@@ -452,7 +453,7 @@ function SidebarItem({ label, count, active, onClick, accent }: {
 }) {
   return (
     <div
-      onClick={onClick}
+      {...clickable(onClick, { label: `${label} (${count})`, pressed: active })}
       style={{
         padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
         fontWeight: active ? 600 : 400,

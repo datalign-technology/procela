@@ -11,6 +11,7 @@ import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
 import HelpPopover from '../components/HelpPopover';
+import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills Taxonomy — DAMA-aligned capabilities that agents (and people) can
@@ -96,6 +97,7 @@ export default function SkillsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
+  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -152,11 +154,11 @@ export default function SkillsPage() {
     setShowForm(true);
   };
 
-  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); };
+  const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
 
   const handleSave = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
-    if (!form.name.trim()) return;
+    if (!validation.validateAll(form)) return;
     try {
       if (editingId) {
         await apiClient.put(`/skills/${editingId}`, form);
@@ -319,7 +321,13 @@ export default function SkillsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
-              <input autoFocus style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Data Profiling" />
+              <input autoFocus
+                style={{ ...inputStyle, border: validation.fieldError('name') ? inputErrorBorder : inputStyle.border }}
+                value={form.name}
+                onChange={(e) => { const v = e.target.value; setForm({ ...form, name: v }); if (validation.touched.name) validation.validateField('name', v, form); }}
+                onBlur={() => { validation.touch('name'); validation.validateField('name', form.name, form); }}
+                placeholder="e.g. Data Profiling" />
+              {validation.fieldError('name') && <div style={fieldErrorStyle}>{validation.fieldError('name')}</div>}
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Category</label>

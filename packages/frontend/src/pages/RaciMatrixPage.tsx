@@ -9,6 +9,7 @@ import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import EmptyState from '../components/EmptyState';
+import { clickable, activateOnKey } from '../lib/a11y';
 
 interface RaciRow {
   id: string;
@@ -413,7 +414,8 @@ export default function RaciMatrixPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {hasCh ? (
                             <span
-                              onClick={() => toggleExpand(row.id)}
+                              {...clickable(() => toggleExpand(row.id), { label: isExp ? `Collapse ${row.name}` : `Expand ${row.name}` })}
+                              aria-expanded={isExp}
                               style={{ cursor: 'pointer', fontSize: 8, color: 'var(--color-text-muted)', width: 12, textAlign: 'center', flexShrink: 0 }}
                             >
                               {isExp ? '\u25BC' : '\u25B6'}
@@ -443,9 +445,11 @@ export default function RaciMatrixPage() {
                         const colors = value ? RACI_COLORS[value] : null;
                         return (
                           <td key={col.personId}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${row.name} — ${value ? RACI_LABELS[value] || value : 'unassigned'}. Activate to change.`}
                             onClick={() => handleCellClick(row.id, col.personId, value)}
-                            onMouseEnter={() => {}}
-                            onMouseLeave={() => {}}
+                            onKeyDown={activateOnKey(() => handleCellClick(row.id, col.personId, value))}
                             style={{
                               ...tdStyle, textAlign: 'center', cursor: 'pointer',
                               background: colors ? colors.bg : 'transparent',
