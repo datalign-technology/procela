@@ -221,7 +221,10 @@ export default function AgentsPage() {
   };
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
   const handleSave = async () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    // Creating needs a header org to default the assignment to; editing an
+    // existing agent doesn't — its orgIds are already on the form and sent in
+    // the PUT. (The orgIds-non-empty check below is the real guard.)
+    if (!editingId && !activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     if (!validation.validateAll(form) || form.orgIds.length === 0) return;
     try {
       if (editingId) await apiClient.put(`/agents/${editingId}`, form);
