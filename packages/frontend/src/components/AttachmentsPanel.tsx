@@ -20,6 +20,11 @@ interface AttachmentsPanelProps {
   entityId: string;
   orgId?: string;
   disabled?: boolean;
+  /** Suppress the internal "Attachments (N)" title — used when an outer
+   *  collapsible section already renders the title. The Add button is kept. */
+  hideHeader?: boolean;
+  /** Reports the current attachment count to a parent (for a section badge). */
+  onCount?: (n: number) => void;
 }
 
 function formatSize(bytes: number): string {
@@ -40,7 +45,7 @@ function getFileIcon(mimeType?: string, type?: string): string {
   return '\u{1F4C4}';
 }
 
-export default function AttachmentsPanel({ entityType, entityId, orgId, disabled }: AttachmentsPanelProps) {
+export default function AttachmentsPanel({ entityType, entityId, orgId, disabled, hideHeader, onCount }: AttachmentsPanelProps) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -53,6 +58,7 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
         `/attachments?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
       );
       setAttachments(res.data || []);
+      onCount?.((res.data || []).length);
     } catch { /* */ }
     finally { setLoading(false); }
   };
@@ -134,10 +140,12 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
 
   return (
     <div style={{ marginTop: 8, padding: '8px 10px', background: '#fafbfc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Attachments ({attachments.length})
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: hideHeader ? 'flex-end' : 'space-between', marginBottom: 6 }}>
+        {!hideHeader && (
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Attachments ({attachments.length})
+          </div>
+        )}
         {!disabled && (
           <button onClick={() => setShowModal(true)}
             style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', border: '1px dashed var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-text-muted)' }}>

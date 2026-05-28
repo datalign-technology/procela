@@ -20,6 +20,7 @@ import { useDomainLensStore, useDomainLens, passesLens } from '../stores/domainL
 import { processDomain } from '../lib/entityDomain';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
+import CollapsibleSection from '../components/CollapsibleSection';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
@@ -1017,6 +1018,18 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  // Collaboration panels (Attachments / Discussion / Activity) are collapsed
+  // by default to keep the tree compact; counts come from the panels via
+  // onCount so the header badge is accurate before the section is opened.
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  const [sectionCounts, setSectionCounts] = useState<{ attachments?: number; discussion?: number }>({});
+  const toggleSection = (key: string) => setOpenSections((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const setSectionCount = (key: 'attachments' | 'discussion', n: number) =>
+    setSectionCounts((prev) => (prev[key] === n ? prev : { ...prev, [key]: n }));
   const nodeTags = allTags.filter((t) => t.entityId === node.id);
   const isExpanded = expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
@@ -1367,37 +1380,58 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               onRemove={onRemoveMapping}
             />
           )}
-          {/* Attachments panel — docs, diagrams, external links */}
+          {/* Collaboration panels — collapsed by default to keep the tree
+            *  compact. The panels stay mounted (hidden) so their header
+            *  counts populate without the user opening each one. */}
           {isExpanded && (
-            <AttachmentsPanel
-              entityType="ProcessNode"
-              entityId={node.id}
-              orgId={node.orgIds?.[0]}
-              disabled={isLocked}
-            />
-          )}
-          {/* Discussion — threaded comments + @mentions for this node.
-            *  Process-level conversations stay attached to the node rather
-            *  than living in someone's email. */}
-          {isExpanded && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                Discussion
-              </div>
-              <CommentsPanel
-                entityType="ProcessNode"
-                entityId={node.id}
-                entityLabel={`${LEVEL_CONFIG[node.level].label}: ${node.name}`}
-              />
-            </div>
-          )}
-          {isExpanded && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-                Activity
-              </div>
-              <ActivityFeed entityType="ProcessNode" entityId={node.id} inline initialRows={5} />
-            </div>
+            <>
+              {/* Attachments — docs, diagrams, external links */}
+              <CollapsibleSection
+                title="Attachments"
+                count={sectionCounts.attachments}
+                open={openSections.has('attachments')}
+                onToggle={() => toggleSection('attachments')}
+              >
+                <AttachmentsPanel
+                  entityType="ProcessNode"
+                  entityId={node.id}
+                  orgId={node.orgIds?.[0]}
+                  disabled={isLocked}
+                  hideHeader
+                  onCount={(n) => setSectionCount('attachments', n)}
+                />
+              </CollapsibleSection>
+              {/* Discussion — threaded comments + @mentions for this node.
+                *  Process-level conversations stay attached to the node
+                *  rather than living in someone's email. */}
+              <CollapsibleSection
+                title="Discussion"
+                count={sectionCounts.discussion}
+                open={openSections.has('discussion')}
+                onToggle={() => toggleSection('discussion')}
+              >
+                <CommentsPanel
+                  entityType="ProcessNode"
+                  entityId={node.id}
+                  entityLabel={`${LEVEL_CONFIG[node.level].label}: ${node.name}`}
+                  onCount={(n) => setSectionCount('discussion', n)}
+                />
+              </CollapsibleSection>
+              {/* No count badge here: the feed is capped at limit=30, so a
+                *  badge could undercount a long audit trail. */}
+              <CollapsibleSection
+                title="Activity"
+                open={openSections.has('activity')}
+                onToggle={() => toggleSection('activity')}
+              >
+                <ActivityFeed
+                  entityType="ProcessNode"
+                  entityId={node.id}
+                  inline
+                  initialRows={5}
+                />
+              </CollapsibleSection>
+            </>
           )}
           {/* Guided prompt for missing required children */}
           {warning && (

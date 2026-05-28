@@ -49,12 +49,15 @@ interface Props {
    *  modals which already have their own card. */
   inline?: boolean;
   title?: string;
+  /** Reports the current entry count to a parent (for a section badge). */
+  onCount?: (n: number) => void;
 }
 
 export default function ActivityFeed({
   entityType, entityId, userId,
   limit = 30, initialRows = 5,
   inline = false, title = 'Recent Activity',
+  onCount,
 }: Props) {
   const { activeOrgId } = useOrgContext();
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
@@ -69,8 +72,8 @@ export default function ActivityFeed({
     params.set('limit', String(limit));
     apiClient
       .get<{ success: boolean; data: AuditEntry[] }>(`/audit?${params.toString()}`)
-      .then((res) => { if (!cancelled) setEntries(res.data || []); })
-      .catch(() => { if (!cancelled) setEntries([]); });
+      .then((res) => { if (!cancelled) { setEntries(res.data || []); onCount?.((res.data || []).length); } })
+      .catch(() => { if (!cancelled) { setEntries([]); onCount?.(0); } });
     return () => { cancelled = true; };
   }, [activeOrgId, entityType, entityId, userId, limit]);
 

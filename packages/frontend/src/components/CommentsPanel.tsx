@@ -48,9 +48,11 @@ interface Props {
   entityId: string;
   /** Optional - improves the @mention notification text. Defaults to "<entityType> <entityId>". */
   entityLabel?: string;
+  /** Reports the current comment count to a parent (for a section badge). */
+  onCount?: (n: number) => void;
 }
 
-export default function CommentsPanel({ entityType, entityId, entityLabel }: Props) {
+export default function CommentsPanel({ entityType, entityId, entityLabel, onCount }: Props) {
   const { activeOrgId } = useOrgContext();
   const currentUser = useAuthStore((s) => s.user);
   const addToast = useToastStore((s) => s.addToast);
@@ -71,8 +73,10 @@ export default function CommentsPanel({ entityType, entityId, entityLabel }: Pro
         `/comments?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}${orgQ}`,
       );
       setComments(res.data || []);
+      onCount?.((res.data || []).length);
     } catch {
       setComments([]);
+      onCount?.(0);
     }
   };
 
