@@ -635,10 +635,12 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   onRemove: (mappingId: string) => void;
 }) {
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
-  const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment'>(isGovernance ? 'policy' : 'asset');
+  const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment' | 'link'>(isGovernance ? 'policy' : 'asset');
   const [pickedAsset, setPickedAsset] = useState('');
   const [pickedPolicy, setPickedPolicy] = useState('');
   const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [pickedUrl, setPickedUrl] = useState('');
+  const [pickedUrlName, setPickedUrlName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [expandedMapping, setExpandedMapping] = useState<string | null>(null);
   const [localMappings, setLocalMappings] = useState(mappings);
@@ -650,7 +652,16 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
 
   const resetAdd = () => {
     setPickedAsset(''); setPickedPolicy(''); setPickedFile(null);
-    setShowAdd(null); setAddKind('asset');
+    setPickedUrl(''); setPickedUrlName('');
+    setShowAdd(null); setAddKind(isGovernance ? 'policy' : 'asset');
+  };
+
+  // Light client-side URL check just to gate the Save button; the backend
+  // does the authoritative validation via new URL().
+  const isValidUrl = (raw: string): boolean => {
+    const v = raw.trim();
+    if (!v) return false;
+    try { new URL(v); return true; } catch { return false; }
   };
 
   const handleAdd = async (linkType: string) => {
@@ -682,6 +693,27 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
         if (orgId) params.set('orgId', orgId);
         const uploaded = await apiClient.upload<{ success: boolean; data: { id: string } }>(`/attachments/upload?${params.toString()}`, pickedFile);
         const id = uploaded.data?.id;
+        if (id) onAdd(nodeId, { kind: 'attachment', id }, linkType);
+        resetAdd();
+      } catch { /* parent toast handles errors */ }
+      finally { setUploading(false); }
+    }
+    if (addKind === 'link') {
+      if (!isValidUrl(pickedUrl)) return;
+      setUploading(true);
+      try {
+        // Create a URL-type attachment, then bind it as an I/O row —
+        // same two-step flow as the file upload, so the mapping always
+        // points at a persisted attachment id.
+        const created = await apiClient.post<{ success: boolean; data: { id: string } }>('/attachments/url', {
+          entityType: 'ProcessNode',
+          entityId: nodeId,
+          name: pickedUrlName.trim() || pickedUrl.trim(),
+          description: '',
+          url: pickedUrl.trim(),
+          ...(orgId ? { orgId } : {}),
+        });
+        const id = created.data?.id;
         if (id) onAdd(nodeId, { kind: 'attachment', id }, linkType);
         resetAdd();
       } catch { /* parent toast handles errors */ }
@@ -814,7 +846,8 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     }
     const canSave = (addKind === 'asset' && !!pickedAsset)
       || (addKind === 'policy' && !!pickedPolicy)
-      || (addKind === 'attachment' && !!pickedFile && !uploading);
+      || (addKind === 'attachment' && !!pickedFile && !uploading)
+      || (addKind === 'link' && isValidUrl(pickedUrl) && !uploading);
     return (
       <div style={{ marginTop: 6, padding: '6px 8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {/* Segmented control — pick WHAT kind of target first.
@@ -825,11 +858,13 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
             ? [
                 { value: 'policy',     label: 'Document' },
                 { value: 'attachment', label: 'Upload' },
+                { value: 'link',       label: 'Link' },
               ] as const
             : [
                 { value: 'asset',      label: 'Data Asset' },
                 { value: 'policy',     label: 'Document' },
                 { value: 'attachment', label: 'Upload' },
+                { value: 'link',       label: 'Link' },
               ] as const
           ).map((opt) => {
             const active = addKind === opt.value;
@@ -873,10 +908,29 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
             style={{ fontSize: 11 }}
           />
         )}
+        {addKind === 'link' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <input
+              type="url"
+              autoFocus
+              value={pickedUrl}
+              onChange={(e) => setPickedUrl(e.target.value)}
+              placeholder="https://… (link to a doc, dashboard, spec)"
+              style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
+            />
+            <input
+              type="text"
+              value={pickedUrlName}
+              onChange={(e) => setPickedUrlName(e.target.value)}
+              placeholder="Label (optional — defaults to the URL)"
+              style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}
+            />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 4 }}>
           <button onClick={() => handleAdd(linkType)} disabled={!canSave}
             style={{ fontSize: 10, padding: '2px 8px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, cursor: canSave ? 'pointer' : 'not-allowed', opacity: canSave ? 1 : 0.5 }}>
-            {uploading ? 'Uploading…' : 'Save'}
+            {uploading ? (addKind === 'link' ? 'Saving…' : 'Uploading…') : 'Save'}
           </button>
           <button onClick={resetAdd}
             style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer' }}>
