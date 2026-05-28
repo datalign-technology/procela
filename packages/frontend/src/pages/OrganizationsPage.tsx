@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
 import SyncConnectionWizard from '../components/SyncConnectionWizard';
+import { SkeletonRows } from '../components/Skeleton';
 
 // ── Types ──
 
@@ -421,13 +422,19 @@ export default function OrganizationsPage() {
       if (importFormat === 'csv') body.csv = importText; else body.organizations = JSON.parse(importText);
       const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number }>('/organizations/import', body);
       if (result.skipped && result.skipped > 0 && result.message) {
-        alert(result.message);
+        addToast('info', result.message);
+      } else {
+        addToast('success', 'Organizations imported');
       }
       setShowImport(false); setImportText(''); fetchData(); expandAll(); triggerRefresh();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+    } catch (e) { addToast('error', e instanceof Error ? e.message : 'Import failed'); }
   };
 
-  if (loading) return <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>;
+  if (loading) return (
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+      <SkeletonRows rows={6} columnWidths={[32, null, null, 90]} />
+    </div>
+  );
 
   return (
     <div>

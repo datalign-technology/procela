@@ -11,6 +11,7 @@ import IconButton from '../components/IconButton';
 import { errorToast } from '../lib/errorToast';
 import SaveIndicator, { type SaveState } from '../components/SaveIndicator';
 import { SkeletonRows } from '../components/Skeleton';
+import HelpPopover from '../components/HelpPopover';
 import OrgChipInput from '../components/OrgChipInput';
 import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
@@ -869,12 +870,16 @@ export default function PeoplePage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>People</h1>
+            <HelpPopover id="people-overview" title="People">
+              Everyone in your directory, grouped by the organization they
+              belong to. People are assigned as owners and stewards across
+              processes, systems, and data assets, and hold governance roles.
+              Pick an organization on the left to narrow the list.
+            </HelpPopover>
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
             {people.length} people across {flatOrgs.length} organizations. Filter by organization to narrow the list.
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         </div>
       </div>
 

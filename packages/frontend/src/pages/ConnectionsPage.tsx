@@ -1195,9 +1195,11 @@ export default function ConnectionsPage() {
                 Discovering assets...
               </div>
             ) : discoveredAssets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
-                No assets discovered.
-              </div>
+              <EmptyState
+                icon={'\u{1F50D}'}
+                title="No assets discovered"
+                description="This connection didn't return any tables, files, or objects. Check that it points at a populated source and try testing it again."
+              />
             ) : (
               <>
                 <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>

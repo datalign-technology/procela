@@ -537,7 +537,7 @@ export default function GovernanceGroupsPage() {
     if (selectedGroupId) fetchGroupDetail(selectedGroupId);
     // Show governance recommendation warning if returned
     if (res?.warning) {
-      setTimeout(() => alert(res.warning), 100);
+      addToast('info', res.warning);
     }
   };
 
@@ -581,7 +581,7 @@ export default function GovernanceGroupsPage() {
       fetchGroupDetail(selectedGroupId);
       fetchGroups();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to add member');
+      addToast('error', e instanceof Error ? e.message : 'Failed to add member');
     }
   };
 
@@ -595,7 +595,7 @@ export default function GovernanceGroupsPage() {
       fetchGroupDetail(selectedGroupId);
       fetchGroups();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to add member');
+      addToast('error', e instanceof Error ? e.message : 'Failed to add member');
     }
   };
 

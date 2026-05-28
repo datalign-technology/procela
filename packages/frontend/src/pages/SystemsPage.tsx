@@ -663,16 +663,18 @@ export default function SystemsPage() {
 
   const handleImport = async () => {
     if (!importText.trim()) return;
-    if (!activeOrgId) { alert('Select an organization from the "Working in" dropdown first.'); return; }
+    if (!activeOrgId) { addToast('error', 'Select an organization from the "Working in" dropdown first.'); return; }
     try {
       const body: any = { orgId: activeOrgId };
       if (importFormat === 'csv') { body.csv = importText; } else { body.systems = JSON.parse(importText); }
       const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number }>('/systems/import', body);
       if (result.skipped && result.skipped > 0 && result.message) {
-        alert(result.message);
+        addToast('info', result.message);
+      } else {
+        addToast('success', 'Systems imported');
       }
       setShowImport(false); setImportText(''); fetchData();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+    } catch (e) { addToast('error', e instanceof Error ? e.message : 'Import failed'); }
   };
 
   const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -800,7 +800,7 @@ export default function GovernanceCalendarPage() {
               Upcoming (next 30 days)
             </h3>
             {loading ? (
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading...</p>
+              <SkeletonRows rows={4} columns={1} />
             ) : upcoming.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
                 Nothing scheduled in the next 30 days.

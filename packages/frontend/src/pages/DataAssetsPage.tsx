@@ -360,6 +360,9 @@ export default function DataAssetsPage() {
   const [loading360, setLoading360] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  // Duplicate-name soft-warn: stashes the pending save so the ConfirmDialog
+  // can resume it on confirm. `keepOpen` mirrors the handleSave argument.
+  const [confirmDuplicate, setConfirmDuplicate] = useState<{ name: string; keepOpen: boolean } | null>(null);
 
   // Source-connection discovery state — populated when the user clicks
   // "Discover" on the Link to Source block so they can pick a table /
@@ -678,11 +681,13 @@ export default function DataAssetsPage() {
       (a.name || '').trim().toLowerCase() === normalized,
     );
     if (collision) {
-      const proceed = window.confirm(
-        `An asset called "${collision.name}" already exists in this organization. Save anyway?\n\nClick Cancel if this is a duplicate, or OK if it's a legitimate same-name asset in a different context.`,
-      );
-      if (!proceed) return;
+      setConfirmDuplicate({ name: collision.name, keepOpen });
+      return;
     }
+    await performSave(keepOpen);
+  };
+
+  const performSave = async (keepOpen: boolean = false) => {
     const { domainId, retentionDurationValue, retentionDurationUnit, ...rest } = form;
     // Translate the split duration inputs into the structured shape the
     // backend expects. Empty value clears the field.
@@ -1536,6 +1541,22 @@ export default function DataAssetsPage() {
           await handleBulkDelete();
         }}
         onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmDuplicate !== null}
+        variant="primary"
+        title="Duplicate name?"
+        message={confirmDuplicate
+          ? `An asset called "${confirmDuplicate.name}" already exists in this organization. Save anyway? Cancel if this is a duplicate, or confirm if it's a legitimate same-name asset in a different context.`
+          : ''}
+        confirmLabel="Save Anyway"
+        onConfirm={async () => {
+          const pending = confirmDuplicate;
+          setConfirmDuplicate(null);
+          if (pending) await performSave(pending.keepOpen);
+        }}
+        onCancel={() => setConfirmDuplicate(null)}
       />
 
       {/* Table */}

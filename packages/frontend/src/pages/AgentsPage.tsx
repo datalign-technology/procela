@@ -275,14 +275,15 @@ export default function AgentsPage() {
   const handleImport = async () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
     const orgId = importOrgId || selectedOrgId;
-    if (!importText.trim() || !orgId) { alert('Select an organization and provide data to import.'); return; }
+    if (!importText.trim() || !orgId) { addToast('error', 'Select an organization and provide data to import.'); return; }
     try {
       const body: any = { orgId };
       if (importFormat === 'csv') body.csv = importText; else body.agents = JSON.parse(importText);
       await apiClient.post('/agents/import', body);
+      addToast('success', 'Agents imported');
       setShowImport(false); setImportText(''); setImportOrgId('');
       fetchData();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Import failed'); }
+    } catch (e) { addToast('error', e instanceof Error ? e.message : 'Import failed'); }
   };
   // Sort — URL-persisted via ?sort=&dir=.
   const { sorted, sortKey, sortDir, toggleSort } = useSortedList(

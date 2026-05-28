@@ -12,6 +12,7 @@ import SectionCard from '../components/SectionCard';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
+import { SkeletonRows } from '../components/Skeleton';
 import { GOVERNANCE_ROLES } from '../types';
 
 // Required governance roles (CDO, Data Governance Lead, Data Owner,
@@ -423,7 +424,7 @@ export default function DamaRolesPage() {
         <div>
           <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
             {loading ? (
-              <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '4rem' }}>Loading...</p>
+              <SkeletonRows rows={6} columns={4} />
             ) : (
               <ByRoleView
                 roles={filteredRoles}

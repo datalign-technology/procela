@@ -255,6 +255,7 @@ export default function DataLineagePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmDeleteDbtConn, setConfirmDeleteDbtConn] = useState<DbtCloudConnectionRow | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'visualization'>('table');
   const [vizMode, setVizMode] = useState<'systems' | 'assets' | 'both'>('systems');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -349,7 +350,12 @@ export default function DataLineagePage() {
   };
 
   const deleteDbtConnection = async (id: string) => {
-    try { await apiClient.delete(`/dbt-cloud-connections/${id}`); } catch { /* */ }
+    try {
+      await apiClient.delete(`/dbt-cloud-connections/${id}`);
+      addToast('success', 'dbt Cloud connection deleted');
+    } catch (e) {
+      addToast('error', e instanceof Error ? e.message : 'Failed to delete dbt Cloud connection');
+    }
     fetchDbtConnections();
   };
 
@@ -627,6 +633,14 @@ export default function DataLineagePage() {
         onConfirm={async () => { setConfirmBulkDelete(false); await handleBulkDelete(); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
+      <ConfirmDialog
+        open={!!confirmDeleteDbtConn}
+        title="Delete dbt Cloud connection?"
+        message={confirmDeleteDbtConn ? `Delete dbt Cloud connection "${confirmDeleteDbtConn.name}"? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        onConfirm={() => { if (confirmDeleteDbtConn) deleteDbtConnection(confirmDeleteDbtConn.id); setConfirmDeleteDbtConn(null); }}
+        onCancel={() => setConfirmDeleteDbtConn(null)}
+      />
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && viewMode === 'table' && (
@@ -753,7 +767,7 @@ export default function DataLineagePage() {
               refreshingId={refreshingConnId}
               onRefresh={refreshDbtConnection}
               onEdit={(c) => { setEditingDbtConn(c); setShowDbtConnForm(true); }}
-              onDelete={deleteDbtConnection}
+              onDelete={(id) => setConfirmDeleteDbtConn(dbtConnections.find((c) => c.id === id) || null)}
               onAdd={() => { setEditingDbtConn(null); setShowDbtConnForm(true); }}
             />
           )}
@@ -1047,7 +1061,7 @@ function DbtCloudConnectionsPanel({
                     {refreshingId === c.id ? 'Refreshing…' : 'Refresh now'}
                   </button>
                   <button type="button" onClick={() => onEdit(c)} style={connBtnStyle}>Edit</button>
-                  <button type="button" onClick={() => { if (confirm(`Delete dbt Cloud connection "${c.name}"?`)) onDelete(c.id); }} style={{ ...connBtnStyle, color: 'var(--color-error)' }}>Delete</button>
+                  <button type="button" onClick={() => onDelete(c.id)} style={{ ...connBtnStyle, color: 'var(--color-error)' }}>Delete</button>
                 </td>
               </tr>
             ))}

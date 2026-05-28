@@ -8,6 +8,7 @@ import { ExportPayload } from '../lib/export';
 import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
+import EmptyState from '../components/EmptyState';
 
 interface RaciRow {
   id: string;
@@ -295,9 +296,11 @@ export default function RaciMatrixPage() {
       )}
       {error && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
       {!loading && !error && !hasData && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '3rem 2rem', textAlign: 'center' }}>
-          <p style={{ color: 'var(--color-text-secondary)' }}>No RACI data available. Define processes and assign governance roles to generate the RACI matrix.</p>
-        </div>
+        <EmptyState
+          icon={'\u{1F4CB}'}
+          title="No RACI data available"
+          description="Define processes and assign governance roles to generate the RACI matrix."
+        />
       )}
 
       {!loading && !error && hasData && data && (

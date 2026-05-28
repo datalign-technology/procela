@@ -206,26 +206,29 @@ export default function GovernancePoliciesPage() {
     try {
       const payload = { ...form, ownerAssignmentId: form.ownerAssignmentId || null,
         ...(activeOrgId ? { orgId: activeOrgId } : {}) };
+      const typeLabel = DOCUMENT_TYPE_LABEL[form.documentType] || 'Document';
       if (editingId) {
         await apiClient.put(`/governance-policies/${editingId}`, payload);
-        addToast('success', 'Policy updated');
+        addToast('success', `${typeLabel} updated`);
       } else {
         await apiClient.post('/governance-policies', payload);
-        addToast('success', 'Policy created');
+        addToast('success', `${typeLabel} created`);
       }
       closeForm(); fetchData();
     } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to save policy');
+      addToast('error', err?.response?.data?.error || 'Failed to save document');
     }
   };
 
   const handleDelete = async (id: string) => {
+    const docType = policies.find((p) => p.id === id)?.documentType;
+    const typeLabel = (docType && DOCUMENT_TYPE_LABEL[docType]) || 'Document';
     try {
       await apiClient.delete(`/governance-policies/${id}`);
-      addToast('success', 'Policy deleted');
+      addToast('success', `${typeLabel} deleted`);
       if (expandedPolicyId === id) setExpandedPolicyId(null);
       fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete policy'); }
+    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete document'); }
   };
 
   // ── Control CRUD ──
@@ -288,7 +291,7 @@ export default function GovernancePoliciesPage() {
 
   return (
     <div>
-      <DependencyBanner phase="Policies should follow governance structure and domain definition." checks={[
+      <DependencyBanner phase="Governance documents should follow governance structure and domain definition." checks={[
         { label: 'Create data domains', met: deps.hasDomains, link: '/data-domains' },
         { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },
       ]} />
@@ -330,20 +333,31 @@ export default function GovernancePoliciesPage() {
         })}
       </div>
 
-      <ConfirmDialog open={confirmDelete !== null} title="Delete Policy?"
-        message="This will permanently delete this policy and orphan its controls." confirmLabel="Delete"
-        onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); if (id) await handleDelete(id); }}
-        onCancel={() => setConfirmDelete(null)} />
+      {(() => {
+        const doc = confirmDelete ? policies.find((p) => p.id === confirmDelete) : null;
+        const docType = doc?.documentType || 'POLICY';
+        const typeLabel = DOCUMENT_TYPE_LABEL[docType] || 'Document';
+        const controlCount = confirmDelete ? controlsForPolicy(confirmDelete).length : 0;
+        const orphanClause = controlCount > 0
+          ? ` and orphan its ${controlCount} control${controlCount === 1 ? '' : 's'}`
+          : '';
+        return (
+          <ConfirmDialog open={confirmDelete !== null} title={`Delete ${typeLabel}?`}
+            message={`This will permanently delete this ${typeLabel.toLowerCase()}${orphanClause}. This cannot be undone.`} confirmLabel="Delete"
+            onConfirm={async () => { const id = confirmDelete; setConfirmDelete(null); if (id) await handleDelete(id); }}
+            onCancel={() => setConfirmDelete(null)} />
+        );
+      })()}
 
       <ConfirmDialog open={confirmDeleteControl !== null} title="Delete Control?"
         message="This will permanently delete this control." confirmLabel="Delete"
         onConfirm={async () => { const id = confirmDeleteControl; setConfirmDeleteControl(null); if (id) await handleDeleteControl(id); }}
         onCancel={() => setConfirmDeleteControl(null)} />
 
-      {/* Add/Edit Policy Form */}
+      {/* Add/Edit Document Form */}
       {showForm && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20, boxShadow: 'var(--shadow-sm)' }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Policy' : 'Add New Policy'}</h3>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? `Edit ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}` : `Add New ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Name *</label>
@@ -392,7 +406,7 @@ export default function GovernancePoliciesPage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
             <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1, cursor: !form.name.trim() ? 'not-allowed' : 'pointer' }} disabled={!form.name.trim()} onClick={handleSave}>
-              {editingId ? 'Save Changes' : 'Add Policy'}
+              {editingId ? 'Save Changes' : `Add ${DOCUMENT_TYPE_LABEL[form.documentType] || 'Document'}`}
             </button>
           </div>
         </div>
