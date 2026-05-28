@@ -26,6 +26,10 @@ export interface StoredAgent {
   status: typeof AGENT_STATUSES[number];
   ownerPersonId: string;          // person responsible (blank = unowned)
   skillIds: string[];             // skills this agent possesses
+  // Operating brief used when the agent actually performs a governance
+  // activity — becomes the system prompt for the real Claude call. Blank
+  // means "use general data-governance best practice".
+  instructions: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +42,10 @@ export const agents: StoredAgent[] = loadStore<StoredAgent>('agents');
   for (const a of agents) {
     if (!Array.isArray(a.skillIds)) {
       (a as any).skillIds = [];
+      backfilled++;
+    }
+    if (typeof a.instructions !== 'string') {
+      (a as any).instructions = '';
       backfilled++;
     }
   }
@@ -79,7 +87,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/agents */
 router.post('/', (req: Request, res: Response) => {
-  const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds } = req.body;
+  const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const assignedOrgIds: string[] = Array.isArray(orgIds) ? orgIds : [];
   if (assignedOrgIds.length === 0) {
@@ -105,6 +113,7 @@ router.post('/', (req: Request, res: Response) => {
     status: resolvedStatus,
     ownerPersonId: ownerPersonId || '',
     skillIds: Array.isArray(skillIds) ? skillIds : [],
+    instructions: typeof instructions === 'string' ? instructions : '',
     createdAt: now, updatedAt: now,
   };
   agents.push(agent);
@@ -116,12 +125,13 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const agent = agents.find((a) => a.id === req.params.id);
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
-  const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds } = req.body;
+  const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
   if (name !== undefined) agent.name = name;
   if (description !== undefined) agent.description = description;
   if (provider !== undefined) agent.provider = provider;
   if (ownerPersonId !== undefined) agent.ownerPersonId = ownerPersonId;
   if (skillIds !== undefined) agent.skillIds = Array.isArray(skillIds) ? skillIds : [];
+  if (instructions !== undefined) agent.instructions = typeof instructions === 'string' ? instructions : '';
   if (agentType !== undefined && AGENT_TYPES.includes(agentType)) agent.agentType = agentType;
   if (status !== undefined && AGENT_STATUSES.includes(status)) agent.status = status;
   if (orgIds !== undefined) {
@@ -210,6 +220,7 @@ router.post('/import', (req: Request, res: Response) => {
         status: 'ACTIVE',
         ownerPersonId: '',
         skillIds: [],
+        instructions: '',
         createdAt: now, updatedAt: now,
       };
       agents.push(agent);

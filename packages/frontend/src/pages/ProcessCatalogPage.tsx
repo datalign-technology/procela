@@ -22,6 +22,7 @@ import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
 import CollapsibleSection from '../components/CollapsibleSection';
 import { useToastStore } from '../stores/toastStore';
+import { useAuthStore } from '../stores/authStore';
 import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
@@ -1026,7 +1027,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, runningActivity, hasAgentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1053,10 +1054,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   onRemoveTag: (tagId: string) => void;
   selectedIds: Set<string>;
   toggleSelect: (id: string) => void;
-  agentExecByActivity?: Record<string, { status: string; completedAt: string | null; agentName: string; durationMs: number | null }>;
-  onRunAgent?: (activityId: string, activityName: string) => void;
+  agentExecByActivity?: Record<string, { id: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; agentName: string; durationMs: number | null }>;
+  onRunAgent?: (activityId: string, activityName: string, agentRole: { agentId: string; agentName: string | null; roleType: string }) => void;
+  onReviewExecution?: (executionId: string, reviewStatus: 'APPROVED' | 'REJECTED' | 'PENDING') => void;
   runningActivity?: string | null;
-  hasAgentRoles?: boolean;
+  /** Agents available to run governance work (one entry per agent). */
+  agentRoles?: Array<{ agentId: string; agentName: string | null; roleType: string }>;
   /** Union of personIds holding ANY governance role in this org —
    *  used to gate Owner / Stakeholders on governance value streams
    *  and processes. */
@@ -1084,6 +1087,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   });
   const setSectionCount = (key: 'attachments' | 'discussion', n: number) =>
     setSectionCounts((prev) => (prev[key] === n ? prev : { ...prev, [key]: n }));
+  // Which available agent to run on this activity, and whether the produced
+  // draft is expanded for review.
+  const [runAgentId, setRunAgentId] = useState('');
+  const [showAgentResult, setShowAgentResult] = useState(false);
   const nodeTags = allTags.filter((t) => t.entityId === node.id);
   const isExpanded = expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
@@ -1347,37 +1354,81 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                     </>
                   )}
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
-                  {/* Agent execution — Run button + last status */}
-                  {hasAgentRoles && onRunAgent && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, marginTop: 2 }}>
-                      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Agent Run:</span>
-                      <button
-                        onClick={() => onRunAgent(node.id, node.name)}
-                        disabled={runningActivity === node.id}
-                        style={{
-                          padding: '2px 10px', fontSize: 10, fontWeight: 600,
-                          background: runningActivity === node.id ? '#e5e7eb' : '#7c3aed',
-                          color: runningActivity === node.id ? '#6b7280' : '#fff',
-                          border: 'none', borderRadius: 4, cursor: runningActivity === node.id ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {runningActivity === node.id ? 'Running...' : 'Run'}
-                      </button>
-                      {agentExecByActivity?.[node.id] && (() => {
-                        const ex = agentExecByActivity[node.id];
-                        const statusColor = ex.status === 'SUCCESS' ? '#065f46' : ex.status === 'FAILED' ? '#b91c1c' : '#92400e';
-                        const statusBg = ex.status === 'SUCCESS' ? '#d1fae5' : ex.status === 'FAILED' ? '#fef2f2' : '#fef3c7';
-                        return (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: statusBg, color: statusColor }}>{ex.status}</span>
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
-                              {ex.agentName} {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : ''} {ex.durationMs != null ? `(${ex.durationMs}ms)` : ''}
-                            </span>
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  )}
+                  {/* Agent execution — have an agent PERFORM this activity.
+                      Scoped to the governance value stream; the backend enforces
+                      the same rule. */}
+                  {node.domain === 'GOVERNANCE' && onRunAgent && (agentRoles?.length ?? 0) > 0 && (() => {
+                    const ex = agentExecByActivity?.[node.id];
+                    const selectedId = runAgentId || agentRoles![0].agentId;
+                    const selected = agentRoles!.find((a) => a.agentId === selectedId) || agentRoles![0];
+                    const running = runningActivity === node.id;
+                    const reviewMap: Record<string, { bg: string; c: string; t: string }> = {
+                      APPROVED: { bg: '#d1fae5', c: '#065f46', t: 'Approved' },
+                      REJECTED: { bg: '#fee2e2', c: '#991b1b', t: 'Rejected' },
+                      PENDING: { bg: '#fef3c7', c: '#92400e', t: 'Pending review' },
+                    };
+                    return (
+                      <div style={{ marginTop: 4, padding: '6px 8px', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, flexWrap: 'wrap' }}>
+                          <span style={{ color: '#6b21a8', fontWeight: 600 }}>Perform with agent:</span>
+                          <select value={selectedId} onChange={(e) => setRunAgentId(e.target.value)} disabled={running}
+                            style={{ fontSize: 11, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)' }}>
+                            {agentRoles!.map((a) => <option key={a.agentId} value={a.agentId}>{a.agentName || 'Agent'}{a.roleType ? ` — ${a.roleType}` : ''}</option>)}
+                          </select>
+                          <button onClick={() => onRunAgent(node.id, node.name, selected)} disabled={running}
+                            style={{ padding: '2px 10px', fontSize: 10, fontWeight: 600, background: running ? '#e5e7eb' : '#7c3aed', color: running ? '#6b7280' : '#fff', border: 'none', borderRadius: 4, cursor: running ? 'not-allowed' : 'pointer' }}>
+                            {running ? 'Running…' : (ex ? 'Re-run' : 'Run')}
+                          </button>
+                          {ex && (() => {
+                            const sc = ex.status === 'SUCCESS' ? '#065f46' : ex.status === 'FAILED' ? '#b91c1c' : '#92400e';
+                            const sb = ex.status === 'SUCCESS' ? '#d1fae5' : ex.status === 'FAILED' ? '#fef2f2' : '#fef3c7';
+                            return (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <span style={{ padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: sb, color: sc }}>{ex.status}</span>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>{ex.agentName} {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : ''}</span>
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        {ex && ex.status === 'SUCCESS' && (
+                          <div style={{ marginTop: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <button onClick={() => setShowAgentResult((v) => !v)}
+                                style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer', color: 'var(--color-primary)' }}>
+                                {showAgentResult ? 'Hide draft' : 'View draft'}
+                              </button>
+                              {(() => { const m = reviewMap[ex.reviewStatus] || reviewMap.PENDING; return (
+                                <span style={{ padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: m.bg, color: m.c }}>
+                                  {m.t}{ex.reviewedBy && ex.reviewStatus !== 'PENDING' ? ` · ${ex.reviewedBy}` : ''}
+                                </span>
+                              ); })()}
+                              {onReviewExecution && ex.reviewStatus === 'PENDING' && (
+                                <>
+                                  <button onClick={() => onReviewExecution(ex.id, 'APPROVED')}
+                                    style={{ fontSize: 10, padding: '2px 8px', background: '#065f46', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>Approve</button>
+                                  <button onClick={() => onReviewExecution(ex.id, 'REJECTED')}
+                                    style={{ fontSize: 10, padding: '2px 8px', background: 'transparent', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 3, cursor: 'pointer' }}>Reject</button>
+                                </>
+                              )}
+                              {onReviewExecution && ex.reviewStatus !== 'PENDING' && (
+                                <button onClick={() => onReviewExecution(ex.id, 'PENDING')}
+                                  style={{ fontSize: 10, padding: '2px 6px', background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer' }}>Reset</button>
+                              )}
+                            </div>
+                            {showAgentResult && (
+                              <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, maxHeight: 360, overflowY: 'auto' }}>
+                                <div style={{ fontSize: 9, fontWeight: 600, color: '#92400e', background: '#fef3c7', display: 'inline-block', padding: '1px 6px', borderRadius: 3, marginBottom: 6 }}>AI DRAFT — review before use</div>
+                                <div style={{ fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{ex.output}</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {ex && ex.status === 'FAILED' && ex.error && (
+                          <div style={{ marginTop: 6, fontSize: 10, color: '#991b1b' }}>{ex.error}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
               {/* Task fields — required skills */}
@@ -1658,8 +1709,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           statusMode={statusMode}
           agentExecByActivity={agentExecByActivity}
           onRunAgent={onRunAgent}
+          onReviewExecution={onReviewExecution}
           runningActivity={runningActivity}
-          hasAgentRoles={hasAgentRoles}
+          agentRoles={agentRoles}
           governanceHolderIds={governanceHolderIds}
           holdersByRoleLabel={holdersByRoleLabel}
           viewMode={viewMode} />
@@ -1698,6 +1750,7 @@ export default function ProcessCatalogPage() {
   const { getOrgName, isOrgInScope } = useOrgNameLookup();
   const { canWrite, canContribute } = usePermissions();
   const addToast = useToastStore((s) => s.addToast);
+  const currentUser = useAuthStore((s) => s.user);
   const [tree, setTree] = useState<ProcessNode[]>([]);
   const [stats, setStats] = useState<Record<string, any>>({});
   const [validChildrenMap, setValidChildrenMap] = useState<Record<string, string[]>>({});
@@ -1746,11 +1799,17 @@ export default function ProcessCatalogPage() {
   };
 
   // Agent execution state
-  interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; completedAt: string | null; durationMs: number | null; createdAt: string; }
+  interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; durationMs: number | null; createdAt: string; }
   interface DamaRoleInfo { agentId: string; agentName: string | null; roleType: string; }
   const [agentExecByActivity, setAgentExecByActivity] = useState<Record<string, AgentExecutionInfo>>({});
   const [damaAgentRoles, setDamaAgentRoles] = useState<DamaRoleInfo[]>([]);
   const [runningActivity, setRunningActivity] = useState<string | null>(null);
+  // Agents available to run governance work — one entry per agent (an agent
+  // may hold several DAMA roles; we only need it listed once in the picker).
+  const agentRoleOptions = useMemo(
+    () => Array.from(new Map(damaAgentRoles.map((r) => [r.agentId, r])).values()),
+    [damaAgentRoles],
+  );
 
   // Governance role assignments in this org — drives the role-gated
   // person pickers below. governanceHolderIds is the union (any
@@ -1952,27 +2011,40 @@ export default function ProcessCatalogPage() {
   };
 
   // ── Agent execution handler ──
-  const handleRunAgent = async (activityId: string, activityName: string) => {
-    // Find an agent assigned to any DAMA role
-    if (damaAgentRoles.length === 0) { addToast('error', 'No agents assigned to DAMA roles'); return; }
-    const agentRole = damaAgentRoles[0]; // Use first available agent
+  // The agent actually performs the governance activity: the backend assembles
+  // the activity's context, runs it through the agent's instructions via Claude,
+  // and returns a draft for review. The caller picks which assigned agent runs.
+  const handleRunAgent = async (activityId: string, activityName: string, agentRole: { agentId: string; agentName: string | null; roleType: string }) => {
     setRunningActivity(activityId);
     try {
-      await apiClient.post('/agent-executions', {
+      const res = await apiClient.post<{ success: boolean; data: AgentExecutionInfo }>('/agent-executions', {
         orgId: activeOrgId,
         agentId: agentRole.agentId,
-        agentName: agentRole.agentName,
         activityId,
         activityName,
         roleType: agentRole.roleType,
       });
-      addToast('success', `Agent "${agentRole.agentName}" executed activity`);
+      if (res.data?.status === 'FAILED') {
+        addToast('error', res.data.error || 'Agent run failed');
+      } else {
+        addToast('success', `${agentRole.agentName || 'Agent'} produced a draft — review it below`);
+      }
       fetchData();
     } catch (err: any) {
-      const msg = err?.message || 'Execution failed';
-      addToast('error', msg);
+      addToast('error', err?.message || 'Execution failed');
     } finally {
       setRunningActivity(null);
+    }
+  };
+
+  // Approve / reject / reset the human review of an agent's draft.
+  const handleReviewExecution = async (executionId: string, reviewStatus: 'APPROVED' | 'REJECTED' | 'PENDING') => {
+    try {
+      await apiClient.patch(`/agent-executions/${executionId}/review`, { reviewStatus, reviewedBy: currentUser?.name });
+      addToast('success', reviewStatus === 'PENDING' ? 'Review reset' : `Draft ${reviewStatus.toLowerCase()}`);
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to update review');
     }
   };
 
@@ -2700,8 +2772,9 @@ export default function ProcessCatalogPage() {
               statusMode={statusMode}
               agentExecByActivity={agentExecByActivity}
               onRunAgent={handleRunAgent}
+              onReviewExecution={handleReviewExecution}
               runningActivity={runningActivity}
-              hasAgentRoles={damaAgentRoles.length > 0}
+              agentRoles={agentRoleOptions}
               governanceHolderIds={governanceHolderIds}
               holdersByRoleLabel={holdersByRoleLabel}
           viewMode={viewMode} />

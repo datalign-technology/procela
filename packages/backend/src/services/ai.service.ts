@@ -31,11 +31,26 @@ export interface IndustryTemplateSpecialization {
   orgType?: string;
 }
 
+/** Everything an agent needs to actually perform one governance activity.
+ *  Assembled server-side from the activity node and its linked context. */
+export interface GovernanceActivityRun {
+  agent: { name: string; instructions: string; description?: string; agentType?: string };
+  activity: { name: string; description?: string; inputsOutputs?: string; responsibleRole?: string };
+  inputs: string[];          // resolved linked inputs (assets / docs / files)
+  outputs: string[];         // resolved linked outputs
+  systems: string[];         // system names this activity runs on
+  requiredSkills: string[];  // skills the human role would need
+  orgName?: string;
+}
+
 export interface AiService {
   generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object>;
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
+  /** Run the agent against a single governance activity and return a
+   *  Markdown draft deliverable for human review. */
+  performGovernanceActivity(run: GovernanceActivityRun): Promise<string>;
 }
 
 class AnthropicAiService implements AiService {
@@ -232,6 +247,51 @@ Guidelines:
         role: m.role,
         content: m.content,
       })),
+    });
+
+    return response.content[0].type === 'text' ? response.content[0].text : '';
+  }
+
+  async performGovernanceActivity(run: GovernanceActivityRun): Promise<string> {
+    const { agent, activity, inputs, outputs, systems, requiredSkills, orgName } = run;
+
+    const system = [
+      'You are an autonomous AI agent operating inside Procela, a platform that connects an organization\'s '
+        + 'business processes to the data and systems that support them. You have been assigned to PERFORM a '
+        + 'data-governance activity that a human role would normally carry out, and to produce a draft '
+        + 'deliverable for human review.',
+      'Your operating instructions (set by the team that configured you):\n"""\n'
+        + (agent.instructions?.trim() || '(No specific instructions provided — apply general data-governance best practice, DAMA-DMBOK aligned.)')
+        + '\n"""',
+      'Critical constraints:\n'
+        + '- You are working ONLY from the business-context description provided below. You do NOT have access '
+        + 'to live data, databases, dashboards, or systems. Never claim to have queried, scanned, profiled, or '
+        + 'measured real data.\n'
+        + '- Wherever the activity would require real data or system access, say so explicitly and describe what '
+        + 'you would need to complete it for real.\n'
+        + '- Produce a concrete, useful draft tailored to THIS activity — not a generic essay.\n'
+        + '- This output is a DRAFT pending human approval. Be explicit about your assumptions and confidence.',
+      'Return your deliverable as well-structured Markdown using exactly these sections:\n'
+        + '## Summary\n## Findings / Assessment\n## Recommendations\n## Assumptions & Data Needed',
+    ].join('\n\n');
+
+    const lines: string[] = [];
+    if (orgName) lines.push(`Organization: ${orgName}`);
+    lines.push(`Activity: ${activity.name}`);
+    if (activity.description) lines.push(`Description: ${activity.description}`);
+    if (activity.responsibleRole) lines.push(`Human role normally responsible: ${activity.responsibleRole}`);
+    if (activity.inputsOutputs) lines.push(`Inputs/outputs note (free text): ${activity.inputsOutputs}`);
+    if (requiredSkills.length) lines.push(`Skills this work requires: ${requiredSkills.join(', ')}`);
+    lines.push(inputs.length ? `Linked inputs:\n${inputs.map((i) => `- ${i}`).join('\n')}` : 'Linked inputs: none recorded.');
+    lines.push(outputs.length ? `Linked outputs:\n${outputs.map((o) => `- ${o}`).join('\n')}` : 'Linked outputs: none recorded.');
+    lines.push(systems.length ? `Systems involved: ${systems.join(', ')}` : 'Systems involved: none recorded.');
+    lines.push('\nPerform this activity now and produce your draft deliverable.');
+
+    const response = await getClient().messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      system,
+      messages: [{ role: 'user', content: lines.join('\n') }],
     });
 
     return response.content[0].type === 'text' ? response.content[0].text : '';

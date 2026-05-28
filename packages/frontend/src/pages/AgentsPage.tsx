@@ -47,6 +47,7 @@ interface Agent {
   status: 'ACTIVE' | 'PAUSED' | 'RETIRED';
   ownerPersonId: string;
   skillIds: string[];
+  instructions?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,12 +61,14 @@ interface FormData {
   status: 'ACTIVE' | 'PAUSED' | 'RETIRED';
   ownerPersonId: string;
   skillIds: string[];
+  instructions: string;
 }
 
 const emptyForm: FormData = {
   name: '', orgIds: [], agentType: 'AI',
   description: '', provider: '',
   status: 'ACTIVE', ownerPersonId: '', skillIds: [],
+  instructions: '',
 };
 
 // ── Inline styles (matching the rest of the app) ──
@@ -211,6 +214,7 @@ export default function AgentsPage() {
       description: a.description, provider: a.provider,
       status: a.status, ownerPersonId: a.ownerPersonId,
       skillIds: a.skillIds || [],
+      instructions: a.instructions || '',
     });
     setEditingId(a.id);
     setShowForm(true);
@@ -476,6 +480,18 @@ export default function AgentsPage() {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What the agent does" />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Instructions</label>
+              <textarea
+                style={{ ...inputStyle, minHeight: 90, fontFamily: 'inherit', resize: 'vertical' }}
+                value={form.instructions}
+                onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+                placeholder="The operating brief used when this agent performs a governance activity. e.g. 'You are a data quality analyst. Assess completeness, accuracy, timeliness, and consistency. Flag any asset below Gold tier supporting a critical process.'"
+              />
+              <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                Becomes the agent's system prompt when it runs an activity. Leave blank to use general data-governance best practice.
+              </p>
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Responsible Person (optional)</label>
