@@ -38,7 +38,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['G', 'C'], description: 'Go to Process Catalog' },
       { keys: ['G', 'A'], description: 'Go to Data Assets' },
       { keys: ['G', 'S'], description: 'Go to Systems' },
-      { keys: ['G', 'M'], description: 'Go to Process Coverage' },
+      { keys: ['G', 'M'], description: 'Go to Data Mapping' },
       { keys: ['G', 'L'], description: 'Go to Data Lineage' },
       { keys: ['G', 'Q'], description: 'Go to Data Quality' },
       { keys: ['G', 'G'], description: 'Go to Governance Program' },

@@ -313,7 +313,7 @@ export default function MappingsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process Coverage</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Mapping</h1>
             <InfoTip term="Mapping" />
           </div>
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>

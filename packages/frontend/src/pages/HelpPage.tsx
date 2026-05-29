@@ -136,11 +136,11 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
           <li><strong>Organizations</strong> &mdash; Accordion covering the "who" of the platform: <strong>Structure</strong> (your company / division / team tree), <strong>People</strong> (the humans on your team), <strong>Agents</strong> (AI agents that hold governance roles and run automation), and <strong>Skills</strong> (the competencies your roles need).</li>
-          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Process Coverage</strong>.)</li>
+          <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Data Mapping</strong>.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
-          <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports, Process Coverage. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
+          <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports, Data Mapping. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
         <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
@@ -193,10 +193,10 @@ export default function HelpPage() {
             The same guard applies to both the Process Wizard and the catalog's manual create path so it can't be sidestepped.
           </li>
         </ul>
-        <h3 style={h3Style}>Process Coverage</h3>
+        <h3 style={h3Style}>Data Mapping</h3>
         <ul style={listStyle}>
           <li>Flat audit / bulk-edit view of every activity ↔ data-asset link in the catalog. Sortable columns, CSV/Excel export, bulk delete, and the Batch Mapping Wizard (matrix interface) for creating many mappings at once.</li>
-          <li>Day-to-day, you connect an activity to its data assets <strong>inline on the Process Catalog</strong> — each node panel has Owner, Responsible Role, Systems, and Inputs/Outputs (data assets) in one place. Process Coverage is the cross-process review surface for those same links; it doesn't introduce a separate model.</li>
+          <li>Day-to-day, you connect an activity to its data assets <strong>inline on the Process Catalog</strong> — each node panel has Owner, Responsible Role, Systems, and Inputs/Outputs (data assets) in one place. Data Mapping is the cross-process review surface for those same links; it doesn't introduce a separate model.</li>
           <li>Mappings can be AI-suggested or user-defined; the page tracks which is which so suggestion overrides are auditable.</li>
         </ul>
       </div>
@@ -639,7 +639,7 @@ export default function HelpPage() {
               ['g then c', 'Go to Processes'],
               ['g then a', 'Go to Data Assets'],
               ['g then s', 'Go to Systems'],
-              ['g then m', 'Go to Process Coverage (mappings)'],
+              ['g then m', 'Go to Data Mapping (mappings)'],
               ['g then l', 'Go to Lineage'],
               ['g then q', 'Go to Data Quality'],
               ['g then g', 'Go to Governance Program'],

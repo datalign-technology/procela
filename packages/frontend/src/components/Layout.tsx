@@ -441,7 +441,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/enterprise-view',   label: 'Enterprise View',   icon: '\u29c9' },
       { to: '/analysis',          label: 'Analysis',          icon: '\u229e' },
-      { to: '/mappings',          label: 'Process Coverage',  icon: '\u21c4' },
+      { to: '/mappings',          label: 'Data Mapping',      icon: '\u21c4' },
       { to: '/reports',           label: 'Reports',           icon: '\u2630' },
       { to: '/gap-detection',     label: 'Gap Detection',     icon: '\u26a0' },
       { to: '/audit-log',         label: 'Audit Log',         icon: '\u29d6' },
