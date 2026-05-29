@@ -41,6 +41,8 @@ import SkillsPage from '@/pages/SkillsPage';
 import DocumentationPage from '@/pages/DocumentationPage';
 import RolesPage from '@/pages/RolesPage';
 import AnalysisPage from '@/pages/AnalysisPage';
+import SetupHubPage from '@/pages/SetupHubPage';
+import AssignOwnersPage from '@/pages/AssignOwnersPage';
 
 export default function App() {
   return (
@@ -48,6 +50,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/setup" element={<SetupHubPage />} />
+        <Route path="/setup/owners" element={<AssignOwnersPage />} />
         <Route path="/processes" element={<ProcessCatalogPage />} />
         <Route path="/processes/wizard" element={<ValueStreamWizard />} />
         <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />

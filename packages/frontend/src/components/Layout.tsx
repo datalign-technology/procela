@@ -11,12 +11,14 @@ import ShortcutsModal from './ShortcutsModal';
 import ShortcutsHint from './ShortcutsHint';
 import OnboardingWizard from './OnboardingWizard';
 import CommandPalette from './CommandPalette';
+import ProgressRing from './ProgressRing';
 
 import DensityToggle from './DensityToggle';
 import TerminologyToggle from './TerminologyToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
+import { useSetupStore } from '@/stores/setupStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -66,6 +68,12 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
       <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
       <rect x="13.5" y="13.5" width="7" height="7" rx="1" />
+    </NavSvg>
+  ),
+  '/setup': (
+    <NavSvg>
+      <path d="M5 21 V5 a1 1 0 0 1 1-1 h9 l-1.5 3 L15 10 H6" />
+      <circle cx="5" cy="21" r="0.6" fill="currentColor" stroke="none" />
     </NavSvg>
   ),
   '/processes': (
@@ -445,6 +453,11 @@ const navSections: NavSection[] = [
   },
 ];
 
+// "Get Started" — the Setup Hub entry. Lives in its own unlabelled section
+// at the very top (above Dashboard) while setup is incomplete, and is hidden
+// once the active org reaches 100% so it doesn't clutter the rail forever.
+const GET_STARTED_ITEM: NavItem = { to: '/setup', label: 'Get Started', icon: '⚑' };
+
 const bottomNavItems: NavItem[] = [
   // Agents moved into the Organizations section alongside People \u2014
   // the bottom cluster now holds only the cross-cutting platform
@@ -463,6 +476,7 @@ const MOBILE_PRIMARY: NavItem[] = [
 ];
 
 const ROUTE_GROUPS: Record<string, string[]> = {
+  '/setup': ['/setup'],
   '/processes': ['/processes'],
   '/data-assets': ['/data-assets'],
   '/systems': ['/systems'],
@@ -600,7 +614,16 @@ export default function Layout() {
   const { branding, fetch: fetchBranding } = useBrandingStore();
   const { isAdmin, role } = usePermissions();
 
-  const visibleSections = navSections.filter((s) => !s.adminOnly || isAdmin);
+  // "Get Started" Setup Hub: shown until the active org is fully set up.
+  // Progress is computed by the Hub page and persisted in setupStore; an
+  // undefined value (never visited) keeps the entry visible as a nudge.
+  const setupProgress = useSetupStore((s) => (activeOrgId ? s.progressByOrg[activeOrgId] : undefined));
+  const showSetup = !!activeOrgId && (setupProgress === undefined || setupProgress < 100);
+
+  const baseSections = showSetup
+    ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
+    : navSections;
+  const visibleSections = baseSections.filter((s) => !s.adminOnly || isAdmin);
 
   // Apply the customer's theme (company name, logo, colors) as early as
   // possible. The store also fetches from /login via brandingStore bootstrap;
@@ -717,6 +740,7 @@ export default function Layout() {
   useEffect(() => {
     const path = location.pathname;
     const allItems: NavItem[] = [
+      GET_STARTED_ITEM,
       ...navSections.flatMap((s) => s.items),
       ...bottomNavItems,
     ];
@@ -1234,7 +1258,11 @@ export default function Layout() {
                       className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
                       title={sidebarCollapsed ? item.label : undefined}
                     >
-                      <span className={styles.navIcon}>{navIconNode(item)}</span>
+                      <span className={styles.navIcon}>
+                        {item.to === '/setup' && setupProgress !== undefined
+                          ? <ProgressRing percent={setupProgress} />
+                          : navIconNode(item)}
+                      </span>
                       {!sidebarCollapsed && item.label}
                     </NavLink>
                   );
@@ -1628,7 +1656,7 @@ export default function Layout() {
         </header>
         <main id="main-content" className={styles.content}>
           <Breadcrumbs />
-          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' ? (
+          {!activeOrgId && location.pathname !== '/organizations' && location.pathname !== '/help' && location.pathname !== '/settings' && location.pathname !== '/setup' ? (
             <div style={{
               textAlign: 'center', padding: '4rem 2rem',
               background: 'var(--color-surface)', border: '1px solid var(--color-border)',
@@ -1671,7 +1699,7 @@ export default function Layout() {
         <RoleDetailDrawer />
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
         {!activeOrgId && !localStorage.getItem('procela:onboarding-complete') && (
-          <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/'); }} />
+          <OnboardingWizard onComplete={() => { triggerRefresh(); navigate('/setup'); }} />
         )}
         {tourOpen && (
           <OnboardingWizard mode="tour-only" onComplete={() => setTourOpen(false)} />

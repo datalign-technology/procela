@@ -512,6 +512,17 @@ export default function PeoplePage() {
 
   // ── People handlers ──
   const openAddPerson = () => { setPersonForm({ ...emptyPersonForm, orgIds: selectedOrgId ? [selectedOrgId] : [] }); setEditingPersonId(null); setShowPersonForm(true); };
+
+  // Deep-link create intent: /people?new=1 (from the Setup Hub) opens the
+  // add form, then strips the param so refresh/back doesn't re-open it.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1' || showPersonForm) return;
+    openAddPerson();
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const openEditPerson = (person: Person) => {
     // Edit only allows name/email/title — orgs and role live under Manage.
     // We still seed the full state from the existing record so the

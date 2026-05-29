@@ -621,6 +621,16 @@ export default function DataAssetsPage() {
     setShowForm(true);
   };
 
+  // Deep-link create intent: /data-assets?new=1 (from the Setup Hub) opens
+  // the add form, then strips the param so refresh/back doesn't re-open it.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1' || !activeOrgId || showForm) return;
+    openAdd();
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const domainForAsset = (assetId: string) => domainsList.find((d) => d.dataAssetIds?.includes(assetId));
 
   const openEdit = (asset: DataAssetEntity) => {

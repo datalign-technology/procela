@@ -523,6 +523,16 @@ export default function SystemsPage() {
   const openAdd = () => {
     if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; } setForm(emptyForm); setEditingId(null); setShowForm(true); };
 
+  // Deep-link create intent: /systems?new=1 (from the Setup Hub) opens the
+  // add form, then strips the param so refresh/back doesn't re-open it.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1' || !activeOrgId || showForm) return;
+    openAdd();
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, activeOrgId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openEdit = (sys: SystemEntity) => {
     // Pre-select the connections currently linked to this system so the
     // user can add or remove them inline alongside the other fields.
