@@ -93,7 +93,14 @@ export default function SetupHubPage() {
     let alive = true;
     setLoading(true);
     Promise.all([
-      apiClient.get<{ success: boolean; data: DashStats }>(`/dashboard/stats?orgId=${activeOrgId}`),
+      // The Get Started journey is about capturing and governing the
+      // *business* — so the process-side counts must reflect only the
+      // operational domain. Without this, generating the canned governance
+      // value stream ("Data Governance Management") would masquerade as
+      // business-process progress and inflate coverage/ownership gaps. The
+      // governance scaffold is tracked separately by the Phase 3
+      // "Governance operating model" task (off governance groups).
+      apiClient.get<{ success: boolean; data: DashStats }>(`/dashboard/stats?orgId=${activeOrgId}&domain=OPERATIONAL`),
       apiClient.get<{ success: boolean; data: unknown[] }>(`/governance-groups?orgId=${activeOrgId}`).catch(() => ({ data: [] as unknown[] })),
     ]).then(([statsRes, groupsRes]) => {
       if (!alive) return;
