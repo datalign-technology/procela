@@ -78,6 +78,11 @@ export default function SetupHubPage() {
   const navigate = useNavigate();
   const { activeOrgId, activeOrgName, orgs, refreshKey } = useOrgContext();
   const { setProgress, toggleAffirm, isAffirmed } = useSetupStore();
+  // Subscribe to the active org's affirmation list so toggling "mark
+  // complete" actually re-derives task status. isAffirmed is a stable
+  // store-method reference, so depending on it alone never recomputes the
+  // phases memo — we key off the data instead.
+  const affirmedKeys = useSetupStore((s) => s.affirmedByOrg[activeOrgId]);
 
   const [stats, setStats] = useState<DashStats | null>(null);
   const [groupsCount, setGroupsCount] = useState(0);
@@ -256,7 +261,7 @@ export default function SetupHubPage() {
         ],
       },
     ];
-  }, [stats, groupsCount, orgCount, activeOrgId, isAffirmed]);
+  }, [stats, groupsCount, orgCount, activeOrgId, isAffirmed, affirmedKeys]);
 
   // Overall + per-phase progress from the counted tasks.
   const { overall, phaseProgress } = useMemo(() => {
