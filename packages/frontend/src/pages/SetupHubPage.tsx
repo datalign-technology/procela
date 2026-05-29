@@ -288,6 +288,17 @@ export default function SetupHubPage() {
     if (activeOrgId && !loading && stats) setProgress(activeOrgId, overall);
   }, [activeOrgId, loading, stats, overall, setProgress]);
 
+  // Expand/collapse. Smart default — done items collapse, everything else
+  // stays open — is derived from status; an explicit user toggle is recorded
+  // as an override that wins over the default for that one phase/task.
+  const [phaseOverride, setPhaseOverride] = useState<Record<number, boolean>>({});
+  const [taskOverride, setTaskOverride] = useState<Record<string, boolean>>({});
+  const phaseAllDone = (ph: Phase) => ph.tasks.every((t) => (t.weight ?? 1) === 0 || t.status === 'done');
+  const isPhaseOpen = (ph: Phase) => (ph.num in phaseOverride ? phaseOverride[ph.num] : !phaseAllDone(ph));
+  const isTaskOpen = (t: Task) => (t.key in taskOverride ? taskOverride[t.key] : t.status !== 'done');
+  const togglePhase = (ph: Phase) => setPhaseOverride((m) => ({ ...m, [ph.num]: !isPhaseOpen(ph) }));
+  const toggleTask = (t: Task) => setTaskOverride((m) => ({ ...m, [t.key]: !isTaskOpen(t) }));
+
   if (!activeOrgId) {
     return (
       <div style={{ maxWidth: 640, margin: '48px auto', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
@@ -319,77 +330,121 @@ export default function SetupHubPage() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading your setup status…</div>
       ) : (
-        phases.map((ph) => (
-          <section key={ph.num} style={{ marginBottom: 28 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        phases.map((ph) => {
+          const phaseOpen = isPhaseOpen(ph);
+          return (
+          <section key={ph.num} style={{ marginBottom: 20 }}>
+            {/* Phase header — clickable accordion toggle for the whole phase. */}
+            <button
+              type="button"
+              onClick={() => togglePhase(ph)}
+              aria-expanded={phaseOpen}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit',
+                padding: '4px 2px', marginBottom: phaseOpen ? 12 : 0, fontFamily: 'inherit',
+              }}
+            >
               <span style={{
                 width: 28, height: 28, borderRadius: '50%', background: ph.color, color: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0,
               }}>{ph.num}</span>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <h2 style={{ fontSize: 16, fontWeight: 700 }}>{ph.title}</h2>
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{phaseProgress[ph.num]}%</span>
                 </div>
                 <p style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>{ph.subtitle}</p>
               </div>
-            </div>
+              <Chevron open={phaseOpen} />
+            </button>
 
+            {phaseOpen && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {ph.tasks.map((t) => {
                 const meta = STATUS_META[t.status];
+                const taskOpen = isTaskOpen(t);
                 return (
                   <div key={t.key} style={{
-                    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-                    background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10,
+                    background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden',
                   }}>
-                    <span aria-label={meta.label} title={meta.label} style={{
-                      width: 22, height: 22, flexShrink: 0, borderRadius: '50%',
-                      border: t.status === 'todo' ? `2px solid ${meta.color}` : 'none',
-                      background: t.status === 'todo' ? 'transparent' : meta.color,
-                      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, fontWeight: 800,
-                    }}>{meta.glyph}</span>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {/* Task header — clickable summary row that toggles detail. */}
+                    <button
+                      type="button"
+                      onClick={() => toggleTask(t)}
+                      aria-expanded={taskOpen}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left',
+                        padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer',
+                        color: 'inherit', fontFamily: 'inherit',
+                      }}
+                    >
+                      <span aria-label={meta.label} title={meta.label} style={{
+                        width: 22, height: 22, flexShrink: 0, borderRadius: '50%',
+                        border: t.status === 'todo' ? `2px solid ${meta.color}` : 'none',
+                        background: t.status === 'todo' ? 'transparent' : meta.color,
+                        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 13, fontWeight: 800,
+                      }}>{meta.glyph}</span>
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</span>
                         <span style={{
                           fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 999,
                           background: 'var(--color-bg)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)',
                         }}>{t.detail}</span>
                       </div>
-                      <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.4, marginTop: 3 }}>{t.why}</p>
+                      <Chevron open={taskOpen} />
+                    </button>
 
-                      {/* Affirmation for subjective capture steps that have data but aren't auto-complete. */}
-                      {t.affirmable && t.status === 'started' && (
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={false} onChange={() => toggleAffirm(activeOrgId, t.key)} style={{ cursor: 'pointer' }} />
-                          Mark this step complete
-                        </label>
-                      )}
-                      {t.affirmable && t.status === 'done' && (
-                        <button onClick={() => toggleAffirm(activeOrgId, t.key)}
-                          style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
-                          Reopen this step
-                        </button>
-                      )}
-                    </div>
+                    {/* Task body — description, affirmation, and actions. */}
+                    {taskOpen && (
+                      <div style={{ padding: '0 16px 14px 52px' }}>
+                        <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>{t.why}</p>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch', flexShrink: 0 }}>
-                      <button onClick={() => navigate(t.to)} style={primaryBtn}>{t.ctaLabel}</button>
-                      {t.secondaryLabel && t.secondaryTo && (
-                        <button onClick={() => navigate(t.secondaryTo!)} style={secondaryBtn}>{t.secondaryLabel}</button>
-                      )}
-                    </div>
+                        {t.affirmable && t.status === 'started' && (
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={false} onChange={() => toggleAffirm(activeOrgId, t.key)} style={{ cursor: 'pointer' }} />
+                            Mark this step complete
+                          </label>
+                        )}
+                        {t.affirmable && t.status === 'done' && (
+                          <button onClick={() => toggleAffirm(activeOrgId, t.key)}
+                            style={{ display: 'block', marginTop: 8, fontSize: 12, color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                            Reopen this step
+                          </button>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                          <button onClick={() => navigate(t.to)} style={primaryBtn}>{t.ctaLabel}</button>
+                          {t.secondaryLabel && t.secondaryTo && (
+                            <button onClick={() => navigate(t.secondaryTo!)} style={secondaryBtn}>{t.secondaryLabel}</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
+            )}
           </section>
-        ))
+          );
+        })
       )}
     </div>
+  );
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12" height="12" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ flexShrink: 0, opacity: 0.55, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'none' }}
+    >
+      <path d="M9 5 L15 12 L9 19" />
+    </svg>
   );
 }
 
