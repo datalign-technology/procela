@@ -203,7 +203,11 @@ export default function AgentsPage() {
     : agents;
 
   const openAdd = () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    // Pre-select an org if the page's filter has one, otherwise leave empty
+    // and let the user pick from the form's checkbox list. The form's own
+    // "Assigned Organizations" picker is the real assignment control; we do
+    // NOT require a header active-org here (the previous guard tripped users
+    // who'd already picked an org in the form's checkbox list).
     setForm({ ...emptyForm, orgIds: selectedOrgId ? [selectedOrgId] : [] });
     setEditingId(null);
     setShowForm(true);
@@ -221,10 +225,13 @@ export default function AgentsPage() {
   };
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
   const handleSave = async () => {
-    // Creating needs a header org to default the assignment to; editing an
-    // existing agent doesn't — its orgIds are already on the form and sent in
-    // the PUT. (The orgIds-non-empty check below is the real guard.)
-    if (!editingId && !activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    // The form's own "Assigned Organizations" picker (form.orgIds) is the
+    // assignment of record — both for create and edit. We do not require a
+    // header active-org: the user has already ticked their orgs in the form,
+    // and the disabled-button state + this orgIds-non-empty check are the
+    // real guards. (A previous activeOrgId guard fired a confusing "Select an
+    // organization from the header first" toast even when the user had
+    // already picked one in the form.)
     if (!validation.validateAll(form) || form.orgIds.length === 0) return;
     try {
       if (editingId) await apiClient.put(`/agents/${editingId}`, form);
@@ -282,7 +289,9 @@ export default function AgentsPage() {
 
   // ── Import handlers ──
   const handleImport = async () => {
-    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    // The import dialog has its own org dropdown (importOrgId); the check
+    // below ("Select an organization and provide data to import") is the
+    // real guard — we don't also require the header active-org.
     const orgId = importOrgId || selectedOrgId;
     if (!importText.trim() || !orgId) { addToast('error', 'Select an organization and provide data to import.'); return; }
     try {
