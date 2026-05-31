@@ -113,27 +113,43 @@ export default function HelpPage() {
       {/* 1. Getting Started */}
       <div style={sectionStyle}>
         <h2 id="help-getting-started" style={h2Style}>1. Getting Started</h2>
-        <ol style={{ ...listStyle, listStyle: 'decimal' }}>
-          <li>Sign in using dev mode or your enterprise SSO credentials</li>
-          <li>Go to <strong>Organizations &rarr; Structure</strong> to create your company / division / team tree</li>
-          <li>Go to <strong>Organizations &rarr; People</strong> to add team members and assign roles</li>
-          <li>Go to <strong>Governance &rarr; Program</strong> to begin the 4-phase governance setup journey</li>
-          <li>Follow the phase recommendations to build your governance foundation</li>
-        </ol>
-        <h3 style={h3Style}>The 4-Phase Governance Journey</h3>
+        <p style={pStyle}>
+          The fastest way in is the <strong>Get Started</strong> hub &mdash; a resumable, data-driven journey that walks an org through everything Procela needs. It sits at the top of the sidebar and at <code>/setup</code>.
+        </p>
+
+        <h3 style={h3Style}>The three phases</h3>
         <ul style={listStyle}>
-          <li><strong>Phase 1 &mdash; Foundation:</strong> Define governance scope, guiding principles, and operating model</li>
-          <li><strong>Phase 2 &mdash; Structural Design:</strong> Create data domains, governance groups, and assign roles</li>
-          <li><strong>Phase 3 &mdash; People &amp; Processes:</strong> Assign stewards, build RACI matrix, create policies</li>
-          <li><strong>Phase 4 &mdash; Operationalization:</strong> Define SOPs, set up calendar, launch the program</li>
+          <li><strong>① Capture</strong> &mdash; tell Procela about your business: organization structure, people, processes, systems, and data assets.</li>
+          <li><strong>② Assign</strong> &mdash; give every process and data domain a clear owner.</li>
+          <li><strong>③ Govern</strong> &mdash; connect data to processes, tier and grade assets, stand up your governance operating model, and review remaining gaps.</li>
         </ul>
+
+        <h3 style={h3Style}>How progress is computed</h3>
+        <ul style={listStyle}>
+          <li><strong>Derived from live data, not checkboxes.</strong> Add five systems and the Systems task flips automatically &mdash; there's no separate to-do list to keep in sync. Status icons: <strong>◐</strong> in progress, <strong>!</strong> needs attention, <strong>✓</strong> done, ○ not started.</li>
+          <li><strong>Affirmation for subjective capture steps.</strong> Steps like <em>Organization structure</em> or <em>People</em> have no objective "done" &mdash; once any data exists, the task shows <em>In progress</em> with a <em>Mark this step complete</em> checkbox; affirmed tasks get a <em>Reopen this step</em> link.</li>
+          <li><strong>Operationally scoped.</strong> Process-side counts (value streams, steps, ownership gaps, coverage) reflect only your business processes. Generating the canned <em>Data Governance Management</em> value stream from the Processes page no longer counts as business-process progress &mdash; that scaffold is tracked separately by the Phase 3 <em>Governance operating model</em> task, which keys off governance groups.</li>
+          <li><strong>Sidebar progress ring.</strong> The overall percentage feeds the ring next to the <em>Get Started</em> link; the link auto-hides once the journey reaches 100%.</li>
+        </ul>
+
+        <h3 style={h3Style}>Reading the hub</h3>
+        <ul style={listStyle}>
+          <li>Each <strong>phase section</strong> and each <strong>task card</strong> is collapsible. A smart default keeps the page focused &mdash; completed items and fully-completed phases collapse on load; in-progress, needs-attention, and not-started items stay open. An explicit click overrides the default for that one item.</li>
+          <li>Every task's CTA deep-links to the same destination the left nav exposes, so the hand-off from journey to workspace is seamless. The hub is for first-run setup and check-ins; the left nav is your persistent workspace once you know the app.</li>
+        </ul>
+
+        <h3 style={h3Style}>Not the same as the Governance Program journey</h3>
+        <p style={pStyle}>
+          The Get Started hub onboards the <em>organization</em> into Procela. The four-phase <strong>Governance Program</strong> journey (Foundation → Structural Design → People &amp; Processes → Operationalization), reached via <strong>Governance &rarr; Program</strong>, is the maturity model for the governance <em>program itself</em>. See Section 8 for the program journey.
+        </p>
       </div>
 
       {/* 2. Navigation */}
       <div style={sectionStyle}>
         <h2 id="help-navigation" style={h2Style}>2. Navigation</h2>
-        <p style={pStyle}>The sidebar opens with the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.</p>
+        <p style={pStyle}>The sidebar opens with <strong>Get Started</strong> for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.</p>
         <ul style={listStyle}>
+          <li><strong>Get Started</strong> &mdash; Resumable three-phase onboarding hub (Capture / Assign / Govern) with a progress ring. Auto-hides once your org reaches 100%. See Section 1 for the mechanics.</li>
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
           <li><strong>Organizations</strong> &mdash; Accordion covering the "who" of the platform: <strong>Structure</strong> (your company / division / team tree), <strong>People</strong> (the humans on your team), <strong>Agents</strong> (AI agents that hold governance roles and run automation), and <strong>Skills</strong> (the competencies your roles need).</li>
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Data Mapping</strong>.)</li>
