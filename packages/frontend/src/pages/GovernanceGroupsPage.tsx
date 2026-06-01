@@ -1053,6 +1053,8 @@ export default function GovernanceGroupsPage() {
                       Governance roles are <strong>org-wide</strong>. Assigning one here is the
                       same assignment shown on the Governance Roles page and the Group
                       Composition view — not a separate, group-only role.
+                      Agents (<span style={{ color: '#5b21b6' }}>⚙</span>) appear here when they hold a role this group expects;
+                      they are <strong>not group members</strong> — group membership is people only.
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {expectedRoles.map((expected) => {
