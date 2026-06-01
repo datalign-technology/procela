@@ -1027,7 +1027,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1058,6 +1058,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   onRunAgent?: (activityId: string, activityName: string, agentRole: { agentId: string; agentName: string | null; roleType: string }) => void;
   onReviewExecution?: (executionId: string, reviewStatus: 'APPROVED' | 'REJECTED' | 'PENDING') => void;
   onPromoteExecution?: (executionId: string, payload: { name: string; documentType: string; description?: string }) => Promise<boolean>;
+  /** Status of each ancestor from root to immediate parent. Empty at the
+   *  top level. Used to warn when an agent is about to run, or a draft is
+   *  about to be promoted, against an unfinished part of the catalogue. */
+  ancestorStatusChain?: Array<{ level: string; status: string; name: string }>;
   runningActivity?: string | null;
   /** Agents available to run governance work (one entry per agent). */
   agentRoles?: Array<{ agentId: string; agentName: string | null; roleType: string }>;
@@ -1092,6 +1096,22 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   // draft is expanded for review.
   const [runAgentId, setRunAgentId] = useState('');
   const [showAgentResult, setShowAgentResult] = useState(false);
+  // Walk the ancestor chain + the current node looking for the most-
+  // senior level whose status is not ACTIVE. Used to warn (not block) on
+  // agent runs and document promotions whose source is in flux. Anything
+  // other than ACTIVE counts as "not settled" — DRAFT/PROPOSED/UNDER_REVIEW
+  // mean still-designing, DEPRECATED means shouldn't be used for new work.
+  const fullStatusChain = [...(ancestorStatusChain || []), { level: node.level, status: node.status, name: node.name }];
+  const firstUnsettled = fullStatusChain.find((s) => s.status !== 'ACTIVE');
+  const sourceUnsettled = !!firstUnsettled;
+  const unsettledLabel = (() => {
+    if (!firstUnsettled) return '';
+    const friendly: Record<string, string> = {
+      VALUE_STREAM: 'Value stream', PROCESS: 'Process', SUBPROCESS: 'Sub-process',
+      ACTIVITY: 'Activity', TASK: 'Task', DOMAIN: 'Domain', CAPABILITY: 'Capability',
+    };
+    return `${friendly[firstUnsettled.level] || firstUnsettled.level} is ${firstUnsettled.status}`;
+  })();
   // Promote-agent-draft inline form. Open keyed by the execution id so
   // the same form can be opened from either the agent panel or the
   // Outputs panel chip for the same execution.
@@ -1392,6 +1412,16 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                             style={{ padding: '2px 10px', fontSize: 10, fontWeight: 600, background: running ? '#e5e7eb' : '#7c3aed', color: running ? '#6b7280' : '#fff', border: 'none', borderRadius: 4, cursor: running ? 'not-allowed' : 'pointer' }}>
                             {running ? 'Running…' : (ex ? 'Re-run' : 'Run')}
                           </button>
+                          {/* Soft warning when the source definition isn't
+                             ACTIVE. Doesn't block — iterative design with
+                             agent assistance is a legitimate use case —
+                             but makes the design state legible. */}
+                          {sourceUnsettled && (
+                            <span title={`Agents can still run, but the draft will reference an unfinished definition. ${unsettledLabel}.`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 600, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                              <span aria-hidden>!</span> {unsettledLabel}
+                            </span>
+                          )}
                           {ex && (() => {
                             const sc = ex.status === 'SUCCESS' ? '#065f46' : ex.status === 'FAILED' ? '#b91c1c' : '#92400e';
                             const sb = ex.status === 'SUCCESS' ? '#d1fae5' : ex.status === 'FAILED' ? '#fef2f2' : '#fef3c7';
@@ -1464,6 +1494,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                                 <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
                                   Creates a new <strong>{promoteDocType.toLowerCase()}</strong> in the Governance Documents catalogue with this draft's content, and links it as an <strong>Output</strong> of this activity.
                                 </div>
+                                {sourceUnsettled && (
+                                  <div style={{ fontSize: 10, padding: '6px 8px', marginBottom: 8, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 3, color: '#92400e', lineHeight: 1.5 }}>
+                                    <strong>{unsettledLabel}.</strong> The document will reference an unfinished process. It will be created as a <strong>DRAFT</strong> document, and its description will record the source status at promotion time. Promote anyway?
+                                  </div>
+                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
                                   <div>
                                     <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Name</label>
@@ -1825,7 +1860,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           agentRoles={agentRoles}
           governanceHolderIds={governanceHolderIds}
           holdersByRoleLabel={holdersByRoleLabel}
-          viewMode={viewMode} />
+          viewMode={viewMode}
+          ancestorStatusChain={[...(ancestorStatusChain || []), { level: node.level, status: node.status, name: node.name }]} />
       ))}
     </div>
   );
@@ -2913,7 +2949,8 @@ export default function ProcessCatalogPage() {
               agentRoles={agentRoleOptions}
               governanceHolderIds={governanceHolderIds}
               holdersByRoleLabel={holdersByRoleLabel}
-          viewMode={viewMode} />
+              viewMode={viewMode}
+              ancestorStatusChain={[]} />
           ))
         )}
       </div>

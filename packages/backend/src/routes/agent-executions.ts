@@ -257,6 +257,13 @@ router.post('/:id/promote', (req: Request, res: Response) => {
   if (!docName) { res.status(400).json({ success: false, error: 'Name is required.' }); return; }
   const finalDocumentType: StoredGovernancePolicy['documentType'] = VALID_DOCUMENT_TYPES.includes(documentType) ? documentType : 'POLICY';
 
+  // Capture the source activity's status at promotion time so any later
+  // reviewer of the document can see whether the underlying activity was
+  // still in design when the draft was produced.
+  const activityNode = processNodes.find((n) => n.id === exec.activityId);
+  const activityStatusAtPromote = activityNode?.status || 'unknown';
+  const provenanceLine = `Promoted from agent draft for "${exec.activityName}" by ${exec.agentName}. Source activity status at promotion: ${activityStatusAtPromote}.`;
+
   const now = new Date().toISOString();
 
   // 1) Create the Governance Document with the execution's Markdown as content.
@@ -265,7 +272,7 @@ router.post('/:id/promote', (req: Request, res: Response) => {
     orgId: exec.orgId,
     code: generateDocCode(finalDocumentType),
     name: docName,
-    description: typeof description === 'string' ? description : `Promoted from agent draft for "${exec.activityName}" by ${exec.agentName}.`,
+    description: (typeof description === 'string' && description.trim()) ? `${description.trim()}\n\n${provenanceLine}` : provenanceLine,
     documentType: finalDocumentType,
     status: 'DRAFT',
     ownerAssignmentId: null,
