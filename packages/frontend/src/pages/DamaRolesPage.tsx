@@ -27,8 +27,12 @@ const CATEGORY_ORDER = ['Executive', 'Business', 'Technical'] as const;
 
 interface DamaRoleAssignment {
   id: string;
-  personId: string;
-  personName: string;
+  personId: string | null;
+  personName: string | null;
+  // Agent holders ride the same row shape — exactly one of
+  // (personId, agentId) is set on any assignment.
+  agentId?: string | null;
+  agentName?: string | null;
   roleType: string;
   scopeType: 'ORG';
   scopeId: string;
@@ -224,7 +228,7 @@ export default function DamaRolesPage() {
     if (filterRoleType && r.roleType !== filterRoleType) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const hay = `${r.personName} ${scopeNameForFilter(r.scopeId)} ${ROLE_TYPE_LABELS[r.roleType] || r.roleType}`.toLowerCase();
+      const hay = `${r.personName || ''} ${r.agentName || ''} ${scopeNameForFilter(r.scopeId)} ${ROLE_TYPE_LABELS[r.roleType] || r.roleType}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -266,9 +270,10 @@ export default function DamaRolesPage() {
             <ExportMenu build={() => ({
               filenameBase: 'governance-roles',
               sheetName: 'Governance Roles',
-              headers: ['Person', 'Governance Role', 'Organization', 'Since'],
+              headers: ['Holder', 'Type', 'Governance Role', 'Organization', 'Since'],
               rows: roles.map((r) => [
-                r.personName,
+                r.agentId ? (r.agentName || '') : (r.personName || ''),
+                r.agentId ? 'Agent' : 'Person',
                 ROLE_TYPE_LABELS[r.roleType] || r.roleType,
                 scopeName(r.scopeId),
                 new Date(r.since).toLocaleDateString(),
@@ -502,7 +507,11 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
   // Render a single role as a card. Coloured left border keys it to
   // the role's badge palette; required roles with no holders go red.
   const renderRoleCard = (rt: string) => {
-    const list = (byRole.get(rt) || []).slice().sort((a, b) => a.personName.localeCompare(b.personName));
+    const list = (byRole.get(rt) || []).slice().sort((a, b) => {
+      const an = a.agentId ? (a.agentName || '') : (a.personName || '');
+      const bn = b.agentId ? (b.agentName || '') : (b.personName || '');
+      return an.localeCompare(bn);
+    });
     const filled = list.length > 0;
     const required = REQUIRED_ROLE_TYPES.has(rt);
     const criticalGap = required && !filled;
@@ -548,22 +557,28 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
         </div>
         {filled ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--color-border)' }}>
-            {list.map((r) => (
+            {list.map((r) => {
+              const isAgent = !!r.agentId;
+              const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
+              return (
               <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
-                <span style={{
+                <span title={isAgent ? 'AI Agent' : 'Person'} style={{
                   width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                  background: c.bg, color: c.color,
+                  background: isAgent ? '#ede9fe' : c.bg, color: isAgent ? '#5b21b6' : c.color,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 10, fontWeight: 700,
                 }}>
-                  {(r.personName || '?').charAt(0).toUpperCase()}
+                  {isAgent ? '⚙' : displayName.charAt(0).toUpperCase()}
                 </span>
-                <span style={{ fontWeight: 500 }}>{r.personName}</span>
+                <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {displayName}
+                </span>
                 <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>{scopeName(r.scopeId)}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
                 <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : (
           <div style={{ padding: '4px 14px 10px', fontSize: 12, color: criticalGap ? '#7f1d1d' : 'var(--color-text-muted)' }}>
