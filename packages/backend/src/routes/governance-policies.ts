@@ -60,7 +60,7 @@ const CODE_PREFIX: Record<StoredGovernancePolicy['documentType'], string> = {
   STANDARD: 'STD',
   POLICY: 'POL',
 };
-function generateCode(documentType: StoredGovernancePolicy['documentType']): string {
+export function generateCode(documentType: StoredGovernancePolicy['documentType']): string {
   const prefix = CODE_PREFIX[documentType];
   const seq = governancePolicies.filter((p) => p.documentType === documentType).length + 1;
   return `${prefix}-${String(seq).padStart(3, '0')}`;

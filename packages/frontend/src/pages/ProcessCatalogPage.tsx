@@ -1027,7 +1027,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1054,9 +1054,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   onRemoveTag: (tagId: string) => void;
   selectedIds: Set<string>;
   toggleSelect: (id: string) => void;
-  agentExecByActivity?: Record<string, { id: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; agentName: string; durationMs: number | null }>;
+  agentExecByActivity?: Record<string, { id: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; agentName: string; durationMs: number | null; promotedDocumentId?: string | null }>;
   onRunAgent?: (activityId: string, activityName: string, agentRole: { agentId: string; agentName: string | null; roleType: string }) => void;
   onReviewExecution?: (executionId: string, reviewStatus: 'APPROVED' | 'REJECTED' | 'PENDING') => void;
+  onPromoteExecution?: (executionId: string, payload: { name: string; documentType: string; description?: string }) => Promise<boolean>;
   runningActivity?: string | null;
   /** Agents available to run governance work (one entry per agent). */
   agentRoles?: Array<{ agentId: string; agentName: string | null; roleType: string }>;
@@ -1091,6 +1092,18 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   // draft is expanded for review.
   const [runAgentId, setRunAgentId] = useState('');
   const [showAgentResult, setShowAgentResult] = useState(false);
+  // Promote-agent-draft inline form. Open keyed by the execution id so
+  // the same form can be opened from either the agent panel or the
+  // Outputs panel chip for the same execution.
+  const [promoteOpen, setPromoteOpen] = useState<string | null>(null);
+  const [promoteName, setPromoteName] = useState('');
+  const [promoteDocType, setPromoteDocType] = useState<'POLICY' | 'STANDARD' | 'CHARTER' | 'FRAMEWORK'>('POLICY');
+  const [promoting, setPromoting] = useState(false);
+  const openPromoteForm = (execId: string, defaultName: string) => {
+    setPromoteOpen(execId);
+    setPromoteName(defaultName);
+    setPromoteDocType('POLICY');
+  };
   const nodeTags = allTags.filter((t) => t.entityId === node.id);
   const isExpanded = expanded.has(node.id);
   const hasChildren = (node.children || []).length > 0;
@@ -1414,11 +1427,78 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                                 <button onClick={() => onReviewExecution(ex.id, 'PENDING')}
                                   style={{ fontSize: 10, padding: '2px 6px', background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 3, cursor: 'pointer' }}>Reset</button>
                               )}
+                              {/* Promote-to-document affordance. An approved-but-
+                                 unpromoted draft can be turned into a Governance
+                                 Document and attached as an OUTPUT in one step.
+                                 Available also on PENDING drafts as a fast-path
+                                 (the backend marks them APPROVED on promote). */}
+                              {onPromoteExecution && ex.reviewStatus !== 'REJECTED' && !ex.promotedDocumentId && (
+                                <button onClick={() => openPromoteForm(ex.id, node.name)}
+                                  style={{ fontSize: 10, padding: '2px 8px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}
+                                  title="Create a Governance Document from this draft and attach it as an Output of this activity">
+                                  Promote to Document
+                                </button>
+                              )}
+                              {ex.promotedDocumentId && (
+                                <a href="/governance-documents"
+                                  style={{ fontSize: 10, padding: '2px 8px', background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd', borderRadius: 3, textDecoration: 'none', fontWeight: 600 }}
+                                  title="This draft has been promoted to a Governance Document and now appears in the activity's Outputs.">
+                                  Promoted →
+                                </a>
+                              )}
                             </div>
                             {showAgentResult && (
                               <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, maxHeight: 360, overflowY: 'auto' }}>
                                 <div style={{ fontSize: 9, fontWeight: 600, color: '#92400e', background: '#fef3c7', display: 'inline-block', padding: '1px 6px', borderRadius: 3, marginBottom: 6 }}>AI DRAFT — review before use</div>
                                 <div style={{ fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{ex.output}</div>
+                              </div>
+                            )}
+                            {/* Inline promote form — shown when openPromoteForm
+                               was called for this execution. The form's name
+                               defaults to the activity name; documentType
+                               defaults to POLICY. The "Outputs panel" chip
+                               opens this same form via the same state. */}
+                            {promoteOpen === ex.id && onPromoteExecution && (
+                              <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--color-bg)', border: '1px solid #c4b5fd', borderRadius: 4 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8, color: '#5b21b6' }}>Promote draft to Governance Document</div>
+                                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                                  Creates a new <strong>{promoteDocType.toLowerCase()}</strong> in the Governance Documents catalogue with this draft's content, and links it as an <strong>Output</strong> of this activity.
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 8 }}>
+                                  <div>
+                                    <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Name</label>
+                                    <input value={promoteName} onChange={(e) => setPromoteName(e.target.value)}
+                                      style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Document type</label>
+                                    <select value={promoteDocType} onChange={(e) => setPromoteDocType(e.target.value as typeof promoteDocType)}
+                                      style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }}>
+                                      <option value="POLICY">Policy</option>
+                                      <option value="STANDARD">Standard</option>
+                                      <option value="CHARTER">Charter</option>
+                                      <option value="FRAMEWORK">Framework</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                  <button onClick={() => setPromoteOpen(null)} disabled={promoting}
+                                    style={{ fontSize: 10, padding: '3px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 3, cursor: promoting ? 'not-allowed' : 'pointer' }}>
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!promoteName.trim() || !onPromoteExecution) return;
+                                      setPromoting(true);
+                                      const ok = await onPromoteExecution(ex.id, { name: promoteName.trim(), documentType: promoteDocType });
+                                      setPromoting(false);
+                                      if (ok) setPromoteOpen(null);
+                                    }}
+                                    disabled={promoting || !promoteName.trim()}
+                                    style={{ fontSize: 10, padding: '3px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 3, cursor: (promoting || !promoteName.trim()) ? 'not-allowed' : 'pointer', opacity: (promoting || !promoteName.trim()) ? 0.6 : 1 }}>
+                                    {promoting ? 'Promoting…' : 'Promote'}
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1485,6 +1565,36 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               onRemove={onRemoveMapping}
             />
           )}
+          {/* Approved agent drafts that haven't yet been promoted to a
+             Governance Document — surfaced here in the Outputs area so
+             the answer to "where's my approved draft as an output?" is
+             one click away. Promoted drafts disappear from this chip
+             list because they show up as proper Output mappings above. */}
+          {isExpanded && (() => {
+            const ex = agentExecByActivity?.[node.id];
+            if (!ex || ex.status !== 'SUCCESS') return null;
+            if (ex.reviewStatus !== 'APPROVED') return null;
+            if (ex.promotedDocumentId) return null;
+            return (
+              <div style={{ marginTop: 6, padding: '6px 10px', background: '#faf5ff', border: '1px dashed #d8b4fe', borderRadius: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                  Approved draft pending promotion
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px', background: '#ede9fe', color: '#5b21b6', borderRadius: 12, fontSize: 11 }}>
+                  <span>⚙</span>
+                  <span>Agent draft by {ex.agentName}</span>
+                  <button onClick={() => setShowAgentResult(true)} style={{ background: 'transparent', border: 'none', color: '#5b21b6', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}>View</button>
+                  <span style={{ color: '#a78bfa' }}>·</span>
+                  {onPromoteExecution && (
+                    <button onClick={() => openPromoteForm(ex.id, node.name)} style={{ background: 'transparent', border: 'none', color: '#5b21b6', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}>Promote</button>
+                  )}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  Promote to a Governance Document to make this an Output of the activity.
+                </div>
+              </div>
+            );
+          })()}
           {/* Collaboration panels — collapsed by default to keep the tree
             *  compact. The panels stay mounted (hidden) so their header
             *  counts populate without the user opening each one. */}
@@ -1710,6 +1820,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           agentExecByActivity={agentExecByActivity}
           onRunAgent={onRunAgent}
           onReviewExecution={onReviewExecution}
+          onPromoteExecution={onPromoteExecution}
           runningActivity={runningActivity}
           agentRoles={agentRoles}
           governanceHolderIds={governanceHolderIds}
@@ -1799,7 +1910,7 @@ export default function ProcessCatalogPage() {
   };
 
   // Agent execution state
-  interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; durationMs: number | null; createdAt: string; }
+  interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; durationMs: number | null; createdAt: string; promotedDocumentId?: string | null; }
   interface DamaRoleInfo { agentId: string; agentName: string | null; roleType: string; }
   const [agentExecByActivity, setAgentExecByActivity] = useState<Record<string, AgentExecutionInfo>>({});
   const [damaAgentRoles, setDamaAgentRoles] = useState<DamaRoleInfo[]>([]);
@@ -2045,6 +2156,30 @@ export default function ProcessCatalogPage() {
       fetchData();
     } catch (err: any) {
       addToast('error', err?.message || 'Failed to update review');
+    }
+  };
+
+  // Promote an approved agent draft to a real Governance Document and
+  // attach it as an OUTPUT mapping of the activity. The backend does
+  // all three (create doc, create mapping, mark execution APPROVED with
+  // a promotedDocumentId back-link) in one call.
+  const handlePromoteExecution = async (
+    executionId: string,
+    payload: { name: string; documentType: string; description?: string },
+  ) => {
+    try {
+      await apiClient.post(`/agent-executions/${executionId}/promote`, {
+        name: payload.name,
+        documentType: payload.documentType,
+        description: payload.description,
+        reviewedBy: currentUser?.name,
+      });
+      addToast('success', 'Draft promoted to Governance Document');
+      fetchData();
+      return true;
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to promote draft');
+      return false;
     }
   };
 
@@ -2773,6 +2908,7 @@ export default function ProcessCatalogPage() {
               agentExecByActivity={agentExecByActivity}
               onRunAgent={handleRunAgent}
               onReviewExecution={handleReviewExecution}
+              onPromoteExecution={handlePromoteExecution}
               runningActivity={runningActivity}
               agentRoles={agentRoleOptions}
               governanceHolderIds={governanceHolderIds}

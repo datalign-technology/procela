@@ -7,7 +7,7 @@ import { agents } from './agents';
 import { processNodes, isGovernanceNode } from './process-catalog';
 import { mappings } from './mappings';
 import { dataAssets } from './data-assets';
-import { governancePolicies } from './governance-policies';
+import { governancePolicies, generateCode as generateDocCode, StoredGovernancePolicy, VALID_DOCUMENT_TYPES } from './governance-policies';
 import { attachments } from './attachments';
 import { systems } from './systems';
 import { skills } from './skills';
@@ -46,6 +46,11 @@ export interface StoredAgentExecution {
   reviewStatus: ReviewStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
+  // Back-link to the Governance Document this draft was promoted to, set
+  // by /promote. Null/undefined means the approved draft hasn't yet been
+  // turned into an authoritative output — the activity's Inputs / Outputs
+  // panel surfaces it as an unpromoted draft chip in that case.
+  promotedDocumentId?: string | null;
   createdAt: string;
 }
 
@@ -66,6 +71,20 @@ function describeMapping(m: { dataAssetId?: string; policyId?: string; attachmen
 }
 
 export const agentExecutions: StoredAgentExecution[] = loadStore<StoredAgentExecution>('agentExecutions');
+
+// One-time normalisation: existing records pre-date the promotedDocumentId
+// field. Treat undefined as null so the rest of the code can rely on the
+// field being present.
+{
+  let backfilled = 0;
+  for (const e of agentExecutions) {
+    if (!('promotedDocumentId' in e)) { (e as StoredAgentExecution).promotedDocumentId = null; backfilled++; }
+  }
+  if (backfilled > 0) {
+    saveStore('agentExecutions', agentExecutions);
+    logger.info({ backfilled }, 'Backfilled promotedDocumentId on existing agent executions');
+  }
+}
 
 const router = Router();
 
@@ -202,6 +221,92 @@ router.patch('/:id/review', (req: Request, res: Response) => {
   exec.reviewedAt = reviewStatus === 'PENDING' ? null : new Date().toISOString();
   saveStore('agentExecutions', agentExecutions);
   res.json({ success: true, data: exec });
+});
+
+/** POST /api/v1/agent-executions/:id/promote — turn the approved draft into
+ * a real Governance Document and attach it as an OUTPUT mapping of the
+ * activity in one atomic step. Stamps the execution as APPROVED and
+ * records the back-link via promotedDocumentId so the UI can show the
+ * chip as "promoted" instead of "needs promotion".
+ *
+ * Body: { name, documentType?, category?, description?, reviewedBy? }
+ *   - name (required) — the document's display name; defaults to the
+ *     activity name on the frontend if the user doesn't edit it.
+ *   - documentType — POLICY by default; CHARTER / FRAMEWORK / STANDARD also valid.
+ *   - category — defaults to GOVERNANCE.
+ *   - reviewedBy — stamped on the execution if provided.
+ */
+router.post('/:id/promote', (req: Request, res: Response) => {
+  const exec = agentExecutions.find((e) => e.id === req.params.id);
+  if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
+  if (exec.status !== 'SUCCESS') {
+    res.status(400).json({ success: false, error: `Cannot promote a draft from a ${exec.status} execution — only SUCCESS drafts can be promoted.` });
+    return;
+  }
+  if (exec.reviewStatus === 'REJECTED') {
+    res.status(400).json({ success: false, error: 'This draft was rejected — reset the review before promoting.' });
+    return;
+  }
+  if (exec.promotedDocumentId) {
+    res.status(400).json({ success: false, error: 'This draft has already been promoted to a Governance Document.' });
+    return;
+  }
+
+  const { name, documentType, category, description, reviewedBy } = req.body || {};
+  const docName = (typeof name === 'string' && name.trim()) ? name.trim() : exec.activityName;
+  if (!docName) { res.status(400).json({ success: false, error: 'Name is required.' }); return; }
+  const finalDocumentType: StoredGovernancePolicy['documentType'] = VALID_DOCUMENT_TYPES.includes(documentType) ? documentType : 'POLICY';
+
+  const now = new Date().toISOString();
+
+  // 1) Create the Governance Document with the execution's Markdown as content.
+  const doc: StoredGovernancePolicy = {
+    id: uuid(),
+    orgId: exec.orgId,
+    code: generateDocCode(finalDocumentType),
+    name: docName,
+    description: typeof description === 'string' ? description : `Promoted from agent draft for "${exec.activityName}" by ${exec.agentName}.`,
+    documentType: finalDocumentType,
+    status: 'DRAFT',
+    ownerAssignmentId: null,
+    category: (typeof category === 'string' && category ? category : 'GOVERNANCE') as StoredGovernancePolicy['category'],
+    reviewFrequency: 'ANNUAL',
+    lastReviewDate: null,
+    nextReviewDate: null,
+    effectiveDate: null,
+    content: exec.output || '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  governancePolicies.push(doc);
+  saveStore('governancePolicies', governancePolicies);
+
+  // 2) Link it to the activity as an OUTPUT mapping (linkType 'produces').
+  const mapping = {
+    id: uuid(),
+    orgId: exec.orgId,
+    processStepId: exec.activityId,
+    policyId: doc.id,
+    linkType: 'produces' as const,
+    notes: `Promoted from agent draft (execution ${exec.id}) by ${exec.agentName}.`,
+    aiSuggested: true,
+    userOverridden: false,
+    createdBy: (typeof reviewedBy === 'string' && reviewedBy) || exec.reviewedBy || 'system',
+    createdAt: now,
+    updatedAt: now,
+  };
+  mappings.push(mapping as unknown as typeof mappings[number]);
+  saveStore('mappings', mappings);
+
+  // 3) Stamp the execution as APPROVED + record the back-link.
+  exec.reviewStatus = 'APPROVED';
+  exec.reviewedBy = (typeof reviewedBy === 'string' && reviewedBy) || exec.reviewedBy || 'Unknown';
+  exec.reviewedAt = now;
+  exec.promotedDocumentId = doc.id;
+  saveStore('agentExecutions', agentExecutions);
+
+  logger.info({ executionId: exec.id, documentId: doc.id, documentCode: doc.code, activityId: exec.activityId }, 'Promoted agent draft to governance document');
+  res.status(201).json({ success: true, data: { execution: exec, document: doc, mapping } });
 });
 
 /** DELETE /api/v1/agent-executions/all — delete all executions */
