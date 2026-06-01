@@ -1014,6 +1014,23 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
 
   return (
     <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', borderRadius: 4, border: '1px solid var(--color-border)' }}>
+      {/* The original free-text inputsOutputs prose used to live as an
+          editable note above this panel. The structured Expected
+          placeholders below now make the prose redundant for action,
+          but the prose itself is still useful as *context* — exact
+          wording the template used, sentence framing, etc. Surface it
+          as a quiet help-tip rather than an input field. */}
+      {nodeInputsOutputs && (
+        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>From template</span>
+          <HelpPopover id={`io-prose-${nodeId}`} title="Inputs & Outputs (from the template)">
+            <p style={{ margin: 0, textTransform: 'none', letterSpacing: 'normal' }}>{nodeInputsOutputs}</p>
+            <p style={{ marginTop: 8, marginBottom: 0, fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', textTransform: 'none', letterSpacing: 'normal' }}>
+              The slots below are parsed from this text. Link an asset, document, or attachment to each expected item to mark it fulfilled.
+            </p>
+          </HelpPopover>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
@@ -1796,17 +1813,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
              assets read as one block (it used to live up among the
              other doc fields, separated from the panel by Skills /
              Agent rows). */}
-          {isExpanded && node.level !== 'VALUE_STREAM' && (
-            <div style={{ marginTop: 8 }}>
-              <DocField
-                label="Inputs / Outputs"
-                value={node.inputsOutputs || ''}
-                onSave={(v) => onUpdate(node.id, { inputsOutputs: v })}
-                disabled={isLocked}
-                placeholder="What goes in and what comes out?"
-              />
-            </div>
-          )}
           {/* Structured Inputs / Outputs panel — rows can target a
               data asset, a governance document (policy), or an
               uploaded attachment. Picker is segmented across the
