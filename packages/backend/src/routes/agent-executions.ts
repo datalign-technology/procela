@@ -12,6 +12,10 @@ import { attachments } from './attachments';
 import { systems } from './systems';
 import { skills } from './skills';
 import { organizations } from './organizations';
+import { damaRoles } from './dama-roles';
+import { people } from './people';
+import { auditService } from '../services/audit.service';
+import { createNotification } from './notifications';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agent Executions — an AI agent actually PERFORMING a governance activity.
@@ -116,36 +120,60 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: exec });
 });
 
-/** POST /api/v1/agent-executions — have an agent perform a governance activity.
- *  Assembles the activity's context, runs it through the agent's instructions
- *  via Claude, and stores the resulting draft (status SUCCESS) or the failure
- *  (status FAILED). Restricted to ACTIVITY nodes in the GOVERNANCE domain. */
-router.post('/', async (req: Request, res: Response) => {
-  const { orgId, agentId, roleType } = req.body;
+/**
+ * Resolve "the person to notify" for an activity completion. Prefer the
+ * explicitly-set responsiblePersonId on the node; fall back to the first
+ * person holding the role the agent acted as. Returns null if no human
+ * is reachable (in which case the notification is skipped — we don't
+ * notify the agent itself).
+ */
+function resolveResponsiblePerson(node: { responsiblePersonId?: string | null }, orgId: string, roleType: string | undefined): string | null {
+  if (node.responsiblePersonId && people.find((p) => p.id === node.responsiblePersonId)) {
+    return node.responsiblePersonId;
+  }
+  if (roleType) {
+    const r = damaRoles.find((d) => d.scopeId === orgId && d.roleType === roleType && d.personId);
+    if (r?.personId) return r.personId;
+  }
+  return null;
+}
 
-  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  if (!agentId) { res.status(400).json({ success: false, error: 'agentId is required' }); return; }
-  if (!req.body.activityId) { res.status(400).json({ success: false, error: 'activityId is required' }); return; }
+/**
+ * Shared run helper used by both the ad-hoc POST endpoint and the
+ * schedule ticker. Returns the persisted StoredAgentExecution. On
+ * validation errors it throws an Error carrying a `status` field used
+ * by the HTTP wrapper to translate to a 4xx.
+ *
+ * Side effects: writes the execution row, emits two audit-log entries
+ * (one on start, one on finish), and creates a notification for the
+ * activity's responsible person on completion (success or failure).
+ */
+export async function runAgentExecution(params: {
+  orgId: string;
+  agentId: string;
+  activityId: string;
+  roleType?: string;
+  /** Where the run was kicked off from — affects audit + notification copy. */
+  triggeredBy?: 'user' | 'schedule';
+  /** When triggered by a schedule, the schedule id for cross-linking. */
+  scheduleId?: string | null;
+  /** Authenticated user that initiated the run, when known. */
+  userId?: string | null;
+}): Promise<StoredAgentExecution> {
+  const { orgId, agentId, activityId, roleType, triggeredBy = 'user', scheduleId = null, userId = null } = params;
+  if (!orgId) throw Object.assign(new Error('orgId is required'), { status: 400 });
+  if (!agentId) throw Object.assign(new Error('agentId is required'), { status: 400 });
+  if (!activityId) throw Object.assign(new Error('activityId is required'), { status: 400 });
 
   const agent = agents.find((a) => a.id === agentId);
-  if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
+  if (!agent) throw Object.assign(new Error('Agent not found'), { status: 404 });
 
-  const node = processNodes.find((n) => n.id === req.body.activityId);
-  if (!node) { res.status(404).json({ success: false, error: 'Activity not found' }); return; }
+  const node = processNodes.find((n) => n.id === activityId);
+  if (!node) throw Object.assign(new Error('Activity not found'), { status: 404 });
+  if (node.level !== 'ACTIVITY') throw Object.assign(new Error('Agents can only perform Activity-level work.'), { status: 400 });
+  if (!isGovernanceNode(node)) throw Object.assign(new Error('Agents can only perform activities in the Data Governance Management value stream.'), { status: 400 });
 
-  // Scope guard: agents may only act on governance Activities. This is the
-  // boundary enforcement of the "Data Governance Management value stream only"
-  // rule, independent of whatever the UI shows.
-  if (node.level !== 'ACTIVITY') {
-    res.status(400).json({ success: false, error: 'Agents can only perform Activity-level work.' });
-    return;
-  }
-  if (!isGovernanceNode(node)) {
-    res.status(400).json({ success: false, error: 'Agents can only perform activities in the Data Governance Management value stream.' });
-    return;
-  }
-
-  // Assemble the activity's business context from its linked items.
+  // Assemble business context from linked items.
   const nodeMappings = mappings.filter((m) => m.processStepId === node.id);
   const inputs = nodeMappings.filter((m) => m.linkType !== 'produces').map(describeMapping);
   const outputs = nodeMappings.filter((m) => m.linkType === 'produces').map(describeMapping);
@@ -181,8 +209,16 @@ router.post('/', async (req: Request, res: Response) => {
     reviewStatus: 'PENDING',
     reviewedBy: null,
     reviewedAt: null,
+    promotedDocumentId: null,
     createdAt: startedAt.toISOString(),
   };
+
+  // Audit the start of the run so it's traceable even if the AI call
+  // hangs or the process dies before it returns.
+  auditService.log(orgId, userId, 'AgentExecution', execution.id, 'AGENT_RUN_STARTED', null, {
+    agentId, agentName: agent.name, activityId: node.id, activityName: node.name,
+    roleType: roleType || null, triggeredBy, scheduleId,
+  });
 
   try {
     const output = await aiService.performGovernanceActivity(run);
@@ -191,20 +227,63 @@ router.post('/', async (req: Request, res: Response) => {
     execution.output = output;
     execution.completedAt = completedAt.toISOString();
     execution.durationMs = completedAt.getTime() - startedAt.getTime();
-    logger.info({ executionId: execution.id, agentId, activityId: node.id }, 'Agent performed governance activity');
+    logger.info({ executionId: execution.id, agentId, activityId: node.id, triggeredBy }, 'Agent performed governance activity');
   } catch (err) {
     const completedAt = new Date();
     execution.status = 'FAILED';
     execution.error = err instanceof Error ? err.message : 'Agent run failed';
     execution.completedAt = completedAt.toISOString();
     execution.durationMs = completedAt.getTime() - startedAt.getTime();
-    logger.error({ executionId: execution.id, agentId, activityId: node.id, err }, 'Agent execution failed');
+    logger.error({ executionId: execution.id, agentId, activityId: node.id, err, triggeredBy }, 'Agent execution failed');
   }
 
   agentExecutions.push(execution);
   saveStore('agentExecutions', agentExecutions);
 
-  res.status(201).json({ success: true, data: execution });
+  // Audit the finish with the outcome.
+  auditService.log(orgId, userId, 'AgentExecution', execution.id, `AGENT_RUN_${execution.status}`, null, {
+    durationMs: execution.durationMs, triggeredBy, scheduleId,
+    ...(execution.status === 'FAILED' ? { error: execution.error } : {}),
+  });
+
+  // Notify the responsible person — they need to know an AI-produced
+  // draft is waiting for them to review (or that a scheduled run failed).
+  const recipientId = resolveResponsiblePerson(node, orgId, roleType);
+  if (recipientId) {
+    const triggerCopy = triggeredBy === 'schedule' ? 'A scheduled agent run' : 'An agent run';
+    if (execution.status === 'SUCCESS') {
+      createNotification({
+        orgId, userId: recipientId, type: 'ACTION',
+        title: `Agent draft ready for review: ${node.name}`,
+        message: `${triggerCopy} by ${agent.name} for "${node.name}" finished. Open the activity to review the draft and approve or promote it.`,
+        link: '/processes',
+      });
+    } else {
+      createNotification({
+        orgId, userId: recipientId, type: 'WARNING',
+        title: `Agent run failed: ${node.name}`,
+        message: `${triggerCopy} by ${agent.name} for "${node.name}" failed: ${execution.error || 'unknown error'}.`,
+        link: '/processes',
+      });
+    }
+  } else {
+    logger.info({ activityId: node.id, roleType }, 'No responsible person to notify for completed agent run');
+  }
+
+  return execution;
+}
+
+/** POST /api/v1/agent-executions — ad-hoc, user-triggered run. */
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const { orgId, agentId, roleType, activityId } = req.body;
+    const userId = (req as Request & { user?: { id?: string } }).user?.id || null;
+    const execution = await runAgentExecution({ orgId, agentId, activityId, roleType, triggeredBy: 'user', userId });
+    res.status(201).json({ success: true, data: execution });
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string };
+    res.status(e.status || 500).json({ success: false, error: e.message || 'Agent run failed' });
+  }
 });
 
 /** PATCH /api/v1/agent-executions/:id/review — approve or reject a draft. */
@@ -216,10 +295,15 @@ router.patch('/:id/review', (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: `reviewStatus must be one of ${REVIEW_STATUSES.join(', ')}` });
     return;
   }
+  const before = { reviewStatus: exec.reviewStatus, reviewedBy: exec.reviewedBy };
   exec.reviewStatus = reviewStatus;
   exec.reviewedBy = reviewStatus === 'PENDING' ? null : (typeof reviewedBy === 'string' && reviewedBy ? reviewedBy : 'Unknown');
   exec.reviewedAt = reviewStatus === 'PENDING' ? null : new Date().toISOString();
   saveStore('agentExecutions', agentExecutions);
+  const userId = (req as Request & { user?: { id?: string } }).user?.id || null;
+  auditService.log(exec.orgId, userId, 'AgentExecution', exec.id, `AGENT_REVIEW_${reviewStatus}`, before, {
+    reviewStatus, reviewedBy: exec.reviewedBy,
+  });
   res.json({ success: true, data: exec });
 });
 
@@ -313,6 +397,11 @@ router.post('/:id/promote', (req: Request, res: Response) => {
   saveStore('agentExecutions', agentExecutions);
 
   logger.info({ executionId: exec.id, documentId: doc.id, documentCode: doc.code, activityId: exec.activityId }, 'Promoted agent draft to governance document');
+  const userIdHeader = (req as Request & { user?: { id?: string } }).user?.id || null;
+  auditService.log(exec.orgId, userIdHeader, 'AgentExecution', exec.id, 'AGENT_DRAFT_PROMOTED', null, {
+    documentId: doc.id, documentCode: doc.code, documentName: doc.name, documentType: doc.documentType,
+    activityId: exec.activityId, agentId: exec.agentId,
+  });
   res.status(201).json({ success: true, data: { execution: exec, document: doc, mapping } });
 });
 

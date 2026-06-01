@@ -1027,7 +1027,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1062,6 +1062,21 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
    *  top level. Used to warn when an agent is about to run, or a draft is
    *  about to be promoted, against an unfinished part of the catalogue. */
   ancestorStatusChain?: Array<{ level: string; status: string; name: string }>;
+  /** Schedules grouped by activityId — used by the agent panel to list
+   *  active and paused schedules inline. */
+  schedulesByActivity?: Record<string, Array<{
+    id: string; agentId: string; agentName: string; roleType: string;
+    frequency: 'ONCE' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    status: 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+    nextRunAt: string; lastRunAt: string | null; runCount: number;
+  }>>;
+  onCreateSchedule?: (payload: {
+    activityId: string; agentId: string; roleType: string;
+    frequency: 'ONCE' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    startAt: string;
+  }) => Promise<boolean>;
+  onToggleSchedule?: (scheduleId: string, nextStatus: 'ACTIVE' | 'PAUSED') => Promise<void>;
+  onDeleteSchedule?: (scheduleId: string) => Promise<void>;
   runningActivity?: string | null;
   /** Agents available to run governance work (one entry per agent). */
   agentRoles?: Array<{ agentId: string; agentName: string | null; roleType: string }>;
@@ -1096,6 +1111,20 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   // draft is expanded for review.
   const [runAgentId, setRunAgentId] = useState('');
   const [showAgentResult, setShowAgentResult] = useState(false);
+  // Schedule inline form state. When `scheduleFormOpen` is true the form
+  // is rendered beneath the Run / Schedule button row.
+  const [scheduleFormOpen, setScheduleFormOpen] = useState(false);
+  const [scheduleFrequency, setScheduleFrequency] = useState<'ONCE' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
+  // datetime-local stores naive "YYYY-MM-DDTHH:mm"; default to roughly
+  // "ten minutes from now" so a user who just clicks Save doesn't get
+  // an instantly-firing run they didn't intend.
+  const defaultScheduleStart = () => {
+    const d = new Date(Date.now() + 10 * 60 * 1000);
+    d.setSeconds(0, 0);
+    return d.toISOString().slice(0, 16);
+  };
+  const [scheduleStartLocal, setScheduleStartLocal] = useState<string>(defaultScheduleStart);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
   // Walk the ancestor chain + the current node looking for the most-
   // senior level whose status is not ACTIVE. Used to warn (not block) on
   // agent runs and document promotions whose source is in flux. Anything
@@ -1412,6 +1441,13 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                             style={{ padding: '2px 10px', fontSize: 10, fontWeight: 600, background: running ? '#e5e7eb' : '#7c3aed', color: running ? '#6b7280' : '#fff', border: 'none', borderRadius: 4, cursor: running ? 'not-allowed' : 'pointer' }}>
                             {running ? 'Running…' : (ex ? 'Re-run' : 'Run')}
                           </button>
+                          {onCreateSchedule && (
+                            <button onClick={() => setScheduleFormOpen((v) => !v)}
+                              title="Schedule this agent to run once at a later time, or on a recurring cadence"
+                              style={{ padding: '2px 10px', fontSize: 10, fontWeight: 600, background: 'transparent', color: '#6b21a8', border: '1px solid #c4b5fd', borderRadius: 4, cursor: 'pointer' }}>
+                              {scheduleFormOpen ? 'Cancel schedule' : 'Schedule…'}
+                            </button>
+                          )}
                           {/* Soft warning when the source definition isn't
                              ACTIVE. Doesn't block — iterative design with
                              agent assistance is a legitimate use case —
@@ -1541,6 +1577,112 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         {ex && ex.status === 'FAILED' && ex.error && (
                           <div style={{ marginTop: 6, fontSize: 10, color: '#991b1b' }}>{ex.error}</div>
                         )}
+
+                        {/* Inline schedule form. Frequency + start datetime;
+                            saves a new agent-schedules row. ONCE schedules
+                            auto-COMPLETED after their single run. */}
+                        {scheduleFormOpen && onCreateSchedule && (
+                          <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--color-bg)', border: '1px solid #c4b5fd', borderRadius: 4 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6, color: '#5b21b6' }}>Schedule this agent</div>
+                            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6, lineHeight: 1.5 }}>
+                              The agent runs on the cadence you pick. The activity's responsible person is notified when each run completes; every run is recorded in the audit log.
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                              <div>
+                                <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Frequency</label>
+                                <select value={scheduleFrequency} onChange={(e) => setScheduleFrequency(e.target.value as typeof scheduleFrequency)}
+                                  style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }}>
+                                  <option value="ONCE">Once (run at this time)</option>
+                                  <option value="HOURLY">Hourly</option>
+                                  <option value="DAILY">Daily</option>
+                                  <option value="WEEKLY">Weekly</option>
+                                  <option value="MONTHLY">Monthly</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>{scheduleFrequency === 'ONCE' ? 'Run at' : 'First run at'}</label>
+                                <input type="datetime-local" value={scheduleStartLocal} onChange={(e) => setScheduleStartLocal(e.target.value)}
+                                  style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, width: '100%', background: 'var(--color-surface)' }} />
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button onClick={() => { setScheduleFormOpen(false); setScheduleStartLocal(defaultScheduleStart()); }} disabled={scheduleSaving}
+                                style={{ fontSize: 10, padding: '3px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 3, cursor: scheduleSaving ? 'not-allowed' : 'pointer' }}>
+                                Cancel
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!scheduleStartLocal || !onCreateSchedule) return;
+                                  // datetime-local is naive local time; convert to ISO.
+                                  const iso = new Date(scheduleStartLocal).toISOString();
+                                  setScheduleSaving(true);
+                                  const ok = await onCreateSchedule({
+                                    activityId: node.id, agentId: selectedId, roleType: selected.roleType,
+                                    frequency: scheduleFrequency, startAt: iso,
+                                  });
+                                  setScheduleSaving(false);
+                                  if (ok) { setScheduleFormOpen(false); setScheduleStartLocal(defaultScheduleStart()); }
+                                }}
+                                disabled={scheduleSaving || !scheduleStartLocal}
+                                style={{ fontSize: 10, padding: '3px 12px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 3, cursor: scheduleSaving ? 'not-allowed' : 'pointer', opacity: scheduleSaving ? 0.6 : 1 }}>
+                                {scheduleSaving ? 'Saving…' : 'Save schedule'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Existing schedules for this activity (ACTIVE or
+                            PAUSED — COMPLETED ones drop off automatically
+                            on the next tick). */}
+                        {(() => {
+                          const list = (schedulesByActivity?.[node.id] || []).filter((s) => s.status !== 'COMPLETED');
+                          if (list.length === 0) return null;
+                          return (
+                            <div style={{ marginTop: 8 }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                                Scheduled runs ({list.length})
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {list.map((s) => {
+                                  const isActive = s.status === 'ACTIVE';
+                                  return (
+                                    <div key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 8px', background: isActive ? '#ede9fe' : '#f5f3ff', color: '#5b21b6', borderRadius: 4, fontSize: 11, border: `1px solid ${isActive ? '#c4b5fd' : 'var(--color-border)'}` }}>
+                                      <span style={{ fontWeight: 600 }}>⚙</span>
+                                      <span>{s.agentName}</span>
+                                      <span style={{ color: '#7c3aed' }}>·</span>
+                                      <span>{s.frequency.toLowerCase()}</span>
+                                      <span style={{ color: '#7c3aed' }}>·</span>
+                                      <span title={`Next run: ${new Date(s.nextRunAt).toLocaleString()}`}>
+                                        next: {new Date(s.nextRunAt).toLocaleString()}
+                                      </span>
+                                      {s.runCount > 0 && (
+                                        <>
+                                          <span style={{ color: '#7c3aed' }}>·</span>
+                                          <span style={{ color: 'var(--color-text-muted)' }}>{s.runCount} run{s.runCount === 1 ? '' : 's'}</span>
+                                        </>
+                                      )}
+                                      {!isActive && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e' }}>PAUSED</span>}
+                                      <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4 }}>
+                                        {onToggleSchedule && (
+                                          <button onClick={() => onToggleSchedule(s.id, isActive ? 'PAUSED' : 'ACTIVE')}
+                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#5b21b6', fontSize: 11, padding: 0, textDecoration: 'underline' }}>
+                                            {isActive ? 'Pause' : 'Resume'}
+                                          </button>
+                                        )}
+                                        {onDeleteSchedule && (
+                                          <button onClick={() => onDeleteSchedule(s.id)}
+                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#991b1b', fontSize: 11, padding: 0, textDecoration: 'underline' }}>
+                                            Delete
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })()}
@@ -1861,7 +2003,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           governanceHolderIds={governanceHolderIds}
           holdersByRoleLabel={holdersByRoleLabel}
           viewMode={viewMode}
-          ancestorStatusChain={[...(ancestorStatusChain || []), { level: node.level, status: node.status, name: node.name }]} />
+          ancestorStatusChain={[...(ancestorStatusChain || []), { level: node.level, status: node.status, name: node.name }]}
+          schedulesByActivity={schedulesByActivity}
+          onCreateSchedule={onCreateSchedule}
+          onToggleSchedule={onToggleSchedule}
+          onDeleteSchedule={onDeleteSchedule} />
       ))}
     </div>
   );
@@ -1948,8 +2094,18 @@ export default function ProcessCatalogPage() {
   // Agent execution state
   interface AgentExecutionInfo { id: string; agentId: string; agentName: string; activityId: string; status: string; output: string; error: string | null; reviewStatus: string; reviewedBy: string | null; completedAt: string | null; durationMs: number | null; createdAt: string; promotedDocumentId?: string | null; }
   interface DamaRoleInfo { agentId: string; agentName: string | null; roleType: string; }
+  // Schedules are stored per-activity for the agent panel's list view.
+  interface AgentScheduleInfo {
+    id: string; orgId: string; agentId: string; agentName: string;
+    activityId: string; activityName: string; roleType: string;
+    frequency: 'ONCE' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    status: 'ACTIVE' | 'PAUSED' | 'COMPLETED';
+    startAt: string; nextRunAt: string; lastRunAt: string | null; runCount: number;
+    createdAt: string; updatedAt: string;
+  }
   const [agentExecByActivity, setAgentExecByActivity] = useState<Record<string, AgentExecutionInfo>>({});
   const [damaAgentRoles, setDamaAgentRoles] = useState<DamaRoleInfo[]>([]);
+  const [schedulesByActivity, setSchedulesByActivity] = useState<Record<string, AgentScheduleInfo[]>>({});
   const [runningActivity, setRunningActivity] = useState<string | null>(null);
   // Agents available to run governance work — one entry per agent (an agent
   // may hold several DAMA roles; we only need it listed once in the picker).
@@ -1999,12 +2155,19 @@ export default function ProcessCatalogPage() {
       setPoliciesList((policiesRes.data || []).map((p: any) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
       setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
       setRoleAssignments((rolesRes.data || []).map((r: any) => ({ personId: r.personId, roleType: r.roleType })));
-      // Fetch agent executions and DAMA roles for agent-assigned activities
+      // Fetch agent executions, DAMA roles, and schedules for agent-assigned activities
       try {
-        const [execsRes, rolesRes] = await Promise.all([
+        const [execsRes, rolesRes, schedRes] = await Promise.all([
           apiClient.get<{ success: boolean; data: AgentExecutionInfo[] }>(`/agent-executions${qp}`),
           apiClient.get<{ success: boolean; data: DamaRoleInfo[] }>(`/dama-roles${qp}`),
+          apiClient.get<{ success: boolean; data: AgentScheduleInfo[] }>(`/agent-schedules${qp}`),
         ]);
+        // Group schedules by activityId so the panel can list them inline.
+        const byActSched: Record<string, AgentScheduleInfo[]> = {};
+        for (const s of (schedRes.data || [])) {
+          (byActSched[s.activityId] = byActSched[s.activityId] || []).push(s);
+        }
+        setSchedulesByActivity(byActSched);
         // Build lookup: activityId -> latest execution
         const byActivity: Record<string, AgentExecutionInfo> = {};
         for (const ex of (execsRes.data || [])) {
@@ -2216,6 +2379,49 @@ export default function ProcessCatalogPage() {
     } catch (err: any) {
       addToast('error', err?.message || 'Failed to promote draft');
       return false;
+    }
+  };
+
+  // ── Agent schedules ──
+  const handleCreateSchedule = async (payload: {
+    activityId: string; agentId: string; roleType: string;
+    frequency: 'ONCE' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    startAt: string;
+  }): Promise<boolean> => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return false; }
+    try {
+      await apiClient.post('/agent-schedules', {
+        orgId: activeOrgId,
+        agentId: payload.agentId,
+        activityId: payload.activityId,
+        roleType: payload.roleType,
+        frequency: payload.frequency,
+        startAt: payload.startAt,
+      });
+      addToast('success', payload.frequency === 'ONCE' ? 'One-time schedule created' : `${payload.frequency.toLowerCase()} schedule created`);
+      fetchData();
+      return true;
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to create schedule');
+      return false;
+    }
+  };
+  const handleToggleSchedule = async (scheduleId: string, nextStatus: 'ACTIVE' | 'PAUSED'): Promise<void> => {
+    try {
+      await apiClient.patch(`/agent-schedules/${scheduleId}`, { status: nextStatus });
+      addToast('success', nextStatus === 'PAUSED' ? 'Schedule paused' : 'Schedule resumed');
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to update schedule');
+    }
+  };
+  const handleDeleteSchedule = async (scheduleId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/agent-schedules/${scheduleId}`);
+      addToast('success', 'Schedule removed');
+      fetchData();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Failed to remove schedule');
     }
   };
 
@@ -2950,7 +3156,11 @@ export default function ProcessCatalogPage() {
               governanceHolderIds={governanceHolderIds}
               holdersByRoleLabel={holdersByRoleLabel}
               viewMode={viewMode}
-              ancestorStatusChain={[]} />
+              ancestorStatusChain={[]}
+              schedulesByActivity={schedulesByActivity}
+              onCreateSchedule={handleCreateSchedule}
+              onToggleSchedule={handleToggleSchedule}
+              onDeleteSchedule={handleDeleteSchedule} />
           ))
         )}
       </div>

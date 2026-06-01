@@ -64,6 +64,7 @@ import businessGlossaryRouter from './routes/business-glossary';
 import operationsManualsRouter from './routes/operations-manuals';
 import skillsRouter from './routes/skills';
 import agentExecutionsRouter from './routes/agent-executions';
+import agentSchedulesRouter from './routes/agent-schedules';
 
 const app = express();
 
@@ -137,6 +138,7 @@ app.use('/api/v1/business-glossary', authenticateToken, businessGlossaryRouter);
 app.use('/api/v1/operations-manuals', authenticateToken, operationsManualsRouter);
 app.use('/api/v1/skills', authenticateToken, skillsRouter);
 app.use('/api/v1/agent-executions', authenticateToken, agentExecutionsRouter);
+app.use('/api/v1/agent-schedules', authenticateToken, agentSchedulesRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling
