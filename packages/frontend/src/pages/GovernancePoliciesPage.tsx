@@ -153,6 +153,22 @@ export default function GovernancePoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [controls, setControls] = useState<Control[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  // Agent-promotion provenance — for any policy promoted from an agent
+  // draft, the matching execution carries the back-link. We join by
+  // execution.promotedDocumentId === policy.id at render time so neither
+  // store needs a schema change.
+  interface PromotionInfo {
+    executionId: string;
+    agentName: string;
+    activityId: string;
+    activityName: string;
+    reviewedBy: string | null;
+    reviewedAt: string | null;
+  }
+  const [promotionsByPolicy, setPromotionsByPolicy] = useState<Record<string, PromotionInfo>>({});
+  // Show-only-agent-promoted filter — defaults off; toggle persists in URL?
+  // No, just session state for now (simple).
+  const [showAgentPromotedOnly, setShowAgentPromotedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   // documentType filter for the segmented control above the list.
   // 'ALL' shows everything; the four document types narrow the view.
@@ -176,14 +192,35 @@ export default function GovernancePoliciesPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [polRes, ctlRes, pplRes] = await Promise.all([
+      // Shape we need from /agent-executions for the join. The endpoint
+      // already returns these fields; we only consume a subset.
+      type ExecRow = { id: string; agentName: string; activityId: string; activityName: string; reviewedBy: string | null; reviewedAt: string | null; promotedDocumentId?: string | null };
+      const [polRes, ctlRes, pplRes, execRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: Policy[] }>(`/governance-policies${query}`),
         apiClient.get<{ success: boolean; data: Control[] }>(`/governance-controls${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
+        apiClient.get<{ success: boolean; data: ExecRow[] }>(`/agent-executions${query}`).catch(() => ({ data: [] as ExecRow[] })),
       ]);
       setPolicies(polRes.data || []);
       setControls(ctlRes.data || []);
       setPeople(pplRes.data || []);
+      // Build the promotedDocumentId → execution-summary lookup. Multiple
+      // executions could theoretically map to the same doc (re-promotes are
+      // rejected by the backend, but a manual reset could clear the
+      // back-link); keep the most recent one.
+      const byDoc: Record<string, PromotionInfo> = {};
+      for (const e of (execRes.data || [])) {
+        if (!e.promotedDocumentId) continue;
+        const prev = byDoc[e.promotedDocumentId];
+        if (!prev || (e.reviewedAt && (!prev.reviewedAt || e.reviewedAt > prev.reviewedAt))) {
+          byDoc[e.promotedDocumentId] = {
+            executionId: e.id, agentName: e.agentName,
+            activityId: e.activityId, activityName: e.activityName,
+            reviewedBy: e.reviewedBy, reviewedAt: e.reviewedAt,
+          };
+        }
+      }
+      setPromotionsByPolicy(byDoc);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -333,6 +370,14 @@ export default function GovernancePoliciesPage() {
             </button>
           );
         })}
+        {/* Agent-promoted toggle. Counts surface even when the toggle is
+            off so the user knows there are AI-originated docs in the list. */}
+        {Object.keys(promotionsByPolicy).length > 0 && (
+          <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
+            <input type="checkbox" checked={showAgentPromotedOnly} onChange={(e) => setShowAgentPromotedOnly(e.target.checked)} />
+            <span><span style={{ color: '#5b21b6' }}>⚙</span> Show only agent-promoted ({Object.keys(promotionsByPolicy).length})</span>
+          </label>
+        )}
       </div>
 
       {(() => {
@@ -473,10 +518,14 @@ export default function GovernancePoliciesPage() {
               </tr>
             </thead>
             <tbody>
-              {policies.filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter).map((pol) => {
+              {policies
+                .filter((p) => typeFilter === 'ALL' || p.documentType === typeFilter)
+                .filter((p) => !showAgentPromotedOnly || !!promotionsByPolicy[p.id])
+                .map((pol) => {
                 const policyControls = controlsForPolicy(pol.id);
                 const isExpanded = expandedPolicyId === pol.id;
                 const docType = pol.documentType || 'POLICY';
+                const promo = promotionsByPolicy[pol.id];
                 return (
                   <tr key={pol.id} style={{ cursor: 'pointer', transition: 'background 0.1s' }}
                     onMouseEnter={(e) => { if (!isExpanded) e.currentTarget.style.background = 'var(--color-bg)'; }}
@@ -489,6 +538,12 @@ export default function GovernancePoliciesPage() {
                     {policyCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--color-primary)' }}>
                       <span>{pol.name}</span>
                       <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
+                      {promo && (
+                        <span title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
+                          style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 12, fontSize: 10, fontWeight: 600, background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          ⚙ from agent draft
+                        </span>
+                      )}
                     </td>}
                     {policyCols.isVisible('category') && <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>}
                     {policyCols.isVisible('status') && <td style={tdStyle}><span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span></td>}
@@ -508,6 +563,40 @@ export default function GovernancePoliciesPage() {
           </table>
         )}
       </div>
+
+      {/* Expanded Source Section — provenance for documents promoted from
+          an agent draft. Shown for ANY documentType (not just POLICY) so
+          the round-trip back to the source activity is always reachable.
+          Renders only when the expanded row has a matching agent
+          execution via promotedDocumentId. */}
+      {expandedPolicyId && promotionsByPolicy[expandedPolicyId] && (() => {
+        const promo = promotionsByPolicy[expandedPolicyId];
+        const polName = policies.find((p) => p.id === expandedPolicyId)?.name || 'Document';
+        return (
+          <div style={{ marginTop: 16, background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#ede9fe', color: '#5b21b6', letterSpacing: '0.04em', textTransform: 'uppercase' }}>⚙ Source</span>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
+              <span style={{ color: 'var(--color-text-muted)' }}>Source activity</span>
+              <a href="/processes" title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
+
+              <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
+              <span><span style={{ color: '#5b21b6' }}>⚙</span> {promo.agentName}</span>
+
+              <span style={{ color: 'var(--color-text-muted)' }}>Approved by</span>
+              <span>{promo.reviewedBy || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+
+              <span style={{ color: 'var(--color-text-muted)' }}>Approved at</span>
+              <span>{promo.reviewedAt ? new Date(promo.reviewedAt).toLocaleString() : <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>
+            </div>
+            <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+              <strong>{polName}</strong> was created by promoting an approved AI-generated draft from the activity above. The draft's source-status note is preserved in the document's <em>Description</em>.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Expanded Controls Section — only shown for documentType
           POLICY. Charters, frameworks and standards don't have
