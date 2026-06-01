@@ -1057,8 +1057,18 @@ export default function GovernanceGroupsPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {expectedRoles.map((expected) => {
                         const assigned = orgDamaRoles.filter((r) => r.roleType === expected.roleType);
-                        const isFilled = assigned.length > 0;
-                        const canAddMore = expected.multiAssign || assigned.length === 0;
+                        // The single-slot rule is about *human accountability* —
+                        // it doesn't apply to agent capabilities. So a single-
+                        // assign role can hold one person AND any number of
+                        // agents in parallel. "Filled" reflects whether the
+                        // human seat is taken; agents are shown as separate
+                        // chips with the ⚙ marker.
+                        const peopleAssigned = assigned.filter((a) => !a.agentId).length;
+                        const agentsAssigned = assigned.filter((a) => !!a.agentId).length;
+                        const isFilled = peopleAssigned > 0;
+                        const canAddPerson = expected.multiAssign || peopleAssigned === 0;
+                        const canAddAgent = expected.multiAssign || agentsAssigned === 0;
+                        const canAddMore = canAddPerson || canAddAgent;
                         return (
                           <div key={expected.roleType} style={{
                             padding: '10px 14px',
@@ -1104,7 +1114,7 @@ export default function GovernanceGroupsPage() {
                                   <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: expected.multiAssign ? '#f5f3ff' : '#f0f9ff', color: expected.multiAssign ? '#6d28d9' : '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     {expected.multiAssign ? 'Multiple' : 'Single'}
                                   </span>
-                                  {!expected.multiAssign && assigned.length > 0 && (
+                                  {!expected.multiAssign && peopleAssigned > 0 && (
                                     <span style={{ fontSize: 11, color: '#16a34a', marginLeft: 'auto' }}>✓ Filled</span>
                                   )}
                                 </div>
@@ -1140,41 +1150,51 @@ export default function GovernanceGroupsPage() {
                                 )}
                                 {canAddMore && (
                                   <div style={{ marginTop: 8, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <select
-                                      style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
-                                      value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
-                                      onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
-                                    >
-                                      <option value="">Person...</option>
-                                      {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
-                                        <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
-                                      disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
-                                      onClick={() => handleAssignDamaRole('person')}
-                                    >
-                                      Assign
-                                    </button>
-                                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
-                                    <select
-                                      style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
-                                      value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
-                                      onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
-                                    >
-                                      <option value="">{'⚙'} Agent...</option>
-                                      {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
-                                        <option key={a.id} value={a.id}>{a.name}</option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
-                                      disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
-                                      onClick={() => handleAssignDamaRole('agent')}
-                                    >
-                                      Assign
-                                    </button>
+                                    {canAddPerson && (
+                                      <>
+                                        <select
+                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px' }}
+                                          value={assignRoleType === expected.roleType ? assignRolePersonId : ''}
+                                          onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRolePersonId(e.target.value); if (e.target.value) setAssignRoleAgentId(''); }}
+                                        >
+                                          <option value="">Person...</option>
+                                          {people.filter((p) => !assigned.some((a) => a.personId === p.id)).map((p) => (
+                                            <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, opacity: !(assignRoleType === expected.roleType && assignRolePersonId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRolePersonId) ? 'not-allowed' : 'pointer' }}
+                                          disabled={!(assignRoleType === expected.roleType && assignRolePersonId)}
+                                          onClick={() => handleAssignDamaRole('person')}
+                                        >
+                                          Assign
+                                        </button>
+                                      </>
+                                    )}
+                                    {canAddPerson && canAddAgent && (
+                                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
+                                    )}
+                                    {canAddAgent && (
+                                      <>
+                                        <select
+                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: '#c4b5fd' }}
+                                          value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
+                                          onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
+                                        >
+                                          <option value="">{'⚙'} Agent...</option>
+                                          {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
+                                            <option key={a.id} value={a.id}>{a.name}</option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
+                                          disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
+                                          onClick={() => handleAssignDamaRole('agent')}
+                                        >
+                                          Assign
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 )}
                               </div>

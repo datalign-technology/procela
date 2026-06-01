@@ -112,13 +112,19 @@ const btnSecondary: React.CSSProperties = {
 };
 
 interface FormData {
+  // A role assignment is held by exactly one of (person, agent). The form
+  // picks one via assigneeType and fills only the corresponding id field.
+  assigneeType: 'person' | 'agent';
   personId: string;
+  agentId: string;
   roleType: string;
   scopeType: 'ORG';
   scopeId: string;
 }
 
-const emptyForm: FormData = { personId: '', roleType: 'CDO', scopeType: 'ORG', scopeId: '' };
+interface AgentOption { id: string; name: string; status: string; orgIds: string[]; }
+
+const emptyForm: FormData = { assigneeType: 'person', personId: '', agentId: '', roleType: 'CDO', scopeType: 'ORG', scopeId: '' };
 
 export default function DamaRolesPage() {
   const { activeOrgId } = useOrgContext();
@@ -127,6 +133,7 @@ export default function DamaRolesPage() {
   const [roles, setRoles] = useState<DamaRoleAssignment[]>([]);
   const [roleTypes, setRoleTypes] = useState<string[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
   const [, setDomains] = useState<DomainOption[]>([]);
   // Counts come from the local `roles` list now (see roleCounts below);
@@ -137,8 +144,11 @@ export default function DamaRolesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormData>(emptyForm);
+  // The required-id field switches with assigneeType — validate whichever
+  // one applies. Falls back to a single combined message if neither is set.
   const roleValidation = useFormValidation({
-    personId: (v: any) => !v ? 'Select a person to assign the role to.' : null,
+    personId: (v: any, form: any) => (form?.assigneeType !== 'agent' && !v) ? 'Select a person to assign the role to.' : null,
+    agentId: (v: any, form: any) => (form?.assigneeType === 'agent' && !v) ? 'Select an agent to assign the role to.' : null,
     scopeId: (v: any) => !v ? 'Select an organization.' : null,
   });
   const [error, setError] = useState('');
@@ -149,10 +159,11 @@ export default function DamaRolesPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, summaryRes, peopleRes, orgsRes, domainsRes] = await Promise.all([
+      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Record<string, number> }>(`/dama-roles/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
+        apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${query}`),
         apiClient.get<{ success: boolean; data: OrgOption[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: DomainOption[] }>(`/data-domains${query}`),
       ]);
@@ -160,6 +171,7 @@ export default function DamaRolesPage() {
       setRoleTypes(rolesRes.roleTypes || []);
       setSummary(summaryRes.data || {});
       setPeople(peopleRes.data || []);
+      setAgents((agentsRes.data || []).filter((a) => a.status === 'ACTIVE'));
       setOrgs(orgsRes.data || []);
       setDomains(domainsRes.data || []);
     } catch { /* API may not be running */ }
@@ -196,8 +208,17 @@ export default function DamaRolesPage() {
   const handleSave = async () => {
     if (!roleValidation.validateAll(form)) return;
     setError('');
+    // Send only the id field that matches assigneeType. Backend accepts
+    // either personId or agentId on this endpoint.
+    const payload: Record<string, unknown> = {
+      roleType: form.roleType,
+      scopeType: form.scopeType,
+      scopeId: form.scopeId,
+    };
+    if (form.assigneeType === 'agent') payload.agentId = form.agentId;
+    else payload.personId = form.personId;
     try {
-      await apiClient.post('/dama-roles', form);
+      await apiClient.post('/dama-roles', payload);
       addToast('success', 'Governance role assigned');
       setShowForm(false);
       setForm(emptyForm);
@@ -320,7 +341,45 @@ export default function DamaRolesPage() {
               {error}
             </div>
           )}
+          {/* Holder kind toggle — a role can be held by a person or an AI agent. */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>Holder type</label>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              {(['person', 'agent'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setForm({ ...form, assigneeType: t, personId: '', agentId: '' })}
+                  style={{
+                    padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                    background: form.assigneeType === t ? (t === 'agent' ? '#ede9fe' : 'var(--color-bg)') : 'transparent',
+                    color: form.assigneeType === t ? (t === 'agent' ? '#5b21b6' : 'var(--color-text)') : 'var(--color-text-muted)',
+                    border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
+                  }}
+                >
+                  {t === 'agent' ? '⚙ Agent' : 'Person'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {form.assigneeType === 'agent' ? (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Agent *</label>
+                <select style={{ ...selectStyle, border: roleValidation.fieldError('agentId') ? inputErrorBorder : selectStyle.border }} value={form.agentId}
+                  onChange={(e) => setForm({ ...form, agentId: e.target.value })}
+                  onBlur={() => { roleValidation.touch('agentId'); roleValidation.validateField('agentId', form.agentId, form); }}>
+                  <option value="">-- Select agent --</option>
+                  {agents
+                    .filter((a) => !form.scopeId || a.orgIds.includes(form.scopeId))
+                    .map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {roleValidation.fieldError('agentId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('agentId')}</div>}
+                {agents.length === 0 && (
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>No active agents in this org — create one on the Agents page.</div>
+                )}
+              </div>
+            ) : (
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person *</label>
               <select style={{ ...selectStyle, border: roleValidation.fieldError('personId') ? inputErrorBorder : selectStyle.border }} value={form.personId}
@@ -331,6 +390,7 @@ export default function DamaRolesPage() {
               </select>
               {roleValidation.fieldError('personId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('personId')}</div>}
             </div>
+            )}
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Governance Role *</label>
               <select style={selectStyle} value={form.roleType} onChange={(e) => setForm({ ...form, roleType: e.target.value })}>
@@ -367,13 +427,19 @@ export default function DamaRolesPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
-            <button
-              style={{ ...btnPrimary, opacity: !form.personId || !form.scopeId ? 0.6 : 1, cursor: !form.personId || !form.scopeId ? 'not-allowed' : 'pointer' }}
-              disabled={!form.personId || !form.scopeId}
-              onClick={handleSave}
-            >
-              Assign Role
-            </button>
+            {(() => {
+              const idFilled = form.assigneeType === 'agent' ? !!form.agentId : !!form.personId;
+              const incomplete = !idFilled || !form.scopeId;
+              return (
+                <button
+                  style={{ ...btnPrimary, opacity: incomplete ? 0.6 : 1, cursor: incomplete ? 'not-allowed' : 'pointer' }}
+                  disabled={incomplete}
+                  onClick={handleSave}
+                >
+                  Assign Role
+                </button>
+              );
+            })()}
           </div>
         </SectionCard>
       )}
