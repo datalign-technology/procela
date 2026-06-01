@@ -248,22 +248,26 @@ export async function runAgentExecution(params: {
 
   // Notify the responsible person — they need to know an AI-produced
   // draft is waiting for them to review (or that a scheduled run failed).
+  // Deep-link the notification to the specific activity so a click on
+  // the bell row scrolls them straight to it instead of dumping them on
+  // the catalog root.
   const recipientId = resolveResponsiblePerson(node, orgId, roleType);
   if (recipientId) {
     const triggerCopy = triggeredBy === 'schedule' ? 'A scheduled agent run' : 'An agent run';
+    const activityLink = `/processes?node=${encodeURIComponent(node.id)}`;
     if (execution.status === 'SUCCESS') {
       createNotification({
         orgId, userId: recipientId, type: 'ACTION',
         title: `Agent draft ready for review: ${node.name}`,
         message: `${triggerCopy} by ${agent.name} for "${node.name}" finished. Open the activity to review the draft and approve or promote it.`,
-        link: '/processes',
+        link: activityLink,
       });
     } else {
       createNotification({
         orgId, userId: recipientId, type: 'WARNING',
         title: `Agent run failed: ${node.name}`,
         message: `${triggerCopy} by ${agent.name} for "${node.name}" failed: ${execution.error || 'unknown error'}.`,
-        link: '/processes',
+        link: activityLink,
       });
     }
   } else {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
@@ -1198,7 +1198,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
 
   return (
     <div>
-      <div style={{
+      <div
+        data-node-id={node.id}
+        style={{
         display: 'flex', alignItems: 'flex-start', gap: 6,
         padding: '7px 12px', paddingLeft: 12 + depth * 22,
         borderBottom: '1px solid var(--color-border)',
@@ -2050,6 +2052,56 @@ export default function ProcessCatalogPage() {
   const [flows, setFlows] = useState<FlowRelationship[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Notifications (and the Source-panel link on the Governance Documents
+  // page) deep-link the user to a specific catalog node via ?node=<id>
+  // (accepted synonym: ?activity=<id>). The effect below honours that:
+  // walks the tree to find the ancestor chain, expands them all, then
+  // on the next paint scrolls the row into view and flashes a brief
+  // highlight so the user's eye lands on it. Falls back silently if
+  // the node isn't in the current scope.
+  const location = useLocation();
+  useEffect(() => {
+    if (!tree.length) return;
+    const params = new URLSearchParams(location.search);
+    const targetId = params.get('node') || params.get('activity');
+    if (!targetId) return;
+    function findAncestorIds(nodes: ProcessNode[], id: string, path: string[] = []): string[] | null {
+      for (const n of nodes) {
+        if (n.id === id) return path;
+        if (n.children?.length) {
+          const sub = findAncestorIds(n.children, id, [...path, n.id]);
+          if (sub) return sub;
+        }
+      }
+      return null;
+    }
+    const ancestors = findAncestorIds(tree, targetId);
+    if (!ancestors) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const id of ancestors) next.add(id);
+      next.add(targetId);
+      return next;
+    });
+    // Defer the scroll + flash to the next paint so the freshly-expanded
+    // rows are actually in the DOM by then.
+    const handle = setTimeout(() => {
+      const el = document.querySelector(`[data-node-id="${CSS.escape(targetId)}"]`) as HTMLElement | null;
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (typeof el.animate === 'function') {
+        el.animate(
+          [
+            { backgroundColor: '#fef3c7', boxShadow: '0 0 0 3px #fde68a inset' },
+            { backgroundColor: 'transparent', boxShadow: '0 0 0 0 transparent inset' },
+          ],
+          { duration: 1800, easing: 'ease-out' },
+        );
+      }
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [tree, location.search]);
+
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);

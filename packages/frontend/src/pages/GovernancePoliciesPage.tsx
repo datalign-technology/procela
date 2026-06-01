@@ -580,7 +580,7 @@ export default function GovernancePoliciesPage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
               <span style={{ color: 'var(--color-text-muted)' }}>Source activity</span>
-              <a href="/processes" title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
+              <a href={`/processes?node=${encodeURIComponent(promo.activityId)}`} title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
 
               <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
               <span><span style={{ color: '#5b21b6' }}>⚙</span> {promo.agentName}</span>
