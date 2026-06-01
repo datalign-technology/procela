@@ -556,6 +556,26 @@ export default function AnalysisPage() {
                 Update saved
               </Button>
             )}
+            {/* Reset the builder back to a blank slate — clears the chosen
+                rows, columns, filters, any loaded-report binding, and the
+                last cube result. Saved reports themselves are untouched. */}
+            <span title="Clear rows, columns, filters, and the current result. Saved reports are not deleted.">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setRowDims([]);
+                  setColDims([]);
+                  setFilters([]);
+                  setActiveReportId(null);
+                  setCube(null);
+                  setDrill(null);
+                  setError(null);
+                }}
+                disabled={rowDims.length === 0 && colDims.length === 0 && filters.length === 0 && !activeReportId && !cube}
+              >
+                Reset
+              </Button>
+            </span>
             <div style={{ marginLeft: 'auto' }}>
               {cube && exportPayload && <ExportMenu build={exportPayload} />}
             </div>
