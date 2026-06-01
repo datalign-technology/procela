@@ -617,7 +617,7 @@ function DocSystemsField({ selected, options, onSave, disabled }: {
 
 export type AddMappingTarget = { kind: 'asset' | 'policy' | 'attachment'; id: string };
 
-function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove }: {
+function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove, nodeInputsOutputs }: {
   nodeId: string;
   mappings: MappingInfo[];
   assetsList: DataAssetRef[];
@@ -634,6 +634,11 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   isGovernance: boolean;
   onAdd: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemove: (mappingId: string) => void;
+  /** The node's free-text inputsOutputs description, e.g.
+   *  "In: business strategy, regulatory requirements. Out: charter."
+   *  Parsed into structured placeholder slots so the panel can show
+   *  the *expected* inputs/outputs with fulfilled/unfulfilled status. */
+  nodeInputsOutputs?: string;
 }) {
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
   const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment' | 'link'>(isGovernance ? 'policy' : 'asset');
@@ -650,6 +655,71 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   const inputs = localMappings.filter((m) => m.linkType === 'consumes' || m.linkType === 'references');
   const outputs = localMappings.filter((m) => m.linkType === 'produces');
   const transforms = localMappings.filter((m) => m.linkType === 'transforms');
+
+  // ── Expected inputs / outputs ──
+  // The free-text inputsOutputs field is by convention written as
+  // "In: a, b, c. Out: x, y, z." Parse it into typed placeholder slots
+  // so the panel can show *what's expected* alongside *what's actually
+  // linked* — and call out unmet expectations as Required + Unfilled.
+  // Matching: case-insensitive substring containment in either direction
+  // (a placeholder "business strategy" matches an asset named "Business
+  // Strategy 2026" and a doc named "Strategy"). Cheap; false negatives
+  // just render as Unfilled and the user can ignore.
+  const { expectedInputs, expectedOutputs } = useMemo(() => {
+    const raw = nodeInputsOutputs || '';
+    const inMatch  = raw.match(/(?:^|[.\n])\s*In:\s*([^.\n]+)/i);
+    const outMatch = raw.match(/(?:^|[.\n])\s*Out:\s*([^.\n]+)/i);
+    const split = (s: string | undefined) =>
+      s ? s.split(/[,;]/).map((p) => p.trim().replace(/\.+$/, '')).filter(Boolean) : [];
+    return { expectedInputs: split(inMatch?.[1]), expectedOutputs: split(outMatch?.[1]) };
+  }, [nodeInputsOutputs]);
+
+  function findMatch(placeholder: string, candidates: MappingInfo[]): MappingInfo | null {
+    const p = placeholder.toLowerCase().trim();
+    if (!p) return null;
+    for (const m of candidates) {
+      const name = (m.assetInfo?.assetName || m.policyInfo?.policyName || m.attachmentInfo?.name || '').toLowerCase();
+      if (!name) continue;
+      if (name.includes(p) || p.includes(name)) return m;
+    }
+    return null;
+  }
+
+  const renderExpected = (placeholder: string, kind: 'input' | 'output') => {
+    const candidates = kind === 'input' ? inputs : outputs;
+    const match = findMatch(placeholder, candidates);
+    const filled = !!match;
+    const matchName = filled ? (match?.assetInfo?.assetName || match?.policyInfo?.policyName || match?.attachmentInfo?.name) : null;
+    const label = placeholder.replace(/^\w/, (c) => c.toUpperCase());
+    return (
+      <div key={`expected-${kind}-${placeholder}`} style={{
+        display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
+        padding: '3px 6px', flexWrap: 'wrap',
+        background: filled ? '#f0fdf4' : '#fffbeb', borderRadius: 3,
+        borderLeft: `2px solid ${filled ? '#22c55e' : '#f59e0b'}`,
+      }}>
+        <span aria-hidden style={{
+          width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+          background: filled ? '#22c55e' : '#f59e0b', color: '#fff',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 9, fontWeight: 800,
+        }}>{filled ? '✓' : '!'}</span>
+        <span style={{ fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Required</span>
+        {filled ? (
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }} title={`Matched by ${matchName}`}>
+            matched: {matchName}
+          </span>
+        ) : (
+          !disabled && (
+            <button onClick={() => setShowAdd(kind)} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}>
+              Link…
+            </button>
+          )
+        )}
+      </div>
+    );
+  };
 
   const resetAdd = () => {
     setPickedAsset(''); setPickedPolicy(''); setPickedFile(null);
@@ -947,17 +1017,27 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-            Inputs ({inputs.length})
+            Inputs ({inputs.length}{expectedInputs.length > 0 ? ` · ${expectedInputs.filter((p) => findMatch(p, inputs)).length} of ${expectedInputs.length} expected` : ''})
           </div>
-          {inputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No inputs defined</div>}
+          {expectedInputs.length > 0 && (
+            <div style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {expectedInputs.map((p) => renderExpected(p, 'input'))}
+            </div>
+          )}
+          {inputs.length === 0 && expectedInputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No inputs defined</div>}
           {inputs.map(renderRow)}
           {!disabled && renderAddRow('consumes')}
         </div>
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-            Outputs ({outputs.length})
+            Outputs ({outputs.length}{expectedOutputs.length > 0 ? ` · ${expectedOutputs.filter((p) => findMatch(p, outputs)).length} of ${expectedOutputs.length} expected` : ''})
           </div>
-          {outputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No outputs defined</div>}
+          {expectedOutputs.length > 0 && (
+            <div style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {expectedOutputs.map((p) => renderExpected(p, 'output'))}
+            </div>
+          )}
+          {outputs.length === 0 && expectedOutputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No outputs defined</div>}
           {outputs.map(renderRow)}
           {!disabled && renderAddRow('produces')}
         </div>
@@ -1742,6 +1822,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               isGovernance={node.domain === 'GOVERNANCE'}
               onAdd={onAddMapping}
               onRemove={onRemoveMapping}
+              nodeInputsOutputs={node.inputsOutputs}
             />
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
