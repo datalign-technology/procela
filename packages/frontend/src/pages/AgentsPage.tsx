@@ -208,13 +208,26 @@ export default function AgentsPage() {
     // "Assigned Organizations" picker is the real assignment control; we do
     // NOT require a header active-org here (the previous guard tripped users
     // who'd already picked an org in the form's checkbox list).
-    setForm({ ...emptyForm, orgIds: selectedOrgId ? [selectedOrgId] : [] });
+    const visibleIds = new Set(orgs.map((o) => o.id));
+    const seed = selectedOrgId && visibleIds.has(selectedOrgId) ? [selectedOrgId] : [];
+    setForm({ ...emptyForm, orgIds: seed });
     setEditingId(null);
     setShowForm(true);
   };
   const openEdit = (a: Agent) => {
+    // Pre-fill only with orgs the current user can see. Anything else —
+    // typically a deleted org id left on a legacy agent record, or a
+    // bogus seed value — would be invisible in the checkbox list but
+    // still ride along on save and trip the backend's "Organization X
+    // not found" guard. Drop those here, and tell the user.
+    const visibleIds = new Set(orgs.map((o) => o.id));
+    const valid = (a.orgIds || []).filter((id) => visibleIds.has(id));
+    const droppedCount = (a.orgIds || []).length - valid.length;
+    if (droppedCount > 0) {
+      addToast('info', `${droppedCount} previously-assigned organization${droppedCount === 1 ? '' : 's'} no longer exist${droppedCount === 1 ? 's' : ''} and ${droppedCount === 1 ? 'has' : 'have'} been cleared. Pick the current org(s) and save to repair this agent.`);
+    }
     setForm({
-      name: a.name, orgIds: a.orgIds, agentType: a.agentType,
+      name: a.name, orgIds: valid, agentType: a.agentType,
       description: a.description, provider: a.provider,
       status: a.status, ownerPersonId: a.ownerPersonId,
       skillIds: a.skillIds || [],
@@ -233,9 +246,21 @@ export default function AgentsPage() {
     // organization from the header first" toast even when the user had
     // already picked one in the form.)
     if (!validation.validateAll(form) || form.orgIds.length === 0) return;
+    // Defensive: strip any org ids that aren't in the live /organizations
+    // response. Without this, a stale id that slipped past openEdit (e.g.
+    // because orgs reloaded after the form opened) would hit the backend's
+    // strict org-lookup and surface as a confusing "Organization X not
+    // found." Better to drop here and tell the user.
+    const visibleIds = new Set(orgs.map((o) => o.id));
+    const cleanOrgIds = form.orgIds.filter((id) => visibleIds.has(id));
+    if (cleanOrgIds.length === 0) {
+      addToast('error', 'None of the selected organizations are visible to you. Pick at least one from the checkbox list.');
+      return;
+    }
+    const payload = { ...form, orgIds: cleanOrgIds };
     try {
-      if (editingId) await apiClient.put(`/agents/${editingId}`, form);
-      else await apiClient.post('/agents', form);
+      if (editingId) await apiClient.put(`/agents/${editingId}`, payload);
+      else await apiClient.post('/agents', payload);
       addToast('success', editingId ? 'Agent updated' : 'Agent created');
       handleCancel();
       fetchData();
