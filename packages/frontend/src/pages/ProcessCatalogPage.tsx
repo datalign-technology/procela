@@ -1816,8 +1816,16 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {/* Structured Inputs / Outputs panel — rows can target a
               data asset, a governance document (policy), or an
               uploaded attachment. Picker is segmented across the
-              three kinds. */}
-          {isExpanded && node.level !== 'VALUE_STREAM' && (
+              three kinds.
+
+              Scoped to Activity-level nodes only. A process's
+              effective inputs/outputs are a roll-up of its child
+              activities; declaring them independently at the process
+              level creates a two-sources-of-truth maintenance trap
+              (and disagrees with how the governance template, the
+              agent execution model, and the mappings already work).
+              Higher-level nodes get a quiet pointer instead. */}
+          {isExpanded && node.level === 'ACTIVITY' && (
             <IOPanel
               nodeId={node.id}
               mappings={mappingsByStep[node.id] || []}
@@ -1830,6 +1838,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               onRemove={onRemoveMapping}
               nodeInputsOutputs={node.inputsOutputs}
             />
+          )}
+          {isExpanded && node.level !== 'VALUE_STREAM' && node.level !== 'ACTIVITY' && (
+            <div style={{ marginTop: 8, padding: '6px 10px', background: '#f8fafc', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+              <strong>Inputs and outputs are defined at the activity level.</strong> Open one of this {node.level === 'PROCESS' ? 'process’s' : 'node’s'} activities to declare data assets, governance documents, and attachments — its effective I/O is the roll-up of its children.
+            </div>
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
              Governance Document — surfaced here in the Outputs area so
