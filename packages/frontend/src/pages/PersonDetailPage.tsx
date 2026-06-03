@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { errorToast, successToast } from '../lib/errorToast';
@@ -268,22 +269,24 @@ export default function PersonDetailPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 4 }}>Person</div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>{p.name}</h1>
-          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+      <PageHeader
+        kicker="Person"
+        title={p.name}
+        subtitle={
+          <>
             {p.email && <span>{p.email}</span>}
             {p.title && <span>{p.email ? ' \u2022 ' : ''}{p.title}</span>}
-          </div>
-        </div>
-        <Link
-          to="/people"
-          style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}
-        >
-          {'\u2190'} Back to People
-        </Link>
-      </div>
+          </>
+        }
+        actions={
+          <Link
+            to="/people"
+            style={{ padding: '8px 16px', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}
+          >
+            {'\u2190'} Back to People
+          </Link>
+        }
+      />
 
       {/* Identity summary */}
       <div style={cardStyle}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -482,44 +483,42 @@ export default function BusinessGlossaryPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Business Glossary</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Agreed-upon definitions for key business terms across the organization.
-          </p>
-          {terms.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-              <span>{terms.length} terms</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{terms.filter((t) => t.status === 'APPROVED').length} approved</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{terms.filter((t) => t.status === 'DRAFT').length} draft</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{new Set(terms.map((t) => t.category).filter(Boolean)).size} categories</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {canWrite && terms.length === 0 && (
-            <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
-          )}
-          {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
-          {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
-          {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
-          <SavedViewsMenu
-            pageKey="business-glossary"
-            currentFilters={{ searchQuery, filterStatus, filterCategory }}
-            onApply={(f) => {
-              setSearchQuery((f.searchQuery as string) || '');
-              setFilterStatus((f.filterStatus as string) || '');
-              setFilterCategory((f.filterCategory as string) || '');
-            }}
-          />
-          <ColumnPicker state={glossaryCols} />
-          {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
-        </div>
-      </div>
+      <PageHeader
+        title="Business Glossary"
+        subtitle="Agreed-upon definitions for key business terms across the organization."
+        meta={terms.length > 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{terms.length} terms</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{terms.filter((t) => t.status === 'APPROVED').length} approved</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{terms.filter((t) => t.status === 'DRAFT').length} draft</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{new Set(terms.map((t) => t.category).filter(Boolean)).size} categories</span>
+          </div>
+        ) : undefined}
+        actions={
+          <>
+            {canWrite && terms.length === 0 && (
+              <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate Industry Terms'} disabled={generating} onClick={handleGenerate} />
+            )}
+            {terms.length > 0 && <IconButton icon="download" label="Export HTML" onClick={handleExportHtml} />}
+            {canWrite && <IconButton icon="upload" label="Import terms" onClick={() => setShowImport(true)} />}
+            {canWrite && <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />}
+            <SavedViewsMenu
+              pageKey="business-glossary"
+              currentFilters={{ searchQuery, filterStatus, filterCategory }}
+              onApply={(f) => {
+                setSearchQuery((f.searchQuery as string) || '');
+                setFilterStatus((f.filterStatus as string) || '');
+                setFilterCategory((f.filterCategory as string) || '');
+              }}
+            />
+            <ColumnPicker state={glossaryCols} />
+            {canWrite && <IconButton icon="plus" label="Add term" variant="primary" onClick={openAdd} />}
+          </>
+        }
+      />
 
       <ConfirmDialog open={confirmDelete !== null} title="Delete Term?"
         message="This will permanently delete this glossary term." confirmLabel="Delete"

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -341,29 +342,27 @@ export default function GovernanceTasksPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Tasks</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Track and manage governance tasks, reviews, and approvals.
-          </p>
-          {summary && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-              <span>{summary.total} tasks</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{summary.open} open</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span style={{ color: summary.overdue > 0 ? '#dc2626' : undefined }}>{summary.overdue} overdue</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={taskCols} />
-          {canWrite && (
-            <IconButton icon="plus" label="Add task" variant="primary" onClick={openAdd} />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Governance Tasks"
+        subtitle="Track and manage governance tasks, reviews, and approvals."
+        meta={summary ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{summary.total} tasks</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{summary.open} open</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span style={{ color: summary.overdue > 0 ? '#dc2626' : undefined }}>{summary.overdue} overdue</span>
+          </div>
+        ) : undefined}
+        actions={
+          <>
+            <ColumnPicker state={taskCols} />
+            {canWrite && (
+              <IconButton icon="plus" label="Add task" variant="primary" onClick={openAdd} />
+            )}
+          </>
+        }
+      />
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       {tasks.length > 0 && (

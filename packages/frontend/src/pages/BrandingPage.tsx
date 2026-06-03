@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '../components/PageHeader';
 import { useBrandingStore, DEFAULT_BRANDING, type BrandingConfig } from '@/stores/brandingStore';
 import { errorToast, successToast } from '@/lib/errorToast';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -148,37 +149,35 @@ export default function BrandingPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Branding</h1>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-            Customize the company name, logo, and color palette. Changes apply live across the app and persist for all users.
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <SaveIndicator state={saveState} />
-          <button
-            onClick={() => setConfirmReset(true)}
-            style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}
-          >
-            Reset to defaults
-          </button>
-          <button
-            onClick={cancel}
-            disabled={!isDirty || saveState === 'saving'}
-            style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: isDirty ? 'pointer' : 'not-allowed', opacity: isDirty ? 1 : 0.5 }}
-          >
-            Discard changes
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!isDirty || saveState === 'saving'}
-            style={{ padding: '8px 18px', fontSize: 13, fontWeight: 500, background: isDirty ? 'var(--color-primary)' : '#e5e7eb', color: isDirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 6, cursor: isDirty ? 'pointer' : 'not-allowed' }}
-          >
-            Save changes
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Branding"
+        subtitle="Customize the company name, logo, and color palette. Changes apply live across the app and persist for all users."
+        actions={
+          <>
+            <SaveIndicator state={saveState} />
+            <button
+              onClick={() => setConfirmReset(true)}
+              style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer' }}
+            >
+              Reset to defaults
+            </button>
+            <button
+              onClick={cancel}
+              disabled={!isDirty || saveState === 'saving'}
+              style={{ padding: '8px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, cursor: isDirty ? 'pointer' : 'not-allowed', opacity: isDirty ? 1 : 0.5 }}
+            >
+              Discard changes
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!isDirty || saveState === 'saving'}
+              style={{ padding: '8px 18px', fontSize: 13, fontWeight: 500, background: isDirty ? 'var(--color-primary)' : '#e5e7eb', color: isDirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 6, cursor: isDirty ? 'pointer' : 'not-allowed' }}
+            >
+              Save changes
+            </button>
+          </>
+        }
+      />
 
       {/* Identity */}
       <div style={cardStyle}>

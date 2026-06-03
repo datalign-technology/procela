@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -326,29 +327,27 @@ export default function GovernanceIssuesPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Issues</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Track and resolve data governance issues across your organization.
-          </p>
-          {summary && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-              <span>{summary.total} issues</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{openCount} open</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span style={{ color: criticalCount > 0 ? '#dc2626' : undefined }}>{criticalCount} critical</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={issueCols} />
-          {canWrite && (
-            <IconButton icon="plus" label="Add issue" variant="primary" onClick={openAdd} />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Governance Issues"
+        subtitle="Track and resolve data governance issues across your organization."
+        meta={summary ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{summary.total} issues</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{openCount} open</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span style={{ color: criticalCount > 0 ? '#dc2626' : undefined }}>{criticalCount} critical</span>
+          </div>
+        ) : undefined}
+        actions={
+          <>
+            <ColumnPicker state={issueCols} />
+            {canWrite && (
+              <IconButton icon="plus" label="Add issue" variant="primary" onClick={openAdd} />
+            )}
+          </>
+        }
+      />
 
       {issues.length > 0 && (
         <FilterBar

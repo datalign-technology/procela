@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
+import PageHeader from '../components/PageHeader';
 import GovernanceTasksPage from './GovernanceTasksPage';
 import GovernanceIssuesPage from './GovernanceIssuesPage';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
@@ -31,12 +32,10 @@ export default function GovernanceWorkPage() {
         { label: 'Assign data stewards', met: deps.hasStewards, link: '/people' },
       ]} />
       {/* Header */}
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Work</h1>
-        <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-          Manage governance tasks, issues, and approvals.
-        </p>
-      </div>
+      <PageHeader
+        title="Governance Work"
+        subtitle="Manage governance tasks, issues, and approvals."
+      />
 
       <div
         role="tablist"

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -301,25 +302,23 @@ export default function SopsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Standard Operating Procedures</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Step-by-step procedures for common governance activities.
-          </p>
-          {sops.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-              <span>{sops.length} procedures</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{activeCount} active</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={sopCols} />
-          {canWrite && <IconButton icon="plus" label="Add SOP" variant="primary" onClick={openAdd} />}
-        </div>
-      </div>
+      <PageHeader
+        title="Standard Operating Procedures"
+        subtitle="Step-by-step procedures for common governance activities."
+        meta={sops.length > 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{sops.length} procedures</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{activeCount} active</span>
+          </div>
+        ) : undefined}
+        actions={
+          <>
+            <ColumnPicker state={sopCols} />
+            {canWrite && <IconButton icon="plus" label="Add SOP" variant="primary" onClick={openAdd} />}
+          </>
+        }
+      />
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>

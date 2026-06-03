@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -264,15 +265,12 @@ export default function RaciMatrixPage() {
         { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },
         { label: 'Assign governance roles', met: deps.hasRoles, link: '/people' },
       ]} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>RACI Matrix</h1>
+      <PageHeader
+        title="RACI Matrix"
+        subtitle="Auto-generated Responsible, Accountable, Consulted, Informed matrix based on process ownership and governance role assignments. Expand value streams and processes to see sub-processes and activities."
+      >
         <InfoTip term="RACI" />
-      </div>
-
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem', maxWidth: 720 }}>
-        Auto-generated Responsible, Accountable, Consulted, Informed matrix based on process ownership and governance role assignments.
-        Expand value streams and processes to see sub-processes and activities.
-      </p>
+      </PageHeader>
 
       {/* Legend */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>

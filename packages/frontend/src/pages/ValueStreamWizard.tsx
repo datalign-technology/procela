@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageHeader from '../components/PageHeader';
 import { INDUSTRIES } from '../types';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -186,17 +187,11 @@ export default function ValueStreamWizard() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 4 }}>
-            {activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            AI generates a complete process hierarchy (Value Streams → Processes → Activities) based on your industry.
-          </p>
-        </div>
-        <button style={btnSecondary} onClick={() => navigate('/processes')}>Back to Processes</button>
-      </div>
+      <PageHeader
+        title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
+        subtitle="AI generates a complete process hierarchy (Value Streams → Processes → Activities) based on your industry."
+        actions={<button style={btnSecondary} onClick={() => navigate('/processes')}>Back to Processes</button>}
+      />
 
       {/* Warning banner when existing value streams exist */}
       {existingCount > 0 && (

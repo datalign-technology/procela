@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 
 // ── Types ──
@@ -227,40 +228,27 @@ export default function ComparisonPage() {
   return (
     <div>
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          marginBottom: 20,
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-              Compare Value Streams
-            </h1>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-            Select two value streams to compare their hierarchies side by side.
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/processes')}
-          style={{
-            padding: '8px 16px',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          Back to Processes
-        </button>
-      </div>
+      <PageHeader
+        title="Compare Value Streams"
+        subtitle="Select two value streams to compare their hierarchies side by side."
+        actions={
+          <button
+            onClick={() => navigate('/processes')}
+            style={{
+              padding: '8px 16px',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            Back to Processes
+          </button>
+        }
+      />
 
       {loading ? (
         <p

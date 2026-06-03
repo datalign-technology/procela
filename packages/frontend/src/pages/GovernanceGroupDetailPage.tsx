@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
@@ -376,35 +377,37 @@ export default function GovernanceGroupDetailPage() {
   return (
     <div>
       {/* ── Header ── */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-          <Link to="/governance-groups" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>← Governance Groups</Link>
-          {group.parentName && (
-            <>
-              <span style={{ margin: '0 6px' }}>›</span>
-              <span>{group.parentName}</span>
-            </>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{group.name}</h1>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
-            {GROUP_TYPE_LABELS[group.type] || group.type}
-          </span>
-          <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: group.status === 'ACTIVE' ? '#d1fae5' : '#f1f5f9', color: group.status === 'ACTIVE' ? '#065f46' : '#64748b' }}>
-            {group.status}
-          </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+      <PageHeader
+        kicker={
+          <>
+            <Link to="/governance-groups" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>← Governance Groups</Link>
+            {group.parentName && (
+              <>
+                <span style={{ margin: '0 6px' }}>›</span>
+                <span>{group.parentName}</span>
+              </>
+            )}
+          </>
+        }
+        title={group.name}
+        subtitle={group.description || undefined}
+        actions={
+          <>
             <Button size="sm" onClick={() => navigate('/governance-groups')}>← Back to list</Button>
             <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>
-          </div>
-        </div>
-        {group.description && (
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 6, marginBottom: 0 }}>
-            {group.description}
-          </p>
-        )}
-      </div>
+          </>
+        }
+        meta={
+          <>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
+              {GROUP_TYPE_LABELS[group.type] || group.type}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: group.status === 'ACTIVE' ? '#d1fae5' : '#f1f5f9', color: group.status === 'ACTIVE' ? '#065f46' : '#64748b' }}>
+              {group.status}
+            </span>
+          </>
+        }
+      />
 
       {/* ── Section 1: Composition ── */}
       <SectionShell

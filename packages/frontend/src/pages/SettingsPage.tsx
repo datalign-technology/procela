@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useOrgContext } from '../stores/orgContext';
 
@@ -245,22 +246,22 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Settings</h1>
-        </div>
-        <button
-          onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
-          style={{
-            padding: '6px 14px', background: 'var(--color-surface)',
-            color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
-            borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-          }}
-          title="Show the three-phase Define / Connect / Discover intro again"
-        >
-          Replay intro
-        </button>
-      </div>
+      <PageHeader
+        title="Settings"
+        actions={
+          <button
+            onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
+            style={{
+              padding: '6px 14px', background: 'var(--color-surface)',
+              color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+              borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            }}
+            title="Show the three-phase Define / Connect / Discover intro again"
+          >
+            Replay intro
+          </button>
+        }
+      />
 
       {/* Branding — quick link to the dedicated theming page */}
       <div style={sectionStyle}>
