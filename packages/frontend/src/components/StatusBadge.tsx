@@ -33,8 +33,17 @@ interface StatusBadgeProps {
   icon?: ReactNode;
   size?: 'sm' | 'md';
   outlined?: boolean;
+  /** Use a dashed border (implies outlined). For "absence" states like
+   *  NOT_CONNECTED where the chip is read as a placeholder rather than
+   *  a positive status. */
+  dashed?: boolean;
   title?: string;
   style?: React.CSSProperties;
+  /** When set, the badge renders as a <button> so it can act as a
+   *  click target (e.g. SystemsPage's "5 configured · 3 live" pill
+   *  navigates to /connections). The badge keeps its visual styling
+   *  and just adds cursor:pointer and reset button chrome. */
+  onClick?: () => void;
 }
 
 const VARIANT_STYLES: Record<StatusBadgeVariant, { bg: string; fg: string; border: string }> = {
@@ -52,32 +61,42 @@ export default function StatusBadge({
   icon,
   size = 'sm',
   outlined = false,
+  dashed = false,
   title,
   style,
+  onClick,
 }: StatusBadgeProps) {
   const palette = VARIANT_STYLES[variant];
   const small = size === 'sm';
+  const showBorder = outlined || dashed;
+  const baseStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: small ? '1px 6px' : '2px 8px',
+    borderRadius: small ? 3 : 999,
+    fontSize: small ? 9 : 11,
+    fontWeight: small ? 700 : 600,
+    letterSpacing: small ? '0.04em' : 'normal',
+    textTransform: small ? 'uppercase' : 'none',
+    background: palette.bg,
+    color: palette.fg,
+    border: showBorder ? `1px ${dashed ? 'dashed' : 'solid'} ${palette.border}` : 'none',
+    lineHeight: 1.2,
+    whiteSpace: 'nowrap',
+    fontFamily: 'inherit',
+    ...style,
+  };
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} title={title} style={{ ...baseStyle, cursor: 'pointer' }}>
+        {icon}
+        <span>{children}</span>
+      </button>
+    );
+  }
   return (
-    <span
-      title={title}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: small ? '1px 6px' : '2px 8px',
-        borderRadius: small ? 3 : 999,
-        fontSize: small ? 9 : 11,
-        fontWeight: small ? 700 : 600,
-        letterSpacing: small ? '0.04em' : 'normal',
-        textTransform: small ? 'uppercase' : 'none',
-        background: palette.bg,
-        color: palette.fg,
-        border: outlined ? `1px solid ${palette.border}` : 'none',
-        lineHeight: 1.2,
-        whiteSpace: 'nowrap',
-        ...style,
-      }}
-    >
+    <span title={title} style={baseStyle}>
       {icon}
       <span>{children}</span>
     </span>

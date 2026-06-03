@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { useOrgContext } from '../stores/orgContext';
 import { useTerm } from '../lib/terminology';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import DetailDrawer from './DetailDrawer';
 import {
   getRoleDef,
   getRoleReference,
@@ -51,8 +51,6 @@ export default function RoleDetailDrawer() {
   const { activeOrgId } = useOrgContext();
   const roleType = useRoleDrawerStore((s) => s.roleType);
   const close = useRoleDrawerStore((s) => s.close);
-  const dialogRef = useRef<HTMLElement>(null);
-  useFocusTrap(dialogRef, !!roleType);
   const custodianLabel = useTerm('custodian');
 
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
@@ -140,84 +138,49 @@ export default function RoleDetailDrawer() {
 
   const priorityColor = damaDef ? PRIORITY_COLORS[damaDef.priority] : null;
 
-  return (
-    <>
-      <div
-        onClick={close}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(15, 23, 42, 0.35)',
-          zIndex: 200,
-        }}
-      />
-      <aside
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${displayLabel} role details`}
-        style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: 'min(520px, 95vw)',
-          background: 'var(--color-surface)',
-          borderLeft: '1px solid var(--color-border)',
-          boxShadow: '-4px 0 24px rgba(15, 23, 42, 0.18)',
-          zIndex: 201,
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        <header style={{
-          padding: '16px 20px',
-          borderBottom: '1px solid var(--color-border)',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+  // Title carries the inline priority + scope badges so they sit beside
+  // the role name without crowding the close button. Subtitle is the
+  // one-line purpose; the rest of the reference content lives in the
+  // scrolling body below.
+  const titleNode = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 18 }}>{displayLabel}</span>
+      {priorityColor && damaDef && (
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+          textTransform: 'uppercase', letterSpacing: '0.04em',
+          background: priorityColor.bg, color: priorityColor.text,
+          border: `1px solid ${priorityColor.border}`,
         }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{displayLabel}</h2>
-              {priorityColor && damaDef && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                  textTransform: 'uppercase', letterSpacing: '0.04em',
-                  background: priorityColor.bg, color: priorityColor.text,
-                  border: `1px solid ${priorityColor.border}`,
-                }}>
-                  {damaDef.priority}
-                </span>
-              )}
-              {/* Scope badge for entity-attached roles - makes it clear at a
-                * glance that System Owner is per-system, Domain Owner is
-                * per-domain, etc. Helps users grok that two people both
-                * being a System Owner isn't a RACI violation. */}
-              {category === 'entity' && (
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                  textTransform: 'uppercase', letterSpacing: '0.04em',
-                  background: 'var(--color-bg)', color: 'var(--color-text-muted)',
-                  border: '1px solid var(--color-border)',
-                }}>
-                  {scope === 'system' ? 'Per system' : scope === 'dataAsset' ? 'Per asset' : 'Per domain'}
-                </span>
-              )}
-            </div>
-            {damaDef?.purpose && (
-              <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
-                {damaDef.purpose}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={close}
-            aria-label="Close"
-            style={{
-              background: 'none', border: 'none', fontSize: 22, lineHeight: 1,
-              color: 'var(--color-text-muted)', cursor: 'pointer', padding: 0,
-            }}
-          >
-            &times;
-          </button>
-        </header>
+          {damaDef.priority}
+        </span>
+      )}
+      {/* Scope badge for entity-attached roles - makes it clear at a
+        * glance that System Owner is per-system, Domain Owner is
+        * per-domain, etc. Helps users grok that two people both
+        * being a System Owner isn't a RACI violation. */}
+      {category === 'entity' && (
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+          textTransform: 'uppercase', letterSpacing: '0.04em',
+          background: 'var(--color-bg)', color: 'var(--color-text-muted)',
+          border: '1px solid var(--color-border)',
+        }}>
+          {scope === 'system' ? 'Per system' : scope === 'dataAsset' ? 'Per asset' : 'Per domain'}
+        </span>
+      )}
+    </div>
+  );
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+  return (
+    <DetailDrawer
+      open
+      onClose={close}
+      width={520}
+      title={titleNode}
+      subtitle={damaDef?.purpose}
+      ariaLabel={`${displayLabel} role details`}
+    >
           {ref?.summary && (
             <Section title="In plain language">
               <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>{ref.summary}</p>
@@ -356,9 +319,7 @@ export default function RoleDetailDrawer() {
               </div>
             )}
           </Section>
-        </div>
-      </aside>
-    </>
+    </DetailDrawer>
   );
 }
 

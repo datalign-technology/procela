@@ -16,6 +16,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
+import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
@@ -241,18 +242,24 @@ function InlineCellEdit({ value, onSave, type = 'text', options }: {
   );
 }
 
+// "+ Connect" CTA shares the badge's pill shape but uses the brand
+// primary colour — semantically a call-to-action, not a status, so it
+// can't fold into StatusBadge.
 const pillBase: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 4,
   padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 500,
 };
 
-const PILL_STYLE: Record<NonNullable<SystemEntity['connectionStatus']>, React.CSSProperties> = {
-  CONNECTED:     { ...pillBase, background: '#dcfce7', color: '#166534' },
-  ERROR:         { ...pillBase, background: '#fee2e2', color: '#991b1b' },
-  UNTESTED:      { ...pillBase, background: '#fef3c7', color: '#92400e' },
-  NOT_CONNECTED: { ...pillBase, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)' },
-  MANUAL:        { ...pillBase, background: '#e0e7ff', color: '#3730a3' },
-  EXTERNAL:      { ...pillBase, background: '#f3e8ff', color: '#6b21a8' },
+// Connectivity status → shared StatusBadge variant. NOT_CONNECTED reads
+// as a placeholder (no connection configured yet) so it picks up the
+// dashed-border treatment to look open rather than asserting a state.
+const CONNECTIVITY_TO_VARIANT: Record<NonNullable<SystemEntity['connectionStatus']>, { variant: StatusBadgeVariant; dashed?: boolean }> = {
+  CONNECTED:     { variant: 'success' },
+  ERROR:         { variant: 'danger' },
+  UNTESTED:      { variant: 'warning' },
+  NOT_CONNECTED: { variant: 'neutral', dashed: true },
+  MANUAL:        { variant: 'info' },
+  EXTERNAL:      { variant: 'agent' },
 };
 
 function renderConnectivityCell(
@@ -271,7 +278,8 @@ function renderConnectivityCell(
        : 'UNTESTED');
 
   if (connectivity !== 'INTEGRATED') {
-    return <span style={PILL_STYLE[status]}>{CONNECTIVITY_LABEL[connectivity]}</span>;
+    const v = CONNECTIVITY_TO_VARIANT[status];
+    return <StatusBadge variant={v.variant} dashed={v.dashed} size="md">{CONNECTIVITY_LABEL[connectivity]}</StatusBadge>;
   }
 
   if (configuredCount === 0) {
@@ -286,14 +294,17 @@ function renderConnectivityCell(
     );
   }
 
+  const v = CONNECTIVITY_TO_VARIANT[status];
   return (
-    <button
+    <StatusBadge
+      variant={v.variant}
+      dashed={v.dashed}
+      size="md"
       onClick={() => navigate(`/connections?systemId=${encodeURIComponent(sys.id)}`)}
-      style={{ ...PILL_STYLE[status], border: 'none', cursor: 'pointer' }}
       title="View connections for this system"
     >
       {configuredCount} configured{connectedCount > 0 ? ` · ${connectedCount} live` : ''}
-    </button>
+    </StatusBadge>
   );
 }
 

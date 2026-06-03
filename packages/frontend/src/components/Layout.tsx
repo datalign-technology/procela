@@ -29,7 +29,7 @@ import { useIsMobile } from '@/hooks/useMediaQuery';
 // overrides the browser tab title so a short sidebar label (e.g.
 // "Structure" inside the Organizations section) can still produce a
 // meaningful tab title ("Organizations").
-type NavItem = { to: string; label: string; icon: string; titleLabel?: string };
+type NavItem = { to: string; label: string; titleLabel?: string };
 // `items` is always the flat source of truth (active-state, flyout,
 // collapsed icon). `subGroups`, when present, only adds labelled
 // dividers in the expanded accordion so a heavy section (Governance)
@@ -364,7 +364,7 @@ const navSections: NavSection[] = [
   {
     label: null,
     items: [
-      { to: '/', label: 'Dashboard', icon: '\u25A3' },
+      { to: '/', label: 'Dashboard' },
     ],
   },
   {
@@ -380,10 +380,10 @@ const navSections: NavSection[] = [
       // doesn't echo the section title \u2014 the destination is still the
       // org tree at /organizations, and the browser tab still reads
       // "Organizations \u00b7 Procela" via titleLabel.
-      { to: '/organizations', label: 'Structure', icon: '\u2616', titleLabel: 'Organizations' },
-      { to: '/people', label: 'People', icon: '\u263B' },
-      { to: '/agents', label: 'Agents', icon: '\u2699' },
-      { to: '/skills', label: 'Skills', icon: '\u2727' },
+      { to: '/organizations', label: 'Structure', titleLabel: 'Organizations' },
+      { to: '/people', label: 'People' },
+      { to: '/agents', label: 'Agents' },
+      { to: '/skills', label: 'Skills' },
     ],
   },
   {
@@ -395,38 +395,38 @@ const navSections: NavSection[] = [
     // "Processes \u203A Processes" expand.
     label: null,
     items: [
-      { to: '/processes', label: 'Processes', icon: '\u26C1' },
+      { to: '/processes', label: 'Processes' },
     ],
   },
   {
     label: 'Data',
     items: [
-      { to: '/data-assets', label: 'Data Assets', icon: '\u2B22' },
-      { to: '/business-glossary', label: 'Glossary', icon: '\u2261' },
-      { to: '/data-dictionary', label: 'Data Dictionary', icon: '\u2263' },
-      { to: '/data-lineage', label: 'Lineage', icon: '\u2192' },
-      { to: '/data-domains', label: 'Domains', icon: '\u229E' },
-      { to: '/data-quality', label: 'Data Quality', icon: '\u2714' },
+      { to: '/data-assets', label: 'Data Assets' },
+      { to: '/business-glossary', label: 'Glossary' },
+      { to: '/data-dictionary', label: 'Data Dictionary' },
+      { to: '/data-lineage', label: 'Lineage' },
+      { to: '/data-domains', label: 'Domains' },
+      { to: '/data-quality', label: 'Data Quality' },
     ],
   },
   {
     label: 'Systems',
     items: [
-      { to: '/systems', label: 'Systems', icon: '\u2338' },
-      { to: '/connections', label: 'Connections', icon: '\u26A1' },
+      { to: '/systems', label: 'Systems' },
+      { to: '/connections', label: 'Connections' },
     ],
   },
   {
     label: 'Governance',
     items: [
-      { to: '/governance-program', label: 'Program', icon: '\u2637' },
-      { to: '/governance-groups', label: 'Groups', icon: '\u2616' },
-      { to: '/dama-roles', label: 'Roles', icon: '\u263C' },
-      { to: '/governance-policies', label: 'Documents', icon: '\u00A7', titleLabel: 'Governance Documents' },
-      { to: '/decision-rights', label: 'Decision Rights', icon: '\u2696' },
-      { to: '/documentation', label: 'Documentation', icon: '\u2611' },
-      { to: '/governance-calendar', label: 'Calendar', icon: '\u2637' },
-      { to: '/governance-work', label: 'Tasks & Issues', icon: '\u2605' },
+      { to: '/governance-program', label: 'Program' },
+      { to: '/governance-groups', label: 'Groups' },
+      { to: '/dama-roles', label: 'Roles' },
+      { to: '/governance-policies', label: 'Documents', titleLabel: 'Governance Documents' },
+      { to: '/decision-rights', label: 'Decision Rights' },
+      { to: '/documentation', label: 'Documentation' },
+      { to: '/governance-calendar', label: 'Calendar' },
+      { to: '/governance-work', label: 'Tasks & Issues' },
     ],
     subGroups: [
       { label: 'Set up', itemTos: ['/governance-program', '/governance-groups', '/dama-roles', '/governance-policies', '/decision-rights'] },
@@ -440,12 +440,12 @@ const navSections: NavSection[] = [
     // rather than under Governance where they used to sit.
     label: 'Insights',
     items: [
-      { to: '/enterprise-view',   label: 'Enterprise View',   icon: '\u29c9' },
-      { to: '/analysis',          label: 'Analysis',          icon: '\u229e' },
-      { to: '/mappings',          label: 'Data Mapping',      icon: '\u21c4' },
-      { to: '/reports',           label: 'Reports',           icon: '\u2630' },
-      { to: '/gap-detection',     label: 'Gap Detection',     icon: '\u26a0' },
-      { to: '/audit-log',         label: 'Audit Log',         icon: '\u29d6' },
+      { to: '/enterprise-view',   label: 'Enterprise View' },
+      { to: '/analysis',          label: 'Analysis' },
+      { to: '/mappings',          label: 'Data Mapping' },
+      { to: '/reports',           label: 'Reports' },
+      { to: '/gap-detection',     label: 'Gap Detection' },
+      { to: '/audit-log',         label: 'Audit Log' },
     ],
     subGroups: [
       { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/mappings'] },
@@ -457,23 +457,23 @@ const navSections: NavSection[] = [
 // "Get Started" — the Setup Hub entry. Lives in its own unlabelled section
 // at the very top (above Dashboard) while setup is incomplete, and is hidden
 // once the active org reaches 100% so it doesn't clutter the rail forever.
-const GET_STARTED_ITEM: NavItem = { to: '/setup', label: 'Get Started', icon: '⚑' };
+const GET_STARTED_ITEM: NavItem = { to: '/setup', label: 'Get Started' };
 
 const bottomNavItems: NavItem[] = [
   // Agents moved into the Organizations section alongside People \u2014
   // the bottom cluster now holds only the cross-cutting platform
   // controls (Settings, Help).
-  { to: '/settings', label: 'Settings', icon: '\u2638' },
-  { to: '/help', label: 'Help', icon: '\u003F' },
+  { to: '/settings', label: 'Settings' },
+  { to: '/help', label: 'Help' },
 ];
 
 // The four primary destinations pinned to the mobile bottom bar; the
 // fifth slot is the "Menu" button that opens the full grouped drawer.
 const MOBILE_PRIMARY: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: '\u25A3' },
-  { to: '/processes', label: 'Processes', icon: '\u26C1' },
-  { to: '/data-assets', label: 'Assets', icon: '\u2B22' },
-  { to: '/people', label: 'People', icon: '\u263B' },
+  { to: '/', label: 'Dashboard' },
+  { to: '/processes', label: 'Processes' },
+  { to: '/data-assets', label: 'Assets' },
+  { to: '/people', label: 'People' },
 ];
 
 const ROUTE_GROUPS: Record<string, string[]> = {
