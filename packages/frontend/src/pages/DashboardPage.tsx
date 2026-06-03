@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { X, ArrowLeftRight } from 'lucide-react';
+import { X, ArrowLeftRight, ListTree, Database, CheckCircle2, Users, TrendingUp } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
@@ -561,10 +561,12 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Build suggestions based on current state
   const suggestions: Array<{ icon: React.ReactNode; title: string; description: string; link: string }> = [];
 
+  const sIcon = { size: 20, strokeWidth: 1.8 } as const;
+
   // Phase 1: No processes yet
   if (stats.valueStreams === 0) {
     suggestions.push({
-      icon: '☰',
+      icon: <ListTree {...sIcon} />,
       title: 'Define your first value stream',
       description: 'Start by mapping out how your organization delivers value. Use the AI wizard to generate a process hierarchy from your industry.',
       link: '/processes/wizard',
@@ -574,7 +576,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Phase 2: Processes exist but no data assets
   if (stats.valueStreams > 0 && stats.dataAssets === 0) {
     suggestions.push({
-      icon: '⛁',
+      icon: <Database {...sIcon} />,
       title: 'Register your data assets',
       description: `You have ${stats.valueStreams} value stream${stats.valueStreams > 1 ? 's' : ''} defined. Now describe the data your processes depend on.`,
       link: '/data-assets',
@@ -599,7 +601,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Phase 5: Low health
   if (stats.dataAssets > 0 && stats.averageHealth < 80) {
     suggestions.push({
-      icon: '✓',
+      icon: <CheckCircle2 {...sIcon} />,
       title: 'Improve data quality',
       description: `Average health is ${stats.averageHealth}%. Add quality rules to your data assets to identify and fix issues.`,
       link: '/data-quality',
@@ -609,7 +611,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Phase 6: No people assigned
   if (stats.people === 0 && stats.valueStreams > 0) {
     suggestions.push({
-      icon: '☻',
+      icon: <Users {...sIcon} />,
       title: 'Add your team',
       description: 'Assign owners and stewards to your processes and data assets so everyone knows who is responsible.',
       link: '/people',
@@ -619,7 +621,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Phase 7: catalogue is dominated by uncertified (BRONZE-tier) assets
   if (stats.governance.bronze > 0 && stats.governance.gold === 0) {
     suggestions.push({
-      icon: '▲',
+      icon: <TrendingUp {...sIcon} />,
       title: 'Elevate governance tiers',
       description: `All ${stats.governance.bronze} data assets are Uncertified. Promote them to Managed or Certified as you define ownership and quality rules.`,
       link: '/data-assets',

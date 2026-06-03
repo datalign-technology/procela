@@ -4,6 +4,8 @@ import { apiClient } from '@/api/client';
 import { useOrgContext } from '@/stores/orgContext';
 import { useToastStore } from '@/stores/toastStore';
 import PersonPicker from '@/components/PersonPicker';
+import EmptyState from '@/components/EmptyState';
+import { CheckCircle2 } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
 // AssignOwnersPage — the bulk ownership-assignment review behind Phase ②
@@ -176,15 +178,12 @@ export default function AssignOwnersPage() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading…</div>
       ) : totalRemaining === 0 ? (
-        <div style={{
-          textAlign: 'center', padding: 48, background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)', borderRadius: 12,
-        }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>✓</div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Everything has an owner</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>No unassigned processes, systems, domains, or data assets.</p>
-          <button onClick={() => navigate('/setup')} style={{ ...primaryBtn, marginTop: 12 }}>Back to Get Started</button>
-        </div>
+        <EmptyState
+          icon={<CheckCircle2 size={36} strokeWidth={1.8} color="var(--color-success, #16a34a)" />}
+          title="Everything has an owner"
+          description="No unassigned processes, systems, domains, or data assets."
+          action={{ label: 'Back to Get Started', onClick: () => navigate('/setup') }}
+        />
       ) : (
         sections.map((section) => (
           <section key={section.key} style={{ marginBottom: 24 }}>
