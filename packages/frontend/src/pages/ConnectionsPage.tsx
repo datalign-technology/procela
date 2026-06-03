@@ -10,6 +10,7 @@ import IconButton from './../components/IconButton';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from './../components/EmptyState';
+import StatusBadge from '../components/StatusBadge';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
@@ -1238,9 +1239,7 @@ export default function ConnectionsPage() {
                             </td>
                             <td style={{ ...tdStyle, fontWeight: 500, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{asset.name}</td>
                             <td style={tdStyle}>
-                              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: '#f1f5f9', color: '#64748b' }}>
-                                {asset.type}
-                              </span>
+                              <StatusBadge variant="neutral" size="md">{asset.type}</StatusBadge>
                             </td>
                             <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                               {asset.rowCount != null ? asset.rowCount.toLocaleString() : '--'}

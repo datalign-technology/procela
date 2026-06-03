@@ -7,6 +7,7 @@ import { useOrgContext } from '../stores/orgContext';
 import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
+import StatusBadge from '../components/StatusBadge';
 
 // ── Types ──
 
@@ -368,17 +369,13 @@ export default function ValueStreamWizard() {
                   </span>
                 )}
                 {templateSource?.specializedFor && (
-                  <span
+                  <StatusBadge
+                    variant="agent"
+                    outlined
                     title={`The AI prompt was specialised for ${templateSource.specializedFor} (not just generic ${orgIndustry || industry}). Output reflects this org's specific operations.`}
-                    style={{
-                      padding: '1px 8px', borderRadius: 999,
-                      fontSize: 10, fontWeight: 600,
-                      background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd',
-                      textTransform: 'uppercase', letterSpacing: '0.04em',
-                    }}
                   >
                     Specialised: {templateSource.specializedFor}
-                  </span>
+                  </StatusBadge>
                 )}
               </h2>
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>

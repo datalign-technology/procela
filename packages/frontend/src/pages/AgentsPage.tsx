@@ -8,6 +8,7 @@ import ExportMenu from '../components/ExportMenu';
 import { DAMA_ROLE_LABELS } from '../types';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
+import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
@@ -659,14 +660,14 @@ export default function AgentsPage() {
                           {(roles.length > 0 || execs.length > 0) && (
                             <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
                               {roles.length > 0 && (
-                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', fontWeight: 600 }}>
+                                <StatusBadge variant="agent">
                                   {roles.length} role{roles.length !== 1 ? 's' : ''}
-                                </span>
+                                </StatusBadge>
                               )}
                               {execs.length > 0 && (
-                                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#d1fae5', color: '#065f46', fontWeight: 600 }}>
+                                <StatusBadge variant="success">
                                   {execs.length} execution{execs.length !== 1 ? 's' : ''}
-                                </span>
+                                </StatusBadge>
                               )}
                             </div>
                           )}
@@ -721,9 +722,9 @@ export default function AgentsPage() {
                                 ) : (
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                     {roles.map((r) => (
-                                      <span key={r.id} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#ede9fe', color: '#5b21b6', fontWeight: 500 }}>
+                                      <StatusBadge key={r.id} variant="agent" size="md">
                                         {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
-                                      </span>
+                                      </StatusBadge>
                                     ))}
                                   </div>
                                 )}
@@ -739,13 +740,9 @@ export default function AgentsPage() {
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                     {execs.slice(0, 5).map((ex) => (
                                       <div key={ex.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11 }}>
-                                        <span style={{
-                                          padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 600,
-                                          background: ex.status === 'SUCCESS' ? '#d1fae5' : ex.status === 'FAILED' ? '#fef2f2' : '#fef3c7',
-                                          color: ex.status === 'SUCCESS' ? '#065f46' : ex.status === 'FAILED' ? '#b91c1c' : '#92400e',
-                                        }}>
+                                        <StatusBadge variant={ex.status === 'SUCCESS' ? 'success' : ex.status === 'FAILED' ? 'danger' : 'warning'}>
                                           {ex.status}
-                                        </span>
+                                        </StatusBadge>
                                         <span style={{ color: 'var(--color-text-muted)' }}>
                                           {ex.completedAt ? new Date(ex.completedAt).toLocaleString() : 'Pending'}
                                         </span>
