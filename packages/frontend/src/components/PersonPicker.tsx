@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { formatPersonLabel } from '../lib/personLabel';
 
@@ -507,8 +507,9 @@ function PersonRow({
           width: 14, height: 14, marginTop: 1, flexShrink: 0, borderRadius: 3,
           border: `1.5px solid ${selected ? 'var(--color-primary)' : 'var(--color-border)'}`,
           background: selected ? 'var(--color-primary)' : 'transparent',
-          color: '#fff', fontSize: 10, lineHeight: '12px', textAlign: 'center',
-        }}>{selected ? '✓' : ''}</span>
+          color: '#fff',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>{selected ? <Check size={10} strokeWidth={3} /> : null}</span>
       )}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>

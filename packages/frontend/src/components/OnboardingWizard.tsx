@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle2 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
@@ -217,7 +218,7 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
           {!isTour && step === 2 && (
             <>
               <div style={{ textAlign: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 40, marginBottom: 8 }}>{'✓'}</div>
+                <CheckCircle2 size={40} strokeWidth={2} color="var(--color-primary)" style={{ display: 'inline-block', marginBottom: 8 }} />
               </div>
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>
                 {orgName} is ready

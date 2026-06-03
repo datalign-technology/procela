@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Check } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ConfirmDialog from './ConfirmDialog';
@@ -113,7 +114,7 @@ export default function GovernanceSetupWizard() {
       {/* Steps */}
       <div style={stepStyle}>
         <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, background: status.hasGovProcesses ? '#d1fae5' : '#dbeafe', color: status.hasGovProcesses ? '#065f46' : '#1e40af' }}>
-          {status.hasGovProcesses ? '✓' : '1'}
+          {status.hasGovProcesses ? <Check size={13} strokeWidth={2.8} /> : '1'}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>Governance Processes</div>
@@ -131,7 +132,7 @@ export default function GovernanceSetupWizard() {
 
       <div style={stepStyle}>
         <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, background: status.hasGovGroups ? '#d1fae5' : '#dbeafe', color: status.hasGovGroups ? '#065f46' : '#1e40af' }}>
-          {status.hasGovGroups ? '✓' : '2'}
+          {status.hasGovGroups ? <Check size={13} strokeWidth={2.8} /> : '2'}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>Governance Groups</div>
@@ -149,7 +150,7 @@ export default function GovernanceSetupWizard() {
 
       <div style={stepStyle}>
         <div style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, background: status.hasDomains ? '#d1fae5' : '#dbeafe', color: status.hasDomains ? '#065f46' : '#1e40af' }}>
-          {status.hasDomains ? '✓' : '3'}
+          {status.hasDomains ? <Check size={13} strokeWidth={2.8} /> : '3'}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>Data Domains</div>
@@ -170,7 +171,7 @@ export default function GovernanceSetupWizard() {
         <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
           {messages.map((m, i) => (
             <div key={i} style={{ padding: '3px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: '#16a34a' }}>{'✓'}</span> {m}
+              <Check size={12} strokeWidth={2.5} color="#16a34a" /> {m}
             </div>
           ))}
         </div>

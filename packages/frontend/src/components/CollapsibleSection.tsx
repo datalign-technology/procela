@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { activateOnKey } from '../lib/a11y';
 
 interface CollapsibleSectionProps {
@@ -30,7 +31,9 @@ export default function CollapsibleSection({ title, count, open, onToggle, actio
           onKeyDown={activateOnKey(onToggle)}
           style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1, minWidth: 0 }}
         >
-          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', width: 10, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
+          <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex', flexShrink: 0 }} aria-hidden="true">
+            {open ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />}
+          </span>
           <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {title}{typeof count === 'number' ? ` (${count})` : ''}
           </span>

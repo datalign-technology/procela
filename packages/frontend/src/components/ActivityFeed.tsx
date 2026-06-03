@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Plus, Pencil, X as XIcon, Circle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 
@@ -165,11 +166,12 @@ function Row({ entry, hideEntityName }: { entry: AuditEntry; hideEntityName: boo
 
 const muted: React.CSSProperties = { fontSize: 12, color: 'var(--color-text-muted)' };
 
-function actionIcon(action: string): string {
-  if (action === 'CREATE') return '+';
-  if (action === 'UPDATE') return '~';
-  if (action === 'DELETE') return '×';
-  return '•';
+function actionIcon(action: string): React.ReactNode {
+  const props = { size: 11, strokeWidth: 2.5, 'aria-hidden': true } as const;
+  if (action === 'CREATE') return <Plus {...props} />;
+  if (action === 'UPDATE') return <Pencil {...props} />;
+  if (action === 'DELETE') return <XIcon {...props} />;
+  return <Circle {...props} fill="currentColor" />;
 }
 
 function actionColor(action: string): string {

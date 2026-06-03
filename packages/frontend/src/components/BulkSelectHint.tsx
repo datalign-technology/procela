@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { CheckSquare, X } from 'lucide-react';
 
 // A one-time amber hint that surfaces bulk-select. The row checkboxes
 // on tables like Data Assets are very easy to miss until you realise
@@ -59,7 +60,7 @@ export default function BulkSelectHint({
         borderRadius: 'var(--radius-md)', fontSize: 12, color: '#92400e',
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 14 }}>☑</span>
+      <CheckSquare size={14} strokeWidth={2.2} aria-hidden="true" />
       <span>
         <strong>Tip:</strong> tick the checkboxes on the left to bulk-edit, delete or change tier on multiple {itemLabel} at once.
       </span>
@@ -70,10 +71,11 @@ export default function BulkSelectHint({
         style={{
           marginLeft: 'auto',
           background: 'transparent', border: 'none',
-          color: '#92400e', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4,
+          color: '#92400e', cursor: 'pointer', lineHeight: 1, padding: 4,
+          display: 'inline-flex',
         }}
       >
-        ×
+        <X size={14} strokeWidth={2.2} />
       </button>
     </div>
   );

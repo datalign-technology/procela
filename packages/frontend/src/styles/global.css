@@ -48,6 +48,18 @@ ol {
 
 /* ── Design system variables ── */
 
+/* Procela's brand colour is teal. Two related teals are in play and
+   serve different jobs:
+     --color-primary        muted enterprise teal, used on white surfaces
+                            for buttons, links, focus rings, badges.
+     --color-sidebar-accent brighter teal-400, used only on the near-black
+                            slate rail where the muted primary would
+                            disappear.
+   Both descend from the same hue family so the brand reads coherent
+   across light and dark surfaces. Indigo was considered (Linear /
+   Vercel lineage) but teal is already wired through the catalog /
+   governance UI and the existing logo, so the cost of switching
+   outweighs the upside. Revisit if the brand identity itself moves. */
 :root {
   --color-primary: #1a7a6d;
   --color-primary-hover: #15655a;
