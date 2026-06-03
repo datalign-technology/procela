@@ -6,6 +6,7 @@ import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from '../components/EmptyState';
+import Modal from '../components/Modal';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -1494,33 +1495,36 @@ export default function PeoplePage() {
       </div>
 
       {/* Person 360 View Modal */}
-      {(viewing360 || loading360) && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => { if (!loading360) setViewing360(null); }}>
-          <div style={{
-            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-            padding: 24, maxWidth: 800, width: '90vw', maxHeight: '85vh', overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          }} onClick={(e) => e.stopPropagation()}>
-            {loading360 ? (
-              <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
-            ) : viewing360 ? (
-              <>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 2 }}>Manage Person</div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{viewing360.person.name}</h2>
-                    <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                      {viewing360.person.email && <span>{viewing360.person.email}</span>}
-                      {viewing360.person.title && <span>{viewing360.person.email ? ' \u2022 ' : ''}{viewing360.person.title}</span>}
-                    </div>
-                  </div>
-                  <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
-                </div>
+      <Modal
+        open={!!(viewing360 || loading360)}
+        onClose={() => { if (!loading360) setViewing360(null); }}
+        size="lg"
+        kicker="MANAGE PERSON"
+        title={viewing360?.person.name || 'Loading\u2026'}
+        subtitle={viewing360 ? (
+          <>
+            {viewing360.person.email && <span>{viewing360.person.email}</span>}
+            {viewing360.person.title && <span>{viewing360.person.email ? ' \u2022 ' : ''}{viewing360.person.title}</span>}
+          </>
+        ) : undefined}
+        ariaLabel={viewing360 ? `Person: ${viewing360.person.name}` : 'Person details'}
+        footer={viewing360 ? (
+          <button
+            onClick={() => setViewing360(null)}
+            style={{
+              padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
+        ) : undefined}
+      >
+        {loading360 ? (
+          <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
+        ) : viewing360 ? (
+          <>
 
                 {/* ── ASSIGNED ORGANIZATIONS (editable, tree) ── */}
                 <div style={{ marginBottom: 16 }}>
@@ -1785,25 +1789,9 @@ export default function PeoplePage() {
                     </div>
                   )}
                 </div>
-                {/* Footer Close — explicit affordance for keyboard / mobile
-                    users who may not discover the header X or backdrop click. */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
-                  <button
-                    onClick={() => setViewing360(null)}
-                    style={{
-                      padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-                      border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                      fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                    }}
-                  >
-                    Close
-                  </button>
-                </div>
               </>
             ) : null}
-          </div>
-        </div>
-      )}
+      </Modal>
       <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
     </div>
   );

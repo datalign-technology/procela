@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import PageHeader from '../components/PageHeader';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
@@ -357,8 +357,6 @@ export default function DataAssetsPage() {
   const isVisible = colPicker.isVisible;
   const visibleColCount = colPicker.visibleCount;
   const [viewing360, setViewing360] = useState<Asset360Data | null>(null);
-  const asset360DialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(asset360DialogRef, !!viewing360);
   const [loading360, setLoading360] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
@@ -1911,65 +1909,60 @@ export default function DataAssetsPage() {
       </div>
 
       {/* Data Asset 360 View Modal */}
-      {(viewing360 || loading360) && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000,
-        }} onClick={() => { if (!loading360) setViewing360(null); }}>
-          <div
-            ref={asset360DialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={viewing360 ? `Data Asset: ${viewing360.asset.name}` : 'Data Asset details'}
+      <Modal
+        open={!!(viewing360 || loading360)}
+        onClose={() => { if (!loading360) setViewing360(null); }}
+        size="lg"
+        kicker="DATA ASSET"
+        title={viewing360?.asset.name || 'Loading…'}
+        subtitle={viewing360?.asset.description}
+        ariaLabel={viewing360 ? `Data Asset: ${viewing360.asset.name}` : 'Data Asset details'}
+        actions={viewing360 && canWrite ? (() => {
+          const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
+          const ownerName = getOrgName(viewing360.asset.orgId);
+          return (
+            <>
+              <OwnerBadge assetOrgId={viewing360.asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+              <button
+                onClick={() => {
+                  const asset = assets.find((a) => a.id === viewing360.asset.id);
+                  if (asset) { setViewing360(null); openEdit(asset); }
+                }}
+                disabled={detailInherited}
+                title={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
+                style={{
+                  background: detailInherited ? 'var(--color-bg)' : 'var(--color-primary)',
+                  color: detailInherited ? 'var(--color-text-muted)' : '#fff',
+                  border: detailInherited ? '1px solid var(--color-border)' : 'none',
+                  borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 500,
+                  cursor: detailInherited ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Edit
+              </button>
+            </>
+          );
+        })() : undefined}
+        footer={viewing360 ? (
+          // Explicit footer Close — keyboard / mobile users may not
+          // discover the header X or backdrop click; the predictable
+          // button-shaped affordance lives here.
+          <button
+            onClick={() => setViewing360(null)}
             style={{
-            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-            padding: 24, maxWidth: 700, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-          }} onClick={(e) => e.stopPropagation()}>
-            {loading360 ? (
-              <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
-            ) : viewing360 ? (
-              <>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                  <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{viewing360.asset.name}</h2>
-                    {viewing360.asset.description && (
-                      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>{viewing360.asset.description}</p>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {canWrite && (() => {
-                      const detailInherited = isInheritedAsset(viewing360.asset.orgId, activeOrgId);
-                      const ownerName = getOrgName(viewing360.asset.orgId);
-                      return (
-                        <>
-                          <OwnerBadge assetOrgId={viewing360.asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
-                          <button
-                            onClick={() => {
-                              const asset = assets.find((a) => a.id === viewing360.asset.id);
-                              if (asset) { setViewing360(null); openEdit(asset); }
-                            }}
-                            disabled={detailInherited}
-                            title={detailInherited ? `Owned at ${ownerName}. Switch the "Working in..." scope to ${ownerName} to edit.` : undefined}
-                            style={{
-                              background: detailInherited ? 'var(--color-bg)' : 'var(--color-primary)',
-                              color: detailInherited ? 'var(--color-text-muted)' : '#fff',
-                              border: detailInherited ? '1px solid var(--color-border)' : 'none',
-                              borderRadius: 4, padding: '6px 12px', fontSize: 13, fontWeight: 500,
-                              cursor: detailInherited ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            Edit
-                          </button>
-                        </>
-                      );
-                    })()}
-                    <button onClick={() => setViewing360(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
-                  </div>
-                </div>
-
+              padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
+        ) : undefined}
+      >
+        {loading360 ? (
+          <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
+        ) : viewing360 ? (
+          <>
                 {/* Asset Info */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
                   {viewing360.system && (
@@ -2113,26 +2106,9 @@ export default function DataAssetsPage() {
                   </h3>
                   <ActivityFeed entityType="DataAsset" entityId={viewing360.asset.id} inline initialRows={5} />
                 </div>
-                {/* Footer Close — keyboard / mobile users may not discover
-                    the header X or backdrop click; an explicit button is
-                    the predictable affordance. */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
-                  <button
-                    onClick={() => setViewing360(null)}
-                    style={{
-                      padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-                      border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-                      fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                    }}
-                  >
-                    Close
-                  </button>
-                </div>
               </>
             ) : null}
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {linkModalAsset && (
         <LinkConnectionModal
