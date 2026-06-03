@@ -11,6 +11,7 @@ import ExportMenu from '../components/ExportMenu';
 import Button from '../components/Button';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DetailDrawer from '../components/DetailDrawer';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useRef } from 'react';
@@ -904,59 +905,50 @@ function CubeGrid({ cube, dimensionLabel, onCellClick, onAddRowFilter, onAddColF
 }
 
 // ── DrillPanel ──
+// Uses the shared DetailDrawer in panel mode (no scrim) so the user can
+// still see and interact with the pivot table behind the drill-down while
+// inspecting which records make up a cell.
 function DrillPanel({
   rowLabel, colLabel, count, rows, loading, dimensionLabel, onClose,
 }: {
   rowLabel: string; colLabel: string; count: number; rows: DrillRow[]; loading: boolean;
   dimensionLabel: (d: Dim) => string; onClose: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useFocusTrap(ref);
   useScrollLock(true);
   return (
-    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)', boxShadow: 'var(--shadow-lg)', zIndex: 200, display: 'flex', flexDirection: 'column' }}
-      ref={ref} role="dialog" aria-modal="true" aria-label="Cell drill-down">
-      <header style={{ padding: 16, borderBottom: '1px solid var(--color-border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
-              Drill-down
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>
-              {rowLabel} × {colLabel}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>
-              {count} matching record{count === 1 ? '' : 's'}
-            </div>
-          </div>
-          <IconButton icon="check" label="Close" onClick={onClose} />
-        </div>
-      </header>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {loading ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
-        ) : rows.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No records returned.</div>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {rows.map((r) => (
-              <li key={r.factId} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
-                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 2 }}>
-                  {r.factType.replace(/-/g, ' ')}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {Object.entries(r.refs).map(([dim, v]) => v ? (
-                    <span key={dim} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 3, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
-                      <span style={{ color: 'var(--color-text-muted)' }}>{dimensionLabel(dim as Dim)}:</span> <strong>{v.label}</strong>
-                    </span>
-                  ) : null)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+    <DetailDrawer
+      open
+      onClose={onClose}
+      mode="panel"
+      width={420}
+      kicker="Drill-down"
+      title={`${rowLabel} × ${colLabel}`}
+      subtitle={`${count} matching record${count === 1 ? '' : 's'}`}
+      ariaLabel="Cell drill-down"
+    >
+      {loading ? (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No records returned.</div>
+      ) : (
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {rows.map((r) => (
+            <li key={r.factId} style={{ padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 2 }}>
+                {r.factType.replace(/-/g, ' ')}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {Object.entries(r.refs).map(([dim, v]) => v ? (
+                  <span key={dim} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 3, background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>{dimensionLabel(dim as Dim)}:</span> <strong>{v.label}</strong>
+                  </span>
+                ) : null)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </DetailDrawer>
   );
 }
 
