@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Bot, Check, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
@@ -702,8 +703,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
           background: filled ? '#22c55e' : '#f59e0b', color: '#fff',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 9, fontWeight: 800,
-        }}>{filled ? '✓' : '!'}</span>
+        }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
         <span style={{ fontWeight: 500 }}>{label}</span>
         <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Required</span>
         {filled ? (
@@ -1746,7 +1746,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                                   const isActive = s.status === 'ACTIVE';
                                   return (
                                     <div key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '3px 8px', background: isActive ? '#ede9fe' : '#f5f3ff', color: '#5b21b6', borderRadius: 4, fontSize: 11, border: `1px solid ${isActive ? '#c4b5fd' : 'var(--color-border)'}` }}>
-                                      <span style={{ fontWeight: 600 }}>⚙</span>
+                                      <Bot size={12} strokeWidth={2.4} />
                                       <span>{s.agentName}</span>
                                       <span style={{ color: '#7c3aed' }}>·</span>
                                       <span>{s.frequency.toLowerCase()}</span>
@@ -1860,7 +1860,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   Approved draft pending promotion
                 </div>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 8px', background: '#ede9fe', color: '#5b21b6', borderRadius: 12, fontSize: 11 }}>
-                  <span>⚙</span>
+                  <Bot size={12} strokeWidth={2.4} />
                   <span>Agent draft by {ex.agentName}</span>
                   <button onClick={() => setShowAgentResult(true)} style={{ background: 'transparent', border: 'none', color: '#5b21b6', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}>View</button>
                   <span style={{ color: '#a78bfa' }}>·</span>

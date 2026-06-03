@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Check, Loader, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { apiClient } from '@/api/client';
 import { useOrgContext } from '@/stores/orgContext';
 import { useSetupStore } from '@/stores/setupStore';
@@ -67,11 +68,15 @@ const COVERAGE_DONE_THRESHOLD = 80;
 
 const scoreOf = (s: TaskStatus): number => (s === 'done' ? 1 : s === 'started' || s === 'attention' ? 0.5 : 0);
 
-const STATUS_META: Record<TaskStatus, { glyph: string; color: string; label: string }> = {
-  done: { glyph: '✓', color: '#22c55e', label: 'Done' },
-  started: { glyph: '◐', color: '#3b82f6', label: 'In progress' },
-  attention: { glyph: '!', color: '#f59e0b', label: 'Needs attention' },
-  todo: { glyph: '', color: 'var(--color-border)', label: 'Not started' },
+// Lucide icons rather than Unicode glyphs so the visual is consistent
+// across OSes (no Wingdings-fallback surprises on Windows, no emoji
+// colour-shift on macOS). Todo has no icon — the bare bordered circle
+// already reads as "empty / not started".
+const STATUS_META: Record<TaskStatus, { Icon: LucideIcon | null; color: string; label: string }> = {
+  done: { Icon: Check, color: '#22c55e', label: 'Done' },
+  started: { Icon: Loader, color: '#3b82f6', label: 'In progress' },
+  attention: { Icon: AlertTriangle, color: '#f59e0b', label: 'Needs attention' },
+  todo: { Icon: null, color: 'var(--color-border)', label: 'Not started' },
 };
 
 export default function SetupHubPage() {
@@ -391,8 +396,7 @@ export default function SetupHubPage() {
                         border: t.status === 'todo' ? `2px solid ${meta.color}` : 'none',
                         background: t.status === 'todo' ? 'transparent' : meta.color,
                         color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 13, fontWeight: 800,
-                      }}>{meta.glyph}</span>
+                      }}>{meta.Icon && <meta.Icon size={14} strokeWidth={3} />}</span>
                       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>{t.title}</span>
                         <span style={{

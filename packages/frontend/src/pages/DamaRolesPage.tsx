@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -634,7 +635,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 10, fontWeight: 700,
                 }}>
-                  {isAgent ? '⚙' : displayName.charAt(0).toUpperCase()}
+                  {isAgent ? <Bot size={13} strokeWidth={2.4} /> : displayName.charAt(0).toUpperCase()}
                 </span>
                 <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   {displayName}

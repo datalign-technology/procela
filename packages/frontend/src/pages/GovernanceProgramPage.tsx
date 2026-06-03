@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -970,7 +971,7 @@ export default function GovernanceProgramPage() {
                                             const displayName = isAgent ? (a.agentName || 'Agent') : (a.personName || 'Unknown');
                                             return (
                                               <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : '#d1f0eb', color: isAgent ? '#5b21b6' : '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                {isAgent && <span title="AI Agent" style={{ fontSize: 10 }}>{'⚙'}</span>}
+                                                {isAgent && <span title="AI Agent" style={{ display: 'inline-flex' }}><Bot size={11} strokeWidth={2.4} /></span>}
                                                 {displayName}
                                                 <button onClick={() => setConfirmRemoveRoleId(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
                                               </span>
@@ -984,7 +985,7 @@ export default function GovernanceProgramPage() {
                                         <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
                                         <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</button>
                                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
-                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12, borderColor: '#c4b5fd' }} value={roleAgentSelections[role.roleType] || ''} onChange={(e) => { setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">{'⚙'} Agent...</option>{agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12, borderColor: '#c4b5fd' }} value={roleAgentSelections[role.roleType] || ''} onChange={(e) => { setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Agent…</option>{agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
                                         <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, background: '#7c3aed', opacity: !roleAgentSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleAgentSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleAgentSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'agent')}>Assign</button>
                                       </div>
                                     ) : (

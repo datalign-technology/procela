@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -375,7 +376,7 @@ export default function GovernancePoliciesPage() {
         {Object.keys(promotionsByPolicy).length > 0 && (
           <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', color: 'var(--color-text-secondary)' }}>
             <input type="checkbox" checked={showAgentPromotedOnly} onChange={(e) => setShowAgentPromotedOnly(e.target.checked)} />
-            <span><span style={{ color: '#5b21b6' }}>⚙</span> Show only agent-promoted ({Object.keys(promotionsByPolicy).length})</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> Show only agent-promoted ({Object.keys(promotionsByPolicy).length})</span>
           </label>
         )}
       </div>
@@ -540,8 +541,8 @@ export default function GovernancePoliciesPage() {
                       <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
                       {promo && (
                         <span title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
-                          style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 12, fontSize: 10, fontWeight: 600, background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                          ⚙ from agent draft
+                          style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 12, fontSize: 10, fontWeight: 600, background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Bot size={11} strokeWidth={2.4} /> from agent draft
                         </span>
                       )}
                     </td>}
@@ -575,7 +576,7 @@ export default function GovernancePoliciesPage() {
         return (
           <div style={{ marginTop: 16, background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#ede9fe', color: '#5b21b6', letterSpacing: '0.04em', textTransform: 'uppercase' }}>⚙ Source</span>
+              <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#ede9fe', color: '#5b21b6', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} /> Source</span>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>
@@ -583,7 +584,7 @@ export default function GovernancePoliciesPage() {
               <a href={`/processes?node=${encodeURIComponent(promo.activityId)}`} title="Open the activity in the Process Catalog" style={{ color: 'var(--color-primary)', fontWeight: 500, textDecoration: 'none' }}>{promo.activityName}</a>
 
               <span style={{ color: 'var(--color-text-muted)' }}>Agent</span>
-              <span><span style={{ color: '#5b21b6' }}>⚙</span> {promo.agentName}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} style={{ color: '#5b21b6' }} /> {promo.agentName}</span>
 
               <span style={{ color: 'var(--color-text-muted)' }}>Approved by</span>
               <span>{promo.reviewedBy || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>}</span>

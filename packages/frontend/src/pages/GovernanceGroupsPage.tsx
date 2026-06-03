@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -1133,7 +1134,7 @@ export default function GovernanceGroupsPage() {
                                       return (
                                         <span key={a.id} title={inThisGroup ? undefined : 'Holds this role in the org but is not a member of this group'}
                                           style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : inThisGroup ? '#d1f0eb' : '#fef3c7', color: isAgent ? '#5b21b6' : inThisGroup ? '#0f4f46' : '#92400e', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                          {isAgent && <span title="AI Agent" style={{ fontSize: 10 }}>{'⚙'}</span>}
+                                          {isAgent && <span title="AI Agent" style={{ display: 'inline-flex' }}><Bot size={11} strokeWidth={2.4} /></span>}
                                           {displayName}
                                           {!inThisGroup && (
                                             <button
@@ -1183,7 +1184,7 @@ export default function GovernanceGroupsPage() {
                                           value={assignRoleType === expected.roleType ? assignRoleAgentId : ''}
                                           onChange={(e) => { setAssignRoleType(expected.roleType); setAssignRoleAgentId(e.target.value); if (e.target.value) setAssignRolePersonId(''); }}
                                         >
-                                          <option value="">{'⚙'} Agent...</option>
+                                          <option value="">Agent…</option>
                                           {agentsList.filter((a) => !assigned.some((d) => d.agentId === a.id)).map((a) => (
                                             <option key={a.id} value={a.id}>{a.name}</option>
                                           ))}
