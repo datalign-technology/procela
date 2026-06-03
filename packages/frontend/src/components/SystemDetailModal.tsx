@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { CSSProperties } from 'react';
-import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useScrollLock } from '../hooks/useScrollLock';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import Modal from './Modal';
 import WhereUsed, { WhereUsedGroup } from './WhereUsed';
 import CommentsPanel from './CommentsPanel';
 import ActivityFeed from './ActivityFeed';
@@ -76,8 +76,6 @@ interface Props {
 }
 
 export default function SystemDetailModal({ systemId, onClose }: Props) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(dialogRef, !!systemId);
   useScrollLock(!!systemId);
   const navigate = useNavigate();
   const custodianLabel = useTerm('custodian');
@@ -177,56 +175,27 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
     },
   ] : [];
 
-  return (
-    <div
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 1000,
-      }}
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={data ? `System: ${data.system.name}` : 'System details'}
-        style={{
-          background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-          padding: 24, maxWidth: 720, width: '90vw', maxHeight: '85vh', overflowY: 'auto',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              System
-            </div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '2px 0 0' }}>
-              {data?.system.name || 'Loading…'}
-            </h2>
-            {data?.system && (
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {data.system.systemType && <span>{data.system.systemType}</span>}
-                {data.system.vendor && <><span>·</span><span>{data.system.vendor}</span></>}
-                {data.system.businessCriticality && <><span>·</span><span>{data.system.businessCriticality} criticality</span></>}
-                {data.system.connectivity && <><span>·</span><span>{data.system.connectivity}</span></>}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 20, color: 'var(--color-text-muted)', lineHeight: 1, padding: 4,
-            }}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
+  // System metadata renders as a "·"-joined meta line under the title.
+  // Only segments with a value contribute; empty ones drop out cleanly.
+  const metaSegments = data?.system
+    ? [
+        data.system.systemType,
+        data.system.vendor,
+        data.system.businessCriticality && `${data.system.businessCriticality} criticality`,
+        data.system.connectivity,
+      ].filter(Boolean)
+    : [];
 
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      kicker="SYSTEM"
+      title={data?.system.name || 'Loading…'}
+      subtitle={metaSegments.length > 0 ? metaSegments.join(' · ') : undefined}
+      ariaLabel={data ? `System: ${data.system.name}` : 'System details'}
+    >
         {data?.system.description && (
           <p style={{ fontSize: 13, color: 'var(--color-text)', marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>
             {data.system.description}
@@ -307,7 +276,6 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

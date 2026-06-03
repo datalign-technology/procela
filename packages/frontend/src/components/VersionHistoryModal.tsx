@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import Modal from './Modal';
 import { getStatusColor } from '@/lib/statusBadge';
 
 interface ProcessNodeSnapshot {
@@ -46,23 +47,27 @@ export default function VersionHistoryModal({ nodeId, onClose }: VersionHistoryM
     return { display: 'inline-block' as const, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 as const, background: c.bg, color: c.color };
   };
 
+  // The modal has two stacked views: a list of all versions, and the
+  // snapshot of a single version. The Modal chrome wraps both; only the
+  // title and inner content swap based on `viewing`. The "Back" button
+  // appears in the actions slot when viewing a snapshot so the user can
+  // return to the list without closing the dialog.
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 1000,
-    }} onClick={() => { onClose(); }}>
-      <div style={{
-        background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-        padding: 24, maxWidth: 600, width: '90vw', maxHeight: '80vh', overflowY: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-      }} onClick={(e) => e.stopPropagation()}>
+    <Modal
+      open
+      onClose={onClose}
+      size="md"
+      title={viewing ? `Version ${viewing.version} Snapshot` : 'Version History'}
+      actions={viewing ? (
+        <button
+          onClick={() => setViewing(null)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--color-primary)', padding: '4px 8px' }}
+        >
+          Back
+        </button>
+      ) : undefined}
+    >
         {viewing ? (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Version {viewing.version} Snapshot</h2>
-              <button onClick={() => setViewing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--color-primary)', padding: '4px 8px' }}>Back</button>
-            </div>
             <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: 16 }}>
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</div>
@@ -85,13 +90,8 @@ export default function VersionHistoryModal({ nodeId, onClose }: VersionHistoryM
                 <div style={{ fontSize: 13 }}>{viewing.note}</div>
               </div>
             </div>
-          </>
         ) : (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Version History</h2>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: '0 4px' }}>x</button>
-            </div>
             {loading ? (
               <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
             ) : versions.length === 0 ? (
@@ -126,7 +126,6 @@ export default function VersionHistoryModal({ nodeId, onClose }: VersionHistoryM
             )}
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

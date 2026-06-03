@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { apiClient } from '../api/client';
+import Modal from './Modal';
 
 interface Attachment {
   id: string;
@@ -251,21 +252,28 @@ function AttachmentModal({ onClose, onUploadFile, onSubmitUrl, uploading, error 
   const canSubmit = tab === 'file' ? !!file : (name.trim() && url.trim());
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title="Add Attachment"
+      footer={
+        <>
+          <button onClick={onClose} disabled={uploading}
+            style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={!canSubmit || uploading}
+            style={{
+              padding: '6px 14px', fontSize: 13, background: 'var(--color-primary)', color: '#fff',
+              border: 'none', borderRadius: 4, cursor: canSubmit && !uploading ? 'pointer' : 'default',
+              opacity: canSubmit && !uploading ? 1 : 0.5,
+            }}>
+            {uploading ? 'Saving...' : tab === 'file' ? 'Upload' : 'Add Link'}
+          </button>
+        </>
+      }
     >
-      <div style={{
-        background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-        padding: 20, width: 480, maxWidth: '90vw', boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-      }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Add Attachment</h3>
-
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
           <button onClick={() => setTab('file')}
@@ -357,22 +365,6 @@ function AttachmentModal({ onClose, onUploadFile, onSubmitUrl, uploading, error 
             {error}
           </div>
         )}
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} disabled={uploading}
-            style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button onClick={handleSubmit} disabled={!canSubmit || uploading}
-            style={{
-              padding: '6px 14px', fontSize: 13, background: 'var(--color-primary)', color: '#fff',
-              border: 'none', borderRadius: 4, cursor: canSubmit && !uploading ? 'pointer' : 'default',
-              opacity: canSubmit && !uploading ? 1 : 0.5,
-            }}>
-            {uploading ? 'Saving...' : tab === 'file' ? 'Upload' : 'Add Link'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
