@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Bot, Check, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import StatusBadge from '../components/StatusBadge';
 import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
 import { useOrgContext } from '../stores/orgContext';
@@ -705,7 +706,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
         <span style={{ fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Required</span>
+        <StatusBadge variant="danger">Required</StatusBadge>
         {filled ? (
           <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }} title={`Matched by ${matchName}`}>
             matched: {matchName}
@@ -1760,7 +1761,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                                           <span style={{ color: 'var(--color-text-muted)' }}>{s.runCount} run{s.runCount === 1 ? '' : 's'}</span>
                                         </>
                                       )}
-                                      {!isActive && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e' }}>PAUSED</span>}
+                                      {!isActive && <StatusBadge variant="warning">Paused</StatusBadge>}
                                       <div style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4 }}>
                                         {onToggleSchedule && (
                                           <button onClick={() => onToggleSchedule(s.id, isActive ? 'PAUSED' : 'ACTIVE')}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -540,10 +541,16 @@ export default function GovernancePoliciesPage() {
                       <span>{pol.name}</span>
                       <span style={{ ...badgeStyle(DOCUMENT_TYPE_COLORS[docType] || DOCUMENT_TYPE_COLORS.POLICY), marginLeft: 8 }}>{DOCUMENT_TYPE_LABEL[docType]}</span>
                       {promo && (
-                        <span title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
-                          style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 12, fontSize: 10, fontWeight: 600, background: '#ede9fe', color: '#5b21b6', border: '1px solid #c4b5fd', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <Bot size={11} strokeWidth={2.4} /> from agent draft
-                        </span>
+                        <StatusBadge
+                          variant="agent"
+                          size="md"
+                          outlined
+                          icon={<Bot size={11} strokeWidth={2.4} />}
+                          title={`Promoted from agent draft "${promo.activityName}" by ${promo.agentName}${promo.reviewedBy ? `, approved by ${promo.reviewedBy}` : ''}`}
+                          style={{ marginLeft: 8 }}
+                        >
+                          from agent draft
+                        </StatusBadge>
                       )}
                     </td>}
                     {policyCols.isVisible('category') && <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>}
@@ -576,7 +583,7 @@ export default function GovernancePoliciesPage() {
         return (
           <div style={{ marginTop: 16, background: '#faf5ff', border: '1px solid #d8b4fe', borderRadius: 'var(--radius-md)', padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#ede9fe', color: '#5b21b6', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bot size={12} strokeWidth={2.4} /> Source</span>
+              <StatusBadge variant="agent" icon={<Bot size={12} strokeWidth={2.4} />}>Source</StatusBadge>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: '#5b21b6' }}>Promoted from agent draft</h3>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 16, rowGap: 6, fontSize: 13 }}>

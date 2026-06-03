@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
@@ -1107,16 +1108,12 @@ export default function GovernanceGroupsPage() {
                                   >
                                     {expected.label}
                                   </button>
-                                  <span style={{
-                                    fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                    background: expected.required ? '#fef2f2' : '#f0f9ff',
-                                    color: expected.required ? '#b91c1c' : '#0369a1',
-                                  }}>
+                                  <StatusBadge variant={expected.required ? 'danger' : 'info'}>
                                     {expected.required ? 'Required' : 'Optional'}
-                                  </span>
-                                  <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: expected.multiAssign ? '#f5f3ff' : '#f0f9ff', color: expected.multiAssign ? '#6d28d9' : '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  </StatusBadge>
+                                  <StatusBadge variant={expected.multiAssign ? 'info' : 'neutral'}>
                                     {expected.multiAssign ? 'Multiple' : 'Single'}
-                                  </span>
+                                  </StatusBadge>
                                   {!expected.multiAssign && peopleAssigned > 0 && (
                                     <span style={{ fontSize: 11, color: '#16a34a', marginLeft: 'auto' }}>✓ Filled</span>
                                   )}
