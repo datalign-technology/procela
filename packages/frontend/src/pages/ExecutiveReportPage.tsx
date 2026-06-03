@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import IconButton from '../components/IconButton';
 
@@ -139,9 +140,7 @@ export default function ExecutiveReportPage() {
   if (loading) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Executive Report</h1>
-        </div>
+        <PageHeader title="Executive Report" />
         <div style={{ color: 'var(--color-text-muted)' }}>Loading report data...</div>
       </div>
     );
@@ -150,9 +149,7 @@ export default function ExecutiveReportPage() {
   if (error) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Executive Report</h1>
-        </div>
+        <PageHeader title="Executive Report" />
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
     );
@@ -180,21 +177,23 @@ export default function ExecutiveReportPage() {
       `}</style>
 
       {/* Print Button */}
-      <div className="no-print" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Executive Report</h1>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => window.print()} className="no-print" style={{
-            padding: '6px 14px', fontSize: 12, fontWeight: 500,
-            background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
-            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-          }}>
-            Print / Export PDF
-          </button>
-          <IconButton icon="download" label="Export PDF" variant="primary" onClick={() => window.print()} />
-        </div>
+      <div className="no-print">
+        <PageHeader
+          title="Executive Report"
+          actions={
+            <>
+              <button onClick={() => window.print()} className="no-print" style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+              }}>
+                Print / Export PDF
+              </button>
+              <IconButton icon="download" label="Export PDF" variant="primary" onClick={() => window.print()} />
+            </>
+          }
+        />
       </div>
 
       <div className="report-content" style={{

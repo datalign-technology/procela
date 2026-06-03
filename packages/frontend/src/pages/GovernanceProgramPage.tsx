@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
@@ -644,23 +645,11 @@ export default function GovernanceProgramPage() {
     <div>
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Program</h1>
-          <HelpPopover id="gov-program-intro" title="Data Governance Program Setup">
-            Procela follows a DAMA-aligned, 4-phase framework for standing up a governance program:
-            (1) Foundation Definition — scope, principles, operating model; (2) Structural Design —
-            domains, roles, and committees; (3) People & Processes — RACI, policies, and stewardship;
-            (4) Operationalization — monitoring, metrics, and continuous improvement. Progress on
-            each phase is tracked automatically as you complete the underlying work. Organizations
-            move through these phases at their own pace.
-          </HelpPopover>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-          A phased approach to building your data governance program
-        </p>
-        {status && (
-          <div style={{ marginTop: 14, maxWidth: 600 }}>
+      <PageHeader
+        title="Governance Program"
+        subtitle="A phased approach to building your data governance program"
+        meta={status ? (
+          <div style={{ maxWidth: 600, width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Overall Progress
@@ -671,8 +660,17 @@ export default function GovernanceProgramPage() {
             </div>
             <ProgressBar value={status.overallProgress} />
           </div>
-        )}
-      </div>
+        ) : undefined}
+      >
+        <HelpPopover id="gov-program-intro" title="Data Governance Program Setup">
+          Procela follows a DAMA-aligned, 4-phase framework for standing up a governance program:
+          (1) Foundation Definition — scope, principles, operating model; (2) Structural Design —
+          domains, roles, and committees; (3) People & Processes — RACI, policies, and stewardship;
+          (4) Operationalization — monitoring, metrics, and continuous improvement. Progress on
+          each phase is tracked automatically as you complete the underlying work. Organizations
+          move through these phases at their own pace.
+        </HelpPopover>
+      </PageHeader>
 
       {loading && (
         <div style={{

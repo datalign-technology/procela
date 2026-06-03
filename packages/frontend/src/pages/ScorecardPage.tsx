@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 
@@ -449,9 +450,7 @@ export default function ScorecardPage() {
   if (loading) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
-        </div>
+        <PageHeader title="Governance Maturity Scorecard" />
         <div style={{ color: 'var(--color-text-muted)' }}>Loading...</div>
       </div>
     );
@@ -460,9 +459,7 @@ export default function ScorecardPage() {
   if (error) {
     return (
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
-        </div>
+        <PageHeader title="Governance Maturity Scorecard" />
         <div style={{ color: 'var(--color-danger, #ef4444)' }}>Error: {error}</div>
       </div>
     );
@@ -477,9 +474,7 @@ export default function ScorecardPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Maturity Scorecard</h1>
-      </div>
+      <PageHeader title="Governance Maturity Scorecard" />
 
       {/* Overall Score */}
       <div style={{

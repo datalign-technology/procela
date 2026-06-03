@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -265,7 +266,7 @@ export default function DataDictionaryPage() {
   if (error) {
     return (
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Data Dictionary</h1>
+        <PageHeader title="Data Dictionary" />
         <div style={{ color: '#ef4444' }}>Error: {error}</div>
       </div>
     );
@@ -312,42 +313,40 @@ export default function DataDictionaryPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Data Dictionary</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
-            Technical catalog of data assets, columns, ownership, and lineage.
-          </p>
-          {assets.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-              <span>{assets.length} assets</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{goldCount} {tierLabel('GOLD').toLowerCase()}</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{silverCount} {tierLabel('SILVER').toLowerCase()}</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{bronzeCount} {tierLabel('BRONZE').toLowerCase()}</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{domains.length} domains</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <SavedViewsMenu
-            pageKey="data-dictionary"
-            currentFilters={{ searchQuery, filterDomain, filterTier }}
-            onApply={(f) => {
-              setSearchQuery((f.searchQuery as string) || '');
-              setFilterDomain((f.filterDomain as string) || '');
-              setFilterTier((f.filterTier as string) || '');
-            }}
-          />
-          {assets.length > 0 && (
-            <ExportMenu build={buildDictionaryExport} />
-          )}
-          <ColumnPicker state={dictCols} />
-        </div>
-      </div>
+      <PageHeader
+        title="Data Dictionary"
+        subtitle="Technical catalog of data assets, columns, ownership, and lineage."
+        meta={assets.length > 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{assets.length} assets</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{goldCount} {tierLabel('GOLD').toLowerCase()}</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{silverCount} {tierLabel('SILVER').toLowerCase()}</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{bronzeCount} {tierLabel('BRONZE').toLowerCase()}</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{domains.length} domains</span>
+          </div>
+        ) : undefined}
+        actions={
+          <>
+            <SavedViewsMenu
+              pageKey="data-dictionary"
+              currentFilters={{ searchQuery, filterDomain, filterTier }}
+              onApply={(f) => {
+                setSearchQuery((f.searchQuery as string) || '');
+                setFilterDomain((f.filterDomain as string) || '');
+                setFilterTier((f.filterTier as string) || '');
+              }}
+            />
+            {assets.length > 0 && (
+              <ExportMenu build={buildDictionaryExport} />
+            )}
+            <ColumnPicker state={dictCols} />
+          </>
+        }
+      />
 
       {/* Two-column layout: Domains sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>

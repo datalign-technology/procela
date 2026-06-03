@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import React, { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
@@ -467,31 +468,26 @@ export default function DataQualityPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Quality</h1>
-            <HelpPopover id="dq-overview" title="Data Quality">
-              Define quality rules per data asset, compute health scores, and track
-              data quality across your organization. Rules can run on demand or on a schedule.
-            </HelpPopover>
+      <PageHeader
+        title="Data Quality"
+        subtitle="Monitor and improve the quality and reliability of your data assets."
+        meta={fullAssets.length > 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{fullAssets.length} assets</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{rules.length} rules</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore >= 80).length} healthy</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore < 80).length} below 80%</span>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Monitor and improve the quality and reliability of your data assets.
-          </p>
-          {fullAssets.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-              <span>{fullAssets.length} assets</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{rules.length} rules</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore >= 80).length} healthy</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{fullAssets.filter((a) => a.healthScore != null && a.healthScore < 80).length} below 80%</span>
-            </div>
-          )}
-        </div>
-      </div>
+        ) : undefined}
+      >
+        <HelpPopover id="dq-overview" title="Data Quality">
+          Define quality rules per data asset, compute health scores, and track
+          data quality across your organization. Rules can run on demand or on a schedule.
+        </HelpPopover>
+      </PageHeader>
 
       <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 16 }}>
         <button style={tabStyle(tab === 'assets')} onClick={() => setTab('assets')}>Assets</button>
@@ -519,45 +515,42 @@ export default function DataQualityPage() {
 
       {tab === 'rules' && (<>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Quality Rules</h1>
-            <HelpPopover id="dq-rules-overview" title="Quality rules">
-              A rule validates one column of one asset against a check (uniqueness,
-              not-null, regex, range, custom). Procela runs rules on demand or on
-              a schedule and rolls each asset's results into a health score.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Define quality rules per data asset and compute health scores.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {rules.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'data-quality-rules',
-              sheetName: 'Rules',
-              headers: ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'],
-              rows: rules.map((r) => [
-                r.dataAssetName,
-                (r as any).columnName || '',
-                r.name,
-                r.dimension,
-                r.threshold,
-                r.currentScore,
-                r.weight,
-                r.status,
-                r.lastMeasured || '',
-              ]),
-            })} />
-          )}
-          <ColumnPicker state={dqCols} />
-          {canWrite && (
-            <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Data Quality Rules"
+        subtitle="Define quality rules per data asset and compute health scores."
+        actions={
+          <>
+            {rules.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'data-quality-rules',
+                sheetName: 'Rules',
+                headers: ['Data Asset', 'Column', 'Rule Name', 'Dimension', 'Threshold', 'Current Score', 'Weight', 'Status', 'Last Measured'],
+                rows: rules.map((r) => [
+                  r.dataAssetName,
+                  (r as any).columnName || '',
+                  r.name,
+                  r.dimension,
+                  r.threshold,
+                  r.currentScore,
+                  r.weight,
+                  r.status,
+                  r.lastMeasured || '',
+                ]),
+              })} />
+            )}
+            <ColumnPicker state={dqCols} />
+            {canWrite && (
+              <IconButton icon="plus" label="Add rule" variant="primary" onClick={openAdd} />
+            )}
+          </>
+        }
+      >
+        <HelpPopover id="dq-rules-overview" title="Quality rules">
+          A rule validates one column of one asset against a check (uniqueness,
+          not-null, regex, range, custom). Procela runs rules on demand or on
+          a schedule and rolls each asset's results into a health score.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Stats */}
       {rules.length > 0 && (

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Bot, Check, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { tierLabel } from '../lib/governanceTier';
 import { badgeColor } from '../lib/badgeColors';
@@ -2790,21 +2791,11 @@ export default function ProcessCatalogPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Process Catalog</h1>
-            <HelpPopover id="process-catalog-overview" title="Process hierarchy">
-              The required path is Value Stream → Process → Activity. Optional
-              levels (Domain, Capability, Sub-Process, Task) sit between for
-              detail when you need it. A Value Stream can't go ACTIVE until at
-              least one Process and one Activity exist underneath.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-            Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong>
-          </p>
-          <div style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <PageHeader
+        title="Process Catalog"
+        subtitle={<>Define your business processes. Required path: <strong>Value Stream</strong> → <strong>Process</strong> → <strong>Activity</strong></>}
+        meta={
+          <>
             <DomainLensToggle pageKey="process-catalog" />
             {/* Simple ↔ Advanced view toggle — Simple hides Compliance,
                 Frequency, Risk Level, Automation and Est. Duration from
@@ -2835,10 +2826,9 @@ export default function ProcessCatalogPage() {
                 );
               })}
             </div>
-            {/* Read-only indicator for the org's status lifecycle
-                mode. The actual toggle lives in Settings — pinning
-                it here would confuse users into thinking it's
-                page-local. Tooltip links to where to change it. */}
+            {/* Read-only indicator for the org's status lifecycle mode.
+                The actual toggle lives in Settings — pinning it here
+                would confuse users into thinking it's page-local. */}
             <span
               title={`Status lifecycle for ${statusMode === 'advanced' ? 'this org is Advanced (6 statuses: Draft → Proposed → Under Review → Approved → Active → Deprecated)' : 'this org is Simple (3 statuses: Draft → Active → Deprecated)'}. Change in Settings → Process & Asset Lifecycle.`}
               style={{
@@ -2863,55 +2853,63 @@ export default function ProcessCatalogPage() {
                 Change
               </button>
             </span>
-          </div>
-        </div>
-        {canCreateValueStreams && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {totalNodes > 0 && (
+          </>
+        }
+        actions={
+          canCreateValueStreams ? (
+            <>
+              {totalNodes > 0 && (
+                <IconButton icon="eye" label="Visualize"
+                  onClick={() => navigate('/processes/visualization')} />
+              )}
+              {(byLevel.VALUE_STREAM || 0) >= 2 && (
+                <IconButton icon="refresh" label="Compare value streams"
+                  onClick={() => navigate('/processes/compare')} />
+              )}
+              {canWrite && canCreateHere && (
+                <IconButton icon="wand"
+                  label="Generate from industry template"
+                  onClick={() => navigate('/processes/wizard')} />
+              )}
+              {canWrite && canCreateGovernanceHere && (
+                <IconButton icon="users"
+                  variant="secondary"
+                  label={
+                    tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))
+                      ? 'Governance processes already exist'
+                      : 'Generate governance processes'
+                  }
+                  disabled={tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))}
+                  onClick={() => setConfirmGovTemplate(true)}
+                />
+              )}
+              {totalNodes > 0 && (
+                <ExportMenu build={buildProcessExport} label="Export process hierarchy" />
+              )}
+              {canContribute && canCreateHere && (
+                <IconButton icon="plus" label="Add value stream" variant="primary"
+                  onClick={() => setAddingTo('__root__')} />
+              )}
+            </>
+          ) : totalNodes > 0 ? (
+            <>
               <IconButton icon="eye" label="Visualize"
                 onClick={() => navigate('/processes/visualization')} />
-            )}
-            {(byLevel.VALUE_STREAM || 0) >= 2 && (
-              <IconButton icon="refresh" label="Compare value streams"
-                onClick={() => navigate('/processes/compare')} />
-            )}
-            {canWrite && canCreateHere && (
-              <IconButton icon="wand"
-                label="Generate from industry template"
-                onClick={() => navigate('/processes/wizard')} />
-            )}
-            {canWrite && canCreateGovernanceHere && (
-              <IconButton icon="users"
-                variant="secondary"
-                label={
-                  tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))
-                    ? 'Governance processes already exist'
-                    : 'Generate governance processes'
-                }
-                disabled={tree.some((n) => n.name.includes('Governance') || n.name.includes('Data Management'))}
-                onClick={() => setConfirmGovTemplate(true)}
-              />
-            )}
-            {totalNodes > 0 && (
-              <ExportMenu build={buildProcessExport} label="Export process hierarchy" />
-            )}
-            {canContribute && canCreateHere && (
-              <IconButton icon="plus" label="Add value stream" variant="primary"
-                onClick={() => setAddingTo('__root__')} />
-            )}
-          </div>
-        )}
-        {totalNodes > 0 && !canCreateValueStreams && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <IconButton icon="eye" label="Visualize"
-              onClick={() => navigate('/processes/visualization')} />
-            {(byLevel.VALUE_STREAM || 0) >= 2 && (
-              <IconButton icon="refresh" label="Compare value streams"
-                onClick={() => navigate('/processes/compare')} />
-            )}
-          </div>
-        )}
-      </div>
+              {(byLevel.VALUE_STREAM || 0) >= 2 && (
+                <IconButton icon="refresh" label="Compare value streams"
+                  onClick={() => navigate('/processes/compare')} />
+              )}
+            </>
+          ) : undefined
+        }
+      >
+        <HelpPopover id="process-catalog-overview" title="Process hierarchy">
+          The required path is Value Stream → Process → Activity. Optional
+          levels (Domain, Capability, Sub-Process, Task) sit between for
+          detail when you need it. A Value Stream can't go ACTIVE until at
+          least one Process and one Activity exist underneath.
+        </HelpPopover>
+      </PageHeader>
 
       {governanceStats.total > 0 && (
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>

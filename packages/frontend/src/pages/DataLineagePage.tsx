@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -480,7 +481,7 @@ export default function DataLineagePage() {
   if (loadError && links.length === 0) {
     return (
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 12 }}>Data Lineage</h1>
+        <PageHeader title="Data Lineage" />
         <div style={{
           background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
@@ -502,39 +503,35 @@ export default function DataLineagePage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Lineage</h1>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Track how data flows between systems — which system feeds which.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
-            onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
-          <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />
-          {links.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'data-lineage',
-              sheetName: 'Lineage',
-              headers: ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'],
-              rows: links.map((l) => [
-                l.sourceSystemName,
-                l.targetSystemName,
-                l.dataAssetName,
-                l.flowType,
-                l.frequency,
-                l.status,
-                l.description,
-              ]),
-            })} />
-          )}
-          <ColumnPicker state={lineageCols} />
-          <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />
-        </div>
-      </div>
+      <PageHeader
+        title="Data Lineage"
+        subtitle="Track how data flows between systems — which system feeds which."
+        actions={
+          <>
+            <IconButton icon="eye" label={viewMode === 'table' ? 'Visualize' : 'Table view'}
+              onClick={() => setViewMode(viewMode === 'table' ? 'visualization' : 'table')} />
+            <IconButton icon="upload" label="Import dbt manifest" onClick={() => setShowDbtImport(true)} />
+            {links.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'data-lineage',
+                sheetName: 'Lineage',
+                headers: ['Source System', 'Target System', 'Data Asset', 'Flow Type', 'Frequency', 'Status', 'Description'],
+                rows: links.map((l) => [
+                  l.sourceSystemName,
+                  l.targetSystemName,
+                  l.dataAssetName,
+                  l.flowType,
+                  l.frequency,
+                  l.status,
+                  l.description,
+                ]),
+              })} />
+            )}
+            <ColumnPicker state={lineageCols} />
+            <IconButton icon="plus" label="Add flow" variant="primary" onClick={openAdd} />
+          </>
+        }
+      />
 
       {/* Add/Edit Form */}
       {showForm && (

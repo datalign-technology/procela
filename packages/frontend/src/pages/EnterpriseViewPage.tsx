@@ -2,6 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
@@ -212,7 +213,7 @@ export default function EnterpriseViewPage() {
   if (loadError) {
     return (
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 12 }}>Enterprise View</h1>
+        <PageHeader title="Enterprise View" />
         <div style={{
           background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
@@ -248,20 +249,16 @@ export default function EnterpriseViewPage() {
       {/* Main content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 4px 20px 0' }}>
         {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Enterprise View</h1>
-            <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
-              See all processes, systems, assets, domains, and people in one place.
-              Click any card to expand, then click an item to run impact analysis — the sidebar
-              shows every entity connected to your selection.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            Full visibility across processes, systems, data assets, domains, and people.
-            Select a view to focus on specific relationships, then click any item to see its impact.
-          </p>
-        </div>
+        <PageHeader
+          title="Enterprise View"
+          subtitle="Full visibility across processes, systems, data assets, domains, and people. Select a view to focus on specific relationships, then click any item to see its impact."
+        >
+          <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
+            See all processes, systems, assets, domains, and people in one place.
+            Click any card to expand, then click an item to run impact analysis — the sidebar
+            shows every entity connected to your selection.
+          </HelpPopover>
+        </PageHeader>
 
         {/* View selector */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>

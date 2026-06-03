@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
@@ -216,7 +217,7 @@ export default function GapDetectionPage() {
   if (loading) {
     return (
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Gap Detection</h1>
+        <PageHeader title="Gap Detection" />
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
           <SkeletonRows rows={5} columns={4} />
         </div>
@@ -227,7 +228,7 @@ export default function GapDetectionPage() {
   if (!data || !summary) {
     return (
       <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Gap Detection</h1>
+        <PageHeader title="Gap Detection" />
         <div style={{ color: 'var(--color-text-muted)' }}>No data available.</div>
       </div>
     );
@@ -239,13 +240,10 @@ export default function GapDetectionPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Gap Detection</h1>
-      </div>
-      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
-        Identifies gaps in process coverage, data governance, ownership, and data quality across the organization.
-      </p>
+      <PageHeader
+        title="Gap Detection"
+        subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
+      />
 
       {/* Summary cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
