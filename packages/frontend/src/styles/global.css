@@ -53,10 +53,19 @@ ol {
   --color-primary-hover: #15655a;
   --color-primary-light: #d1f0eb;
 
-  --color-sidebar: #0f4f46;
-  --color-sidebar-hover: #1a6b5f;
-  --color-sidebar-text: #a0d8cf;
+  /* Sidebar palette is a near-black slate (Collibra / Purview /
+     Linear lineage), not the brand teal. The teal is reserved as an
+     accent — used on the active-row left bar and the active label —
+     so the rail reads as neutral chrome and the content area's
+     brand colour stands out. */
+  --color-sidebar: #0f172a;             /* slate-900 */
+  --color-sidebar-hover: #1e293b;       /* slate-800 */
+  --color-sidebar-active: #1e293b;      /* slate-800 (same as hover; accent bar differentiates) */
+  --color-sidebar-text: #cbd5e1;        /* slate-300 — readable on slate-900 */
   --color-sidebar-text-active: #ffffff;
+  --color-sidebar-text-muted: #94a3b8;  /* slate-400 — section labels */
+  --color-sidebar-border: #1e293b;      /* slate-800 — dividers + brand row underline */
+  --color-sidebar-accent: #2dd4bf;      /* teal-400 — active-row left bar; pops on near-black */
 
   --color-text: #1e293b;
   --color-text-secondary: #64748b;

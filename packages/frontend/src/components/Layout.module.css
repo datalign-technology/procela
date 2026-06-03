@@ -40,7 +40,7 @@
   padding: 12px;
   background: none;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--color-sidebar-border);
   color: var(--color-sidebar-text);
   font-size: 18px;
   cursor: pointer;
@@ -58,7 +58,7 @@
   font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.025em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-sidebar-border);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -89,7 +89,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--color-sidebar-text-muted);
 }
 
 /* Divider label inside an expanded section (Governance: Set up /
@@ -101,7 +101,8 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--color-sidebar-text-muted);
+  opacity: 0.85;
 }
 
 .navSpacer {
@@ -110,7 +111,7 @@
 
 .navDivider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-sidebar-border);
   margin: 4px 24px;
 }
 
@@ -121,12 +122,15 @@
   padding: 10px 24px;
   font-size: 14px;
   color: var(--color-sidebar-text);
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
   border: none;
   background: none;
   cursor: pointer;
   text-align: left;
   width: 100%;
+  /* Reserve the left-bar gutter so .navLinkActive's inset shadow
+     doesn't shift text horizontally on activation. */
+  box-shadow: inset 3px 0 0 transparent;
 }
 
 .navLink:hover {
@@ -134,9 +138,19 @@
   color: var(--color-sidebar-text-active);
 }
 
+/* Active row: slate-800 fill + 3px brand-teal accent bar on the left.
+   The inset box-shadow technique avoids changing the box model so the
+   rest of the rail stays pixel-stable when items activate. The icon
+   and label both move to the accent colour so the row reads as a
+   single unit, with the bar acting as a wayfinder. */
 .navLinkActive {
-  background-color: var(--color-sidebar-hover);
+  background-color: var(--color-sidebar-active);
   color: var(--color-sidebar-text-active);
+  box-shadow: inset 3px 0 0 var(--color-sidebar-accent);
+}
+
+.navLinkActive .navIcon {
+  color: var(--color-sidebar-accent);
 }
 
 .navLinkChild {
@@ -156,9 +170,9 @@
   position: fixed;
   min-width: 200px;
   background: var(--color-sidebar);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--color-sidebar-border);
   border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   padding: 6px 0;
   z-index: 1000;
 }
@@ -169,7 +183,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-sidebar-text-muted);
 }
 
 .navFlyoutLink {
@@ -179,8 +193,9 @@
   padding: 8px 16px;
   font-size: 14px;
   color: var(--color-sidebar-text);
-  transition: background-color 0.12s;
+  transition: background-color 0.12s, color 0.12s, box-shadow 0.12s;
   white-space: nowrap;
+  box-shadow: inset 3px 0 0 transparent;
 }
 
 .navFlyoutLink:hover {
@@ -189,8 +204,13 @@
 }
 
 .navFlyoutLinkActive {
-  background-color: var(--color-sidebar-hover);
+  background-color: var(--color-sidebar-active);
   color: var(--color-sidebar-text-active);
+  box-shadow: inset 3px 0 0 var(--color-sidebar-accent);
+}
+
+.navFlyoutLinkActive .navIcon {
+  color: var(--color-sidebar-accent);
 }
 
 /* ── Main area ── */
@@ -381,7 +401,7 @@
     z-index: 50;
     flex-direction: row;
     overflow-x: auto;
-    border-top: 1px solid rgba(255,255,255,0.1);
+    border-top: 1px solid var(--color-sidebar-border);
   }
   .sidebarBrand { display: none; }
   .sidebarNav {

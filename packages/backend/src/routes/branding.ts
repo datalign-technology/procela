@@ -37,8 +37,8 @@ const DEFAULT_BRANDING: BrandingConfig = {
   primaryColor:       '#1a7a6d',
   primaryHoverColor:  '#15655a',
   primaryLightColor:  '#d1f0eb',
-  sidebarColor:       '#0f4f46',
-  sidebarHoverColor:  '#1a6b5f',
+  sidebarColor:       '#0f172a',
+  sidebarHoverColor:  '#1e293b',
   updatedAt:          new Date(0).toISOString(),
   updatedBy:          null,
 };
