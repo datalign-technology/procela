@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -337,18 +338,16 @@ export default function GovernancePoliciesPage() {
         { label: 'Establish governance groups', met: deps.hasGroups, link: '/governance' },
       ]} />
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Documents</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Charters, frameworks, standards, and policies — every formal governance document with a lifecycle. Controls hang off Policies specifically (the rule-shaped subset).
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <ColumnPicker state={policyCols} />
-          {canWrite && <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} />}
-        </div>
-      </div>
+      <PageHeader
+        title="Governance Documents"
+        subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle. Controls hang off Policies specifically (the rule-shaped subset)."
+        actions={
+          <>
+            <ColumnPicker state={policyCols} />
+            {canWrite && <IconButton icon="plus" label="Add document" variant="primary" onClick={openAdd} />}
+          </>
+        }
+      />
 
       {/* documentType filter — segmented control. "All" is the
           default so the page still reads as one combined list. */}

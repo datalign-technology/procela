@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePermissions } from '../hooks/usePermissions';
@@ -310,39 +311,38 @@ export default function MappingsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Mapping</h1>
-            <InfoTip term="Mapping" />
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Flat audit view of every activity ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each activity in the Process Catalog — this page is for cross-process review and bulk edits.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {canWrite && (
-            <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
-          )}
-          {mappings.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'mappings',
-              sheetName: 'Mappings',
-              headers: ['Process Activity', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'],
-              rows: mappings.map((m) => [
-                m.stepInfo ? formatStepPath(m.stepInfo) : m.processStepId,
-                m.assetInfo ? m.assetInfo.assetName : m.dataAssetId,
-                m.linkType,
-                m.aiSuggested ? 'Yes' : 'No',
-                m.notes,
-              ]),
-            })} />
-          )}
-          {canWrite && (
-            <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Data Mapping"
+        subtitle={
+          <>Flat audit view of every activity ↔ data-asset mapping, with bulk add / delete and a batch wizard. The day-to-day place to <em>create</em> these links is inline on each activity in the Process Catalog — this page is for cross-process review and bulk edits.</>
+        }
+        actions={
+          <>
+            {canWrite && (
+              <IconButton icon="settings" label="Batch mapping wizard" onClick={() => setShowBatchWizard(true)} />
+            )}
+            {mappings.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'mappings',
+                sheetName: 'Mappings',
+                headers: ['Process Activity', 'Data Asset', 'Link Type', 'AI Suggested', 'Notes'],
+                rows: mappings.map((m) => [
+                  m.stepInfo ? formatStepPath(m.stepInfo) : m.processStepId,
+                  m.assetInfo ? m.assetInfo.assetName : m.dataAssetId,
+                  m.linkType,
+                  m.aiSuggested ? 'Yes' : 'No',
+                  m.notes,
+                ]),
+              })} />
+            )}
+            {canWrite && (
+              <IconButton icon="plus" label="Add mapping" variant="primary" onClick={openForm} />
+            )}
+          </>
+        }
+      >
+        <InfoTip term="Mapping" />
+      </PageHeader>
 
       {/* Coverage gaps */}
       {!loading && (unmappedCount > 0 || unlinkedCount > 0) && (

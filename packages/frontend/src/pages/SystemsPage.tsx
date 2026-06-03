@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
@@ -787,68 +788,65 @@ export default function SystemsPage() {
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Systems</h1>
-            <HelpPopover id="systems-intro" title="Systems">
-              Register the applications and platforms your organization uses. Include business
-              criticality, vendor, and integration points so you can assess the impact of changes.
-            </HelpPopover>
+      <PageHeader
+        title="Systems"
+        subtitle="Applications and platforms where your organization's data lives."
+        meta={systems.length > 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{systems.length} systems</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{new Set(systems.map((s) => s.systemType).filter(Boolean)).size} types</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{systems.filter((s) => s.businessCriticality === 'HIGH').length} high criticality</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{connections.filter((c) => c.status === 'CONNECTED').length} connected</span>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Applications and platforms where your organization's data lives.
-          </p>
-          {systems.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-              <span>{systems.length} systems</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{new Set(systems.map((s) => s.systemType).filter(Boolean)).size} types</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{systems.filter((s) => s.businessCriticality === 'HIGH').length} high criticality</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{connections.filter((c) => c.status === 'CONNECTED').length} connected</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <SavedViewsMenu
-            pageKey="systems"
-            currentFilters={{ filterType, filterCriticality, searchQuery }}
-            onApply={(f) => {
-              setFilterType((f.filterType as string) || '');
-              setFilterCriticality((f.filterCriticality as string) || '');
-              setSearchQuery((f.searchQuery as string) || '');
-            }}
-          />
-          <ExportMenu
-            disabled={systems.length === 0}
-            build={() => ({
-              filenameBase: 'systems',
-              sheetName: 'Systems',
-              headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
-              rows: systems.map((s) => [
-                s.name,
-                s.systemType,
-                s.vendor || '',
-                s.businessCriticality || '',
-                s.connectivity ? CONNECTIVITY_LABEL[s.connectivity] : '',
-                s.connectionStatus || '',
-                s.ownerName || '',
-                s.deputyOwnerName || '',
-                (s.custodianNames || []).join('; '),
-                s.description,
-              ]),
-            })}
-          />
-          <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
-          <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
-          <ColumnPicker state={systemCols} />
-          {canOwnHere && (
-            <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
-          )}
-        </div>
-      </div>
+        ) : undefined}
+        actions={
+          <>
+            <SavedViewsMenu
+              pageKey="systems"
+              currentFilters={{ filterType, filterCriticality, searchQuery }}
+              onApply={(f) => {
+                setFilterType((f.filterType as string) || '');
+                setFilterCriticality((f.filterCriticality as string) || '');
+                setSearchQuery((f.searchQuery as string) || '');
+              }}
+            />
+            <ExportMenu
+              disabled={systems.length === 0}
+              build={() => ({
+                filenameBase: 'systems',
+                sheetName: 'Systems',
+                headers: ['Name', 'Type', 'Vendor', 'Criticality', 'Connectivity', 'Connection Status', 'Owner', 'Deputy Owner', custodiansLabel, 'Description'],
+                rows: systems.map((s) => [
+                  s.name,
+                  s.systemType,
+                  s.vendor || '',
+                  s.businessCriticality || '',
+                  s.connectivity ? CONNECTIVITY_LABEL[s.connectivity] : '',
+                  s.connectionStatus || '',
+                  s.ownerName || '',
+                  s.deputyOwnerName || '',
+                  (s.custodianNames || []).join('; '),
+                  s.description,
+                ]),
+              })}
+            />
+            <IconButton icon="upload" label="Import systems" onClick={() => setShowImport(true)} />
+            <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
+            <ColumnPicker state={systemCols} />
+            {canOwnHere && (
+              <IconButton icon="plus" label="Add system" variant="primary" onClick={openAdd} />
+            )}
+          </>
+        }
+      >
+        <HelpPopover id="systems-intro" title="Systems">
+          Register the applications and platforms your organization uses. Include business
+          criticality, vendor, and integration points so you can assess the impact of changes.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Wrong-level banner. Systems can only be owned by companies
           or divisions; if the active scope is a department or team

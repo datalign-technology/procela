@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import PageHeader from '../components/PageHeader';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
@@ -943,55 +944,54 @@ export default function DataAssetsPage() {
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Assets</h1>
-            <HelpPopover id="data-assets-overview" title="Data assets">
-              Define your data in business terms first ("Customer accounts",
-              "Billing records") — then link each one to where it actually
-              lives via a connection. Asset identity stays stable even when
-              the storage location changes.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4, maxWidth: 760 }}>
-            Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <SavedViewsMenu
-            pageKey="data-assets"
-            currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, searchQuery }}
-            onApply={(f) => {
-              setFilterCategory((f.filterCategory as string) || '');
-              setFilterTier((f.filterTier as string) || '');
-              setFilterSystemId((f.filterSystemId as string) || '');
-              setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
-              setSearchQuery((f.searchQuery as string) || '');
-            }}
-          />
-          {assets.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'data-assets',
-              sheetName: 'Data Assets',
-              headers: ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'],
-              rows: assets.map((a) => [
-                a.name,
-                a.description,
-                systemName(a.systemId),
-                a.sourceAsset ? `${a.sourceAsset}${a.sourceColumn ? '.' + a.sourceColumn : ''}` : '',
-                a.domainName || '',
-                a.ownerName || '',
-                a.stewardName || '',
-              ]),
-            })} />
-          )}
-          <ColumnPicker state={colPicker} />
-          {canWrite && canOwnHere && (
-            <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Data Assets"
+        subtitle={
+          <>Business-level concepts &mdash; <em>&ldquo;Customer Accounts&rdquo;</em>, <em>&ldquo;Billing Records&rdquo;</em>, <em>&ldquo;Inventory Levels&rdquo;</em>. Not files or columns: the physical tables, files, and columns that back each asset are configured via Bindings on the row.</>
+        }
+        actions={
+          <>
+            <SavedViewsMenu
+              pageKey="data-assets"
+              currentFilters={{ filterCategory, filterTier, filterSystemId, filterOrigin, searchQuery }}
+              onApply={(f) => {
+                setFilterCategory((f.filterCategory as string) || '');
+                setFilterTier((f.filterTier as string) || '');
+                setFilterSystemId((f.filterSystemId as string) || '');
+                setFilterOrigin((f.filterOrigin as '' | 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED') || '');
+                setSearchQuery((f.searchQuery as string) || '');
+              }}
+            />
+            {assets.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'data-assets',
+                sheetName: 'Data Assets',
+                headers: ['Name', 'Description', 'System', 'Source', 'Domain', 'Owner', 'Steward'],
+                rows: assets.map((a) => [
+                  a.name,
+                  a.description,
+                  systemName(a.systemId),
+                  a.sourceAsset ? `${a.sourceAsset}${a.sourceColumn ? '.' + a.sourceColumn : ''}` : '',
+                  a.domainName || '',
+                  a.ownerName || '',
+                  a.stewardName || '',
+                ]),
+              })} />
+            )}
+            <ColumnPicker state={colPicker} />
+            {canWrite && canOwnHere && (
+              <IconButton icon="plus" label="Add data asset" variant="primary" onClick={openAdd} />
+            )}
+          </>
+        }
+      >
+        <HelpPopover id="data-assets-overview" title="Data assets">
+          Define your data in business terms first ("Customer accounts",
+          "Billing records") — then link each one to where it actually
+          lives via a connection. Asset identity stays stable even when
+          the storage location changes.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Wrong-level banner. Data assets can only be owned by
           companies or divisions; if the active scope is a

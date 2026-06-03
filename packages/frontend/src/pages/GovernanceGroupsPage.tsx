@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -757,50 +758,46 @@ export default function GovernanceGroupsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Governance Groups</h1>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Manage governance councils, committees, and working groups. {flatGroups.length} groups total.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {flatGroups.length > 0 && (
-            <IconButton icon="eye" label="Visualize"
-              onClick={() => navigate('/governance/visualization')} />
-          )}
-          {flatGroups.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'governance-groups',
-              sheetName: 'Governance Groups',
-              headers: ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'],
-              rows: flatGroups.map((g) => [
-                g.name,
-                GROUP_TYPE_LABELS[g.type] || g.type,
-                flatGroups.find((p) => p.id === g.parentId)?.name || '',
-                g.description,
-                g.members.length,
-                g.status,
-              ]),
-            })} />
-          )}
-          {canWrite && (
-            <IconButton icon="wand"
-              label={
-                flatGroups.length > 0
-                  ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
-                  : 'Generate governance template'
-              }
-              disabled={flatGroups.length > 0}
-              onClick={() => setConfirmGenerate(true)} />
-          )}
-          {canWrite && (
-            <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Governance Groups"
+        subtitle={`Manage governance councils, committees, and working groups. ${flatGroups.length} groups total.`}
+        actions={
+          <>
+            {flatGroups.length > 0 && (
+              <IconButton icon="eye" label="Visualize"
+                onClick={() => navigate('/governance/visualization')} />
+            )}
+            {flatGroups.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'governance-groups',
+                sheetName: 'Governance Groups',
+                headers: ['Name', 'Type', 'Parent', 'Description', 'Members', 'Status'],
+                rows: flatGroups.map((g) => [
+                  g.name,
+                  GROUP_TYPE_LABELS[g.type] || g.type,
+                  flatGroups.find((p) => p.id === g.parentId)?.name || '',
+                  g.description,
+                  g.members.length,
+                  g.status,
+                ]),
+              })} />
+            )}
+            {canWrite && (
+              <IconButton icon="wand"
+                label={
+                  flatGroups.length > 0
+                    ? `Generate disabled — ${flatGroups.length} group${flatGroups.length === 1 ? '' : 's'} already exist. Delete all to regenerate.`
+                    : 'Generate governance template'
+                }
+                disabled={flatGroups.length > 0}
+                onClick={() => setConfirmGenerate(true)} />
+            )}
+            {canWrite && (
+              <IconButton icon="plus" label="Add group" variant="primary" onClick={openAdd} />
+            )}
+          </>
+        }
+      />
 
       <ConfirmDialog
         open={confirmGenerate}
