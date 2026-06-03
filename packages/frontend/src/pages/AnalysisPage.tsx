@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -417,8 +418,8 @@ export default function AnalysisPage() {
                   </span>
                 )}
                 <button onClick={() => onRemove(i)} aria-label={`Remove ${dimensionLabel(dim)}`}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 14, padding: 0, lineHeight: 1 }}>
-                  ×
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 0, lineHeight: 1, display: 'inline-flex' }}>
+                  <X size={14} strokeWidth={2.4} />
                 </button>
               </span>
             ))}
@@ -486,8 +487,8 @@ export default function AnalysisPage() {
                   <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>by {r.ownerName || '—'}</div>
                 </button>
                 <button onClick={() => setConfirmDelete(r)} aria-label="Delete report"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 14, padding: 2 }}>
-                  ×
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 2, display: 'inline-flex' }}>
+                  <X size={14} strokeWidth={2.4} />
                 </button>
               </div>
             );
@@ -533,7 +534,7 @@ export default function AnalysisPage() {
                   <span style={{ color: 'var(--color-text-muted)' }}>{dimensionLabel(f.dim)}:</span>
                   <strong>{f.label}</strong>
                   <button onClick={() => setFilters((prev) => prev.filter((_, j) => j !== i))} aria-label="Remove filter"
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-text-muted)', fontSize: 12 }}>×</button>
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-text-muted)', display: 'inline-flex' }}><X size={12} strokeWidth={2.4} /></button>
                 </span>
               ))}
               <button onClick={() => setFilters([])}

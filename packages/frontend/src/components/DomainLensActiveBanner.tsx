@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { useDomainLensStore, useDomainLens, DomainLens } from '../stores/domainLensStore';
 
 // Visible reminder that a per-page domain lens is filtering what the
@@ -40,7 +41,7 @@ export default function DomainLensActiveBanner({
         borderRadius: 'var(--radius-md)', fontSize: 13, color: '#92400e',
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>⚠</span>
+      <span aria-hidden="true" style={{ display: 'inline-flex' }}><AlertTriangle size={15} strokeWidth={2.2} /></span>
       <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 11 }}>Filter active</span>
       <span>Showing <strong>{which} {entityLabel}</strong> only — some {entityLabel} are hidden.</span>
       <button

@@ -1,5 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useTierLabel } from '../lib/governanceTier';
 import { useOrgContext } from '../stores/orgContext';
@@ -216,7 +217,7 @@ export default function EnterpriseViewPage() {
           background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
         }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>{'⚠'}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><AlertTriangle size={32} strokeWidth={1.8} /></div>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Couldn't load enterprise view</div>
           <div style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>{loadError}</div>
           <button

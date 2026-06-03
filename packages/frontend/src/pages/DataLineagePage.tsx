@@ -1,5 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -484,7 +485,7 @@ export default function DataLineagePage() {
           background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
         }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>{'⚠'}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><AlertTriangle size={32} strokeWidth={1.8} /></div>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Couldn't load data lineage</div>
           <div style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>{loadError}</div>
           <button
@@ -1207,8 +1208,9 @@ function DbtCloudConnectionForm({
               <option value="WEEKLY">Every week</option>
             </select>
           </FormRow>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-            ⚠ Tokens are stored in plaintext in the prototype. Replace with secret-manager refs for production.
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+            <AlertTriangle size={12} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>Tokens are stored in plaintext in the prototype. Replace with secret-manager refs for production.</span>
           </div>
           {error && (
             <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#b91c1c', fontSize: 12 }}>{error}</div>
@@ -1509,7 +1511,7 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
         padding: 40, textAlign: 'center',
         color: 'var(--color-text-muted)',
       }}>
-        <div style={{ fontSize: 32, marginBottom: 8 }}>{'⇄'}</div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><ArrowLeftRight size={32} strokeWidth={1.8} /></div>
         <div>No asset-level lineage yet. Import a dbt manifest to populate this view.</div>
       </div>
     );

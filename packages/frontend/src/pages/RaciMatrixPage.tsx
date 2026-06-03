@@ -1,5 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -433,8 +434,8 @@ export default function RaciMatrixPage() {
                           <span style={{ fontSize: 13, fontWeight: cfg.weight }}>{row.name}</span>
                           {(warningMap.get(row.id) || []).length > 0 && (
                             <span title={(warningMap.get(row.id) || []).join(', ')}
-                              style={{ fontSize: 10, color: '#d97706', marginLeft: 4, flexShrink: 0 }}>
-                              {'⚠'}
+                              style={{ color: '#d97706', marginLeft: 4, flexShrink: 0, display: 'inline-flex' }}>
+                              <AlertTriangle size={11} strokeWidth={2.2} />
                             </span>
                           )}
                         </div>

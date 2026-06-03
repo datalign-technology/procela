@@ -12,6 +12,7 @@ import ShortcutsHint from './ShortcutsHint';
 import OnboardingWizard from './OnboardingWizard';
 import CommandPalette from './CommandPalette';
 import ProgressRing from './ProgressRing';
+import { X } from 'lucide-react';
 
 import DensityToggle from './DensityToggle';
 import TerminologyToggle from './TerminologyToggle';
@@ -583,8 +584,8 @@ function MobileNavDrawer({ sections, bottomItems, pathname, onClose }: {
           type="button"
           onClick={onClose}
           aria-label="Close navigation menu"
-          style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1, padding: 4 }}
-        >×</button>
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1, padding: 4, display: 'inline-flex' }}
+        ><X size={20} strokeWidth={2.2} /></button>
       </div>
       <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 24 }}>
         {sections.map((section, i) => (

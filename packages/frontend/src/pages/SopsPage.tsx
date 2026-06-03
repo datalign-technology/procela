@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -425,7 +426,7 @@ export default function SopsPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     </div>
                   </div>
-                  <button onClick={() => removeStep(idx)} disabled={form.steps.length <= 1} style={{ background: 'none', border: 'none', cursor: form.steps.length <= 1 ? 'default' : 'pointer', color: form.steps.length <= 1 ? 'var(--color-border)' : 'var(--color-error, #dc2626)', fontSize: 14, padding: 4 }}>×</button>
+                  <button onClick={() => removeStep(idx)} disabled={form.steps.length <= 1} aria-label="Remove step" style={{ background: 'none', border: 'none', cursor: form.steps.length <= 1 ? 'default' : 'pointer', color: form.steps.length <= 1 ? 'var(--color-border)' : 'var(--color-error, #dc2626)', padding: 4, display: 'inline-flex' }}><X size={14} strokeWidth={2.4} /></button>
                 </div>
               </div>
             ))}

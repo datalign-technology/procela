@@ -20,7 +20,9 @@ interface EmptyStateAction {
 }
 
 interface EmptyStateProps {
-  icon?: string;                     // optional unicode glyph
+  // Either a Unicode glyph (legacy) or a React node (e.g. a Lucide
+  // icon element). Rendered inside a centred 36px container.
+  icon?: ReactNode;
   title: string;
   description?: string | ReactNode;
   action?: EmptyStateAction;

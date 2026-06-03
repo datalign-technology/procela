@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
 // OrgDeleteCleanupDialog — replaces a generic ConfirmDialog for the
@@ -288,7 +289,7 @@ export default function OrgDeleteCleanupDialog({
           background: '#7f1d1d', color: '#fff',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>{'⚠'}</span>
+          <span aria-hidden style={{ display: 'inline-flex' }}><AlertTriangle size={18} strokeWidth={2.2} /></span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>This action cannot be undone.</div>
             <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>

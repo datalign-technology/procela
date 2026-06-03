@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { X, ArrowLeftRight } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
@@ -502,7 +503,7 @@ const quickActions = [
   { icon: '✶', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
   { icon: '⛁', label: 'Data Assets', description: 'Define and manage data assets', link: '/data-assets' },
   { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
-  { icon: '↔', label: 'Data Mapping', description: 'Link data to process activities', link: '/mappings' },
+  { icon: <ArrowLeftRight size={24} strokeWidth={1.8} />, label: 'Data Mapping', description: 'Link data to process activities', link: '/mappings' },
   { icon: '▨', label: 'Enterprise View', description: 'Full cross-entity visibility', link: '/enterprise-view' },
   { icon: '⊞', label: 'Analysis', description: 'Pivot the catalog (systems × domains, roles × people…)', link: '/analysis' },
 ];
@@ -558,7 +559,7 @@ function QuickActions() {
 
 function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Build suggestions based on current state
-  const suggestions: Array<{ icon: string; title: string; description: string; link: string }> = [];
+  const suggestions: Array<{ icon: React.ReactNode; title: string; description: string; link: string }> = [];
 
   // Phase 1: No processes yet
   if (stats.valueStreams === 0) {
@@ -583,7 +584,7 @@ function WhatsNext({ stats }: { stats: DashboardStats }) {
   // Phase 3: Assets exist but no mappings
   if (stats.dataAssets > 0 && stats.mappings === 0) {
     suggestions.push({
-      icon: '↔',
+      icon: <ArrowLeftRight size={20} strokeWidth={1.8} />,
       title: 'Map data to processes',
       description: `You have ${stats.dataAssets} data asset${stats.dataAssets > 1 ? 's' : ''} but none are linked to process activities. Data Mapping reveals dependencies and gaps.`,
       link: '/mappings',
@@ -1028,9 +1029,9 @@ function SetupCompleteBanner({ stats, orgId }: { stats: DashboardStats; orgId: s
         aria-label="Dismiss setup-complete message"
         style={{
           marginLeft: 'auto', background: 'transparent', border: 'none',
-          color: '#166534', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4,
+          color: '#166534', cursor: 'pointer', lineHeight: 1, padding: 4, display: 'inline-flex',
         }}
-      >×</button>
+      ><X size={16} strokeWidth={2.4} /></button>
     </div>
   );
 }

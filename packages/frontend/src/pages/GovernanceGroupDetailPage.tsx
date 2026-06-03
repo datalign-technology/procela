@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -365,7 +366,7 @@ export default function GovernanceGroupDetailPage() {
 
   if (error || !group) return (
     <EmptyState
-      icon={'⚠'}
+      icon={<AlertTriangle size={36} strokeWidth={1.8} />}
       title={error || 'Group not found'}
       description="The governance group you're looking for may have been deleted, or you don't have access."
       action={{ label: '← Back to Groups', onClick: () => navigate('/governance-groups') }}

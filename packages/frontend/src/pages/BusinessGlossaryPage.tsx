@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -877,7 +878,7 @@ export default function BusinessGlossaryPage() {
             {loading ? (
               <SkeletonRows rows={5} columns={6} />
             ) : loadError && terms.length === 0 ? (
-              <EmptyState icon={'⚠'} title="Couldn't load glossary"
+              <EmptyState icon={<AlertTriangle size={36} strokeWidth={1.8} />} title="Couldn't load glossary"
                 description={loadError}
                 action={{ label: 'Retry', onClick: () => { setLoading(true); fetchData(); } }} />
             ) : terms.length === 0 && !showForm ? (

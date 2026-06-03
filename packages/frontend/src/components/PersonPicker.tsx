@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { formatPersonLabel } from '../lib/personLabel';
 
@@ -348,8 +349,8 @@ export default function PersonPicker({
                 <button
                   onClick={() => onChange(selectedKeys.filter((x) => x !== k))}
                   aria-label={`Remove ${p?.name || k}`}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-text-muted)', fontSize: 12 }}
-                >×</button>
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-text-muted)', display: 'inline-flex' }}
+                ><X size={12} strokeWidth={2.4} /></button>
               </span>
             );
           })}
