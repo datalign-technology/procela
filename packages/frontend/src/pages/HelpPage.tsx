@@ -1,3 +1,5 @@
+import PageHeader from '../components/PageHeader';
+
 const sectionStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
@@ -71,21 +73,23 @@ const kbdStyle: React.CSSProperties = {
 export default function HelpPage() {
   return (
     <div style={{ maxWidth: 820, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 8 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Help Guide</h1>
-        <button
-          onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
-          style={{
-            padding: '8px 16px', background: 'var(--color-surface)',
-            color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
-            borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-            flexShrink: 0,
-          }}
-          title="Show the three-phase Define / Connect / Discover intro again"
-        >
-          Replay intro
-        </button>
-      </div>
+      <PageHeader
+        title="Help Guide"
+        actions={
+          <button
+            onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
+            style={{
+              padding: '8px 16px', background: 'var(--color-surface)',
+              color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+              borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+              flexShrink: 0,
+            }}
+            title="Show the three-phase Define / Connect / Discover intro again"
+          >
+            Replay intro
+          </button>
+        }
+      />
       <p style={{ ...pStyle, marginBottom: 16 }}>
         Procela is a DAMA-aligned governance operating platform that helps organizations design, execute, and mature
         data governance using workflows, accountability models, and structured procedures.

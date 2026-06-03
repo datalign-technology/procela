@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -877,22 +878,17 @@ export default function PeoplePage() {
     <div>
       <style>{`@keyframes highlightPulse { 0% { background: #fef3c7; } 100% { background: transparent; } }`}</style>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>People</h1>
-            <HelpPopover id="people-overview" title="People">
-              Everyone in your directory, grouped by the organization they
-              belong to. People are assigned as owners and stewards across
-              processes, systems, and data assets, and hold governance roles.
-              Pick an organization on the left to narrow the list.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            {people.length} people across {flatOrgs.length} organizations. Filter by organization to narrow the list.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="People"
+        subtitle={`${people.length} people across ${flatOrgs.length} organizations. Filter by organization to narrow the list.`}
+      >
+        <HelpPopover id="people-overview" title="People">
+          Everyone in your directory, grouped by the organization they
+          belong to. People are assigned as owners and stewards across
+          processes, systems, and data assets, and hold governance roles.
+          Pick an organization on the left to narrow the list.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Side-by-side: Org tree (left) + People list (center) + Preview (right) */}
       <div style={{ display: 'grid', gridTemplateColumns: previewPersonId ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>

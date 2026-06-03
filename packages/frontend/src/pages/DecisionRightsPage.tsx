@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -476,35 +477,33 @@ export default function DecisionRightsPage() {
     <div>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Decision Rights</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4, maxWidth: 720 }}>
-            Who has authority to decide, recommend, approve, and be informed for governance decisions.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {canWrite && rows.length === 0 && (
-            <button
-              style={{ ...btnSecondary, opacity: seeding ? 0.6 : 1, cursor: seeding ? 'not-allowed' : 'pointer' }}
-              disabled={seeding}
-              onClick={handleSeed}
-            >
-              {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
-            </button>
-          )}
-          <SavedViewsMenu
-            pageKey="decision-rights"
-            currentFilters={{ categoryFilter, searchQuery }}
-            onApply={(f) => {
-              setCategoryFilter(((f.categoryFilter as 'ALL' | DecisionCategory) || 'ALL'));
-              setSearchQuery((f.searchQuery as string) || '');
-            }}
-          />
-          <ColumnPicker state={decisionCols} />
-          {canWrite && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
-        </div>
-      </div>
+      <PageHeader
+        title="Decision Rights"
+        subtitle="Who has authority to decide, recommend, approve, and be informed for governance decisions."
+        actions={
+          <>
+            {canWrite && rows.length === 0 && (
+              <button
+                style={{ ...btnSecondary, opacity: seeding ? 0.6 : 1, cursor: seeding ? 'not-allowed' : 'pointer' }}
+                disabled={seeding}
+                onClick={handleSeed}
+              >
+                {seeding ? 'Seeding...' : 'Seed Standard Decisions'}
+              </button>
+            )}
+            <SavedViewsMenu
+              pageKey="decision-rights"
+              currentFilters={{ categoryFilter, searchQuery }}
+              onApply={(f) => {
+                setCategoryFilter(((f.categoryFilter as 'ALL' | DecisionCategory) || 'ALL'));
+                setSearchQuery((f.searchQuery as string) || '');
+              }}
+            />
+            <ColumnPicker state={decisionCols} />
+            {canWrite && <IconButton icon="plus" label="Add decision" variant="primary" onClick={openAdd} />}
+          </>
+        }
+      />
 
       {/* Search + row-expansion controls. Category filter moved into the
        *  sidebar; expand/collapse-all replaces the visual noise of always

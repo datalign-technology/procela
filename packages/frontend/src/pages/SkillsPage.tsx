@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -249,38 +250,35 @@ export default function SkillsPage() {
     <div>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Skills Taxonomy</h1>
-            <HelpPopover id="skills-taxonomy" title="Skills Taxonomy">
-              DAMA-aligned capabilities that agents and people can possess. Seed the standard
-              taxonomy to get started, then customise to match your organization.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Define and manage the skills your data governance team and AI agents need.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button
-            style={{
-              ...btnSecondary,
-              opacity: skills.length > 0 || seeding ? 0.6 : 1,
-              cursor: skills.length > 0 || seeding ? 'not-allowed' : 'pointer',
-            }}
-            disabled={skills.length > 0 || seeding}
-            onClick={handleSeed}
-            title={skills.length > 0 ? 'Skills already exist for this organization' : 'Seed standard DAMA-aligned skills'}
-          >
-            {seeding ? 'Seeding...' : 'Seed Standard Skills'}
-          </button>
-          {filtered.length > 0 && (
-            <ExportMenu build={buildSkillsExport} />
-          )}
-          <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} />
-        </div>
-      </div>
+      <PageHeader
+        title="Skills Taxonomy"
+        subtitle="Define and manage the skills your data governance team and AI agents need."
+        actions={
+          <>
+            <button
+              style={{
+                ...btnSecondary,
+                opacity: skills.length > 0 || seeding ? 0.6 : 1,
+                cursor: skills.length > 0 || seeding ? 'not-allowed' : 'pointer',
+              }}
+              disabled={skills.length > 0 || seeding}
+              onClick={handleSeed}
+              title={skills.length > 0 ? 'Skills already exist for this organization' : 'Seed standard DAMA-aligned skills'}
+            >
+              {seeding ? 'Seeding...' : 'Seed Standard Skills'}
+            </button>
+            {filtered.length > 0 && (
+              <ExportMenu build={buildSkillsExport} />
+            )}
+            <IconButton icon="plus" label="Add Skill" variant="primary" onClick={openAdd} />
+          </>
+        }
+      >
+        <HelpPopover id="skills-taxonomy" title="Skills Taxonomy">
+          DAMA-aligned capabilities that agents and people can possess. Seed the standard
+          taxonomy to get started, then customise to match your organization.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>

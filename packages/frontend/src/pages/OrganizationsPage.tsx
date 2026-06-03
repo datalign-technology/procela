@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import ExportMenu from '../components/ExportMenu';
@@ -450,48 +451,45 @@ export default function OrganizationsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Organizations</h1>
-            <HelpPopover id="orgs-overview" title="Organizations">
-              The hierarchy of company → division → department → team. The
-              "Working in" selector at the top of every page scopes most of
-              the app to the org you pick — change it to switch context.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            The organization hierarchy. Manage people on the <a href="/people" style={{ color: 'var(--color-primary)' }}>People</a> page.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {flatOrgs.length > 0 && (
-            <IconButton
-              icon="eye"
-              label="Visualize hierarchy"
-              onClick={() => navigate('/organizations/visualization')}
-            />
-          )}
-          {flatOrgs.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'organizations',
-              sheetName: 'Organizations',
-              headers: ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'],
-              rows: flatOrgs.map((o) => [
-                o.name,
-                o.type,
-                flatOrgs.find((p) => p.id === o.parentId)?.name || '',
-                o.industry,
-                o.description,
-                peopleCounts[o.id] || 0,
-              ]),
-            })} />
-          )}
-          <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
-          <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
-          <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />
-        </div>
-      </div>
+      <PageHeader
+        title="Organizations"
+        subtitle={<>The organization hierarchy. Manage people on the <a href="/people" style={{ color: 'var(--color-primary)' }}>People</a> page.</>}
+        actions={
+          <>
+            {flatOrgs.length > 0 && (
+              <IconButton
+                icon="eye"
+                label="Visualize hierarchy"
+                onClick={() => navigate('/organizations/visualization')}
+              />
+            )}
+            {flatOrgs.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'organizations',
+                sheetName: 'Organizations',
+                headers: ['Name', 'Type', 'Parent', 'Industry', 'Description', 'People'],
+                rows: flatOrgs.map((o) => [
+                  o.name,
+                  o.type,
+                  flatOrgs.find((p) => p.id === o.parentId)?.name || '',
+                  o.industry,
+                  o.description,
+                  peopleCounts[o.id] || 0,
+                ]),
+              })} />
+            )}
+            <IconButton icon="upload" label="Import organizations" onClick={() => setShowImport(true)} />
+            <IconButton icon="link" label="Connect to source" onClick={() => setShowSync(true)} />
+            <IconButton icon="plus" label="Add organization" variant="primary" onClick={() => openAddOrg(null)} />
+          </>
+        }
+      >
+        <HelpPopover id="orgs-overview" title="Organizations">
+          The hierarchy of company → division → department → team. The
+          "Working in" selector at the top of every page scopes most of
+          the app to the org you pick — change it to switch context.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Import Org Panel */}
       {showImport && (

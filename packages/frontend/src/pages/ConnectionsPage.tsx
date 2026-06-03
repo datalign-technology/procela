@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
@@ -738,59 +739,55 @@ export default function ConnectionsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Connections</h1>
+      <PageHeader
+        title="Data Connections"
+        subtitle={filterSystem
+          ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
+          : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); credential validation happens when real drivers are wired in.'}
+        meta={connections.length > 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{connections.length} connections</span>
+            <span style={{ color: 'var(--color-border)' }}>&middot;</span>
+            <span>{connectedCount} connected</span>
+            {errorCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span style={{ color: '#dc2626' }}>{errorCount} error</span></>}
+            {untestedCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span>{untestedCount} untested</span></>}
           </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            {filterSystem
-              ? <>Showing connections for <strong>{filterSystem.name}</strong>. <button onClick={() => setSystemFilter('')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>Show all</button></>
-              : 'Connect to external data sources. Test verifies reachability (TCP or HTTP probe); credential validation happens when real drivers are wired in.'}
-          </p>
-          {connections.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-              <span>{connections.length} connections</span>
-              <span style={{ color: 'var(--color-border)' }}>&middot;</span>
-              <span>{connectedCount} connected</span>
-              {errorCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span style={{ color: '#dc2626' }}>{errorCount} error</span></>}
-              {untestedCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span>{untestedCount} untested</span></>}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <SavedViewsMenu
-            pageKey="connections"
-            currentFilters={{ filterConnType, searchQuery }}
-            onApply={(f) => {
-              setFilterConnType((f.filterConnType as string) || '');
-              setSearchQuery((f.searchQuery as string) || '');
-            }}
-          />
-          <ExportMenu
-            disabled={visibleConnections.length === 0}
-            build={() => ({
-              filenameBase: 'connections',
-              sheetName: 'Connections',
-              headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
-              rows: visibleConnections.map((c) => {
-                const ids = c.systemIds && c.systemIds.length > 0 ? c.systemIds : (c.systemId ? [c.systemId] : []);
-                const sysNames = ids.map((id) => systemNameMap[id]).filter(Boolean).join('; ');
-                return [
-                  c.name,
-                  c.connectionType,
-                  c.status,
-                  sysNames,
-                  c.lastTestedAt ? new Date(c.lastTestedAt).toLocaleString() : '',
-                  c.lastTestResult || '',
-                ];
-              }),
-            })}
-          />
-          <ColumnPicker state={connCols} />
-          <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
-        </div>
-      </div>
+        ) : undefined}
+        actions={
+          <>
+            <SavedViewsMenu
+              pageKey="connections"
+              currentFilters={{ filterConnType, searchQuery }}
+              onApply={(f) => {
+                setFilterConnType((f.filterConnType as string) || '');
+                setSearchQuery((f.searchQuery as string) || '');
+              }}
+            />
+            <ExportMenu
+              disabled={visibleConnections.length === 0}
+              build={() => ({
+                filenameBase: 'connections',
+                sheetName: 'Connections',
+                headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
+                rows: visibleConnections.map((c) => {
+                  const ids = c.systemIds && c.systemIds.length > 0 ? c.systemIds : (c.systemId ? [c.systemId] : []);
+                  const sysNames = ids.map((id) => systemNameMap[id]).filter(Boolean).join('; ');
+                  return [
+                    c.name,
+                    c.connectionType,
+                    c.status,
+                    sysNames,
+                    c.lastTestedAt ? new Date(c.lastTestedAt).toLocaleString() : '',
+                    c.lastTestResult || '',
+                  ];
+                }),
+              })}
+            />
+            <ColumnPicker state={connCols} />
+            <IconButton icon="plus" label="Add connection" variant="primary" onClick={openAdd} />
+          </>
+        }
+      />
 
       {/* Two-column layout: Type sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>

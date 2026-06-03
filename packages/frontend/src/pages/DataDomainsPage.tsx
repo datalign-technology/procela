@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -318,41 +319,38 @@ export default function DataDomainsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Data Domains</h1>
-            <HelpPopover id="domains-intro" title="Data Domains">
-              Domains group related data assets into governed categories (e.g. Customer Data, Financial Data).
-              Each domain has an owner, stewards, and a scope definition.
-            </HelpPopover>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            Organize data assets into governed domains with assigned owners and stewards.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {canWrite && domains.length === 0 && (
-            <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
-          )}
-          {domains.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'data-domains',
-              sheetName: 'Data Domains',
-              headers: ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'],
-              rows: domains.map((d) => [
-                d.name,
-                d.description,
-                d.ownerName || '',
-                d.stewards.map((s) => s.name).join('; '),
-                d.assets.map((a) => a.name).join('; '),
-                d.status,
-              ]),
-            })} />
-          )}
-          {canWrite && <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />}
-        </div>
-      </div>
+      <PageHeader
+        title="Data Domains"
+        subtitle="Organize data assets into governed domains with assigned owners and stewards."
+        actions={
+          <>
+            {canWrite && domains.length === 0 && (
+              <IconButton icon="wand" label={generating ? 'Generating...' : 'Generate from Industry'} disabled={generating} onClick={handleGenerate} />
+            )}
+            {domains.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'data-domains',
+                sheetName: 'Data Domains',
+                headers: ['Name', 'Description', 'Owner', 'Stewards', 'Assets', 'Status'],
+                rows: domains.map((d) => [
+                  d.name,
+                  d.description,
+                  d.ownerName || '',
+                  d.stewards.map((s) => s.name).join('; '),
+                  d.assets.map((a) => a.name).join('; '),
+                  d.status,
+                ]),
+              })} />
+            )}
+            {canWrite && <IconButton icon="plus" label="Add domain" variant="primary" onClick={openAdd} />}
+          </>
+        }
+      >
+        <HelpPopover id="domains-intro" title="Data Domains">
+          Domains group related data assets into governed categories (e.g. Customer Data, Financial Data).
+          Each domain has an owner, stewards, and a scope definition.
+        </HelpPopover>
+      </PageHeader>
 
       {/* Ownership gap warning */}
       {unownedCount > 0 && (

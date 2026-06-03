@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -364,47 +365,43 @@ export default function AgentsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Agents</h1>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            {'Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people.'}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organization:</label>
-          <select
-            style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 13 }}
-            value={selectedOrgId}
-            onChange={(e) => applyOrgFilter(e.target.value)}
-          >
-            <option value="">All organizations</option>
-            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-          {filtered.length > 0 && (
-            <ExportMenu build={() => ({
-              filenameBase: 'agents',
-              sheetName: 'Agents',
-              headers: ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'],
-              rows: filtered.map((a) => [
-                a.name,
-                a.agentType,
-                a.provider,
-                a.status,
-                a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join('; '),
-                personNameById[a.ownerPersonId] || '',
-                a.description,
-              ]),
-            })} />
-          )}
-          <IconButton icon="upload" label="Import agents"
-            onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
-          <ColumnPicker state={agentCols} />
-          <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />
-        </div>
-      </div>
+      <PageHeader
+        title="Agents"
+        subtitle="Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people."
+        actions={
+          <>
+            <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organization:</label>
+            <select
+              style={{ ...inputStyle, width: 'auto', minWidth: 200, appearance: 'auto' as any, fontSize: 13 }}
+              value={selectedOrgId}
+              onChange={(e) => applyOrgFilter(e.target.value)}
+            >
+              <option value="">All organizations</option>
+              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            {filtered.length > 0 && (
+              <ExportMenu build={() => ({
+                filenameBase: 'agents',
+                sheetName: 'Agents',
+                headers: ['Name', 'Type', 'Provider', 'Status', 'Organizations', 'Responsible', 'Description'],
+                rows: filtered.map((a) => [
+                  a.name,
+                  a.agentType,
+                  a.provider,
+                  a.status,
+                  a.orgIds.map((oid) => orgNameById[oid]).filter(Boolean).join('; '),
+                  personNameById[a.ownerPersonId] || '',
+                  a.description,
+                ]),
+              })} />
+            )}
+            <IconButton icon="upload" label="Import agents"
+              onClick={() => { setImportOrgId(selectedOrgId); setShowImport(true); }} />
+            <ColumnPicker state={agentCols} />
+            <IconButton icon="plus" label="Add agent" variant="primary" onClick={openAdd} />
+          </>
+        }
+      />
 
       {/* Import Panel */}
       {showImport && (
