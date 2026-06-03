@@ -15,8 +15,18 @@ import {
   RACI_DESCRIPTION,
   RACI_COLOR,
 } from '../lib/roleDefinitions';
-import type { GovernanceRoleDef } from '../types';
-import { PRIORITY_COLORS } from '../types';
+import type { GovernanceRoleDef, RolePriority } from '../types';
+import StatusBadge, { type StatusBadgeVariant } from './StatusBadge';
+
+// Priority levels share their colour story with StatusBadge:
+// ESSENTIAL reads as success, RECOMMENDED as info, OPTIONAL as neutral.
+// Centralised here so the two call sites that surface priority chips
+// stay visually identical without re-importing PRIORITY_COLORS.
+const PRIORITY_TO_VARIANT: Record<RolePriority, StatusBadgeVariant> = {
+  ESSENTIAL: 'success',
+  RECOMMENDED: 'info',
+  OPTIONAL: 'neutral',
+};
 
 // ──────────────────────────────────────────────────────────────────────────
 // RoleDetailDrawer - a slide-in side panel that explains a governance
@@ -136,8 +146,6 @@ export default function RoleDetailDrawer() {
     ? rawLabel.replace('Custodian', custodianLabel)
     : rawLabel;
 
-  const priorityColor = damaDef ? PRIORITY_COLORS[damaDef.priority] : null;
-
   // Title carries the inline priority + scope badges so they sit beside
   // the role name without crowding the close button. Subtitle is the
   // one-line purpose; the rest of the reference content lives in the
@@ -145,29 +153,19 @@ export default function RoleDetailDrawer() {
   const titleNode = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 18 }}>{displayLabel}</span>
-      {priorityColor && damaDef && (
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-          textTransform: 'uppercase', letterSpacing: '0.04em',
-          background: priorityColor.bg, color: priorityColor.text,
-          border: `1px solid ${priorityColor.border}`,
-        }}>
+      {damaDef && (
+        <StatusBadge variant={PRIORITY_TO_VARIANT[damaDef.priority]} outlined>
           {damaDef.priority}
-        </span>
+        </StatusBadge>
       )}
       {/* Scope badge for entity-attached roles - makes it clear at a
         * glance that System Owner is per-system, Domain Owner is
         * per-domain, etc. Helps users grok that two people both
         * being a System Owner isn't a RACI violation. */}
       {category === 'entity' && (
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-          textTransform: 'uppercase', letterSpacing: '0.04em',
-          background: 'var(--color-bg)', color: 'var(--color-text-muted)',
-          border: '1px solid var(--color-border)',
-        }}>
+        <StatusBadge variant="neutral" outlined>
           {scope === 'system' ? 'Per system' : scope === 'dataAsset' ? 'Per asset' : 'Per domain'}
-        </span>
+        </StatusBadge>
       )}
     </div>
   );

@@ -8,7 +8,18 @@ import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { usePermissions } from '../hooks/usePermissions';
-import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PRIORITY_COLORS } from '../types';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
+import type { RolePriority } from '../types';
+import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
+
+// ESSENTIAL reads as success, RECOMMENDED as info, OPTIONAL as neutral —
+// same mapping the RoleDetailDrawer uses so priority chips look identical
+// wherever they appear.
+const PRIORITY_TO_VARIANT: Record<RolePriority, StatusBadgeVariant> = {
+  ESSENTIAL: 'success',
+  RECOMMENDED: 'info',
+  OPTIONAL: 'neutral',
+};
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 
@@ -949,14 +960,13 @@ export default function GovernanceProgramPage() {
                             <div style={{ marginTop: 6 }}>
                               {groupRoles.map((role) => {
                                 const assignees = roleAssignments.filter((a) => a.roleType === role.roleType);
-                                const pc = PRIORITY_COLORS[role.priority];
                                 const isFilled = !role.multiAssign && assignees.length > 0;
                                 return (
                                   <div key={role.roleType} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', marginLeft: 14, background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderLeft: `3px solid ${group.color}`, borderRadius: 'var(--radius-md)', marginBottom: 6 }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                         <span style={{ fontSize: 13, fontWeight: 600 }}>{role.label}</span>
-                                        <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: pc.bg, color: pc.text, textTransform: 'uppercase' }}>{role.priority}</span>
+                                        <StatusBadge variant={PRIORITY_TO_VARIANT[role.priority]}>{role.priority}</StatusBadge>
                                         <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: role.multiAssign ? '#f5f3ff' : '#f0f9ff', color: role.multiAssign ? '#6d28d9' : '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                           {role.multiAssign ? 'Multiple' : 'Single'}
                                         </span>

@@ -1,6 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import clsx from 'clsx';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import styles from './Layout.module.css';
 import Breadcrumbs from './Breadcrumbs';
 import ChatPanel from './ChatPanel';
@@ -11,18 +10,15 @@ import ShortcutsModal from './ShortcutsModal';
 import ShortcutsHint from './ShortcutsHint';
 import OnboardingWizard from './OnboardingWizard';
 import CommandPalette from './CommandPalette';
-import ProgressRing from './ProgressRing';
 import MobileNavDrawer from './MobileNavDrawer';
-import { navIconNode, NavChevron, NAV_MENU_ICON } from './navIcons';
+import NotificationsMenu from './NotificationsMenu';
+import Sidebar from './Sidebar';
 import {
   navSections,
   bottomNavItems,
-  MOBILE_PRIMARY,
   GET_STARTED_ITEM,
-  ROUTE_GROUPS,
   openHelpWindow,
   type NavItem,
-  type NavSection,
 } from './navConfig';
 
 import DensityToggle from './DensityToggle';
@@ -30,23 +26,10 @@ import TerminologyToggle from './TerminologyToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
-import { useSetupStore } from '@/stores/setupStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
-
-interface Notification {
-  id: string;
-  orgId: string;
-  userId: string | null;
-  type: 'INFO' | 'WARNING' | 'ACTION';
-  title: string;
-  message: string;
-  link: string;
-  read: boolean;
-  createdAt: string;
-}
 
 
 export default function Layout() {
@@ -55,18 +38,7 @@ export default function Layout() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey, triggerRefresh } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
-  const { isAdmin, role } = usePermissions();
-
-  // "Get Started" Setup Hub: shown until the active org is fully set up.
-  // Progress is computed by the Hub page and persisted in setupStore; an
-  // undefined value (never visited) keeps the entry visible as a nudge.
-  const setupProgress = useSetupStore((s) => (activeOrgId ? s.progressByOrg[activeOrgId] : undefined));
-  const showSetup = !!activeOrgId && (setupProgress === undefined || setupProgress < 100);
-
-  const baseSections = showSetup
-    ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
-    : navSections;
-  const visibleSections = baseSections.filter((s) => !s.adminOnly || isAdmin);
+  const { role } = usePermissions();
 
   // Apply the customer's theme (company name, logo, colors) as early as
   // possible. The store also fetches from /login via brandingStore bootstrap;
@@ -75,67 +47,13 @@ export default function Layout() {
   useEffect(() => { fetchBranding(); }, [fetchBranding]);
   const [orgOptions, setOrgOptions] = useState<Array<{ id: string; name: string; type: string; parentId: string | null; label: string }>>([]);
 
-  // Sidebar collapse state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
-  // Accordion nav: which section is expanded (one at a time)
-  const activeSectionLabel = (() => {
-    for (const section of navSections) {
-      if (!section.label) continue;
-      const match = section.items.some((item) => {
-        const groupRoutes = ROUTE_GROUPS[item.to];
-        return groupRoutes
-          ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-          : location.pathname === item.to;
-      });
-      if (match) return section.label;
-    }
-    return null;
-  })();
-  // Set of expanded accordion sections. Multi-open: navigating to a
-  // section *adds* it to the open set rather than replacing the
-  // previous one, so bouncing People → Data → People no longer
-  // collapses the section you came from. The user can still close any
-  // section by clicking its header.
-  const [expandedNavSections, setExpandedNavSections] = useState<Set<string>>(
-    () => new Set(activeSectionLabel ? [activeSectionLabel] : []),
-  );
-  const prevPathnameRef = useRef(location.pathname);
-
-  // Auto-expand the active section when navigating; never auto-close.
-  useEffect(() => {
-    if (location.pathname === prevPathnameRef.current) return;
-    prevPathnameRef.current = location.pathname;
-    if (activeSectionLabel && !expandedNavSections.has(activeSectionLabel)) {
-      setExpandedNavSections((prev) => new Set(prev).add(activeSectionLabel));
-    }
-  }, [location.pathname, activeSectionLabel, expandedNavSections]);
 
   // Close the mobile nav drawer on navigation.
   useEffect(() => { setMobileDrawerOpen(false); }, [location.pathname]);
 
-  const toggleNavSection = (label: string) => {
-    setExpandedNavSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  };
 
-  // Flyout for collapsed sidebar
-  const [flyoutSection, setFlyoutSection] = useState<string | null>(null);
-  const [flyoutTop, setFlyoutTop] = useState(0);
-  const flyoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Notification state
-  const [notifCount, setNotifCount] = useState(0);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [notifList, setNotifList] = useState<Notification[]>([]);
-  const [notifLoading, setNotifLoading] = useState(false);
-  const notifWrapperRef = useRef<HTMLDivElement>(null);
 
   // Search state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -255,111 +173,6 @@ export default function Layout() {
   }, [navigate]);
 
 
-  // Notification: fetch unread count on mount and route change
-  const fetchNotifCount = useCallback(async () => {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: { unread: number } }>('/notifications/count');
-      setNotifCount(res.data.unread);
-    } catch { /* */ }
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) fetchNotifCount();
-  }, [isAuthenticated, fetchNotifCount, location.pathname]);
-
-  // Notification: fetch list when panel is opened
-  const fetchNotifList = useCallback(async () => {
-    setNotifLoading(true);
-    try {
-      const res = await apiClient.get<{ success: boolean; data: Notification[] }>('/notifications');
-      setNotifList(res.data);
-    } catch { /* */ }
-    finally { setNotifLoading(false); }
-  }, []);
-
-  const handleNotifToggle = () => {
-    if (!notifOpen) fetchNotifList();
-    setNotifOpen((v) => !v);
-  };
-
-  const handleNotifClick = async (notif: Notification) => {
-    if (!notif.read) {
-      await apiClient.put(`/notifications/${notif.id}/read`);
-      setNotifCount((c) => Math.max(0, c - 1));
-      setNotifList((list) => list.map((n) => n.id === notif.id ? { ...n, read: true } : n));
-    }
-    setNotifOpen(false);
-    navigate(notif.link);
-  };
-
-  const handleMarkAllRead = async () => {
-    disarmClearAll();
-    await apiClient.put('/notifications/read-all');
-    setNotifCount(0);
-    setNotifList((list) => list.map((n) => ({ ...n, read: true })));
-  };
-
-  // "Clear all" deletes every notification with no undo, so it's a
-  // two-click action: the first click arms the button, the second
-  // actually clears. The armed state shows a live countdown so a
-  // paused user isn't surprised by a silent no-op when the window
-  // lapses. Avoids a full modal for a minor action.
-  const [clearAllCountdown, setClearAllCountdown] = useState(0);
-  const clearAllTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const clearAllArmed = clearAllCountdown > 0;
-  const disarmClearAll = () => {
-    if (clearAllTimerRef.current) clearInterval(clearAllTimerRef.current);
-    clearAllTimerRef.current = null;
-    setClearAllCountdown(0);
-  };
-  const handleClearAllNotifications = async () => {
-    if (!clearAllArmed) {
-      setClearAllCountdown(3);
-      if (clearAllTimerRef.current) clearInterval(clearAllTimerRef.current);
-      clearAllTimerRef.current = setInterval(() => {
-        setClearAllCountdown((n) => {
-          if (n <= 1) { disarmClearAll(); return 0; }
-          return n - 1;
-        });
-      }, 1000);
-      return;
-    }
-    disarmClearAll();
-    await apiClient.delete('/notifications/all');
-    setNotifCount(0);
-    setNotifList([]);
-  };
-
-  // Abort an armed "Clear all" whenever the notification panel closes
-  // (toggle, outside-click, Escape, or following a notification) — so
-  // an accidental first click is cancelled by any normal interaction,
-  // not only by waiting out the countdown.
-  useEffect(() => { if (!notifOpen) disarmClearAll(); }, [notifOpen]);
-
-  const handleDismissNotification = async (id: string) => {
-    setNotifList((list) => list.filter((n) => n.id !== id));
-    setNotifCount((c) => Math.max(0, c - 1));
-    try { await apiClient.delete(`/notifications/${id}`); }
-    catch { /* optimistic — already removed from UI */ }
-  };
-
-  // Close notification dropdown on click outside or Escape
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (notifWrapperRef.current && !notifWrapperRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setNotifOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
 
   const fetchOrgs = useCallback(async () => {
     try {
@@ -505,263 +318,7 @@ export default function Layout() {
         * and header straight to the page body. */}
       <a href="#main-content" className="skip-to-content">Skip to main content</a>
       {/* Sidebar */}
-      <aside className={clsx(styles.sidebar, sidebarCollapsed && styles.sidebarCollapsed)}>
-        <div className={styles.sidebarBrand}>
-          <img
-            src={branding.logoUrl || '/procela-icon.png'}
-            alt={branding.companyName || 'Procela'}
-            className={styles.brandIcon}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/procela-icon.png'; }}
-          />
-          {!sidebarCollapsed && <span>{branding.companyName || 'Procela'}</span>}
-        </div>
-        <nav className={styles.sidebarNav}>
-          {isMobile ? (
-            /* On phones the sidebar is a fixed bottom bar with four
-               primary destinations plus a "Menu" button that opens a
-               full-screen drawer with the complete, section-grouped
-               navigation. The earlier flat 30-item horizontal scroll
-               strip made finding anything past the first few icons a
-               sideways-scrolling hunt. */
-            <>
-              {MOBILE_PRIMARY.map((item) => {
-                const isActive = location.pathname === item.to
-                  || (item.to !== '/' && location.pathname.startsWith(item.to + '/'));
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.to === '/'}
-                    className={() => clsx(styles.navLink, isActive && styles.navLinkActive)}
-                    title={item.label}
-                  >
-                    <span className={styles.navIcon}>{navIconNode(item)}</span>
-                    <span style={{ fontSize: 10 }}>{item.label}</span>
-                  </NavLink>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setMobileDrawerOpen(true)}
-                className={styles.navLink}
-                aria-label="Open navigation menu"
-                aria-expanded={mobileDrawerOpen}
-              >
-                <span className={styles.navIcon}>{NAV_MENU_ICON}</span>
-                <span style={{ fontSize: 10 }}>Menu</span>
-              </button>
-            </>
-          ) : visibleSections.map((section, sIdx) => {
-            const isExpanded = section.label ? expandedNavSections.has(section.label) : true;
-            const isFlyoutOpen = sidebarCollapsed && flyoutSection === section.label;
-            const sectionHasActive = section.items.some((item) => {
-              const groupRoutes = ROUTE_GROUPS[item.to];
-              return groupRoutes
-                ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                : location.pathname === item.to;
-            });
-
-            return (
-            <div
-              key={sIdx}
-              className={styles.navGroup}
-              style={{ position: 'relative' }}
-              onMouseEnter={(e) => {
-                if (sidebarCollapsed && section.label) {
-                  if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current);
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setFlyoutTop(rect.top);
-                  setFlyoutSection(section.label);
-                }
-              }}
-              onMouseLeave={() => {
-                if (sidebarCollapsed && section.label) {
-                  flyoutTimeoutRef.current = setTimeout(() => setFlyoutSection(null), 150);
-                }
-              }}
-            >
-              {section.label ? (
-                <>
-                  {/* Section header — clickable accordion toggle. Rendered
-                    * as a real button so it's in the tab order and
-                    * Enter/Space activate it. aria-expanded announces
-                    * the open/closed state to screen readers. */}
-                  <button
-                    type="button"
-                    className={clsx(styles.navLink, sectionHasActive && !isExpanded && styles.navLinkActive)}
-                    onClick={() => {
-                      if (sidebarCollapsed) {
-                        setFlyoutSection(isFlyoutOpen ? null : section.label);
-                      } else {
-                        toggleNavSection(section.label!);
-                      }
-                    }}
-                    aria-expanded={!sidebarCollapsed ? isExpanded : isFlyoutOpen}
-                    aria-label={sidebarCollapsed ? section.label || undefined : undefined}
-                    style={{ cursor: 'pointer', userSelect: 'none', width: '100%', textAlign: 'left', background: 'transparent', fontFamily: 'inherit', color: 'inherit', border: 'none' }}
-                    title={sidebarCollapsed ? section.label : undefined}
-                  >
-                    <span className={styles.navIcon}>{navIconNode(section.items[0])}</span>
-                    {!sidebarCollapsed && (
-                      <>
-                        <span style={{ flex: 1 }}>{section.label}</span>
-                        <NavChevron open={isExpanded} />
-                      </>
-                    )}
-                  </button>
-
-                  {/* Expanded children (accordion — only when sidebar is open) */}
-                  {!sidebarCollapsed && isExpanded && (() => {
-                    const renderItem = (item: NavItem) => {
-                      const groupRoutes = ROUTE_GROUPS[item.to];
-                      const isGroupActive = groupRoutes
-                        ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                        : location.pathname === item.to;
-                      return (
-                        <NavLink
-                          key={item.to}
-                          to={item.to}
-                          end={item.to === '/'}
-                          className={() => clsx(styles.navLink, styles.navLinkChild, isGroupActive && styles.navLinkActive)}
-                        >
-                          <span className={styles.navIcon}>{navIconNode(item)}</span>
-                          {item.label}
-                        </NavLink>
-                      );
-                    };
-                    if (!section.subGroups) return section.items.map(renderItem);
-                    // Labelled sub-clusters: a small uppercase divider
-                    // above each group's items. Falls back to flat for
-                    // any item not placed in a cluster.
-                    const byTo = new Map(section.items.map((i) => [i.to, i]));
-                    return section.subGroups.map((sg) => (
-                      <div key={sg.label}>
-                        <div className={styles.navSubGroupLabel}>{sg.label}</div>
-                        {sg.itemTos.map((to) => byTo.get(to)).filter(Boolean).map((i) => renderItem(i as NavItem))}
-                      </div>
-                    ));
-                  })()}
-
-                  {/* Flyout panel (collapsed sidebar hover) */}
-                  {sidebarCollapsed && isFlyoutOpen && (
-                    <div
-                      className={styles.navFlyout}
-                      style={{ left: 60, top: flyoutTop }}
-                      onMouseEnter={() => { if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current); }}
-                      onMouseLeave={() => { flyoutTimeoutRef.current = setTimeout(() => setFlyoutSection(null), 150); }}
-                    >
-                      <div className={styles.navFlyoutLabel}>{section.label}</div>
-                      {(() => {
-                        const renderFlyoutItem = (item: NavItem) => {
-                          const groupRoutes = ROUTE_GROUPS[item.to];
-                          const isGroupActive = groupRoutes
-                            ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                            : location.pathname === item.to;
-                          return (
-                            <NavLink
-                              key={item.to}
-                              to={item.to}
-                              end={item.to === '/'}
-                              className={() => clsx(styles.navFlyoutLink, isGroupActive && styles.navFlyoutLinkActive)}
-                              onClick={() => setFlyoutSection(null)}
-                            >
-                              <span className={styles.navIcon}>{navIconNode(item)}</span>
-                              {item.label}
-                            </NavLink>
-                          );
-                        };
-                        // Mirror the expanded panel: when the section has
-                        // sub-clusters (Governance: Set up / Operate),
-                        // show the same dividers in the flyout instead of
-                        // a flat list that loses the structure.
-                        if (!section.subGroups) return section.items.map(renderFlyoutItem);
-                        const byTo = new Map(section.items.map((i) => [i.to, i]));
-                        return section.subGroups.map((sg) => (
-                          <div key={sg.label}>
-                            <div className={styles.navFlyoutLabel} style={{ opacity: 0.7 }}>{sg.label}</div>
-                            {sg.itemTos.map((to) => byTo.get(to)).filter(Boolean).map((i) => renderFlyoutItem(i as NavItem))}
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* No-label sections (Dashboard) — always show items directly */
-                section.items.map((item) => {
-                  const groupRoutes = ROUTE_GROUPS[item.to];
-                  const isGroupActive = groupRoutes
-                    ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                    : location.pathname === item.to;
-                  return (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.to === '/'}
-                      className={() => clsx(styles.navLink, isGroupActive && styles.navLinkActive)}
-                      title={sidebarCollapsed ? item.label : undefined}
-                    >
-                      <span className={styles.navIcon}>
-                        {item.to === '/setup' && setupProgress !== undefined
-                          ? <ProgressRing percent={setupProgress} />
-                          : navIconNode(item)}
-                      </span>
-                      {!sidebarCollapsed && item.label}
-                    </NavLink>
-                  );
-                })
-              )}
-            </div>
-            );
-          })}
-
-          {/* Bottom-nav cluster (Agents / Settings / Help). Skipped on
-              mobile — those items are already inlined into the flat
-              leaf list above so the bottom strip stays in a single
-              horizontal row. */}
-          {!isMobile && (
-            <>
-              <div className={styles.navSpacer} />
-              <div className={styles.navDivider} />
-              {bottomNavItems.map((item) => (
-                item.to === '/help' ? (
-                  // Help opens the guide in a separate window, matching
-                  // the top-bar Help button — not in-app navigation.
-                  <button
-                    key={item.to}
-                    type="button"
-                    onClick={openHelpWindow}
-                    className={styles.navLink}
-                    title={sidebarCollapsed ? item.label : undefined}
-                  >
-                    <span className={styles.navIcon}>{navIconNode(item)}</span>
-                    {!sidebarCollapsed && item.label}
-                  </button>
-                ) : (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      clsx(styles.navLink, isActive && styles.navLinkActive)
-                    }
-                    title={sidebarCollapsed ? item.label : undefined}
-                  >
-                    <span className={styles.navIcon}>{navIconNode(item)}</span>
-                    {!sidebarCollapsed && item.label}
-                  </NavLink>
-                )
-              ))}
-            </>
-          )}
-        </nav>
-        <button
-          className={styles.sidebarToggle}
-          onClick={() => setSidebarCollapsed((c) => !c)}
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {'\u2630'}
-        </button>
-      </aside>
+      <Sidebar onOpenMobileMenu={() => setMobileDrawerOpen(true)} mobileDrawerOpen={mobileDrawerOpen} />
 
       {/* Main content area */}
       <div className={styles.main}>
@@ -908,168 +465,8 @@ export default function Layout() {
               <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{'⍰'}</span>
               <span>Help</span>
             </button>
-            {/* Notification Bell */}
-            <div ref={notifWrapperRef} style={{ position: 'relative' }}>
-              <button
-                onClick={handleNotifToggle}
-                aria-label="Notifications"
-                aria-expanded={notifOpen}
-                style={{
-                  background: notifOpen ? 'var(--color-bg)' : 'none',
-                  border: 'none', cursor: 'pointer',
-                  position: 'relative', padding: 6,
-                  color: 'var(--color-text-secondary)',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                }}
-                title="Notifications"
-              >
-                {/* Outline bell — inherits currentColor from the button so it
-                    matches the rest of the header text, and stays crisp on
-                    high-DPI screens where a Unicode glyph would go fuzzy. */}
-                <svg
-                  width="20" height="20" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="1.8"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  aria-hidden="true" focusable="false"
-                >
-                  <path d="M15 17h5l-1.4-1.9a2 2 0 0 1-.4-1.2V10a6.2 6.2 0 0 0-5-6.08V3.5a1.2 1.2 0 1 0-2.4 0v.42A6.2 6.2 0 0 0 5.8 10v3.9a2 2 0 0 1-.4 1.2L4 17h5" />
-                  <path d="M10 20a2 2 0 0 0 4 0" />
-                </svg>
-                {notifCount > 0 && (
-                  <span style={{
-                    position: 'absolute', top: -2, right: -2,
-                    background: '#ef4444', color: '#fff', fontSize: 9,
-                    fontWeight: 700, borderRadius: '50%',
-                    minWidth: 16, height: 16, padding: '0 4px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    lineHeight: 1, boxShadow: '0 0 0 2px var(--color-surface)',
-                  }}>
-                    {notifCount > 99 ? '99+' : notifCount}
-                  </span>
-                )}
-              </button>
-              {notifOpen && (
-                <div
-                  role="dialog"
-                  aria-label="Notifications"
-                  style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                  width: 380, maxHeight: 440, overflowY: 'auto',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-lg)',
-                  zIndex: 800,
-                }}>
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '10px 14px', borderBottom: '1px solid var(--color-border)',
-                  }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Notifications</span>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {notifList.some((n) => !n.read) && (
-                        <button onClick={handleMarkAllRead} style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          fontSize: 11, color: 'var(--color-primary)', fontWeight: 500,
-                        }}>
-                          Mark all read
-                        </button>
-                      )}
-                      {notifList.length > 0 && (
-                        <button onClick={handleClearAllNotifications} style={{
-                          background: clearAllArmed ? 'var(--color-error, #dc2626)' : 'none',
-                          border: 'none', cursor: 'pointer', borderRadius: 4, padding: '2px 6px',
-                          fontSize: 11, color: clearAllArmed ? '#fff' : 'var(--color-error, #dc2626)', fontWeight: 500,
-                        }}>
-                          {clearAllArmed ? `Click again to confirm (${clearAllCountdown})` : 'Clear all'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {notifLoading && (
-                    <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>Loading...</div>
-                  )}
-                  {!notifLoading && notifList.length === 0 && (
-                    <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)' }}>No notifications</div>
-                  )}
-                  {!notifLoading && notifList.map((n) => {
-                    const typeColor = n.type === 'WARNING' ? '#d97706' : n.type === 'ACTION' ? '#0f766e' : '#2563eb';
-                    const typeIcon = n.type === 'WARNING' ? '\u26A0' : n.type === 'ACTION' ? '\u25B6' : '\u2139';
-                    const ago = (() => {
-                      const diff = Date.now() - new Date(n.createdAt).getTime();
-                      const mins = Math.floor(diff / 60000);
-                      if (mins < 1) return 'just now';
-                      if (mins < 60) return `${mins}m ago`;
-                      const hrs = Math.floor(mins / 60);
-                      if (hrs < 24) return `${hrs}h ago`;
-                      return `${Math.floor(hrs / 24)}d ago`;
-                    })();
-                    return (
-                      // role="button" + tabIndex + key handler instead of
-                      // wrapping in <button>, because the dismiss control
-                      // nested inside is already a button and we can't
-                      // nest interactive elements. Enter/Space activate
-                      // the notification the same as a click.
-                      <div
-                        key={n.id}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`${n.title}. ${n.read ? 'Read.' : 'Unread.'}`}
-                        onClick={() => handleNotifClick(n)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleNotifClick(n);
-                          }
-                        }}
-                        style={{
-                          display: 'flex', gap: 10, padding: '10px 14px',
-                          cursor: 'pointer', borderBottom: '1px solid var(--color-border)',
-                          background: n.read ? 'transparent' : 'var(--color-bg)',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = n.read ? 'transparent' : 'var(--color-bg)'; }}
-                      >
-                        <span style={{
-                          width: 24, height: 24, borderRadius: '50%',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 12, background: typeColor + '18', color: typeColor,
-                          flexShrink: 0, marginTop: 2,
-                        }}>
-                          {typeIcon}
-                        </span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: n.read ? 400 : 600, color: 'var(--color-text)' }}>{n.title}</div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{n.message}</div>
-                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>{ago}</div>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                          {!n.read && (
-                            <span style={{
-                              width: 8, height: 8, borderRadius: '50%', background: '#2563eb',
-                            }} />
-                          )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDismissNotification(n.id); }}
-                            aria-label="Dismiss notification"
-                            title="Dismiss"
-                            style={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              color: 'var(--color-text-muted)', fontSize: 14, lineHeight: 1,
-                              padding: '2px 4px', borderRadius: 4,
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-error, #dc2626)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-muted)'; }}
-                          >&times;</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {/* Notifications bell + dropdown */}
+            <NotificationsMenu />
             <TerminologyToggle />
             <DensityToggle />
             <div className={styles.userMenu}>
@@ -1129,7 +526,6 @@ export default function Layout() {
         <ChatPanel />
         {isMobile && mobileDrawerOpen && (
           <MobileNavDrawer
-            sections={visibleSections}
             bottomItems={bottomNavItems}
             pathname={location.pathname}
             onClose={() => setMobileDrawerOpen(false)}
