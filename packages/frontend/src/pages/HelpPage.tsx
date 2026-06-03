@@ -159,8 +159,8 @@ export default function HelpPage() {
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Data Mapping</strong>.)</li>
           <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
-          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Policies, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
-          <li><strong>Insights</strong> &mdash; Enterprise View, Analysis, Reports, Data Mapping. Cross-cutting exploration surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
+          <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
+          <li><strong>Insights</strong> &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Data Mapping) and <strong>Review</strong> (Reports, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
         <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
 
@@ -437,6 +437,14 @@ export default function HelpPage() {
           <li>Same component in three lenses. Org-wide on the Dashboard's Recent Activity widget; per-entity on the System / Data Asset / Process node detail pages; per-person on the People profile.</li>
           <li>Rows phrase events as English ("Eleanor created System SAP Finance &middot; 5m ago") with the actor's name, the action verb, and the affected record. Comments use conversation verbs; CRUD events use create/update/delete.</li>
           <li>Backed by the audit log; comments, role assignments, and dbt imports all flow through it so the timeline is the single source of truth for "what changed and who changed it".</li>
+        </ul>
+
+        <h3 style={h3Style}>Notifications</h3>
+        <ul style={listStyle}>
+          <li>The bell in the top bar surfaces in-app notifications: @mentions in comments, tasks assigned to you, issues you've been flagged on, and policy reviews coming due. A red badge on the bell shows your unread count (caps at 99+).</li>
+          <li>Click the bell to open the dropdown. Each row links straight to the source entity &mdash; the click marks it read on the way through.</li>
+          <li><strong>Mark all read</strong> clears the unread state without deleting; <strong>Clear all</strong> deletes every notification with no undo and is a two-click action (the first click arms it with a 3-second countdown, the second confirms). Per-row <strong>x</strong> dismisses a single notification.</li>
+          <li>Escape or clicking outside closes the dropdown. The unread count refreshes whenever you navigate, so a notification arriving while you're on another page surfaces when you come back.</li>
         </ul>
 
         <h3 style={h3Style}>Saved views</h3>
