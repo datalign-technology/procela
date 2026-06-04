@@ -768,33 +768,41 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     const match = findMatch(placeholder, candidates);
     const filled = !!match;
     const label = placeholder.replace(/^\w/, (c) => c.toUpperCase());
+    // Stacked form-field layout: the placeholder name + Required badge
+    // sits on the top line; the linked entity (or CTA when empty) sits
+    // on the second line, indented to read as the field's value. The
+    // panel is rendered side-by-side with the other I/O column, so
+    // each slot only has ~240–400px to work with — going stacked lets
+    // both the label and the value claim the full row width instead
+    // of splitting it.
     return (
       <div
         key={`expected-${kind}-${placeholder}`}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, fontSize: 11,
-          padding: '6px 10px', flexWrap: 'wrap',
+          fontSize: 11,
+          padding: '6px 10px',
           background: filled ? '#f0fdf4' : '#fffbeb',
           border: '1px solid var(--color-border)',
           borderLeft: `3px solid ${filled ? '#22c55e' : '#f59e0b'}`,
           borderRadius: 4,
         }}
       >
-        {/* Field label (the placeholder name + Required badge). Acts
-            as the "label" side of a form field. */}
-        <span aria-hidden style={{
-          width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-          background: filled ? '#22c55e' : '#f59e0b', color: '#fff',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
-        <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>
-        <StatusBadge variant="danger">Required</StatusBadge>
-
-        {/* Field value (right side). Either the linked entity rendered
-            inline like a form value, or the "Link…" CTA when empty.
-            marginLeft auto pushes everything past the label to the
-            right edge of the row. */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginLeft: 'auto', minWidth: 0 }}>
+        {/* Top line — field label. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span aria-hidden style={{
+            width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+            background: filled ? '#22c55e' : '#f59e0b', color: '#fff',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
+          <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>
+          <StatusBadge variant="danger">Required</StatusBadge>
+        </div>
+        {/* Bottom line — field value. Indented to sit under the label
+            and visually tied to it. */}
+        <div style={{
+          marginTop: 4, paddingLeft: 20,
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0,
+        }}>
           {filled ? (
             <>
               {renderInlineMapping(match!)}
@@ -803,7 +811,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
                   onClick={() => onRemove(match!.id)}
                   title="Unlink this document"
                   aria-label="Unlink"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px 4px', display: 'inline-flex', borderRadius: 3 }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px 4px', display: 'inline-flex', borderRadius: 3, marginLeft: 'auto' }}
                 >
                   <X size={12} strokeWidth={2.2} />
                 </button>
@@ -815,10 +823,10 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
               title={`Link a document, asset, or attachment to fulfill "${label}"`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 10px', fontSize: 11, fontWeight: 500,
+                padding: '4px 12px', fontSize: 11, fontWeight: 500,
                 background: 'var(--color-surface)', color: 'var(--color-primary)',
                 border: '1px dashed var(--color-primary)',
-                borderRadius: 3, cursor: 'pointer',
+                borderRadius: 3, cursor: 'pointer', width: '100%', justifyContent: 'flex-start',
               }}
             >
               + Link document, asset, or attachment
@@ -826,7 +834,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           ) : (
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>not yet linked</span>
           )}
-        </span>
+        </div>
       </div>
     );
   };
