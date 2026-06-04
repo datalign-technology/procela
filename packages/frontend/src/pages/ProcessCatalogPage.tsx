@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Bot, Check, AlertTriangle } from 'lucide-react';
+import { Bot, Check, AlertTriangle, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
@@ -720,41 +720,113 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     return null;
   }
 
+  // Compact inline rendering of a linked mapping's name + type. Used
+  // inside the expected-field rows so the linked entity sits next to
+  // its placeholder label like a form value. The full row with the
+  // expand-to-edit chevron + advanced fields is still rendered for
+  // mappings that don't fulfill any expected slot ("Additional…").
+  const renderInlineMapping = (m: MappingInfo) => {
+    if (m.assetInfo) {
+      const tierC = badgeColor('tier', m.assetInfo.governanceTier);
+      return (
+        <>
+          <span style={{ fontWeight: 500 }}>{m.assetInfo.assetName}</span>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: tierC.bg, color: tierC.color }}>
+            {tierLabel(m.assetInfo.governanceTier)}
+          </span>
+        </>
+      );
+    }
+    if (m.policyInfo) {
+      return (
+        <>
+          <a href="/governance-documents" style={{ fontWeight: 500, color: 'var(--color-primary)', textDecoration: 'none' }} title={`${m.policyInfo.documentType} — open Governance Documents`}>
+            {m.policyInfo.policyName}
+          </a>
+          <span style={{ fontSize: 9, color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{m.policyInfo.policyCode}</span>
+          <StatusBadge variant="agent">{m.policyInfo.documentType}</StatusBadge>
+        </>
+      );
+    }
+    if (m.attachmentInfo) {
+      const isFile = m.attachmentInfo.type === 'FILE';
+      const href = isFile ? `/api/v1/attachments/${m.attachmentInfo.attachmentId}/download` : (m.attachmentInfo.url || '#');
+      return (
+        <>
+          <a href={href} target={isFile ? undefined : '_blank'} rel={isFile ? undefined : 'noopener noreferrer'} download={isFile ? (m.attachmentInfo.fileName || m.attachmentInfo.name) : undefined} style={{ fontWeight: 500, color: 'var(--color-primary)', textDecoration: 'none' }}>
+            {m.attachmentInfo.name}
+          </a>
+          <StatusBadge variant="info">{isFile ? 'File' : 'URL'}</StatusBadge>
+        </>
+      );
+    }
+    return <span style={{ fontStyle: 'italic', color: 'var(--color-text-muted)' }}>Linked target no longer exists</span>;
+  };
+
   const renderExpected = (placeholder: string, kind: 'input' | 'output') => {
     const candidates = kind === 'input' ? inputs : outputs;
     const match = findMatch(placeholder, candidates);
     const filled = !!match;
-    const matchName = filled ? (match?.assetInfo?.assetName || match?.policyInfo?.policyName || match?.attachmentInfo?.name) : null;
     const label = placeholder.replace(/^\w/, (c) => c.toUpperCase());
     return (
-      <div key={`expected-${kind}-${placeholder}`} style={{
-        display: 'flex', alignItems: 'center', gap: 6, fontSize: 11,
-        padding: '3px 6px', flexWrap: 'wrap',
-        background: filled ? '#f0fdf4' : '#fffbeb', borderRadius: 3,
-        borderLeft: `2px solid ${filled ? '#22c55e' : '#f59e0b'}`,
-      }}>
+      <div
+        key={`expected-${kind}-${placeholder}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, fontSize: 11,
+          padding: '6px 10px', flexWrap: 'wrap',
+          background: filled ? '#f0fdf4' : '#fffbeb',
+          border: '1px solid var(--color-border)',
+          borderLeft: `3px solid ${filled ? '#22c55e' : '#f59e0b'}`,
+          borderRadius: 4,
+        }}
+      >
+        {/* Field label (the placeholder name + Required badge). Acts
+            as the "label" side of a form field. */}
         <span aria-hidden style={{
           width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
           background: filled ? '#22c55e' : '#f59e0b', color: '#fff',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
-        <span style={{ fontWeight: 500 }}>{label}</span>
+        <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>
         <StatusBadge variant="danger">Required</StatusBadge>
-        {filled ? (
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }} title={`Matched by ${matchName}`}>
-            matched: {matchName}
-          </span>
-        ) : (
-          !disabled && (
+
+        {/* Field value (right side). Either the linked entity rendered
+            inline like a form value, or the "Link…" CTA when empty.
+            marginLeft auto pushes everything past the label to the
+            right edge of the row. */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginLeft: 'auto', minWidth: 0 }}>
+          {filled ? (
+            <>
+              {renderInlineMapping(match!)}
+              {!disabled && (
+                <button
+                  onClick={() => onRemove(match!.id)}
+                  title="Unlink this document"
+                  aria-label="Unlink"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px 4px', display: 'inline-flex', borderRadius: 3 }}
+                >
+                  <X size={12} strokeWidth={2.2} />
+                </button>
+              )}
+            </>
+          ) : !disabled ? (
             <button
               onClick={() => { setLinkingExpected(placeholder); setShowAdd(kind); }}
-              style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}
               title={`Link a document, asset, or attachment to fulfill "${label}"`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 10px', fontSize: 11, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-primary)',
+                border: '1px dashed var(--color-primary)',
+                borderRadius: 3, cursor: 'pointer',
+              }}
             >
-              Link…
+              + Link document, asset, or attachment
             </button>
-          )
-        )}
+          ) : (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>not yet linked</span>
+          )}
+        </span>
       </div>
     );
   };
@@ -1076,32 +1148,44 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
         </div>
       )}
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-            Inputs ({inputs.length}{expectedInputs.length > 0 ? ` · ${expectedInputs.filter((p) => findMatch(p, inputs)).length} of ${expectedInputs.length} expected` : ''})
-          </div>
-          {expectedInputs.length > 0 && (
-            <div style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {expectedInputs.map((p) => renderExpected(p, 'input'))}
+        {(['input', 'output'] as const).map((kind) => {
+          const expected = kind === 'input' ? expectedInputs : expectedOutputs;
+          const list = kind === 'input' ? inputs : outputs;
+          const linkType = kind === 'input' ? 'consumes' : 'produces';
+          // Mappings that fulfill an expected slot already render inline
+          // inside that slot's row, so don't duplicate them below.
+          const matchedIds = new Set(expected.map((p) => findMatch(p, list)?.id).filter(Boolean) as string[]);
+          const extras = list.filter((m) => !matchedIds.has(m.id));
+          const filledCount = expected.filter((p) => findMatch(p, list)).length;
+          return (
+            <div key={kind} style={{ flex: 1, minWidth: 240 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                {kind === 'input' ? 'Inputs' : 'Outputs'} ({list.length}{expected.length > 0 ? ` · ${filledCount} of ${expected.length} expected` : ''})
+              </div>
+              {expected.length > 0 && (
+                <div style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {expected.map((p) => renderExpected(p, kind))}
+                </div>
+              )}
+              {list.length === 0 && expected.length === 0 && !showAdd && (
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No {kind}s defined</div>
+              )}
+              {/* "Additional" — mappings that don't correspond to any
+                  expected placeholder. These render as full rows with
+                  the expand-to-edit chevron (Criticality / Format /
+                  SLA / Quality requirement). Header label only shows
+                  when there's at least one extra so the section title
+                  doesn't appear empty. */}
+              {expected.length > 0 && extras.length > 0 && (
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '8px 0 2px' }}>
+                  Additional
+                </div>
+              )}
+              {extras.map(renderRow)}
+              {!disabled && renderAddRow(linkType)}
             </div>
-          )}
-          {inputs.length === 0 && expectedInputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No inputs defined</div>}
-          {inputs.map(renderRow)}
-          {!disabled && renderAddRow('consumes')}
-        </div>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-            Outputs ({outputs.length}{expectedOutputs.length > 0 ? ` · ${expectedOutputs.filter((p) => findMatch(p, outputs)).length} of ${expectedOutputs.length} expected` : ''})
-          </div>
-          {expectedOutputs.length > 0 && (
-            <div style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {expectedOutputs.map((p) => renderExpected(p, 'output'))}
-            </div>
-          )}
-          {outputs.length === 0 && expectedOutputs.length === 0 && !showAdd && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No outputs defined</div>}
-          {outputs.map(renderRow)}
-          {!disabled && renderAddRow('produces')}
-        </div>
+          );
+        })}
       </div>
       {transforms.length > 0 && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
