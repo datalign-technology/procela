@@ -183,6 +183,13 @@ interface MappingInfo {
   dataFormat?: string;
   sla?: string;
   qualityRequirement?: string;
+  /** When set, this mapping was created by clicking "Link…" next to a
+   *  specific expected input/output placeholder (parsed from the node's
+   *  free-text inputsOutputs field). The expected row uses this as a
+   *  durable association so the visible label can stay e.g. "Business
+   *  strategy" while the linked entity is "Q4 Strategy Plan.pdf",
+   *  bypassing the fuzzy substring match. */
+  fulfillsExpected?: string;
   assetInfo: { assetId: string; assetName: string; ownerName: string | null; stewardName: string | null; governanceTier: string; healthScore: number } | null;
   policyInfo: { policyId: string; policyName: string; policyCode: string; documentType: string; status: string } | null;
   attachmentInfo: { attachmentId: string; name: string; type: 'FILE' | 'URL'; fileName?: string; url?: string; mimeType?: string; fileSize?: number } | null;
@@ -618,7 +625,15 @@ function DocSystemsField({ selected, options, onSave, disabled }: {
 //    The link picker is segmented across the three kinds so the
 //    user picks WHAT first, then the specific target.
 
-export type AddMappingTarget = { kind: 'asset' | 'policy' | 'attachment'; id: string };
+export type AddMappingTarget = {
+  kind: 'asset' | 'policy' | 'attachment';
+  id: string;
+  /** When the picker was opened from a specific expected input/output
+   *  row ("Link…" next to "Business strategy"), this carries the
+   *  placeholder name so the new mapping is durably bound to that
+   *  slot rather than relying on substring matching. */
+  fulfillsExpected?: string;
+};
 
 function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove, nodeInputsOutputs }: {
   nodeId: string;
@@ -644,6 +659,12 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   nodeInputsOutputs?: string;
 }) {
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
+  // When the picker was opened from a specific expected I/O row
+  // (e.g. the "Link…" button next to "Business strategy"), this holds
+  // that placeholder name so the new mapping can be tagged with it.
+  // Null when the picker was opened via the generic "+ Add Input /
+  // Output" button at the bottom of the panel.
+  const [linkingExpected, setLinkingExpected] = useState<string | null>(null);
   const [addKind, setAddKind] = useState<'asset' | 'policy' | 'attachment' | 'link'>(isGovernance ? 'policy' : 'asset');
   const [pickedAsset, setPickedAsset] = useState('');
   const [pickedPolicy, setPickedPolicy] = useState('');
@@ -680,7 +701,18 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   function findMatch(placeholder: string, candidates: MappingInfo[]): MappingInfo | null {
     const p = placeholder.toLowerCase().trim();
     if (!p) return null;
+    // Explicit binding wins. When a mapping was created via "Link…"
+    // next to this placeholder, it carries fulfillsExpected — that's
+    // a durable user-asserted match that survives the linked entity
+    // being renamed.
     for (const m of candidates) {
+      if (m.fulfillsExpected && m.fulfillsExpected.toLowerCase().trim() === p) return m;
+    }
+    // Fall back to fuzzy substring matching for legacy rows and rows
+    // added via the generic "+ Add Input/Output" path (which don't
+    // know which placeholder they correspond to).
+    for (const m of candidates) {
+      if (m.fulfillsExpected) continue; // already considered above
       const name = (m.assetInfo?.assetName || m.policyInfo?.policyName || m.attachmentInfo?.name || '').toLowerCase();
       if (!name) continue;
       if (name.includes(p) || p.includes(name)) return m;
@@ -714,7 +746,11 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           </span>
         ) : (
           !disabled && (
-            <button onClick={() => setShowAdd(kind)} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}>
+            <button
+              onClick={() => { setLinkingExpected(placeholder); setShowAdd(kind); }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11, padding: 0 }}
+              title={`Link a document, asset, or attachment to fulfill "${label}"`}
+            >
               Link…
             </button>
           )
@@ -727,6 +763,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     setPickedAsset(''); setPickedPolicy(''); setPickedFile(null);
     setPickedUrl(''); setPickedUrlName('');
     setShowAdd(null); setAddKind(isGovernance ? 'policy' : 'asset');
+    setLinkingExpected(null);
   };
 
   // Light client-side URL check just to gate the Save button; the backend
@@ -738,15 +775,20 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   };
 
   const handleAdd = async (linkType: string) => {
+    // Tag the new mapping with the expected placeholder (if the picker
+    // was opened from an expected row's "Link…" button) so the
+    // association survives the linked entity being renamed and works
+    // even when the names don't substring-match.
+    const tag = linkingExpected ? { fulfillsExpected: linkingExpected } : {};
     if (addKind === 'asset') {
       if (!pickedAsset) return;
-      onAdd(nodeId, { kind: 'asset', id: pickedAsset }, linkType);
+      onAdd(nodeId, { kind: 'asset', id: pickedAsset, ...tag }, linkType);
       resetAdd();
       return;
     }
     if (addKind === 'policy') {
       if (!pickedPolicy) return;
-      onAdd(nodeId, { kind: 'policy', id: pickedPolicy }, linkType);
+      onAdd(nodeId, { kind: 'policy', id: pickedPolicy, ...tag }, linkType);
       resetAdd();
       return;
     }
@@ -766,7 +808,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
         if (orgId) params.set('orgId', orgId);
         const uploaded = await apiClient.upload<{ success: boolean; data: { id: string } }>(`/attachments/upload?${params.toString()}`, pickedFile);
         const id = uploaded.data?.id;
-        if (id) onAdd(nodeId, { kind: 'attachment', id }, linkType);
+        if (id) onAdd(nodeId, { kind: 'attachment', id, ...tag }, linkType);
         resetAdd();
       } catch { /* parent toast handles errors */ }
       finally { setUploading(false); }
@@ -787,7 +829,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           ...(orgId ? { orgId } : {}),
         });
         const id = created.data?.id;
-        if (id) onAdd(nodeId, { kind: 'attachment', id }, linkType);
+        if (id) onAdd(nodeId, { kind: 'attachment', id, ...tag }, linkType);
         resetAdd();
       } catch { /* parent toast handles errors */ }
       finally { setUploading(false); }
@@ -2417,6 +2459,7 @@ export default function ProcessCatalogPage() {
         notes: '',
         aiSuggested: false,
         ...(activeOrgId ? { orgId: activeOrgId } : {}),
+        ...(target.fulfillsExpected ? { fulfillsExpected: target.fulfillsExpected } : {}),
       };
       if (target.kind === 'asset') body.dataAssetId = target.id;
       else if (target.kind === 'policy') body.policyId = target.id;
