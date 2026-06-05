@@ -172,7 +172,7 @@ function createRefreshToken(sub: string, context: RefreshTokenContext = {}): { t
  *  Unset context fields (legacy sessions minted before this change)
  *  fail open — there's no fingerprint to compare against, so the
  *  request is allowed and the next mint will pin one. */
-function sessionFingerprintMatches(ctx: RefreshTokenContext, req: Request): boolean {
+export function sessionFingerprintMatches(ctx: RefreshTokenContext, req: Request): boolean {
   if (!ctx.ip && !ctx.userAgent) return true; // legacy session
   const ua = String(req.headers['user-agent'] || '');
   if (ctx.userAgent && ctx.userAgent !== ua) return false;
@@ -183,7 +183,7 @@ function sessionFingerprintMatches(ctx: RefreshTokenContext, req: Request): bool
   return true;
 }
 
-function ipsInSameSubnet(a: string, b: string): boolean {
+export function ipsInSameSubnet(a: string, b: string): boolean {
   if (!a || !b) return false;
   if (a === b) return true;
   // IPv4 — match the first 3 octets (/24).

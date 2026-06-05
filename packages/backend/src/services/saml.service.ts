@@ -60,7 +60,7 @@ setInterval(() => {
   }
 }, 60_000).unref?.();
 
-function normaliseCert(raw: string): string {
+export function normaliseCert(raw: string): string {
   // node-saml accepts certs with or without PEM headers, but it's
   // picky about whitespace. Strip headers, collapse whitespace,
   // re-wrap at 64 chars + add headers. This way an operator can paste
@@ -237,7 +237,7 @@ export class SamlAuthProvider implements AuthProvider {
   }
 }
 
-function mapClaimToRole(claim: string): string {
+export function mapClaimToRole(claim: string): string {
   const c = claim.toUpperCase();
   // Direct match against our role names is the common case.
   if (['SUPER_ADMIN', 'ORG_ADMIN', 'PROCESS_OWNER', 'DATA_STEWARD', 'CONTRIBUTOR', 'VIEWER'].includes(c)) {
