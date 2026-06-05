@@ -34,25 +34,31 @@ export const DEFAULT_POLICY: PasswordPolicy = {
   blockBreached: true,
 };
 
-// Load the wordlist once at module init. The cost is one file read at
-// boot, ~50 KB of memory for the Set. Stripped of comments and blank
-// lines; comparison is case-insensitive.
+// Load the wordlist once at module init. Stripped of comments and
+// blank lines; comparison is case-insensitive.
+//
+// Path resolution:
+//   1. BREACHED_PASSWORDS_FILE env var (absolute or relative to cwd)
+//      so production can mount a full HIBP corpus without touching
+//      this repo.
+//   2. The bundled wordlist next to this module.
 function loadBreachedSet(): Set<string> {
+  const envPath = process.env.BREACHED_PASSWORDS_FILE;
+  const path = envPath || join(__dirname, 'breached-passwords.txt');
   try {
-    const path = join(__dirname, 'breached-passwords.txt');
     const raw = readFileSync(path, 'utf-8');
     const entries = raw
       .split(/\r?\n/)
       .map((l) => l.trim().toLowerCase())
       .filter((l) => l.length > 0 && !l.startsWith('#'));
     const set = new Set(entries);
-    logger.info({ count: set.size }, 'Loaded breached-password wordlist');
+    logger.info({ count: set.size, source: envPath ? 'env' : 'bundled', path }, 'Loaded breached-password wordlist');
     return set;
   } catch (err) {
     // Fail open — log loudly but don't block the boot. An empty set
     // means the policy still enforces minLength; only the breach
     // check is disabled.
-    logger.error({ err }, 'Failed to load breached-password wordlist — breach screening disabled');
+    logger.error({ err, path }, 'Failed to load breached-password wordlist — breach screening disabled');
     return new Set();
   }
 }

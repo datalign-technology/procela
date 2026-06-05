@@ -239,7 +239,39 @@ const PORT = config.port;
 
 const server = app.listen(PORT, () => {
   logger.info({ port: PORT, env: config.nodeEnv }, 'Procela server started');
+  warnOnMissingProdConfig();
 });
+
+// Production-config readiness check. Runs once at boot, after the
+// server starts listening, so a misconfigured prod env surfaces in
+// the very first log lines rather than silently degrading the first
+// time a user hits an affected route. Each missing var falls back to
+// a safe-but-degraded default (in-memory rate limiter, audit-log
+// reset tokens, dev JWT secret) — none crash the process, so the
+// signal MUST be in the log.
+function warnOnMissingProdConfig(): void {
+  if (config.nodeEnv !== 'production') return;
+  const missing: Array<{ name: string; impact: string }> = [];
+  if (!config.redisUrl) {
+    missing.push({ name: 'REDIS_URL', impact: 'rate limiter falls back to per-instance in-memory counters (multi-instance brute-force protection is broken)' });
+  }
+  if (!config.smtpHost || !config.smtpUser || !config.smtpPass || !config.mailFrom || !config.appUrl) {
+    missing.push({ name: 'SMTP_HOST / SMTP_USER / SMTP_PASS / MAIL_FROM / APP_URL', impact: 'password-reset emails fall back to logging the token in the audit feed (not delivered to the user)' });
+  }
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret-change-in-production') {
+    missing.push({ name: 'JWT_SECRET', impact: 'sessions are signed with the development default — anyone with the source can forge tokens' });
+  }
+  if (!config.anthropicApiKey) {
+    missing.push({ name: 'ANTHROPIC_API_KEY', impact: 'AI features (template generation, suggestions, assistant) will fail when invoked' });
+  }
+  if (missing.length === 0) {
+    logger.info('Production config: all expected env vars are set');
+    return;
+  }
+  for (const m of missing) {
+    logger.warn({ envVar: m.name, impact: m.impact }, 'Production config: missing env var');
+  }
+}
 
 // Friendly handler for the most common dev-time crash: a previous
 // instance still has the port. The default Node error here is a

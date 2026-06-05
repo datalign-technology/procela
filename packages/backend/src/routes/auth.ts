@@ -13,6 +13,7 @@ import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
+import { sendPasswordResetEmail, isConfigured as isMailConfigured } from '../services/mail.service';
 import {
   getAuthProvider,
   getAuthConfig,
@@ -584,7 +585,7 @@ router.post('/password/admin-reset', authenticateToken, authorize('SUPER_ADMIN',
  *
  * Token redemption: POST /auth/password/reset with { token, newPassword }.
  */
-router.post('/password/forgot', forgotLimiter, (req: Request, res: Response) => {
+router.post('/password/forgot', forgotLimiter, async (req: Request, res: Response) => {
   const { email } = req.body;
   if (!email) {
     res.status(400).json({ success: false, error: 'email is required' });
@@ -592,22 +593,39 @@ router.post('/password/forgot', forgotLimiter, (req: Request, res: Response) => 
   }
 
   const person = people.find((p) => p.email.toLowerCase() === email.toLowerCase());
+  const mailReady = isMailConfigured();
 
   if (person) {
     const token = mintResetToken(person.id);
+    const ttlMinutes = Math.round(RESET_TOKEN_TTL_MS / 60_000);
+
+    // Try email delivery first when SMTP is configured. Audit entry
+    // records whether the send actually succeeded so a misconfigured
+    // production env shows up in reports.
+    let delivered = false;
+    if (mailReady) {
+      delivered = await sendPasswordResetEmail({
+        to: person.email,
+        name: person.name,
+        token,
+        ttlMinutes,
+      });
+    }
+
     auditService.log(person.orgIds[0] || DEV_ORG_ID, null, 'Auth', 'password', 'PASSWORD_RESET_REQUESTED', null, {
       targetPersonId: person.id,
       targetEmail: person.email,
-      // The token is written to the audit log under "after" only in
-      // dev mode so an admin can read it from the audit feed when no
-      // SMTP integration is wired. In production this branch should
-      // hand the token to the email-delivery layer instead and the
-      // audit entry should NOT include the token value.
-      ...(process.env.NODE_ENV !== 'production' ? { resetTokenDev: token } : {}),
+      deliveryChannel: delivered ? 'email' : 'audit',
+      // Include the plaintext token in the audit entry only when SMTP
+      // delivery did not happen (dev mode, or a production env where
+      // SMTP failed). When the email goes out, the token leaves with
+      // it and shouldn't be re-exposed via the audit feed.
+      ...(!delivered ? { resetTokenDev: token } : {}),
     });
     logger.info({
       personId: person.id,
       ttlMs: RESET_TOKEN_TTL_MS,
+      delivered,
     }, 'Password reset token minted');
   } else {
     // Always log the request — even for unknown emails — so brute

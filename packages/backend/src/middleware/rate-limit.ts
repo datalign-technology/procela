@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createClient, RedisClientType } from 'redis';
 import logger from '../lib/logger';
+import config from '../config';
 import { auditService } from '../services/audit.service';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ async function getRedisClient(): Promise<RedisClientType | null> {
   if (redisReady) return redisClient;
   if (redisAttempted) return null;
   redisAttempted = true;
-  const url = process.env.REDIS_URL;
+  const url = config.redisUrl;
   if (!url) {
     logger.info('REDIS_URL not set — rate limiter using in-memory backend');
     return null;

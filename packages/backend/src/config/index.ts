@@ -25,8 +25,24 @@ export const config = {
   s3Bucket: process.env.S3_BUCKET || '',
   s3Region: process.env.S3_REGION || 'us-east-1',
 
-  // Redis
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  // Redis — empty string means "not configured". Rate limiter falls
+  // back to in-memory when empty. The previous default of
+  // redis://localhost:6379 hid the misconfiguration: production
+  // would try (and fail) to connect to a localhost Redis that doesn't
+  // exist, then silently downgrade. Empty + boot-time warning makes
+  // the state explicit.
+  redisUrl: process.env.REDIS_URL || '',
+
+  // Mail — production deployments must set these for password reset
+  // emails to be delivered. When any are missing, /auth/password/forgot
+  // falls back to logging the token to the audit trail (dev path).
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: process.env.SMTP_PASS || '',
+  smtpSecure: process.env.SMTP_SECURE === 'true',
+  mailFrom: process.env.MAIL_FROM || '',
+  appUrl: process.env.APP_URL || '',
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
