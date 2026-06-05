@@ -295,6 +295,28 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
       return;
     }
 
+    // ── SAML redirect flow ──
+    // Mirrors the OIDC branch: build the AuthnRequest, return the URL
+    // the browser should follow. The IdP POSTs the assertion to
+    // /auth/saml/acs which we handle separately below.
+    if (provider.type === 'saml') {
+      const samlProv = provider as unknown as import('../services/saml.service').SamlAuthProvider;
+      if (!samlProv.isConfigured) {
+        res.status(503).json({ success: false, error: 'SAML provider is not configured.' });
+        return;
+      }
+      const returnTo = req.body.returnTo || '/';
+      try {
+        const { loginUrl } = await samlProv.startLogin({ returnTo });
+        auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'SAML_LOGIN_REDIRECT', null, { returnTo });
+        res.json({ success: true, data: { loginUrl, provider: 'saml' } });
+      } catch (err: any) {
+        logger.warn({ err: err?.message }, 'SAML login start failed');
+        res.status(503).json({ success: false, error: err?.message || 'Failed to start SAML flow' });
+      }
+      return;
+    }
+
     // ── Pre-flight CAPTCHA gate ──
     // Once an IP has burned through the failure threshold, every
     // subsequent attempt from that IP must include a verified
@@ -625,6 +647,118 @@ router.get('/callback', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/v1/auth/saml/acs
+ *
+ * The SAML Assertion Consumer Service endpoint. The IdP POSTs a
+ * signed SAMLResponse here at the end of an SP-initiated login. We
+ * validate the signature against the configured IdP cert, extract the
+ * subject + attributes, find-or-provision the Person record, mint
+ * Procela JWTs, and redirect the browser to the frontend's
+ * /oidc-complete route — the same handler the OIDC flow lands on,
+ * because the post-IdP plumbing is identical.
+ *
+ * Express needs `express.urlencoded({ extended: true })` registered
+ * for this to receive the SAMLResponse field; that's wired in
+ * index.ts at the top of the middleware chain.
+ */
+router.post('/saml/acs', async (req: Request, res: Response) => {
+  const frontendBase = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const errorRedirect = (msg: string) =>
+    res.redirect(`${frontendBase}/login?error=${encodeURIComponent(msg)}`);
+  try {
+    // Lazy import — the route only resolves the SAML service when the
+    // ACS is actually hit, so installs that don't use SAML don't pay
+    // the cost.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+    const samlProv = getSamlProvider();
+    if (!samlProv || !samlProv.isConfigured) {
+      return errorRedirect('SAML provider is not configured');
+    }
+    const { user, returnTo } = await samlProv.completeAcs(req.body as Record<string, string>);
+
+    // Find-or-just-in-time-provision — same shape as OIDC.
+    let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    if (person && !isPersonActive(person)) {
+      auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'saml', 'SAML_DEACTIVATED_LOGIN_BLOCKED', null, {
+        email: person.email,
+      });
+      return errorRedirect('Your Procela account is not active. Contact an administrator.');
+    }
+    let provisioned = false;
+    if (!person) {
+      const now = new Date().toISOString();
+      person = {
+        id: uuid(),
+        orgIds: [DEV_ORG_ID],
+        accessibleOrgIds: [DEV_ORG_ID],
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        title: '',
+        skillIds: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      people.push(person);
+      saveStore('people', people);
+      provisioned = true;
+    }
+
+    const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const role = getRoleForOrg(person, orgId) || user.role;
+    const accessToken = createAccessToken({
+      sub: person.id, email: person.email, name: person.name, role, orgId,
+    });
+    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+
+    auditService.log(orgId, person.id, 'Auth', 'saml', 'SAML_LOGIN_SUCCESS', null, {
+      email: person.email, provisioned,
+    });
+
+    const params = new URLSearchParams({
+      accessToken,
+      refreshToken: refresh.token,
+      expiresIn: String(ACCESS_TOKEN_EXPIRY_SECONDS),
+      returnTo,
+    });
+    return res.redirect(`${frontendBase}/oidc-complete#${params.toString()}`);
+  } catch (err: any) {
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'saml', 'SAML_ACS_FAILED', null, {
+      error: err?.message || String(err),
+    });
+    logger.warn({ err: err?.message }, 'SAML ACS failed');
+    return errorRedirect(err?.message || 'SAML assertion failed');
+  }
+});
+
+/**
+ * GET /api/v1/auth/saml/metadata
+ *
+ * Returns a thin SP metadata blob for IdP-side configuration. Most
+ * IdPs accept this XML pasted into their "SP metadata" form to wire
+ * up the entity ID, ACS URL, and certificate.
+ */
+router.get('/saml/metadata', (req: Request, res: Response) => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+  const samlProv = getSamlProvider();
+  if (!samlProv || !samlProv.isConfigured) {
+    res.status(503).type('text/plain').send('SAML provider is not configured');
+    return;
+  }
+  const pub = samlProv.getPublicConfig();
+  const acsUrl = `${(config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/api/v1/auth/saml/acs`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${pub.issuer}">
+  <SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol" AuthnRequestsSigned="false" WantAssertionsSigned="true">
+    <AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${acsUrl}" index="0" isDefault="true"/>
+  </SPSSODescriptor>
+</EntityDescriptor>`;
+  res.type('application/xml').send(xml);
+});
+
+/**
  * POST /api/v1/auth/refresh
  *
  * Accepts { refreshToken } and returns a new access token.
@@ -846,6 +980,20 @@ router.get('/providers', (req: Request, res: Response) => {
     enabled: authCfg.provider === 'oidc' && p.isConfigured,
   }));
 
+  // Surface SAML when the env is configured. The frontend shows a
+  // single "Sign in with SAML" button — providerId selection is
+  // single-IdP per install (multi-IdP SAML is a future enhancement;
+  // the data model is ready for it once a real customer asks).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+  const samlProv = getSamlProvider();
+  const samlButtons = samlProv && samlProv.isConfigured ? [{
+    id: 'saml',
+    name: 'Single sign-on (SAML)',
+    type: 'saml',
+    enabled: authCfg.provider === 'saml',
+  }] : [];
+
   res.json({
     success: true,
     data: {
@@ -853,6 +1001,7 @@ router.get('/providers', (req: Request, res: Response) => {
       currentName: authCfg.providerName,
       providers: [
         ...oidcButtons,
+        ...samlButtons,
         {
           id: 'local',
           name: 'Local credentials',
@@ -871,7 +1020,7 @@ router.get('/providers', (req: Request, res: Response) => {
         { type: 'dev', name: 'Development', description: 'Email-based dev login (no IdP required)' },
         { type: 'local', name: 'Local credentials', description: 'Email + password, stored in Procela as Argon2 hashes', configured: true },
         { type: 'oidc', name: 'OIDC', description: 'OpenID Connect (Azure AD, Okta, etc.)', configured: authCfg.oidcConfigured },
-        { type: 'saml', name: 'SAML', description: 'SAML 2.0 (coming soon)', configured: false },
+        { type: 'saml', name: 'SAML', description: 'SAML 2.0 (Active Directory FS, Shibboleth, etc.)', configured: !!samlProv?.isConfigured },
       ],
     },
   });

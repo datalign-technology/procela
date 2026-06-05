@@ -142,6 +142,11 @@ app.use(compression());
 // Default JSON body limit is 100kb — too small for branding logos uploaded
 // as data: URLs. Raise to 2MB so customers can inline a reasonable PNG.
 app.use(express.json({ limit: '2mb' }));
+// SAML's ACS endpoint receives application/x-www-form-urlencoded
+// posts from IdPs — the SAMLResponse field is base64-encoded XML in
+// the body. Register the urlencoded parser globally; the limit
+// matches the JSON parser so neither is the bottleneck.
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ---------------------------------------------------------------------------
 // Routes — Public (no auth required)

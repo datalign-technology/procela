@@ -582,10 +582,17 @@ export function getAuthProvider(): AuthProvider {
       logger.warn('OIDC provider selected but none configured; falling back to dev provider');
       return devProvider;
     }
-    case 'saml':
-      // SAML not yet implemented — fall back to dev with a warning
-      logger.warn('SAML provider requested but not implemented; falling back to dev provider');
+    case 'saml': {
+      // Lazy import to avoid the circular-dep loader cost when SAML
+      // isn't in play. getSamlProvider returns null when the env
+      // isn't set; fall back to dev with a warning in that case.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getSamlProvider } = require('./saml.service') as typeof import('./saml.service');
+      const saml = getSamlProvider();
+      if (saml && saml.isConfigured) return saml;
+      logger.warn('SAML provider requested but not configured; falling back to dev provider');
       return devProvider;
+    }
     case 'dev':
     default:
       return devProvider;

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@node-saml/node-saml": "^5.1.0",
     "@prisma/client": "^6.4.1",
     "@simplewebauthn/server": "^13.3.1",
     "argon2": "^0.44.0",
