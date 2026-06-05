@@ -64,6 +64,12 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 interface RefreshTokenContext {
   oidcProviderId?: string;
   oidcIdToken?: string;
+  /** SAML NameID + SessionIndex captured at ACS time so
+   *  IdP-initiated SLO can match a LogoutRequest to the right local
+   *  refresh-token entries, and so /auth/logout can drive
+   *  SP-initiated SLO with the right session hint. */
+  samlNameID?: string;
+  samlSessionIndex?: string;
   /** Procela person id — surfaced on /auth/sessions so users can see
    *  whose sessions they're looking at without decoding the JWT. */
   personId?: string;
@@ -99,6 +105,11 @@ interface AccessTokenPayload {
   orgId: string;
   role: string;
   type: 'access';
+  /** Refresh-token jti this access token was minted alongside. Lets
+   *  /auth/sessions tag the row representing the caller's own device
+   *  with current=true so the UI can label it. Optional because
+   *  legacy tokens minted before the field existed still verify. */
+  sjti?: string;
 }
 
 interface RefreshTokenPayload {
@@ -113,6 +124,7 @@ function createAccessToken(user: {
   name: string;
   role: string;
   orgId?: string;
+  sessionJti?: string;
 }): string {
   const payload: AccessTokenPayload = {
     sub: user.sub,
@@ -121,6 +133,7 @@ function createAccessToken(user: {
     orgId: user.orgId || DEV_ORG_ID,
     role: user.role,
     type: 'access',
+    ...(user.sessionJti ? { sjti: user.sessionJti } : {}),
   };
   return jwt.sign(payload, config.jwtSecret, { expiresIn: ACCESS_TOKEN_EXPIRY });
 }
@@ -467,13 +480,16 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     const fallbackName = user.email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     const resolvedName = personRecord?.name || (looksLikePassword ? fallbackName : user.name) || fallbackName;
 
+    // Mint refresh first so we can stamp its jti onto the access
+    // token — /auth/sessions uses that to tag the caller's own row.
+    const refresh = createRefreshToken(user.sub, fingerprintFromRequest(req));
     const accessToken = createAccessToken({
       ...user,
       name: resolvedName,
       orgId: resolvedOrgId,
       role: resolvedRole,
+      sessionJti: refresh.jti,
     });
-    const refresh = createRefreshToken(user.sub, fingerprintFromRequest(req));
 
     auditService.log(resolvedOrgId, user.sub, 'Auth', 'login', 'LOGIN_SUCCESS', null, {
       email: user.email,
@@ -603,9 +619,6 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
     const role = getRoleForOrg(person, orgId) || user.role;
-    const accessToken = createAccessToken({
-      sub: person.id, email: person.email, name: person.name, role, orgId,
-    });
     // Capture the OIDC providerId + id_token on the refresh-token
     // entry so /auth/logout can drive RP-initiated logout. The
     // id_token is verified, contains no Procela secret, and is only
@@ -615,6 +628,10 @@ router.get('/callback', async (req: Request, res: Response) => {
       oidcProviderId: flow.providerId,
       oidcIdToken: idToken,
       ...fingerprintFromRequest(req),
+    });
+    const accessToken = createAccessToken({
+      sub: person.id, email: person.email, name: person.name, role, orgId,
+      sessionJti: refresh.jti,
     });
 
     auditService.log(orgId, person.id, 'Auth', 'oidc', 'OIDC_CALLBACK_SUCCESS', null, {
@@ -675,7 +692,7 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
     if (!samlProv || !samlProv.isConfigured) {
       return errorRedirect('SAML provider is not configured');
     }
-    const { user, returnTo } = await samlProv.completeAcs(req.body as Record<string, string>);
+    const { user, returnTo, nameID, sessionIndex } = await samlProv.completeAcs(req.body as Record<string, string>);
 
     // Find-or-just-in-time-provision — same shape as OIDC.
     let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
@@ -707,10 +724,15 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
     const role = getRoleForOrg(person, orgId) || user.role;
+    const refresh = createRefreshToken(person.id, {
+      samlNameID: nameID,
+      ...(sessionIndex ? { samlSessionIndex: sessionIndex } : {}),
+      ...fingerprintFromRequest(req),
+    });
     const accessToken = createAccessToken({
       sub: person.id, email: person.email, name: person.name, role, orgId,
+      sessionJti: refresh.jti,
     });
-    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
     auditService.log(orgId, person.id, 'Auth', 'saml', 'SAML_LOGIN_SUCCESS', null, {
       email: person.email, provisioned,
@@ -733,6 +755,82 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/auth/saml/sls
+ *
+ * Single Logout Service endpoint — handles IdP-initiated SLO. The
+ * IdP sends a signed LogoutRequest here when the user signs out at
+ * the IdP side and the IdP wants every connected SP to invalidate
+ * its own session. We verify the signature, look up the local
+ * refresh-token entries by SAML NameID, revoke them, and send a
+ * signed LogoutResponse back to the IdP.
+ *
+ * Both Redirect-binding (GET with SAMLRequest in the query) and
+ * POST-binding (POST with SAMLRequest in the body) are supported
+ * — node-saml's validateRedirectAsync handles both via its
+ * `originalQuery` parameter.
+ */
+const handleSamlSls = async (req: Request, res: Response): Promise<void> => {
+  const frontendBase = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+    const samlProv = getSamlProvider();
+    if (!samlProv || !samlProv.isConfigured) {
+      res.status(503).type('text/plain').send('SAML provider is not configured');
+      return;
+    }
+
+    // node-saml expects the raw query string for signature validation
+    // (the signature was computed over the URL-encoded parameters as
+    // they arrived). For POST-binding requests, hand it the body
+    // serialised the same way.
+    const rawQuery = req.method === 'GET'
+      ? (req.url.split('?')[1] || '')
+      : new URLSearchParams(req.body as Record<string, string>).toString();
+    const params = req.method === 'GET'
+      ? (req.query as Record<string, string>)
+      : (req.body as Record<string, string>);
+
+    const { nameID } = await samlProv.validateIdpLogoutRequest(params, rawQuery);
+
+    // Revoke every refresh token whose SAML NameID matches. A single
+    // browser session typically has one entry, but a user who logged
+    // in on multiple devices through the same IdP has one entry per
+    // device — all of them go.
+    let revoked = 0;
+    for (const [jti, ctx] of validRefreshTokens) {
+      if (ctx.samlNameID === nameID) {
+        validRefreshTokens.delete(jti);
+        revoked++;
+        auditService.log(DEV_ORG_ID, ctx.personId || null, 'Auth', 'saml', 'SAML_SLO_REVOKED', null, { jti, nameID });
+      }
+    }
+
+    // Build the LogoutResponse URL the IdP expects, redirect the
+    // browser there. Without SAML_LOGOUT_URL we can't build the URL
+    // so just redirect the user to the login page locally — the
+    // refresh-token revocation already did its job, the IdP just
+    // won't see a confirmation.
+    const relayState = String(params.RelayState || '');
+    const responseUrl = await samlProv.buildLogoutResponseUrl(nameID, relayState);
+    if (responseUrl) {
+      res.redirect(responseUrl);
+    } else {
+      res.redirect(`${frontendBase}/login`);
+    }
+    logger.info({ nameID, revoked }, 'SAML SLO processed');
+  } catch (err: any) {
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'saml', 'SAML_SLO_FAILED', null, {
+      error: err?.message || String(err),
+    });
+    logger.warn({ err: err?.message }, 'SAML SLO failed');
+    res.redirect(`${frontendBase}/login?error=${encodeURIComponent('SAML logout failed')}`);
+  }
+};
+router.get('/saml/sls', handleSamlSls);
+router.post('/saml/sls', handleSamlSls);
+
+/**
  * GET /api/v1/auth/saml/metadata
  *
  * Returns a thin SP metadata blob for IdP-side configuration. Most
@@ -748,10 +846,14 @@ router.get('/saml/metadata', (req: Request, res: Response) => {
     return;
   }
   const pub = samlProv.getPublicConfig();
-  const acsUrl = `${(config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/api/v1/auth/saml/acs`;
+  const base = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const acsUrl = `${base}/api/v1/auth/saml/acs`;
+  const slsUrl = `${base}/api/v1/auth/saml/sls`;
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${pub.issuer}">
   <SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol" AuthnRequestsSigned="false" WantAssertionsSigned="true">
+    <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${slsUrl}"/>
+    <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${slsUrl}"/>
     <AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${acsUrl}" index="0" isDefault="true"/>
   </SPSSODescriptor>
 </EntityDescriptor>`;
@@ -761,8 +863,17 @@ router.get('/saml/metadata', (req: Request, res: Response) => {
 /**
  * POST /api/v1/auth/refresh
  *
- * Accepts { refreshToken } and returns a new access token.
- * The refresh token itself is not rotated (single-use revocation via logout).
+ * Accepts { refreshToken } and returns BOTH a new access token AND a
+ * rotated refresh token. Rotation closes the window on a stolen
+ * refresh token — once the legitimate client uses one, the previous
+ * jti is revoked, so any concurrent use of the old token from an
+ * attacker fails closed. The frontend must replace its stored
+ * refreshToken on every successful refresh.
+ *
+ * Detection of token reuse: if the incoming jti isn't in
+ * validRefreshTokens, it's either expired (auto-cleaned) or already
+ * rotated. Either way we 401 — the second case is the suspicious one
+ * and the audit entry surfaces it so a SOC can investigate.
  */
 router.post('/refresh', (req: Request, res: Response) => {
   const { refreshToken } = req.body;
@@ -805,25 +916,53 @@ router.post('/refresh', (req: Request, res: Response) => {
       return;
     }
 
-    // Update the lastUsedAt timestamp so /auth/sessions reflects
-    // ongoing activity. This is the only field that updates inside
-    // /auth/refresh; ip / ua are pinned at mint time so a roving user
-    // doesn't slowly walk the fingerprint to anywhere they like.
-    ctx.lastUsedAt = new Date().toISOString();
+    // ── Rotation ──
+    // Revoke the incoming jti and mint a fresh refresh token bound to
+    // the same session context (provider id, original mint timestamp,
+    // fingerprint). Preserving createdAt lets the Active Sessions page
+    // keep showing "Signed in 3 days ago" rather than resetting on
+    // every refresh.
+    const newRefresh = createRefreshToken(decoded.sub, {
+      oidcProviderId: ctx.oidcProviderId,
+      oidcIdToken: ctx.oidcIdToken,
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+    // Overwrite the auto-set createdAt with the original so the
+    // session timeline doesn't reset on every refresh.
+    const rotatedCtx = validRefreshTokens.get(newRefresh.jti);
+    if (rotatedCtx && ctx.createdAt) rotatedCtx.createdAt = ctx.createdAt;
+    validRefreshTokens.delete(decoded.jti);
 
-    // Mint a new access token.  We need the user details — for dev mode we
-    // re-derive them from the sub claim.  In production the refresh token
-    // would be looked up in a session store that holds the full user record.
-    const accessToken = jwt.sign(
-      { sub: decoded.sub, type: 'access' } as any,
-      config.jwtSecret,
-      { expiresIn: ACCESS_TOKEN_EXPIRY },
-    );
+    // Re-derive the user details from the people store so the access
+    // token reflects current role + name. The old refresh path
+    // re-issued from the sub claim alone, which drifted whenever a
+    // role changed mid-session.
+    const person = people.find((p) => p.id === decoded.sub);
+    const orgId = person?.orgIds[0] || DEV_ORG_ID;
+    const role = person ? getRoleForOrg(person, orgId) : 'VIEWER';
+    const accessToken = createAccessToken({
+      sub: decoded.sub,
+      email: person?.email || '',
+      name: person?.name || '',
+      role,
+      orgId,
+      sessionJti: newRefresh.jti,
+    });
 
-    auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'TOKEN_REFRESHED', null, null);
-    logger.debug({ sub: decoded.sub }, 'Token refreshed');
+    auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'TOKEN_REFRESHED', null, {
+      oldJti: decoded.jti, newJti: newRefresh.jti,
+    });
+    logger.debug({ sub: decoded.sub, oldJti: decoded.jti, newJti: newRefresh.jti }, 'Refresh token rotated');
 
-    res.json({ success: true, data: { accessToken, expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS } });
+    res.json({
+      success: true,
+      data: {
+        accessToken,
+        refreshToken: newRefresh.token,
+        expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      },
+    });
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
   }
@@ -840,7 +979,7 @@ router.post('/refresh', (req: Request, res: Response) => {
  * round-trip, the IdP still considers the user signed in and a fresh
  * "Sign in" click silently logs them back in.
  */
-router.post('/logout', (req: Request, res: Response) => {
+router.post('/logout', async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
@@ -857,7 +996,7 @@ router.post('/logout', (req: Request, res: Response) => {
     }
 
     // Pull the session context BEFORE deleting so we can build the
-    // RP-initiated logout URL with the original id_token.
+    // RP / SP-initiated logout URL with the original id_token / nameID.
     const ctx = validRefreshTokens.get(decoded.jti) || {};
     const wasValid = validRefreshTokens.delete(decoded.jti);
 
@@ -871,6 +1010,21 @@ router.post('/logout', (req: Request, res: Response) => {
           postLogoutRedirectUri,
         });
       }
+    } else if (ctx.samlNameID) {
+      // SP-initiated SAML SLO: ship the user to the IdP's logout
+      // endpoint with our nameID hint so the IdP can correlate the
+      // logout with its own session record.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+      const samlProv = getSamlProvider();
+      if (samlProv) {
+        const postLogoutRedirectUri = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '') + '/login';
+        logoutUrl = await samlProv.buildLogoutUrl({
+          sub: ctx.samlNameID,
+          sessionIndex: ctx.samlSessionIndex,
+          returnTo: postLogoutRedirectUri,
+        });
+      }
     }
 
     auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'logout', 'LOGOUT', null, {
@@ -878,6 +1032,7 @@ router.post('/logout', (req: Request, res: Response) => {
       wasValid,
       rpInitiated: !!logoutUrl,
       oidcProviderId: ctx.oidcProviderId || null,
+      samlNameID: ctx.samlNameID || null,
     });
     logger.info({ sub: decoded.sub, rpInitiated: !!logoutUrl }, 'User logged out');
 
@@ -1637,10 +1792,11 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
 
   // Issue the real session now that MFA cleared.
   const orgId = person.orgIds[0] || DEV_ORG_ID;
+  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+    sessionJti: refresh.jti,
   });
-  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
   if (usedBackup) {
     person.updatedAt = new Date().toISOString();
@@ -1932,10 +2088,11 @@ router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res
 
   // Issue the session, same as the TOTP path.
   const orgId = person.orgIds[0] || DEV_ORG_ID;
+  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+    sessionJti: refresh.jti,
   });
-  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
   auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_LOGIN_SUCCESS', null, {
     credentialLabel: credential.label,
@@ -2104,10 +2261,11 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
     saveStore('people', people);
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
     const accessToken = createAccessToken({
       sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+      sessionJti: refresh.jti,
     });
-    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
     auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_DISCOVERABLE_LOGIN_SUCCESS', null, {
       credentialLabel: credential.label,
@@ -2149,6 +2307,10 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
 router.get('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  // sjti is the refresh-token jti minted alongside the access token
+  // the caller is using right now. Match against each session row so
+  // the UI can label one as "This device".
+  const currentJti = (req.user as { sjti?: string } | undefined)?.sjti;
   const sessions: Array<Record<string, unknown>> = [];
   for (const [jti, ctx] of validRefreshTokens) {
     if (ctx.personId !== userId) continue;
@@ -2159,6 +2321,7 @@ router.get('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Resp
       ip: ctx.ip || null,
       userAgent: ctx.userAgent || null,
       provider: ctx.oidcProviderId ? 'oidc' : 'local',
+      current: jti === currentJti,
     });
   }
   sessions.sort((a, b) => String(b.lastUsedAt).localeCompare(String(a.lastUsedAt)));
@@ -2228,8 +2391,13 @@ router.post('/switch-org', authenticateToken, (req: AuthenticatedRequest, res: R
   }
 
   const role = getRoleForOrg(person, orgId);
+  // Preserve the existing session jti — switching orgs doesn't open
+  // a new session, it re-stamps the access token within the same
+  // refresh-token lifecycle. /auth/sessions will keep tagging the
+  // same row as current.
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role, orgId,
+    sessionJti: (req.user as { sjti?: string } | undefined)?.sjti,
   });
   auditService.log(orgId, person.id, 'Auth', 'switch-org', 'ORG_SWITCHED', null, {
     from: req.user?.orgId, to: orgId, role,

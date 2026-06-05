@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import logger from '../lib/logger';
+import { reloadAllStores } from '../lib/persistence';
 import { auditService } from './audit.service';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -94,6 +95,11 @@ interface CascadeReport {
   rowsRemoved: number;
   rowsModified: number;
   auditEntriesRedacted: number;
+  /** Names of in-memory stores that picked up the on-disk changes via
+   *  the reload registry. A store that holds personId references but
+   *  hasn't been registered will still be scrubbed on disk; it just
+   *  won't see the new content until the next process restart. */
+  storesReloaded: string[];
 }
 
 /** Run the full right-to-be-forgotten cascade for the given personId.
@@ -102,7 +108,7 @@ interface CascadeReport {
 export function erasePersonReferences(personId: string): CascadeReport {
   const report: CascadeReport = {
     storesScanned: 0, storesModified: 0, rowsRemoved: 0, rowsModified: 0,
-    auditEntriesRedacted: 0,
+    auditEntriesRedacted: 0, storesReloaded: [],
   };
   if (!fs.existsSync(DATA_DIR)) return report;
   const files = fs.readdirSync(DATA_DIR).filter((f) => f.endsWith('.json'));
@@ -150,6 +156,13 @@ export function erasePersonReferences(personId: string): CascadeReport {
   }
 
   report.auditEntriesRedacted = auditService.redactPerson(personId);
+  // After the disk writes settle, splice the in-memory arrays in
+  // every registered store back in line with the file content. Stores
+  // that didn't opt in to the registry still see the on-disk scrub,
+  // they just need a restart to flush their cached copies — the
+  // CascadeReport names the ones that did refresh so an admin can
+  // tell at a glance.
+  report.storesReloaded = reloadAllStores();
   logger.info({ personId, report }, 'GDPR cascade complete');
   return report;
 }

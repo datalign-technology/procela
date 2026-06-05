@@ -10,7 +10,7 @@ interface AuthState {
   sessionExpiresAt: number | null; // timestamp in ms
   login: (user: User, accessToken: string, refreshToken: string, expiresIn: number) => void;
   logout: () => void;
-  refreshSession: (accessToken: string, expiresIn: number) => void;
+  refreshSession: (accessToken: string, expiresIn: number, refreshToken?: string) => void;
   getTimeUntilExpiry: () => number; // seconds remaining
 }
 
@@ -41,10 +41,15 @@ export const useAuthStore = create<AuthState>()(
           sessionExpiresAt: null,
         }),
 
-      refreshSession: (accessToken: string, expiresIn: number) =>
+      refreshSession: (accessToken: string, expiresIn: number, refreshToken?: string) =>
+        // Refresh-token rotation: when the backend returns a new
+        // refresh token alongside the access token, store it so the
+        // next /auth/refresh uses the latest jti. The old jti has
+        // already been revoked server-side.
         set({
           accessToken,
           sessionExpiresAt: Date.now() + expiresIn * 1000,
+          ...(refreshToken ? { refreshToken } : {}),
         }),
 
       getTimeUntilExpiry: () => {

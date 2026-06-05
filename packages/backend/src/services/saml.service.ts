@@ -102,6 +102,8 @@ export class SamlAuthProvider implements AuthProvider {
     getAuthorizeUrlAsync: (relayState: string) => Promise<string>;
     validatePostResponseAsync: (body: Record<string, string>) => Promise<{ profile?: Record<string, unknown> }>;
     getLogoutUrlAsync: (user: unknown, relayState: string) => Promise<string>;
+    validateRedirectAsync: (req: Record<string, unknown>, originalQuery: string) => Promise<{ profile?: Record<string, unknown>; loggedOut?: boolean }>;
+    getLogoutResponseUrlAsync: (user: unknown, relayState: string) => Promise<string>;
   }> {
     if (this.samlClient) return this.samlClient as any;
     if (!this.isConfigured) throw new Error('SAML provider is not configured');
@@ -140,7 +142,7 @@ export class SamlAuthProvider implements AuthProvider {
   /** Process a SAMLResponse posted to the ACS. Verifies the signature
    *  against the configured IdP cert, then maps attributes onto the
    *  Procela user shape. */
-  async completeAcs(body: Record<string, string>): Promise<{ user: { sub: string; email: string; name: string; role: string }; returnTo: string }> {
+  async completeAcs(body: Record<string, string>): Promise<{ user: { sub: string; email: string; name: string; role: string }; returnTo: string; nameID: string; sessionIndex?: string }> {
     const client = await this.getClient();
     const result = await client.validatePostResponseAsync(body);
     const profile = (result.profile || {}) as Record<string, unknown>;
@@ -179,6 +181,8 @@ export class SamlAuthProvider implements AuthProvider {
         email, name, role,
       },
       returnTo,
+      nameID: String(profile.nameID || email),
+      ...(profile.sessionIndex ? { sessionIndex: String(profile.sessionIndex) } : {}),
     };
   }
 
@@ -194,6 +198,34 @@ export class SamlAuthProvider implements AuthProvider {
       return await client.getLogoutUrlAsync({ nameID: args.sub, sessionIndex: args.sessionIndex }, state);
     } catch (err) {
       logger.warn({ err }, 'SAML buildLogoutUrl failed');
+      return null;
+    }
+  }
+
+  /** Validate an IdP-initiated LogoutRequest (the IdP sends one when
+   *  the user signs out at the IdP side and the IdP wants every SP to
+   *  invalidate its own session in turn). Returns the NameID — the
+   *  caller uses it to find and revoke the local refresh tokens. */
+  async validateIdpLogoutRequest(query: Record<string, string>, originalQueryString: string): Promise<{ nameID: string }> {
+    const client = await this.getClient();
+    const result = await client.validateRedirectAsync(query, originalQueryString);
+    const profile = (result.profile || {}) as Record<string, unknown>;
+    const nameID = String(profile.nameID || '');
+    if (!nameID) throw new Error('SAML LogoutRequest did not include a NameID');
+    return { nameID };
+  }
+
+  /** Build the URL of the LogoutResponse to send back to the IdP after
+   *  successfully revoking the local session. The IdP needs this to
+   *  consider the SLO complete. Returns null when SAML_LOGOUT_URL
+   *  isn't configured — without it we can't produce the response URL. */
+  async buildLogoutResponseUrl(nameID: string, relayState: string): Promise<string | null> {
+    if (!this.config.logoutUrl) return null;
+    try {
+      const client = await this.getClient();
+      return await client.getLogoutResponseUrlAsync({ nameID }, relayState);
+    } catch (err) {
+      logger.warn({ err }, 'SAML buildLogoutResponseUrl failed');
       return null;
     }
   }

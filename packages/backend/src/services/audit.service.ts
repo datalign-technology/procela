@@ -27,6 +27,54 @@ export interface AuditLogEntry {
 // Persistent audit log (replace with Prisma when DB is connected)
 export const auditLogs: AuditLogEntry[] = loadStore<AuditLogEntry>('auditLogs');
 
+// One-time bootstrap: when the hash-chain code first lands, every
+// previously-written entry lacks prevHash / entryHash. The verifier
+// treats missing hashes as a chain break, so without this pass the
+// log would report broken until enough new entries push the legacy
+// ones out. Walk the existing log on startup, compute hashes
+// deterministically from the content already there, and write them
+// back. Cheap (single sequential pass), idempotent (entries that
+// already have a hash are left alone — they get rehashed only if a
+// later edit breaks the chain).
+(function bootstrapHashChain() {
+  let prev = '';
+  let mutated = false;
+  for (let i = 0; i < auditLogs.length; i++) {
+    const e = auditLogs[i];
+    if (e.entryHash && e.prevHash !== undefined && e.prevHash === prev) {
+      prev = e.entryHash;
+      continue;
+    }
+    e.prevHash = prev;
+    e.entryHash = computeEntryHashStandalone(prev, e);
+    prev = e.entryHash;
+    mutated = true;
+  }
+  if (mutated) {
+    saveStore('auditLogs', auditLogs);
+    logger.info({ count: auditLogs.length }, 'Audit log hash chain bootstrapped on existing entries');
+  }
+})();
+
+// Standalone variant of computeEntryHash that takes the entry
+// directly. Used by the bootstrap pass since `computeEntryHash` is
+// hoisted below as a function declaration but the standalone variant
+// avoids reaching across module-scope state.
+function computeEntryHashStandalone(prev: string, e: AuditLogEntry): string {
+  const ordered = {
+    id: e.id,
+    orgId: e.orgId,
+    userId: e.userId,
+    entityType: e.entityType,
+    entityId: e.entityId,
+    action: e.action,
+    before: e.before,
+    after: e.after,
+    timestamp: e.timestamp,
+  };
+  return createHash('sha256').update(prev + JSON.stringify(ordered)).digest('hex');
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Hash chain — each entry's entryHash binds the previous entry's
 // entryHash to the current entry's content. Compute it deterministically

@@ -49,3 +49,45 @@ export function flushStores(stores: Record<string, () => any[]>): void {
     catch (err) { logger.error({ err, name }, 'Final save failed'); }
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Mutating reload registry — supports operations that rewrite store
+// files on disk while route modules hold the in-memory copy. The GDPR
+// cascade is the first consumer: after it scrubs personId references
+// across every .procela-data/*.json file, it asks every registered
+// store to splice its in-memory array back to match the disk.
+//
+// Each route module that wants to participate calls
+//   registerStore('storeName', myInMemoryArray)
+// at module-load time. After a cascade we walk the registry, reload
+// from disk, and use array splice + push to mutate the existing
+// reference in place so other modules that captured a reference
+// still see the new content.
+// ──────────────────────────────────────────────────────────────────────────
+
+const reloadRegistry = new Map<string, any[]>();
+
+/** Hook an in-memory store into the reload registry. Idempotent —
+ *  registering the same name twice overwrites the registration. */
+export function registerStore<T>(name: string, target: T[]): void {
+  reloadRegistry.set(name, target);
+}
+
+/** Reload every registered store from disk, mutating the existing
+ *  array references so callers that captured them see the new
+ *  content. Used after a destructive on-disk operation (GDPR cascade)
+ *  to bring in-memory state back in sync without a restart. Returns
+ *  the list of stores that were touched. */
+export function reloadAllStores(): string[] {
+  const reloaded: string[] = [];
+  for (const [name, target] of reloadRegistry) {
+    try {
+      const fresh = loadStore<any>(name);
+      target.splice(0, target.length, ...fresh);
+      reloaded.push(name);
+    } catch (err) {
+      logger.warn({ err, name }, 'Reload failed for registered store');
+    }
+  }
+  return reloaded;
+}

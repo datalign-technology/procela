@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { dataDomains } from './data-domains';
 import { people } from './people';
@@ -59,6 +59,7 @@ interface StoredGovernanceGroup {
 }
 
 export const governanceGroups: StoredGovernanceGroup[] = loadStore<StoredGovernanceGroup>('governanceGroups');
+registerStore('governanceGroups', governanceGroups);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 // Deduplicate on startup: keep the first occurrence of each name+orgId+type combo

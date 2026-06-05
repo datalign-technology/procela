@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import logger from '../lib/logger';
@@ -64,6 +64,7 @@ interface StoredGovernanceTask {
 }
 
 export const governanceTasks: StoredGovernanceTask[] = loadStore<StoredGovernanceTask>('governanceTasks');
+registerStore('governanceTasks', governanceTasks);
 
 function enrichTask(task: StoredGovernanceTask): any {
   const assignee = task.assigneeId ? people.find((p) => p.id === task.assigneeId) : null;

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
@@ -317,6 +317,7 @@ export function canAccessOrg(
 }
 
 export const people: StoredPerson[] = loadStore<StoredPerson>('people');
+registerStore('people', people);
 
 // Migration: PROCESS_OWNER and DATA_STEWARD were legacy app-roles that
 // conflated platform permissions with governance accountability. They've
@@ -615,6 +616,14 @@ router.post('/:id/forget', (req: Request, res: Response) => {
     return;
   }
 
+  // Remove the person record on disk first so the cascade's
+  // reloadAllStores() pass picks up the deletion uniformly with
+  // every other scrubbed store. Order matters: cascade runs after
+  // the people file is rewritten so the reload-from-disk pass at
+  // the end of the cascade sees a consistent snapshot.
+  people.splice(idx, 1);
+  saveStore('people', people);
+
   // Lazy import to break the route ↔ service circular dependency.
   // The gdpr service imports auditService which doesn't depend on
   // routes; importing it at top-level is fine, but require() keeps
@@ -624,19 +633,15 @@ router.post('/:id/forget', (req: Request, res: Response) => {
   const { erasePersonReferences } = require('../services/gdpr.service') as typeof import('../services/gdpr.service');
   const report = erasePersonReferences(person.id);
 
-  // Drop the person record itself last so the in-memory people array
-  // reflects the deletion immediately (the on-disk file is rewritten
-  // by saveStore below).
-  people.splice(idx, 1);
-  saveStore('people', people);
-
   res.json({
     success: true,
     data: {
       personId: person.id,
       email: person.email,
       cascadeReport: report,
-      message: 'Person record erased and references scrubbed across stores. Restart the server to flush any cached in-memory copies in long-lived route modules.',
+      message: report.storesReloaded.length > 0
+        ? `Person record erased and references scrubbed across stores. ${report.storesReloaded.length} in-memory stores were reloaded automatically.`
+        : 'Person record erased and references scrubbed across stores. Restart the server to flush any cached in-memory copies in long-lived route modules.',
     },
   });
 });

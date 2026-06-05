@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -24,6 +24,7 @@ export interface StoredDataDomain {
 }
 
 export const dataDomains: StoredDataDomain[] = loadStore<StoredDataDomain>('dataDomains');
+registerStore('dataDomains', dataDomains);
 
 // Migrate legacy statuses to DRAFT
 {

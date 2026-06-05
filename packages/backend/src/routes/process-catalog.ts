@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { getVisibleOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { organizations } from './organizations';
@@ -156,8 +156,11 @@ export interface ProcessVersion {
 
 export { SIMPLE_TRANSITIONS, ADVANCED_TRANSITIONS, SIMPLE_LOCKED, ADVANCED_LOCKED };
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
+registerStore('processNodes', processNodes);
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
+registerStore('flowRelationships', flowRelationships);
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
+registerStore('processVersions', processVersions);
 
 // ── One-time backfill of the `domain` classifier ──
 // Pre-existing nodes have no `domain`. Resolve it once from the

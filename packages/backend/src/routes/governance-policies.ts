@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { people } from './people';
 import logger from '../lib/logger';
 
@@ -49,6 +49,7 @@ export const governancePolicies: StoredGovernancePolicy[] = loadStore<StoredGove
   ...p,
   documentType: p.documentType || inferDocumentType(p.name),
 }));
+registerStore('governancePolicies', governancePolicies);
 
 // Code prefix per documentType so a charter coded "POL-001" stops
 // reading as a misnamed policy. Sequence is per-type: CHA-001,

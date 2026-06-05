@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
@@ -49,6 +49,7 @@ interface StoredMapping {
 }
 
 export const mappings: StoredMapping[] = loadStore<StoredMapping>('mappings');
+registerStore('mappings', mappings);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
