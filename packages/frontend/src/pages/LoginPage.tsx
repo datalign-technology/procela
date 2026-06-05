@@ -23,6 +23,11 @@ interface LoginResponse {
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
+    /** Set by the backend when the Local provider issued a temporary
+     *  password (admin reset or dev→local migration). The session is
+     *  still issued so the change-password endpoint is reachable; the
+     *  frontend should block normal navigation and force a change. */
+    passwordMustChange?: boolean;
     user: {
       sub: string;
       email: string;
@@ -35,10 +40,22 @@ interface LoginResponse {
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<AuthProvider[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
+  // Forced-change state. When the login response carries
+  // passwordMustChange=true, we hold off navigating and surface a
+  // modal that requires the user to set a new password before
+  // continuing. The current (temporary) password is kept in state so
+  // the change-password endpoint can re-verify it without asking the
+  // user to type it again.
+  const [forcedChange, setForcedChange] = useState<{ currentPassword: string } | null>(null);
+  // Forgot-password modal state.
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
 
@@ -58,18 +75,20 @@ export default function LoginPage() {
   }, []);
 
   const devProvider = providers.find((p) => p.type === 'dev' && p.enabled);
+  const localProvider = providers.find((p) => p.type === 'local' && p.enabled);
   const microsoftProvider = providers.find((p) => p.type === 'oidc' && p.id === 'microsoft');
   const oktaProvider = providers.find((p) => p.type === 'oidc' && p.id === 'okta');
 
-  const loginWithEmail = async (loginEmail: string, loginName?: string) => {
+  const loginWithEmail = async (loginEmail: string, loginName?: string, loginPassword?: string) => {
     setError('');
     setLoading(true);
     try {
       const res = await apiClient.post<LoginResponse>('/auth/login', {
         email: loginEmail,
         name: loginName || undefined,
+        password: loginPassword || undefined,
       });
-      const { accessToken, refreshToken, expiresIn, user } = res.data;
+      const { accessToken, refreshToken, expiresIn, user, passwordMustChange } = res.data;
       login(
         {
           id: user.sub,
@@ -84,7 +103,14 @@ export default function LoginPage() {
         refreshToken,
         expiresIn,
       );
-      navigate('/');
+      if (passwordMustChange && loginPassword) {
+        // Hold the temporary password in memory so the change-password
+        // endpoint can re-verify it. Stay on this page; the modal
+        // blocks until the user picks a new password.
+        setForcedChange({ currentPassword: loginPassword });
+      } else {
+        navigate('/');
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -99,6 +125,26 @@ export default function LoginPage() {
       return;
     }
     await loginWithEmail(email.trim());
+  };
+
+  const handleLocalLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      setError('Email and password are required');
+      return;
+    }
+    await loginWithEmail(email.trim(), undefined, password);
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    try {
+      // Always returns 204 from the backend regardless of whether the
+      // email matched — same UX either way so we don't leak existence.
+      await apiClient.post('/auth/password/forgot', { email: forgotEmail.trim() });
+    } catch { /* */ }
+    setForgotSubmitted(true);
   };
 
   const handleSsoClick = (provider: AuthProvider | undefined) => {
@@ -187,6 +233,62 @@ export default function LoginPage() {
               </button>
             </div>
 
+            {/* Local credentials (email + password). Only shown when
+                the backend reports the Local provider as the active
+                one. Otherwise the email/password fields would invite
+                users to type credentials into the dev-mode flow that
+                ignores them. */}
+            {localProvider && (
+              <>
+                <div style={styles.divider}>
+                  <div style={styles.dividerLine} />
+                  <span style={styles.dividerText}>or</span>
+                  <div style={styles.dividerLine} />
+                </div>
+                <form onSubmit={handleLocalLogin} style={styles.devForm} autoComplete="on">
+                  <input
+                    type="email"
+                    name="login-email"
+                    placeholder="Email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    style={styles.input}
+                  />
+                  <input
+                    type="password"
+                    name="login-password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    style={styles.input}
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    style={{
+                      ...styles.devSubmitButton,
+                      ...(loading ? styles.devSubmitButtonDisabled : {}),
+                    }}
+                  >
+                    {loading ? 'Signing in...' : 'Sign in'}
+                  </button>
+                </form>
+                <div style={{ marginTop: 10, textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotEmail(email); setForgotOpen(true); setForgotSubmitted(false); }}
+                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              </>
+            )}
+
             {/* Divider */}
             {devProvider && (
               <>
@@ -260,6 +362,138 @@ export default function LoginPage() {
         <p style={styles.footer}>
           Procela — Process Intelligence Platform
         </p>
+      </div>
+
+      {/* Forced-change modal — blocks until the user picks a new
+          password. The current (temporary) password is held in state
+          so the user doesn't have to retype it. */}
+      {forcedChange && (
+        <ForcedChangeModal
+          currentPassword={forcedChange.currentPassword}
+          onDone={() => { setForcedChange(null); navigate('/'); }}
+        />
+      )}
+
+      {/* Forgot-password modal — fire-and-forget POST to /password/forgot.
+          The backend always returns 204; we acknowledge the submission
+          without confirming whether the email matched. */}
+      {forgotOpen && (
+        <div style={styles.modalScrim} onClick={() => setForgotOpen(false)}>
+          <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+            {!forgotSubmitted ? (
+              <>
+                <div style={styles.modalTitle}>Reset your password</div>
+                <p style={styles.modalText}>
+                  Enter the email address tied to your Procela account. If we
+                  recognise it, we'll send instructions for setting a new
+                  password.
+                </p>
+                <form onSubmit={handleForgotSubmit}>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="Email address"
+                    required
+                    autoFocus
+                    style={styles.input}
+                  />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                    <button type="button" onClick={() => setForgotOpen(false)} style={styles.modalSecondary}>Cancel</button>
+                    <button type="submit" style={styles.modalPrimary}>Send instructions</button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <div style={styles.modalTitle}>Check your email</div>
+                <p style={styles.modalText}>
+                  If <strong>{forgotEmail}</strong> matches an active account,
+                  you'll receive instructions for setting a new password
+                  shortly.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                  <button type="button" onClick={() => setForgotOpen(false)} style={styles.modalPrimary}>Done</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// ForcedChangeModal — pops after a Local-provider login when the
+// backend reports passwordMustChange=true. The session is already
+// active (the access token was stored by useAuthStore.login()), but
+// the user is held here until they pick a real password — navigation
+// is gated behind a successful change.
+// ──────────────────────────────────────────────────────────────────────────
+function ForcedChangeModal({ currentPassword, onDone }: {
+  currentPassword: string;
+  onDone: () => void;
+}) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    if (newPassword !== confirm) {
+      setErr('Passwords do not match');
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiClient.post('/auth/password', { currentPassword, newPassword });
+      onDone();
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to set a new password');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={styles.modalScrim}>
+      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>Set a new password</div>
+        <p style={styles.modalText}>
+          Your account is using a temporary password. Choose a new one
+          before continuing — at least 12 characters; password must not be
+          on the common-breach list.
+        </p>
+        {err && <div style={styles.errorBanner}>{err}</div>}
+        <form onSubmit={submit}>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password"
+            required
+            autoComplete="new-password"
+            autoFocus
+            style={styles.input}
+          />
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Confirm new password"
+            required
+            autoComplete="new-password"
+            style={{ ...styles.input, marginTop: 8 }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+            <button type="submit" disabled={busy} style={styles.modalPrimary}>
+              {busy ? 'Saving…' : 'Save new password'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -439,5 +673,54 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.75rem',
     color: '#94a3b8',
     marginTop: '2rem',
+  },
+  modalScrim: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '1rem',
+    zIndex: 1000,
+  },
+  modalCard: {
+    background: '#fff',
+    borderRadius: '12px',
+    padding: '1.5rem',
+    width: 'min(420px, 100%)',
+    boxShadow: '0 20px 60px rgba(15, 23, 42, 0.35)',
+  },
+  modalTitle: {
+    fontSize: '1.125rem',
+    fontWeight: 700,
+    color: '#1e293b',
+    marginBottom: '0.5rem',
+  },
+  modalText: {
+    fontSize: '0.85rem',
+    color: '#475569',
+    lineHeight: 1.5,
+    marginBottom: '1rem',
+  },
+  modalPrimary: {
+    padding: '0.5rem 1rem',
+    background: '#0f4f46',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  modalSecondary: {
+    padding: '0.5rem 1rem',
+    background: '#fff',
+    color: '#475569',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    fontSize: '0.85rem',
+    fontWeight: 500,
+    cursor: 'pointer',
   },
 };

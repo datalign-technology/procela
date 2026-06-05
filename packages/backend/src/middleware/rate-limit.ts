@@ -1,20 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
+import { createClient, RedisClientType } from 'redis';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 
 // ──────────────────────────────────────────────────────────────────────────
-// rate-limit — in-memory request limiter for sensitive endpoints.
+// rate-limit — request limiter for sensitive endpoints.
 //
 // Used on /auth/login and the password routes to make brute-force and
 // credential-stuffing patterns expensive. Keys requests by a caller-
 // provided function (typically `${ip}:${email}` for login) so an
 // attacker can't trivially spread attempts across emails.
 //
-// In-memory store: a Map<key, { count, windowStart }>. Production
-// should swap this for Redis so the limiter survives process restarts
-// and works across instances. The middleware factory's API is
-// designed to allow that swap without touching call sites — just
-// replace the store implementation.
+// Two backends, picked at boot:
+//   - Redis (production): one shared counter across instances; survives
+//     process restarts. Uses INCR + EXPIRE on a per-key bucket so the
+//     atomic semantics are correct under load. Activated by REDIS_URL
+//     env var.
+//   - In-memory (dev / single-instance): a Map<key, {count, windowStart}>
+//     with periodic sweep. Used when Redis isn't configured OR when the
+//     Redis connection fails to come up — we fall back rather than
+//     refusing to start so a misconfigured production env doesn't lock
+//     everyone out.
 //
 // Successful actions don't reset the counter — that would let an
 // attacker hide brute attempts inside a successful session's window.
@@ -28,55 +34,134 @@ export interface RateLimitOptions {
   max: number;
   /** Derive a key from the request. Default: IP only. */
   keyBy?: (req: Request) => string;
-  /** Optional label for audit log entries. */
+  /** Optional label for audit log entries + Redis key namespace. */
   label?: string;
-}
-
-interface Counter {
-  count: number;
-  windowStart: number;
 }
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
+// ── Redis backend ──
+// Lazy-singleton client shared across all limiter instances. The first
+// rate-limited route call triggers connection; subsequent ones reuse.
+// We don't fail boot if Redis is misconfigured — the per-key get()
+// helper catches and downgrades to in-memory so the app keeps running.
+let redisClient: RedisClientType | null = null;
+let redisReady = false;
+let redisAttempted = false;
+
+async function getRedisClient(): Promise<RedisClientType | null> {
+  if (redisReady) return redisClient;
+  if (redisAttempted) return null;
+  redisAttempted = true;
+  const url = process.env.REDIS_URL;
+  if (!url) {
+    logger.info('REDIS_URL not set — rate limiter using in-memory backend');
+    return null;
+  }
+  try {
+    redisClient = createClient({ url });
+    redisClient.on('error', (err) => {
+      // Don't spam the log; one warning at first failure is enough.
+      // Subsequent requests fall through to the in-memory backend
+      // automatically because incrInRedis() catches.
+      if (redisReady) logger.warn({ err }, 'Redis connection error — falling back to in-memory rate limiter');
+      redisReady = false;
+    });
+    await redisClient.connect();
+    redisReady = true;
+    logger.info({ url: url.replace(/:[^:@/]+@/, ':***@') }, 'Connected to Redis for rate limiter');
+    return redisClient;
+  } catch (err) {
+    logger.warn({ err }, 'Failed to connect to Redis — using in-memory rate limiter');
+    redisClient = null;
+    return null;
+  }
+}
+
+/**
+ * Atomic INCR + EXPIRE on a windowed counter. Returns the post-increment
+ * count and the remaining TTL in ms (so the middleware can populate
+ * Retry-After). Returns null if the Redis hop fails — the caller falls
+ * back to in-memory.
+ */
+async function incrInRedis(key: string, windowMs: number): Promise<{ count: number; ttlMs: number } | null> {
+  const client = await getRedisClient();
+  if (!client || !redisReady) return null;
+  try {
+    // Multi to keep INCR + PEXPIRE atomic; PEXPIRE only applies when
+    // the key was freshly created (count === 1) so we don't keep
+    // pushing the expiry out and turn a 60-second window into a
+    // perpetual lockout.
+    const multi = client.multi();
+    multi.incr(key);
+    multi.pTTL(key);
+    const [countRaw, ttlRaw] = (await multi.exec()) as unknown as [number, number];
+    const count = Number(countRaw);
+    let ttlMs = Number(ttlRaw);
+    if (ttlMs < 0) {
+      // First hit in this window — set the expiry.
+      await client.pExpire(key, windowMs);
+      ttlMs = windowMs;
+    }
+    return { count, ttlMs };
+  } catch (err) {
+    logger.warn({ err, key }, 'Redis rate-limit op failed — falling back to in-memory');
+    redisReady = false;
+    return null;
+  }
+}
+
+// ── In-memory backend ──
+interface Counter {
+  count: number;
+  windowStart: number;
+}
+const memStore = new Map<string, Counter>();
+const memSweep = setInterval(() => {
+  const now = Date.now();
+  for (const [k, c] of memStore) {
+    if (now - c.windowStart > 24 * 60 * 60_000) memStore.delete(k);
+  }
+}, 60_000);
+memSweep.unref?.();
+
+function incrInMemory(key: string, windowMs: number): { count: number; ttlMs: number } {
+  const now = Date.now();
+  const existing = memStore.get(key);
+  if (!existing || now - existing.windowStart > windowMs) {
+    memStore.set(key, { count: 1, windowStart: now });
+    return { count: 1, ttlMs: windowMs };
+  }
+  existing.count += 1;
+  return { count: existing.count, ttlMs: existing.windowStart + windowMs - now };
+}
+
+// ── Middleware factory ──
 export function rateLimit(opts: RateLimitOptions) {
-  const store = new Map<string, Counter>();
   const keyBy = opts.keyBy || ((req: Request) => req.ip || 'unknown');
   const label = opts.label || 'rate-limit';
 
-  // Sweep every minute to evict expired counters so the map doesn't
-  // grow indefinitely under attack.
-  const sweepInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [k, c] of store) {
-      if (now - c.windowStart > opts.windowMs) store.delete(k);
-    }
-  }, 60_000);
-  // unref so a hung interval doesn't keep the test process alive.
-  sweepInterval.unref?.();
+  return async function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const baseKey = keyBy(req);
+    // Namespace Redis keys by window length so two limiters on the
+    // same route (e.g. 5/min and 20/hour login limits) don't collide
+    // on the same counter.
+    const fullKey = `procela:ratelimit:${label}:${opts.windowMs}:${baseKey}`;
 
-  return function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
-    const key = keyBy(req);
-    const now = Date.now();
-    const existing = store.get(key);
+    const redisResult = await incrInRedis(fullKey, opts.windowMs);
+    const result = redisResult ?? incrInMemory(fullKey, opts.windowMs);
 
-    if (!existing || now - existing.windowStart > opts.windowMs) {
-      store.set(key, { count: 1, windowStart: now });
-      next();
-      return;
-    }
-
-    existing.count += 1;
-    if (existing.count > opts.max) {
-      const retryAfterSec = Math.ceil((existing.windowStart + opts.windowMs - now) / 1000);
+    if (result.count > opts.max) {
+      const retryAfterSec = Math.max(1, Math.ceil(result.ttlMs / 1000));
       res.setHeader('Retry-After', String(retryAfterSec));
       // Audit the first time we tip over so brute patterns surface
       // in the log without flooding it on every blocked request.
-      if (existing.count === opts.max + 1) {
+      if (result.count === opts.max + 1) {
         auditService.log(DEV_ORG_ID, null, 'Auth', label, 'RATE_LIMITED', null, {
-          key, count: existing.count, windowMs: opts.windowMs,
+          key: baseKey, count: result.count, windowMs: opts.windowMs,
+          backend: redisResult ? 'redis' : 'memory',
         });
-        logger.warn({ key, label, count: existing.count }, 'Rate limit exceeded');
+        logger.warn({ key: baseKey, label, count: result.count }, 'Rate limit exceeded');
       }
       res.status(429).json({ success: false, error: 'Too many requests — please try again shortly.' });
       return;

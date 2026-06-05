@@ -12,6 +12,7 @@ import { people, computeAccessibleOrgs } from './people';
 import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
+import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
 import {
   getAuthProvider,
   getAuthConfig,
@@ -577,15 +578,11 @@ router.post('/password/admin-reset', authenticateToken, authorize('SUPER_ADMIN',
  *
  * Anyone may request a reset. Always returns 204 — never confirms
  * whether the email exists (prevents enumeration). When the email
- * matches a real person, a single-use reset token is generated and
- * either delivered by email (production) or written to the audit log
- * + returned in the response for dev visibility.
+ * matches a real person, a single-use reset token is minted and
+ * either delivered by email (production) or returned to the dev
+ * audit log so an admin can hand it over out-of-band.
  *
- * The reset-token consumption endpoint (POST /password/reset with
- * { token, newPassword }) is a separate feature — this commit only
- * stubs the request-side. Token storage and the consume endpoint are
- * a follow-up so this commit doesn't depend on an SMTP integration
- * that's not yet wired.
+ * Token redemption: POST /auth/password/reset with { token, newPassword }.
  */
 router.post('/password/forgot', forgotLimiter, (req: Request, res: Response) => {
   const { email } = req.body;
@@ -597,15 +594,21 @@ router.post('/password/forgot', forgotLimiter, (req: Request, res: Response) => 
   const person = people.find((p) => p.email.toLowerCase() === email.toLowerCase());
 
   if (person) {
-    // Stub: in production this would mint a single-use token,
-    // persist it with an expiry, and email a reset link. For now we
-    // log it as an audit event so an admin can see the request and
-    // run an admin-reset out-of-band.
+    const token = mintResetToken(person.id);
     auditService.log(person.orgIds[0] || DEV_ORG_ID, null, 'Auth', 'password', 'PASSWORD_RESET_REQUESTED', null, {
       targetPersonId: person.id,
       targetEmail: person.email,
+      // The token is written to the audit log under "after" only in
+      // dev mode so an admin can read it from the audit feed when no
+      // SMTP integration is wired. In production this branch should
+      // hand the token to the email-delivery layer instead and the
+      // audit entry should NOT include the token value.
+      ...(process.env.NODE_ENV !== 'production' ? { resetTokenDev: token } : {}),
     });
-    logger.info({ personId: person.id }, 'Password reset requested');
+    logger.info({
+      personId: person.id,
+      ttlMs: RESET_TOKEN_TTL_MS,
+    }, 'Password reset token minted');
   } else {
     // Always log the request — even for unknown emails — so brute
     // enumeration via this endpoint shows up as a pattern.
@@ -613,6 +616,64 @@ router.post('/password/forgot', forgotLimiter, (req: Request, res: Response) => 
   }
 
   // Uniform response regardless of whether the email matched.
+  res.status(204).end();
+});
+
+/**
+ * POST /api/v1/auth/password/reset
+ * Body: { token, newPassword }
+ *
+ * Consumes a forgot-password token and sets a new password.
+ * Single-use: the token is deleted on first read whether the new
+ * password validates or not. The reset clears passwordMustChange
+ * because the user has just demonstrated control of the recovery
+ * channel and is choosing their own password.
+ *
+ * Uniform 400 for "invalid or expired token" so a caller can't
+ * distinguish between "token never existed" and "token consumed
+ * already" — both are equivalently terminal.
+ */
+router.post('/password/reset', forgotLimiter, async (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    res.status(400).json({ success: false, error: 'token and newPassword are required' });
+    return;
+  }
+
+  const personId = consumeResetToken(token);
+  if (!personId) {
+    res.status(400).json({ success: false, error: 'Invalid or expired token' });
+    return;
+  }
+
+  const valid = validatePassword(newPassword);
+  if (!valid.valid) {
+    res.status(400).json({ success: false, error: valid.error });
+    return;
+  }
+
+  const person = people.find((p) => p.id === personId);
+  if (!person) {
+    // The token was minted for a person that no longer exists.
+    // Treat as terminal — log so the orphan token shows up but
+    // return the uniform "invalid" response.
+    logger.warn({ personId }, 'Reset token bound to missing person');
+    res.status(400).json({ success: false, error: 'Invalid or expired token' });
+    return;
+  }
+
+  person.passwordHash = await hashPassword(newPassword);
+  person.passwordUpdatedAt = new Date().toISOString();
+  person.passwordMustChange = false;
+  person.updatedAt = person.passwordUpdatedAt;
+  saveStore('people', people);
+
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'password', 'PASSWORD_RESET_CONSUMED', null, {
+    targetPersonId: person.id,
+  });
+  logger.info({ personId: person.id }, 'Password reset via token');
+
   res.status(204).end();
 });
 

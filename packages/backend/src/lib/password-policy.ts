@@ -1,3 +1,7 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import logger from './logger';
+
 // ──────────────────────────────────────────────────────────────────────────
 // password-policy — validates new passwords against organization rules.
 //
@@ -15,17 +19,13 @@
 //     model and slip into wordlists.
 //   - No maximum length (Argon2 handles long inputs fine; rejecting
 //     "too long" is an anti-pattern).
-//   - Breached-password screening is the second primary control. A
-//     real deployment ships an embedded HIBP-style local wordlist
-//     (no network call needed). The stub here matches a small
-//     handful of obvious ones so the rule path is testable; the
-//     wordlist is meant to be replaced before production.
+//   - Breached-password screening is the second primary control. The
+//     wordlist is loaded from breached-passwords.txt at startup and
+//     can be swapped for a fuller HIBP corpus without code changes.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface PasswordPolicy {
   minLength: number;
-  /** Allow blocking a small set of common passwords. Replace the stub
-   *  set with an embedded HIBP-derived wordlist for production. */
   blockBreached: boolean;
 }
 
@@ -34,16 +34,30 @@ export const DEFAULT_POLICY: PasswordPolicy = {
   blockBreached: true,
 };
 
-// Stub breached-password set. NOT comprehensive — production should
-// embed the top ~10k from HIBP / SecLists. Kept small here so the
-// repo doesn't carry a wordlist artefact in this commit.
-const KNOWN_BREACHED = new Set([
-  'password', 'password1', 'password123', 'p@ssword', 'p@ssw0rd',
-  'qwerty', 'qwerty123', '12345678', '123456789', '1234567890',
-  'iloveyou', 'admin', 'admin123', 'letmein', 'welcome',
-  'monkey', 'dragon', 'baseball', 'football', 'starwars',
-  'procela', 'procela123', 'procela2025', 'procela2026',
-]);
+// Load the wordlist once at module init. The cost is one file read at
+// boot, ~50 KB of memory for the Set. Stripped of comments and blank
+// lines; comparison is case-insensitive.
+function loadBreachedSet(): Set<string> {
+  try {
+    const path = join(__dirname, 'breached-passwords.txt');
+    const raw = readFileSync(path, 'utf-8');
+    const entries = raw
+      .split(/\r?\n/)
+      .map((l) => l.trim().toLowerCase())
+      .filter((l) => l.length > 0 && !l.startsWith('#'));
+    const set = new Set(entries);
+    logger.info({ count: set.size }, 'Loaded breached-password wordlist');
+    return set;
+  } catch (err) {
+    // Fail open — log loudly but don't block the boot. An empty set
+    // means the policy still enforces minLength; only the breach
+    // check is disabled.
+    logger.error({ err }, 'Failed to load breached-password wordlist — breach screening disabled');
+    return new Set();
+  }
+}
+
+const KNOWN_BREACHED = loadBreachedSet();
 
 export interface ValidationResult {
   valid: boolean;
