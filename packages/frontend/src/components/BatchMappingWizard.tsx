@@ -169,7 +169,9 @@ export default function BatchMappingWizard({ open, onClose, orgId, onCreated }: 
         >
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Batch Mapping</h2>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close batch mapping wizard"
             style={{
               background: 'none',
               border: 'none',
@@ -179,9 +181,8 @@ export default function BatchMappingWizard({ open, onClose, orgId, onCreated }: 
               padding: '4px 8px',
               lineHeight: 1,
             }}
-            aria-label="Close"
           >
-            &times;
+            <span aria-hidden="true">&times;</span>
           </button>
         </div>
 

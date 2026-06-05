@@ -2249,7 +2249,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onClone(node.id)} title="Clone Value Stream">Clone</button>
         )}
         {!isLocked && (
-          <button style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete">&times;</button>
+          <button type="button" style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 14 }} onClick={() => onDelete(node.id)} title="Delete" aria-label={`Delete ${node.name || 'node'}`}><span aria-hidden="true">&times;</span></button>
         )}
       </div>
 

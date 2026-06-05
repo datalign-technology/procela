@@ -499,7 +499,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
               </>
             )}
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}>&times;</button>
+          <button type="button" onClick={onClose} aria-label="Close data quality rules" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
         </div>
 
         {/* Active rules — filtered by selected column when one is picked */}

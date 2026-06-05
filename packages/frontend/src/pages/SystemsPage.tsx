@@ -393,7 +393,7 @@ function ConnectPickerModal({
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Connect to a source</h2>
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Pick a connection to serve <strong>{sys.name}</strong>, or create a new one. A connection can serve several systems at once.</span>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+          <button type="button" onClick={onClose} aria-label="Close system detail" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}><span aria-hidden="true">&times;</span></button>
         </div>
 
         {empty && (

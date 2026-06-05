@@ -1210,7 +1210,7 @@ export default function PeoplePage() {
                       <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People</h3>
                       <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste CSV or JSON, or browse a file. Format is auto-detected.</span>
                     </div>
-                    <button onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
+                    <button type="button" onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }} aria-label="Close import dialog" style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                     <label style={{ fontSize: 11, fontWeight: 500 }}>Default org *</label>
@@ -1395,7 +1395,7 @@ export default function PeoplePage() {
                     {previewData.person.title && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>{previewData.person.title}</div>}
                     {previewData.person.email && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{previewData.person.email}</div>}
                   </div>
-                  <button onClick={() => setPreviewPersonId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)', padding: '0 4px' }}>&times;</button>
+                  <button type="button" onClick={() => setPreviewPersonId(null)} aria-label="Close person preview" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)', padding: '0 4px' }}><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div style={{ marginBottom: 12 }}>
                   <span style={roleBadge(previewData.person.role)}>{ROLE_LABELS[previewData.person.role] || previewData.person.role}</span>

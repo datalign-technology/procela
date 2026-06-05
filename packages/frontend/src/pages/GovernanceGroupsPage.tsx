@@ -1139,7 +1139,7 @@ export default function GovernanceGroupsPage() {
                                               + add to group
                                             </button>
                                           )}
-                                          <button onClick={() => handleRemoveDamaRole(a.id)} title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                          <button type="button" onClick={() => handleRemoveDamaRole(a.id)} aria-label="Remove role assignment" title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>
                                         </span>
                                       );
                                     })}

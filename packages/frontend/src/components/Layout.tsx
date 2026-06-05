@@ -407,12 +407,18 @@ export default function Layout() {
                   <select
                     value={activeOrgId}
                     onChange={(e) => handleOrgChange(e.target.value)}
+                    aria-label="Active organization scope"
                     style={{
                       padding: '4px 10px', fontSize: 13, fontWeight: 500,
                       border: '1px solid var(--color-border)', borderRadius: 4,
                       background: 'var(--color-surface)',
                       color: 'var(--color-text)',
-                      minWidth: 220, cursor: 'pointer',
+                      // Cap at the available width so the picker doesn't push
+                      // the rest of the header off-screen on narrow viewports.
+                      // The min keeps it usable when there's room.
+                      width: 'min(220px, 100%)',
+                      maxWidth: '100%',
+                      cursor: 'pointer',
                     }}
                   >
                     {companies.map((co) => {
@@ -444,7 +450,7 @@ export default function Layout() {
               );
             })()}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {/* Ask AI — surfaces the ChatPanel from the top bar. The
                 ChatPanel still owns its own open state and its floating
                 bottom-right bubble; this button is a second entry point
@@ -495,20 +501,21 @@ export default function Layout() {
               <div className={styles.userAvatar}>{userInitial}</div>
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
                 <span>{user?.name || 'User'}</span>
-                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   {role.replace('_', ' ')}
                 </span>
               </div>
             </div>
             <button
+              type="button"
               onClick={handleSignOut}
               style={{
                 padding: '6px 14px',
                 fontSize: '13px',
                 background: 'transparent',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                color: '#64748b',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--color-text-secondary)',
                 cursor: 'pointer',
               }}
             >

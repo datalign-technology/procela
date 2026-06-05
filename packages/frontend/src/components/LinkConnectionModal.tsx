@@ -173,7 +173,7 @@ export default function LinkConnectionModal({
               asset corresponds to.
             </p>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}>&times;</button>
+          <button type="button" onClick={onClose} aria-label="Close connection link dialog" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
         </div>
 
         {/* Step 1: pick connection */}

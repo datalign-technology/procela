@@ -863,7 +863,7 @@ export default function GovernanceProgramPage() {
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 4 }}>
                               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', minWidth: 20 }}>{idx + 1}.</span>
                               <span style={{ flex: 1, fontSize: 13 }}>{p}</span>
-                              <button type="button" onClick={() => removePrinciple(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: 2 }}>&times;</button>
+                              <button type="button" onClick={() => removePrinciple(idx)} aria-label={`Remove principle ${p}`} title="Remove principle" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--color-text-muted)', padding: 2 }}><span aria-hidden="true">&times;</span></button>
                             </div>
                           ))}
                         </div>
@@ -981,7 +981,7 @@ export default function GovernanceProgramPage() {
                                               <span key={a.id} style={{ fontSize: 11, padding: '2px 8px', background: isAgent ? '#ede9fe' : '#d1f0eb', color: isAgent ? '#5b21b6' : '#0f4f46', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                 {isAgent && <span title="AI Agent" style={{ display: 'inline-flex' }}><Bot size={11} strokeWidth={2.4} /></span>}
                                                 {displayName}
-                                                <button onClick={() => setConfirmRemoveRoleId(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                                <button type="button" onClick={() => setConfirmRemoveRoleId(a.id)} aria-label={`Remove ${displayName} from this role`} title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: isAgent ? '#5b21b6' : '#0f4f46', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>
                                               </span>
                                             );
                                           })}

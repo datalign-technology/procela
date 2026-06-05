@@ -81,7 +81,13 @@ ol {
 
   --color-text: #1e293b;
   --color-text-secondary: #64748b;
-  --color-text-muted: #94a3b8;
+  /* slate-500 — was slate-400 (#94a3b8), which sat at ~2.6:1 against
+   * the white surface and failed WCAG AA for both normal text (4.5:1)
+   * and large text (3:1). slate-500 (#64748b) lands at ~4.6:1 and
+   * passes AA across the board. The visual hierarchy with primary
+   * text stays — that comes from font-size + weight + uppercase
+   * tracking, not just colour. */
+  --color-text-muted: #64748b;
 
   --color-bg: #f8fafc;
   --color-surface: #ffffff;
