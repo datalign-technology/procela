@@ -20,15 +20,28 @@ interface ProvidersResponse {
 interface LoginResponse {
   success: boolean;
   data: {
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
+    /** Set by the backend when the user has enrolled in MFA. Instead
+     *  of access + refresh tokens, the login response carries this
+     *  short-lived opaque token + a `mfaRequired: true` flag. The
+     *  frontend prompts for a TOTP / backup code and POSTs both to
+     *  /auth/mfa/login-verify, which returns the real session.
+     *  Mutually exclusive with the standard accessToken/refreshToken
+     *  shape — one or the other is present, never both. */
+    mfaRequired?: boolean;
+    mfaToken?: string;
+
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn?: number;
     /** Set by the backend when the Local provider issued a temporary
      *  password (admin reset or dev→local migration). The session is
      *  still issued so the change-password endpoint is reachable; the
      *  frontend should block normal navigation and force a change. */
     passwordMustChange?: boolean;
-    user: {
+    /** Surface from the MFA login-verify response so the UI can nudge
+     *  a regen when the user is running low on backup codes. */
+    backupCodesRemaining?: number;
+    user?: {
       sub: string;
       email: string;
       name: string;
@@ -52,6 +65,12 @@ export default function LoginPage() {
   // the change-password endpoint can re-verify it without asking the
   // user to type it again.
   const [forcedChange, setForcedChange] = useState<{ currentPassword: string } | null>(null);
+  // MFA gate: once the password check succeeds and the user has TOTP
+  // enrolled, /auth/login returns mfaRequired: true + an opaque
+  // mfaToken instead of issuing a session. We hold the token + the
+  // password (so forced-change still works if needed) and show the
+  // 6-digit prompt until login-verify clears the gate.
+  const [mfaPending, setMfaPending] = useState<{ token: string; currentPassword?: string } | null>(null);
   // Forgot-password modal state.
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -92,6 +111,36 @@ export default function LoginPage() {
   const microsoftProvider = providers.find((p) => p.type === 'oidc' && p.id === 'microsoft');
   const oktaProvider = providers.find((p) => p.type === 'oidc' && p.id === 'okta');
 
+  const completeLogin = (
+    data: LoginResponse['data'],
+    loginPassword?: string,
+  ) => {
+    const { accessToken, refreshToken, expiresIn, user, passwordMustChange } = data;
+    if (!accessToken || !refreshToken || !expiresIn || !user) {
+      setError('Login response was incomplete');
+      return;
+    }
+    login(
+      {
+        id: user.sub,
+        orgId: user.orgId,
+        name: user.name,
+        email: user.email,
+        role: user.role as any,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      accessToken,
+      refreshToken,
+      expiresIn,
+    );
+    if (passwordMustChange && loginPassword) {
+      setForcedChange({ currentPassword: loginPassword });
+    } else {
+      navigate('/');
+    }
+  };
+
   const loginWithEmail = async (loginEmail: string, loginName?: string, loginPassword?: string) => {
     setError('');
     setLoading(true);
@@ -101,29 +150,14 @@ export default function LoginPage() {
         name: loginName || undefined,
         password: loginPassword || undefined,
       });
-      const { accessToken, refreshToken, expiresIn, user, passwordMustChange } = res.data;
-      login(
-        {
-          id: user.sub,
-          orgId: user.orgId,
-          name: user.name,
-          email: user.email,
-          role: user.role as any,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        accessToken,
-        refreshToken,
-        expiresIn,
-      );
-      if (passwordMustChange && loginPassword) {
-        // Hold the temporary password in memory so the change-password
-        // endpoint can re-verify it. Stay on this page; the modal
-        // blocks until the user picks a new password.
-        setForcedChange({ currentPassword: loginPassword });
-      } else {
-        navigate('/');
+      // MFA gate: the user has TOTP enrolled, so the backend issued
+      // an opaque mfaToken instead of a session. Hold the password
+      // (for forced-change after MFA clears) and show the code prompt.
+      if (res.data.mfaRequired && res.data.mfaToken) {
+        setMfaPending({ token: res.data.mfaToken, currentPassword: loginPassword });
+        return;
       }
+      completeLogin(res.data, loginPassword);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -405,6 +439,23 @@ export default function LoginPage() {
         <ForcedChangeModal
           currentPassword={forcedChange.currentPassword}
           onDone={() => { setForcedChange(null); navigate('/'); }}
+        />
+      )}
+
+      {/* MFA / TOTP prompt — shown when /auth/login returned
+          mfaRequired:true. Locks the page until the user supplies
+          a valid code (or backup code); on success the real session
+          is issued and we navigate (or hand off to the forced-change
+          modal if the password also needs rotation). */}
+      {mfaPending && (
+        <MfaPromptModal
+          mfaToken={mfaPending.token}
+          onSuccess={(data) => {
+            const pwd = mfaPending.currentPassword;
+            setMfaPending(null);
+            completeLogin(data, pwd);
+          }}
+          onCancel={() => setMfaPending(null)}
         />
       )}
 
@@ -758,3 +809,99 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
 };
+
+// ──────────────────────────────────────────────────────────────────────────
+// MfaPromptModal — pops after a password login when the backend says
+// MFA is required. Takes a 6-digit TOTP from the user's authenticator
+// app or, when they've lost access, a single-use backup code. Calls
+// /auth/mfa/login-verify with whichever the user supplied; on success
+// the real session payload comes back and the caller hands it to
+// authStore.
+// ──────────────────────────────────────────────────────────────────────────
+
+function MfaPromptModal({ mfaToken, onSuccess, onCancel }: {
+  mfaToken: string;
+  onSuccess: (data: LoginResponse['data']) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState('');
+  const [useBackup, setUseBackup] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    if (!code.trim()) return;
+    setBusy(true);
+    try {
+      const body = useBackup
+        ? { mfaToken, backupCode: code.trim() }
+        : { mfaToken, code: code.replace(/\D/g, '') };
+      const res = await apiClient.post<LoginResponse>('/auth/mfa/login-verify', body);
+      onSuccess(res.data);
+    } catch (e: any) {
+      setErr(e?.message || 'Invalid code');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={styles.modalScrim}>
+      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>
+          {useBackup ? 'Enter a backup code' : 'Two-step verification'}
+        </div>
+        <p style={styles.modalText}>
+          {useBackup
+            ? 'Backup codes are the strings you saved at enrollment. Each one works only once.'
+            : 'Open your authenticator app and enter the 6-digit code it shows.'}
+        </p>
+        {err && <div style={styles.errorBanner}>{err}</div>}
+        <form onSubmit={submit}>
+          <input
+            type="text"
+            inputMode={useBackup ? 'text' : 'numeric'}
+            autoComplete="one-time-code"
+            maxLength={useBackup ? 24 : 6}
+            value={code}
+            onChange={(e) => setCode(useBackup ? e.target.value : e.target.value.replace(/\D/g, ''))}
+            placeholder={useBackup ? 'Backup code' : '6-digit code'}
+            required
+            autoFocus
+            style={styles.input}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => { setUseBackup(!useBackup); setCode(''); setErr(''); }}
+              style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+            >
+              {useBackup ? 'Use authenticator instead' : "Lost your authenticator? Use a backup code"}
+            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={busy}
+                style={styles.modalSecondary}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busy || !code.trim()}
+                style={{
+                  ...styles.modalPrimary,
+                  opacity: (busy || !code.trim()) ? 0.6 : 1,
+                  cursor: (busy || !code.trim()) ? 'default' : 'pointer',
+                }}
+              >
+                {busy ? 'Verifying…' : 'Verify'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

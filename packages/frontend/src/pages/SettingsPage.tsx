@@ -509,6 +509,20 @@ export default function SettingsPage() {
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
+      {/* Two-step verification (MFA / TOTP) */}
+      <div style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Two-step verification</h2>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          Use an authenticator app (Google Authenticator, 1Password, Authy)
+          to generate a one-time code at sign-in. When enabled, your
+          password alone won't be enough to sign in.
+        </p>
+        <MfaPanel />
+      </div>
+
+      {/* Spacer */}
+      <div style={{ height: '1.5rem' }} />
+
       {/* API Configuration */}
       {/* API Configuration */}
       <div style={sectionStyle}>
@@ -832,6 +846,392 @@ function LocalMigrationPanel() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// MfaPanel — enroll / disable TOTP for the current user.
+//
+// Three states:
+//   - loading                 fetching /auth/me to see if already enrolled
+//   - enrolled                shows "Enrolled" pill + Disable button
+//   - not-enrolled / enrolling  shows the QR + secret + a 6-digit code
+//                              prompt. After verify, displays backup
+//                              codes ONCE and asks the user to confirm
+//                              they've saved them.
+//
+// MFA is bound to the local-credential auth path. Users signing in via
+// OIDC see this panel disabled with a one-line note — their IdP is the
+// place to enforce MFA. Dev-mode users see it disabled too.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface MeResponse {
+  data: {
+    sub: string;
+    mfaEnrolled?: boolean;
+    role: string;
+  };
+}
+
+function MfaPanel() {
+  const [loading, setLoading] = useState(true);
+  const [enrolled, setEnrolled] = useState(false);
+  const [enrolling, setEnrolling] = useState<{
+    secret: string;
+    qrDataUrl: string;
+    uri: string;
+    replacing: boolean;
+  } | null>(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+
+  // Disable flow state
+  const [disablingOpen, setDisablingOpen] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // /auth/me returns the JWT-decoded payload; we also fetch
+        // the full person record via /people to get mfaEnrolled,
+        // since it isn't on the JWT (would force a re-issue on every
+        // enrollment change).
+        const me = await apiClient.get<MeResponse>('/auth/me');
+        const personRes = await apiClient.get<{ data: { mfaEnrolled?: boolean } }>(`/people/${me.data.sub}`);
+        setEnrolled(!!personRes.data.mfaEnrolled);
+      } catch { /* default to not enrolled */ }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const startEnrollment = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      const res = await apiClient.post<{ data: { secret: string; qrDataUrl: string; uri: string; replacing: boolean } }>(
+        '/auth/mfa/start', {});
+      setEnrolling(res.data);
+      setCode('');
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to start enrollment');
+    } finally { setBusy(false); }
+  };
+
+  const verifyEnrollment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    setBusy(true);
+    try {
+      const res = await apiClient.post<{ data: { backupCodes: string[] } }>(
+        '/auth/mfa/verify', { code });
+      setBackupCodes(res.data.backupCodes);
+      setEnrolled(true);
+      setEnrolling(null);
+      setCode('');
+    } catch (e: any) {
+      setErr(e?.message || 'Invalid code');
+    } finally { setBusy(false); }
+  };
+
+  const disableMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    setBusy(true);
+    try {
+      await apiClient.post('/auth/mfa/disable', { currentPassword: disablePassword, code: disableCode });
+      setEnrolled(false);
+      setDisablingOpen(false);
+      setDisablePassword('');
+      setDisableCode('');
+    } catch (e: any) {
+      setErr(e?.message || 'Could not disable two-step verification');
+    } finally { setBusy(false); }
+  };
+
+  const downloadBackupCodes = () => {
+    if (!backupCodes) return;
+    const blob = new Blob([
+      'Procela backup codes — keep these somewhere safe.\n',
+      'Each code is single-use. Use them to sign in if you lose access to your authenticator app.\n\n',
+      ...backupCodes.map((c) => c + '\n'),
+    ], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `procela-backup-codes-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (loading) {
+    return <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Loading…</div>;
+  }
+
+  // ── Backup-codes display (post-enrollment, one-time) ──
+  if (backupCodes) {
+    return (
+      <div style={{
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        padding: '1rem',
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+          Save these backup codes
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+          Each code is single-use. Save them somewhere you'll be able to
+          reach when you don't have your authenticator app — a password
+          manager, an offline note, a printout. They aren't stored on
+          our side after this and can't be recovered.
+        </p>
+        <div style={{
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: 13,
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: 12,
+          marginBottom: 12,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '4px 16px',
+        }}>
+          {backupCodes.map((c) => <div key={c}>{c}</div>)}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={downloadBackupCodes}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-surface)', color: 'var(--color-text)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+          >
+            Download as text
+          </button>
+          <button
+            type="button"
+            onClick={() => setBackupCodes(null)}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-primary)', color: '#fff',
+              border: 'none', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+          >
+            I've saved them
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Already enrolled ──
+  if (enrolled) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: '#d1fae5', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>Enrolled</span>
+          <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            You'll be asked for a code at sign-in.
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={startEnrollment}
+            disabled={busy}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-surface)', color: 'var(--color-text)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: busy ? 'default' : 'pointer',
+            }}
+          >
+            Replace authenticator
+          </button>
+          <button
+            type="button"
+            onClick={() => setDisablingOpen(true)}
+            disabled={busy}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-surface)', color: 'var(--color-error, #dc2626)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: busy ? 'default' : 'pointer',
+            }}
+          >
+            Disable
+          </button>
+        </div>
+
+        {disablingOpen && (
+          <form onSubmit={disableMfa} style={{
+            marginTop: 12, padding: 12,
+            background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+          }}>
+            <div style={{ fontSize: 12, marginBottom: 8 }}>
+              Confirm with your current password and a code from your authenticator:
+            </div>
+            {err && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 6 }}>{err}</div>}
+            <input
+              type="password"
+              value={disablePassword}
+              onChange={(e) => setDisablePassword(e.target.value)}
+              placeholder="Current password"
+              required
+              autoComplete="current-password"
+              style={inputStyle}
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={disableCode}
+              onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="6-digit code"
+              required
+              style={{ ...inputStyle, marginTop: 6 }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => { setDisablingOpen(false); setErr(''); }}
+                style={{
+                  padding: '0.4rem 1rem', fontSize: 13,
+                  background: 'transparent', color: 'var(--color-text-muted)',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                style={{
+                  padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+                  background: 'var(--color-error, #dc2626)', color: '#fff',
+                  border: 'none', borderRadius: 'var(--radius-md)',
+                  cursor: busy ? 'default' : 'pointer',
+                }}
+              >
+                {busy ? 'Disabling…' : 'Disable'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    );
+  }
+
+  // ── Mid-enrollment (QR + code prompt) ──
+  if (enrolling) {
+    return (
+      <div style={{
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        padding: '1rem',
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+          {enrolling.replacing ? 'Replace your authenticator' : 'Scan with your authenticator'}
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+          Open Google Authenticator, 1Password, Authy, or another TOTP app and
+          scan this QR code. Then enter the 6-digit code it generates.
+        </p>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <img src={enrolling.qrDataUrl} alt="MFA QR code" width={180} height={180} style={{ border: '1px solid var(--color-border)', borderRadius: 4, background: '#fff' }} />
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+              Can't scan? Type this:
+            </div>
+            <div style={{
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 13,
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 4, padding: '6px 8px', marginBottom: 12,
+              wordBreak: 'break-all',
+            }}>
+              {enrolling.secret}
+            </div>
+            <form onSubmit={verifyEnrollment}>
+              {err && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 6 }}>{err}</div>}
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="6-digit code"
+                required
+                autoFocus
+                style={inputStyle}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button
+                  type="submit"
+                  disabled={busy || code.length !== 6}
+                  style={{
+                    padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+                    background: 'var(--color-primary)', color: '#fff',
+                    border: 'none', borderRadius: 'var(--radius-md)',
+                    cursor: (busy || code.length !== 6) ? 'default' : 'pointer',
+                    opacity: (busy || code.length !== 6) ? 0.5 : 1,
+                  }}
+                >
+                  {busy ? 'Verifying…' : 'Verify'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEnrolling(null); setErr(''); }}
+                  style={{
+                    padding: '0.4rem 1rem', fontSize: 13,
+                    background: 'transparent', color: 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Default: not enrolled, offer to start ──
+  return (
+    <div>
+      {err && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 6 }}>{err}</div>}
+      <button
+        type="button"
+        onClick={startEnrollment}
+        disabled={busy}
+        style={{
+          padding: '0.5rem 1rem', fontSize: 13, fontWeight: 500,
+          background: 'var(--color-primary)', color: '#fff',
+          border: 'none', borderRadius: 'var(--radius-md)',
+          cursor: busy ? 'default' : 'pointer',
+        }}
+      >
+        {busy ? 'Starting…' : 'Set up two-step verification'}
+      </button>
     </div>
   );
 }
