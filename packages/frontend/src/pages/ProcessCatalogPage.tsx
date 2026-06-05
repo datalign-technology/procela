@@ -635,7 +635,7 @@ export type AddMappingTarget = {
   fulfillsExpected?: string;
 };
 
-function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove, nodeInputsOutputs }: {
+function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, isGovernance, onAdd, onRemove, onRestore, nodeInputsOutputs }: {
   nodeId: string;
   mappings: MappingInfo[];
   assetsList: DataAssetRef[];
@@ -652,12 +652,16 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
   isGovernance: boolean;
   onAdd: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemove: (mappingId: string) => void;
+  /** Recreates the mapping from a snapshot. Wired to the Undo action
+   *  on the toast that pops when a user unlinks. */
+  onRestore: (snapshot: MappingInfo) => void;
   /** The node's free-text inputsOutputs description, e.g.
    *  "In: business strategy, regulatory requirements. Out: charter."
    *  Parsed into structured placeholder slots so the panel can show
    *  the *expected* inputs/outputs with fulfilled/unfulfilled status. */
   nodeInputsOutputs?: string;
 }) {
+  const addToast = useToastStore((s) => s.addToast);
   const [showAdd, setShowAdd] = useState<'input' | 'output' | null>(null);
   // When the picker was opened from a specific expected I/O row
   // (e.g. the "Link…" button next to "Business strategy"), this holds
@@ -719,6 +723,22 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     }
     return null;
   }
+
+  // Linked-entity display name, used in toast copy.
+  const entityName = (m: MappingInfo): string =>
+    m.assetInfo?.assetName || m.policyInfo?.policyName || m.attachmentInfo?.name || 'this link';
+
+  // Unlink with optimistic remove + 6-second Undo toast. Follows the
+  // same pattern as single-item deletes elsewhere in the app (Data
+  // Asset, System, Person) — confirms reserved for catastrophic
+  // actions; reversible ones get an undo affordance instead.
+  const unlinkWithUndo = (m: MappingInfo) => {
+    onRemove(m.id);
+    addToast('info', `Unlinked "${entityName(m)}"`, {
+      action: { label: 'Undo', handler: () => onRestore(m) },
+      duration: 6000,
+    });
+  };
 
   // Compact inline rendering of a linked mapping's name + type. Used
   // inside the expected-field rows so the linked entity sits next to
@@ -808,7 +828,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
               {renderInlineMapping(match!)}
               {!disabled && (
                 <button
-                  onClick={() => onRemove(match!.id)}
+                  onClick={() => unlinkWithUndo(match!)}
                   title="Unlink this document"
                   aria-label="Unlink"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px 4px', display: 'inline-flex', borderRadius: 3, marginLeft: 'auto' }}
@@ -986,7 +1006,7 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
             <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: '#e0e7ff', color: '#3730a3' }}>{m.dataFormat}</span>
           )}
           {!disabled && (
-            <button onClick={() => onRemove(m.id)}
+            <button onClick={() => unlinkWithUndo(m)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--color-error)', padding: 0, marginLeft: 'auto' }}>
               Remove
             </button>
@@ -1260,7 +1280,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1277,6 +1297,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   activePageOrgId: string;
   onAddMapping: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemoveMapping: (mappingId: string) => void;
+  onRestoreMapping: (snapshot: MappingInfo) => void;
   statusMode: 'simple' | 'advanced';
   siblingIndex: number;
   siblingCount: number;
@@ -1972,6 +1993,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               isGovernance={node.domain === 'GOVERNANCE'}
               onAdd={onAddMapping}
               onRemove={onRemoveMapping}
+              onRestore={onRestoreMapping}
               nodeInputsOutputs={node.inputsOutputs}
             />
           )}
@@ -2231,6 +2253,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           activePageOrgId={activePageOrgId}
           onAddMapping={onAddMapping}
           onRemoveMapping={onRemoveMapping}
+          onRestoreMapping={onRestoreMapping}
           statusMode={statusMode}
           agentExecByActivity={agentExecByActivity}
           onRunAgent={onRunAgent}
@@ -2605,6 +2628,33 @@ export default function ProcessCatalogPage() {
   const removeMapping = async (mappingId: string) => {
     try {
       await apiClient.delete(`/mappings/${mappingId}`);
+      fetchData();
+    } catch { /* */ }
+  };
+
+  // Recreates a mapping from a snapshot. Used as the Undo handler on
+  // the toast that pops when a user unlinks an input/output — costs
+  // nothing on the intentional click, saves a misclick. Bypasses the
+  // cross-division guard (addMapping) because the user just had this
+  // exact link and is restoring it; nothing to confirm.
+  const restoreMapping = async (m: MappingInfo) => {
+    try {
+      const body: Record<string, any> = {
+        processStepId: m.processStepId,
+        linkType: m.linkType,
+        notes: '',
+        aiSuggested: false,
+        ...(activeOrgId ? { orgId: activeOrgId } : {}),
+        ...(m.dataAssetId ? { dataAssetId: m.dataAssetId } : {}),
+        ...(m.policyId ? { policyId: m.policyId } : {}),
+        ...(m.attachmentId ? { attachmentId: m.attachmentId } : {}),
+        ...(m.fulfillsExpected ? { fulfillsExpected: m.fulfillsExpected } : {}),
+        ...(m.criticality ? { criticality: m.criticality } : {}),
+        ...(m.dataFormat ? { dataFormat: m.dataFormat } : {}),
+        ...(m.sla ? { sla: m.sla } : {}),
+        ...(m.qualityRequirement ? { qualityRequirement: m.qualityRequirement } : {}),
+      };
+      await apiClient.post('/mappings', body);
       fetchData();
     } catch { /* */ }
   };
@@ -3432,6 +3482,7 @@ export default function ProcessCatalogPage() {
               activePageOrgId={activeOrgId || ''}
               onAddMapping={addMapping}
               onRemoveMapping={removeMapping}
+              onRestoreMapping={restoreMapping}
               statusMode={statusMode}
               agentExecByActivity={agentExecByActivity}
               onRunAgent={handleRunAgent}
