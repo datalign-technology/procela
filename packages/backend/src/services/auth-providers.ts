@@ -6,6 +6,7 @@ import config from '../config';
 import logger from '../lib/logger';
 import { people, isActive as isPersonActive } from '../routes/people';
 import { mintFlow, consumeFlow, pkceChallenge, type PendingFlow } from './pending-oidc-flows';
+import { resolveEnvSecretSync } from './crypto.service';
 
 // ---------------------------------------------------------------------------
 // Auth Provider Abstraction
@@ -545,7 +546,11 @@ const oidcProviders = new Map<string, OidcAuthProvider>();
 function loadInitialOidcProviders(): void {
   const issuer = process.env.OIDC_ISSUER || '';
   const clientId = process.env.OIDC_CLIENT_ID || '';
-  const clientSecret = process.env.OIDC_CLIENT_SECRET || '';
+  // OIDC_CLIENT_SECRET supports either plaintext or an enc:v1:…
+  // envelope encrypted with the local KMS key. resolveEnvSecretSync
+  // decrypts transparently when the envelope is present, otherwise
+  // returns the value unchanged.
+  const clientSecret = resolveEnvSecretSync(process.env.OIDC_CLIENT_SECRET);
   if (issuer || clientId) {
     // Default provider — id "default" since we can't reliably guess
     // whether the IdP is Microsoft / Okta / generic from env alone.

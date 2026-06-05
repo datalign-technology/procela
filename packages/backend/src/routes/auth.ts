@@ -943,6 +943,40 @@ router.put('/config', (req: Request, res: Response) => {
   });
 });
 
+/**
+ * POST /api/v1/auth/encrypt-secret
+ * Body: { plaintext }
+ *
+ * Admin-only helper that takes a plaintext value and returns the
+ * enc:v1:… envelope an operator can paste into an .env file for
+ * SMTP_PASS, OIDC_CLIENT_SECRET, or any other env-sourced secret that
+ * resolveEnvSecretSync handles. Avoids the operator having to drop
+ * into a Node REPL on the server to call encryptSecret directly.
+ *
+ * The plaintext never gets persisted — it's read off the request,
+ * encrypted with the active master key, and returned in the response.
+ * MFA_ENCRYPTION_KEY must be configured (otherwise no-op passthrough
+ * is the active backend and "encryption" produces unchanged output).
+ */
+router.post('/encrypt-secret', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { plaintext } = req.body || {};
+    if (typeof plaintext !== 'string' || plaintext.length === 0) {
+      res.status(400).json({ success: false, error: 'plaintext is required' });
+      return;
+    }
+    const ciphertext = await encryptSecret(plaintext);
+    if (ciphertext === plaintext) {
+      res.status(503).json({
+        success: false,
+        error: 'No encryption backend is configured. Set MFA_ENCRYPTION_KEY or KMS_PROVIDER and restart.',
+      });
+      return;
+    }
+    auditService.log(DEV_ORG_ID, req.user?.sub || null, 'Auth', 'crypto', 'SECRET_ENCRYPTED', null, null);
+    res.json({ success: true, data: { ciphertext } });
+  });
+
 // ---------------------------------------------------------------------------
 // Local-provider password management
 // ---------------------------------------------------------------------------

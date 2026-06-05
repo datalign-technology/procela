@@ -58,7 +58,7 @@ class LocalAesProvider implements KmsProvider {
     this.key = scryptSync(keyMaterial, salt, KEY_LENGTH);
   }
 
-  async encrypt(plaintext: string): Promise<string> {
+  encryptSync(plaintext: string): string {
     const iv = randomBytes(IV_LENGTH);
     const cipher = createCipheriv(ALGO, this.key, iv);
     const enc = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
@@ -69,7 +69,7 @@ class LocalAesProvider implements KmsProvider {
     return `${CIPHERTEXT_PREFIX}${iv.toString('base64url')}.${tag.toString('base64url')}.${enc.toString('base64url')}`;
   }
 
-  async decrypt(ciphertext: string): Promise<string> {
+  decryptSync(ciphertext: string): string {
     if (!ciphertext.startsWith(CIPHERTEXT_PREFIX)) {
       throw new Error('Not a v1 ciphertext envelope');
     }
@@ -84,6 +84,9 @@ class LocalAesProvider implements KmsProvider {
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf-8');
   }
+
+  async encrypt(plaintext: string): Promise<string> { return this.encryptSync(plaintext); }
+  async decrypt(ciphertext: string): Promise<string> { return this.decryptSync(ciphertext); }
 }
 
 // ── No-op backend ──
@@ -229,6 +232,38 @@ async function decryptViaTemporaryProvider(kind: 'aws' | 'azure' | 'gcp', cipher
  *  MFA_ENCRYPTION_KEY. */
 export function isEncryptionConfigured(): boolean {
   return provider.name !== 'noop-passthrough';
+}
+
+/** Resolve an env-sourced secret transparently. When the value looks
+ *  like a local-AES envelope (enc:v1:…) AND the LocalAesProvider is
+ *  configured, decrypt it synchronously and return the plaintext.
+ *  Otherwise return the value unchanged.
+ *
+ *  This is the bridge that lets operators paste an encrypted SMTP
+ *  password, OIDC client secret, or any other long-lived shared
+ *  secret into their .env file without storing it in plaintext on
+ *  disk. Encrypt once with `procela-cli encrypt-secret` (a future
+ *  one-liner — for now use the encryptSecret() function from a REPL),
+ *  copy the resulting enc:v1:… string into .env, set
+ *  MFA_ENCRYPTION_KEY to the same master key on every Procela
+ *  instance, and the secret is recoverable on boot without ever
+ *  hitting disk in plaintext.
+ *
+ *  Cloud KMS envelopes (enc:aws:v1:, …) aren't supported here because
+ *  the cloud SDKs are async — call the async decryptSecret() instead. */
+export function resolveEnvSecretSync(value: string | undefined): string {
+  if (!value) return '';
+  if (!value.startsWith(CIPHERTEXT_PREFIX)) return value;
+  if (!(provider instanceof LocalAesProvider)) {
+    logger.warn('Encrypted env secret detected but LocalAesProvider not active — cannot decrypt synchronously');
+    return value;
+  }
+  try {
+    return provider.decryptSync(value);
+  } catch (err) {
+    logger.error({ err }, 'Failed to decrypt env secret — leaving value as-is');
+    return value;
+  }
 }
 
 void config; // referenced for parity with other services; kept so an
