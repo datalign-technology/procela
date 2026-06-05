@@ -15,6 +15,10 @@ import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
 import { peekFlow } from '../services/pending-oidc-flows';
 import { checkLockout, recordFailedLogin, clearLockout, adminClearLockout } from '../services/account-lockout';
+import {
+  isCaptchaRequired, recordLoginFailure, clearLoginFailures,
+  verifyCaptchaToken, getCaptchaSiteKey,
+} from '../services/login-challenge';
 import { sendPasswordResetEmail, isConfigured as isMailConfigured } from '../services/mail.service';
 import {
   generateEnrollment,
@@ -291,6 +295,26 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
       return;
     }
 
+    // ── Pre-flight CAPTCHA gate ──
+    // Once an IP has burned through the failure threshold, every
+    // subsequent attempt from that IP must include a verified
+    // captchaToken. Slows automated credential-stuffing without
+    // adding friction for a user who fumbles their password once or
+    // twice. The frontend learns to render the widget from the
+    // challengeRequired flag the route sets on every failure.
+    if (isCaptchaRequired(req.ip)) {
+      const ok = await verifyCaptchaToken(req.body.captchaToken, req.ip);
+      if (!ok) {
+        res.status(428).json({
+          success: false,
+          error: 'A CAPTCHA challenge is required before this sign-in attempt can be processed.',
+          challengeRequired: true,
+          captchaSiteKey: getCaptchaSiteKey(),
+        });
+        return;
+      }
+    }
+
     // ── Pre-flight lockout check (Local provider) ──
     // Cuts off brute-force / credential-stuffing attempts before we
     // burn argon2 verify cycles. Only meaningful for the Local
@@ -335,11 +359,21 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
           });
         }
       }
+      // Per-IP failure counter — once over threshold every subsequent
+      // attempt from this IP needs a captcha. The frontend learns to
+      // render the widget from the challengeRequired flag we add to
+      // the failure response below.
+      recordLoginFailure(req.ip);
       auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'LOGIN_FAILED', null, {
         email: req.body.email,
         error: result.error || 'Unknown error',
       });
-      res.status(401).json({ success: false, error: result.error || 'Authentication failed' });
+      const needsCaptcha = isCaptchaRequired(req.ip);
+      res.status(401).json({
+        success: false,
+        error: result.error || 'Authentication failed',
+        ...(needsCaptcha ? { challengeRequired: true, captchaSiteKey: getCaptchaSiteKey() } : {}),
+      });
       return;
     }
 
@@ -358,6 +392,10 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     // Successful credential check resets the lockout counter +
     // unlocks the account if it had been locked by an earlier burst.
     if (personRecord && provider.type === 'local') clearLockout(personRecord);
+    // …and resets the per-IP CAPTCHA challenge counter — the
+    // legitimate user just produced valid credentials, so the IP
+    // gets a fresh budget.
+    clearLoginFailures(req.ip);
 
     // ── MFA gate (Local provider only) ──
     // Once a user enrolls in MFA, every subsequent password-flow

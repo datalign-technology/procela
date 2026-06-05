@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
@@ -75,6 +75,13 @@ export default function LoginPage() {
     currentPassword?: string;
     availableFactors?: { totp: boolean; webauthn: boolean };
   } | null>(null);
+  // CAPTCHA gate: once the backend has seen enough failures from
+  // this IP it returns challengeRequired=true on every subsequent
+  // attempt. We render a tiny "confirm you're human" prompt and
+  // include the resulting token on the next login post.
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const [captchaSiteKey, setCaptchaSiteKey] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
   // Forgot-password modal state.
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -153,6 +160,7 @@ export default function LoginPage() {
         email: loginEmail,
         name: loginName || undefined,
         password: loginPassword || undefined,
+        ...(captchaToken ? { captchaToken } : {}),
       });
       // MFA gate: the user has TOTP enrolled, so the backend issued
       // an opaque mfaToken instead of a session. Hold the password
@@ -165,8 +173,22 @@ export default function LoginPage() {
         });
         return;
       }
+      // Successful login — clear any captcha state for the next session.
+      setCaptchaRequired(false);
+      setCaptchaToken('');
       completeLogin(res.data, loginPassword);
     } catch (err: any) {
+      // 401 / 428 may include challengeRequired — the user needs to
+      // solve a CAPTCHA before the next attempt will be processed.
+      // captchaSiteKey lets us know whether the backend is wired to
+      // hCaptcha (non-empty) or running in dev mode (empty, accept
+      // any non-empty token).
+      const responseBody = err?.body || {};
+      if (responseBody.challengeRequired) {
+        setCaptchaRequired(true);
+        setCaptchaSiteKey(responseBody.captchaSiteKey || '');
+        setCaptchaToken('');
+      }
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -276,6 +298,18 @@ export default function LoginPage() {
           <div style={styles.errorBanner}>
             {error}
           </div>
+        )}
+
+        {/* CAPTCHA prompt — visible after enough failures from this IP.
+            When HCAPTCHA_SITE_KEY is configured server-side, render
+            the hCaptcha widget; otherwise fall back to a single
+            "confirm you're human" button (dev / no-hCaptcha path). */}
+        {captchaRequired && (
+          <CaptchaPrompt
+            siteKey={captchaSiteKey}
+            token={captchaToken}
+            onToken={setCaptchaToken}
+          />
         )}
 
         {providersLoading ? (
@@ -560,6 +594,94 @@ export default function LoginPage() {
 // the user is held here until they pick a real password — navigation
 // is gated behind a successful change.
 // ──────────────────────────────────────────────────────────────────────────
+// CaptchaPrompt — surfaced after enough failed logins from this IP.
+// Two modes:
+//   - When the backend reports an hCaptcha site key, dynamically load
+//     the hCaptcha JS API and render the widget. Once the user solves
+//     it, hCaptcha fires window.hcaptcha's callback with the token,
+//     which we mirror into local state so the next login post carries
+//     it.
+//   - When no site key is configured (dev / self-hosted with no
+//     hCaptcha account), fall back to a "Confirm I'm human" button
+//     that fills a dummy token. The backend accepts any non-empty
+//     token when no HCAPTCHA_SECRET is set, so this gets the user
+//     through.
+function CaptchaPrompt({ siteKey, token, onToken }: {
+  siteKey: string;
+  token: string;
+  onToken: (t: string) => void;
+}) {
+  const widgetRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!siteKey) return;
+    // Load the hCaptcha script once. Subsequent re-renders find the
+    // global already loaded and just re-render the widget.
+    const existing = document.querySelector('script[data-procela-hcaptcha]') as HTMLScriptElement | null;
+    let cleanup = () => {};
+    const render = () => {
+      const win = window as unknown as { hcaptcha?: {
+        render: (el: HTMLElement, opts: { sitekey: string; callback: (t: string) => void; 'expired-callback'?: () => void }) => string;
+      }};
+      if (!win.hcaptcha || !widgetRef.current) return;
+      const id = win.hcaptcha.render(widgetRef.current, {
+        sitekey: siteKey,
+        callback: (t: string) => onToken(t),
+        'expired-callback': () => onToken(''),
+      });
+      cleanup = () => {
+        if (widgetRef.current) widgetRef.current.innerHTML = '';
+        void id;
+      };
+    };
+    if (existing) {
+      render();
+    } else {
+      const s = document.createElement('script');
+      s.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
+      s.async = true;
+      s.defer = true;
+      s.setAttribute('data-procela-hcaptcha', '');
+      s.onload = render;
+      document.head.appendChild(s);
+    }
+    return () => { cleanup(); };
+  }, [siteKey, onToken]);
+
+  if (siteKey) {
+    return (
+      <div style={{
+        margin: '8px 0', padding: 12,
+        background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6,
+      }}>
+        <div style={{ fontSize: 12, color: '#9a3412', marginBottom: 8 }}>
+          Confirm you're human before we can process this sign-in:
+        </div>
+        <div ref={widgetRef} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      margin: '8px 0', padding: 12,
+      background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6,
+    }}>
+      <div style={{ fontSize: 12, color: '#9a3412', marginBottom: 8 }}>
+        Too many recent sign-in attempts from your network. Confirm you're human to continue.
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={!!token}
+          onChange={(e) => onToken(e.target.checked ? `human-confirmed-${Date.now()}` : '')}
+        />
+        I'm not a robot
+      </label>
+    </div>
+  );
+}
+
 function ForcedChangeModal({ currentPassword, onDone }: {
   currentPassword: string;
   onDone: () => void;
