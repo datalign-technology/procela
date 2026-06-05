@@ -4,6 +4,7 @@ import styles from './Layout.module.css';
 import Breadcrumbs from './Breadcrumbs';
 import ChatPanel from './ChatPanel';
 import SessionTimeout from './SessionTimeout';
+import IdleTimeout from './IdleTimeout';
 import ToastContainer from './ToastContainer';
 import RoleDetailDrawer from './RoleDetailDrawer';
 import ShortcutsModal from './ShortcutsModal';
@@ -553,6 +554,7 @@ export default function Layout() {
           />
         )}
         <SessionTimeout />
+        <IdleTimeout />
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
