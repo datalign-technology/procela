@@ -14,6 +14,7 @@ import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
 import { peekFlow } from '../services/pending-oidc-flows';
+import { checkLockout, recordFailedLogin, clearLockout, adminClearLockout } from '../services/account-lockout';
 import { sendPasswordResetEmail, isConfigured as isMailConfigured } from '../services/mail.service';
 import {
   generateEnrollment,
@@ -59,6 +60,22 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 interface RefreshTokenContext {
   oidcProviderId?: string;
   oidcIdToken?: string;
+  /** Procela person id — surfaced on /auth/sessions so users can see
+   *  whose sessions they're looking at without decoding the JWT. */
+  personId?: string;
+  /** ISO timestamp the session was minted. Drives the
+   *  /auth/sessions display ("Signed in 3h ago"). */
+  createdAt?: string;
+  /** ISO timestamp of the last /auth/refresh call. Drives "Last used"
+   *  and lets users spot a stale session that's still active. */
+  lastUsedAt?: string;
+  /** IP address + User-Agent fingerprint captured at mint time.
+   *  Subsequent /auth/refresh calls must match (UA exact, IP within
+   *  the same /24 for IPv4 or /64 for IPv6) or the token is revoked
+   *  and the caller is forced back through login. Mitigates stolen-
+   *  refresh-token replay from a different network. */
+  ip?: string;
+  userAgent?: string;
 }
 const validRefreshTokens = new Map<string, RefreshTokenContext>();
 
@@ -104,12 +121,79 @@ function createAccessToken(user: {
   return jwt.sign(payload, config.jwtSecret, { expiresIn: ACCESS_TOKEN_EXPIRY });
 }
 
+/** Capture the IP + User-Agent fingerprint from a request — fed
+ *  into createRefreshToken so /auth/refresh can detect a
+ *  significantly different origin and revoke the token. */
+function fingerprintFromRequest(req: Request): { ip?: string; userAgent?: string } {
+  return {
+    ip: req.ip || undefined,
+    userAgent: (req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined),
+  };
+}
+
 function createRefreshToken(sub: string, context: RefreshTokenContext = {}): { token: string; jti: string } {
   const jti = uuid();
   const payload: RefreshTokenPayload = { sub, type: 'refresh', jti };
   const token = jwt.sign(payload, config.jwtSecret, { expiresIn: REFRESH_TOKEN_EXPIRY });
-  validRefreshTokens.set(jti, context);
+  const now = new Date().toISOString();
+  validRefreshTokens.set(jti, {
+    personId: sub,
+    createdAt: now,
+    lastUsedAt: now,
+    ...context,
+  });
   return { token, jti };
+}
+
+/** Best-effort session-binding check. Returns true if the request
+ *  origin (IP + UA) matches the values the refresh token was minted
+ *  with. UA must be exact; IP is matched within /24 for IPv4 and /64
+ *  for IPv6, so a user on a residential connection that gets a new
+ *  DHCP lease doesn't get bounced every time their address rotates
+ *  within the same subnet.
+ *
+ *  Unset context fields (legacy sessions minted before this change)
+ *  fail open — there's no fingerprint to compare against, so the
+ *  request is allowed and the next mint will pin one. */
+function sessionFingerprintMatches(ctx: RefreshTokenContext, req: Request): boolean {
+  if (!ctx.ip && !ctx.userAgent) return true; // legacy session
+  const ua = String(req.headers['user-agent'] || '');
+  if (ctx.userAgent && ctx.userAgent !== ua) return false;
+  if (ctx.ip) {
+    const reqIp = req.ip || '';
+    if (!ipsInSameSubnet(ctx.ip, reqIp)) return false;
+  }
+  return true;
+}
+
+function ipsInSameSubnet(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // IPv4 — match the first 3 octets (/24).
+  if (a.includes('.') && b.includes('.')) {
+    const ax = a.split('.');
+    const bx = b.split('.');
+    if (ax.length !== 4 || bx.length !== 4) return false;
+    return ax[0] === bx[0] && ax[1] === bx[1] && ax[2] === bx[2];
+  }
+  // IPv6 — match the first four 16-bit groups (/64). Express may
+  // give us either compressed or expanded form; normalise by
+  // expanding to a full 8-group representation first.
+  if (a.includes(':') && b.includes(':')) {
+    const expand = (s: string): string[] => {
+      const segs = s.split('::');
+      if (segs.length === 1) return s.split(':');
+      const left = segs[0] ? segs[0].split(':') : [];
+      const right = segs[1] ? segs[1].split(':') : [];
+      const fill = new Array(8 - left.length - right.length).fill('0');
+      return [...left, ...fill, ...right];
+    };
+    const ax = expand(a);
+    const bx = expand(b);
+    if (ax.length < 4 || bx.length < 4) return false;
+    return ax[0] === bx[0] && ax[1] === bx[1] && ax[2] === bx[2] && ax[3] === bx[3];
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,10 +291,50 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
       return;
     }
 
+    // ── Pre-flight lockout check (Local provider) ──
+    // Cuts off brute-force / credential-stuffing attempts before we
+    // burn argon2 verify cycles. Only meaningful for the Local
+    // provider — Dev has no credential, OIDC defers auth to the IdP.
+    // Pre-flight peek doesn't reveal account existence: an unknown
+    // email passes this branch and lands in the standard "invalid
+    // credentials" error from the provider.
+    if (provider.type === 'local' && req.body.email) {
+      const preflight = people.find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase());
+      if (preflight) {
+        const state = checkLockout(preflight);
+        if (state.locked) {
+          auditService.log(preflight.orgIds[0] || DEV_ORG_ID, preflight.id, 'Auth', 'login', 'LOGIN_LOCKED_OUT', null, {
+            retryAfterSeconds: state.retryAfterSeconds,
+          });
+          res.setHeader('Retry-After', String(state.retryAfterSeconds));
+          res.status(429).json({
+            success: false,
+            error: `Account temporarily locked due to repeated failed sign-in attempts. Try again in ${Math.ceil(state.retryAfterSeconds / 60)} minute${state.retryAfterSeconds >= 120 ? 's' : ''}.`,
+          });
+          return;
+        }
+      }
+    }
+
     // ── Dev / direct credential flow ──
     const result = await provider.validateCredentials(req.body);
 
     if (!result.success || !result.user) {
+      // Record the failed attempt against the matched account (when
+      // there is one) — tips the lockout counter. We deliberately
+      // don't differentiate "unknown email" vs "bad password" in the
+      // response, but we do count differently behind the scenes.
+      const matched = req.body.email
+        ? people.find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase())
+        : null;
+      if (matched && provider.type === 'local') {
+        const after = recordFailedLogin(matched);
+        if (after.locked) {
+          auditService.log(matched.orgIds[0] || DEV_ORG_ID, matched.id, 'Auth', 'login', 'ACCOUNT_LOCKED', null, {
+            retryAfterSeconds: after.retryAfterSeconds,
+          });
+        }
+      }
       auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'LOGIN_FAILED', null, {
         email: req.body.email,
         error: result.error || 'Unknown error',
@@ -225,6 +349,10 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
     const resolvedOrgId = personRecord?.orgIds?.[0] || DEV_ORG_ID;
     const resolvedRole = personRecord?.role || user.role;
+
+    // Successful credential check resets the lockout counter +
+    // unlocks the account if it had been locked by an earlier burst.
+    if (personRecord && provider.type === 'local') clearLockout(personRecord);
 
     // ── MFA gate (Local provider only) ──
     // Once a user enrolls in MFA, every subsequent password-flow
@@ -280,7 +408,7 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
       orgId: resolvedOrgId,
       role: resolvedRole,
     });
-    const refresh = createRefreshToken(user.sub);
+    const refresh = createRefreshToken(user.sub, fingerprintFromRequest(req));
 
     auditService.log(resolvedOrgId, user.sub, 'Auth', 'login', 'LOGIN_SUCCESS', null, {
       email: user.email,
@@ -421,6 +549,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     const refresh = createRefreshToken(person.id, {
       oidcProviderId: flow.providerId,
       oidcIdToken: idToken,
+      ...fingerprintFromRequest(req),
     });
 
     auditService.log(orgId, person.id, 'Auth', 'oidc', 'OIDC_CALLBACK_SUCCESS', null, {
@@ -474,13 +603,36 @@ router.post('/refresh', (req: Request, res: Response) => {
       return;
     }
 
-    if (!validRefreshTokens.has(decoded.jti)) {
+    const ctx = validRefreshTokens.get(decoded.jti);
+    if (!ctx) {
       auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'REFRESH_REVOKED', null, {
         jti: decoded.jti,
       });
       res.status(401).json({ success: false, error: 'Refresh token has been revoked' });
       return;
     }
+
+    // Session-binding check: the IP + UA from this request must match
+    // the values the token was minted with (UA exact, IP within the
+    // same /24 or /64). A mismatch suggests the token has been
+    // stolen and is being replayed from a different network. Revoke
+    // it, audit, force the user back through login.
+    if (!sessionFingerprintMatches(ctx, req)) {
+      validRefreshTokens.delete(decoded.jti);
+      auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'REFRESH_BINDING_MISMATCH', null, {
+        jti: decoded.jti,
+        ip: req.ip,
+        ua: req.headers['user-agent'],
+      });
+      res.status(401).json({ success: false, error: 'Session origin mismatch — please sign in again' });
+      return;
+    }
+
+    // Update the lastUsedAt timestamp so /auth/sessions reflects
+    // ongoing activity. This is the only field that updates inside
+    // /auth/refresh; ip / ua are pinned at mint time so a roving user
+    // doesn't slowly walk the fingerprint to anywhere they like.
+    ctx.lastUsedAt = new Date().toISOString();
 
     // Mint a new access token.  We need the user details — for dev mode we
     // re-derive them from the sub claim.  In production the refresh token
@@ -1262,7 +1414,7 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
   });
-  const refresh = createRefreshToken(person.id);
+  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
   if (usedBackup) {
     person.updatedAt = new Date().toISOString();
@@ -1557,7 +1709,7 @@ router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
   });
-  const refresh = createRefreshToken(person.id);
+  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
   auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_LOGIN_SUCCESS', null, {
     credentialLabel: credential.label,
@@ -1729,7 +1881,7 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
     const accessToken = createAccessToken({
       sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
     });
-    const refresh = createRefreshToken(person.id);
+    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
 
     auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_DISCOVERABLE_LOGIN_SUCCESS', null, {
       credentialLabel: credential.label,
@@ -1752,6 +1904,84 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
         },
       },
     });
+  });
+
+// ---------------------------------------------------------------------------
+// Active sessions
+// ---------------------------------------------------------------------------
+// Surface the live refresh tokens for the current user so they can
+// see "I'm signed in from these devices" and revoke individual
+// sessions (e.g. a forgotten public computer, a phone they lost).
+// Industry-standard control — GitHub, Google, Microsoft all expose
+// something equivalent.
+//
+//   GET    /auth/sessions          list current user's sessions
+//   DELETE /auth/sessions/:jti     revoke one
+//   DELETE /auth/sessions          revoke all (sign out everywhere)
+// ---------------------------------------------------------------------------
+
+router.get('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const sessions: Array<Record<string, unknown>> = [];
+  for (const [jti, ctx] of validRefreshTokens) {
+    if (ctx.personId !== userId) continue;
+    sessions.push({
+      jti,
+      createdAt: ctx.createdAt || null,
+      lastUsedAt: ctx.lastUsedAt || null,
+      ip: ctx.ip || null,
+      userAgent: ctx.userAgent || null,
+      provider: ctx.oidcProviderId ? 'oidc' : 'local',
+    });
+  }
+  sessions.sort((a, b) => String(b.lastUsedAt).localeCompare(String(a.lastUsedAt)));
+  res.json({ success: true, data: sessions });
+});
+
+router.delete('/sessions/:jti', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const jti = String(req.params.jti);
+  const ctx = validRefreshTokens.get(jti);
+  if (!ctx || ctx.personId !== userId) {
+    res.status(404).json({ success: false, error: 'Session not found' });
+    return;
+  }
+  validRefreshTokens.delete(jti);
+  auditService.log(DEV_ORG_ID, userId, 'Auth', 'session', 'SESSION_REVOKED_SELF', null, { jti });
+  res.status(204).end();
+});
+
+router.delete('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  let revoked = 0;
+  for (const [jti, ctx] of validRefreshTokens) {
+    if (ctx.personId === userId) {
+      validRefreshTokens.delete(jti);
+      revoked++;
+    }
+  }
+  auditService.log(DEV_ORG_ID, userId, 'Auth', 'session', 'SESSION_REVOKED_ALL', null, { revoked });
+  res.json({ success: true, data: { revoked } });
+});
+
+// Admin unlock — clear a target user's lockout state. Useful when an
+// admin has positively identified the user via another channel (phone
+// call, in-person) and doesn't want to wait out the auto-unlock.
+router.post('/lockout/admin-clear', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { personId } = req.body || {};
+    if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
+    const target = people.find((p) => p.id === personId);
+    if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+    adminClearLockout(target);
+    auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'lockout', 'LOCKOUT_ADMIN_CLEARED', null, {
+      targetPersonId: target.id,
+      targetEmail: target.email,
+    });
+    res.status(204).end();
   });
 
 // ---------------------------------------------------------------------------

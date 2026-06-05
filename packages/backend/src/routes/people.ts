@@ -43,6 +43,17 @@ export interface StoredPerson {
    *  do anything else. The login flow short-circuits to a "set new
    *  password" prompt instead of issuing a normal session. */
   passwordMustChange?: boolean;
+  /** Counter for consecutive failed login attempts. Reset on success.
+   *  Drives the lockout: when failedLoginCount crosses the threshold
+   *  inside the rolling window starting at failedLoginFirstAt, the
+   *  account is locked via lockedUntil. */
+  failedLoginCount?: number;
+  failedLoginFirstAt?: string;
+  /** ISO timestamp of when the account becomes signable-in-able again.
+   *  Login is rejected until now > lockedUntil; the value is then
+   *  cleared on the next attempt regardless of outcome so the failure
+   *  counter starts fresh. */
+  lockedUntil?: string;
   /** Base32-encoded TOTP secret. Present once the user has scanned
    *  the QR and verified a code; absent before enrollment and after
    *  disable / admin-reset. SHOULD be encrypted at rest in
@@ -112,24 +123,38 @@ export function isActive(p: StoredPerson): boolean {
  *  Surfaces:
  *    - mfaEnrolled (bool)   so the frontend knows whether to show
  *                           "Enrolled" vs "Set up" in Settings. */
-export type PublicPerson = Omit<StoredPerson, 'passwordHash' | 'mfaSecret' | 'mfaBackupCodes' | 'webauthnCredentials'> & {
+export type PublicPerson = Omit<StoredPerson, 'passwordHash' | 'mfaSecret' | 'mfaBackupCodes' | 'webauthnCredentials' | 'failedLoginCount' | 'failedLoginFirstAt' | 'lockedUntil'> & {
   /** Public-safe representation of WebAuthn credentials — just the
    *  metadata the user / admin should see (which keys are
    *  registered, when, with what label). Credential ID and public
    *  key stay server-side. */
   webauthnCredentials?: Array<{ id: string; label: string; createdAt: string; transports?: string[] }>;
   webauthnEnrolled?: boolean;
+  /** True when the account is currently locked by the brute-force
+   *  protection. Surfaced so the admin SecurityCard can show a
+   *  "Locked" pill and a one-click clear button without leaking the
+   *  raw failure counter / window-start timestamp. */
+  locked?: boolean;
+  lockedUntil?: string;
 };
 
 export function publicPerson(p: StoredPerson): PublicPerson {
-  const { passwordHash, mfaSecret, mfaBackupCodes, webauthnCredentials, ...rest } = p;
+  const {
+    passwordHash, mfaSecret, mfaBackupCodes, webauthnCredentials,
+    failedLoginCount, failedLoginFirstAt, lockedUntil,
+    ...rest
+  } = p;
   void passwordHash; void mfaSecret; void mfaBackupCodes;
+  void failedLoginCount; void failedLoginFirstAt;
+  const lockedUntilMs = lockedUntil ? new Date(lockedUntil).getTime() : 0;
+  const isLocked = Number.isFinite(lockedUntilMs) && lockedUntilMs > Date.now();
   return {
     ...rest,
     webauthnEnrolled: (webauthnCredentials?.length || 0) > 0,
     ...(webauthnCredentials?.length
       ? { webauthnCredentials: webauthnCredentials.map((c) => ({ id: c.id, label: c.label, createdAt: c.createdAt, transports: c.transports })) }
       : {}),
+    ...(isLocked ? { locked: true, lockedUntil } : {}),
   };
 }
 

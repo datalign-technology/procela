@@ -38,6 +38,10 @@ interface Person360Data {
     // and the SecurityCard treats absence-of-active as "active".
     active?: boolean;
     mfaEnrolled?: boolean;
+    webauthnCredentials?: Array<{ id: string; label: string; createdAt: string }>;
+    webauthnEnrolled?: boolean;
+    locked?: boolean;
+    lockedUntil?: string;
   };
   orgAssignments: { id: string; name: string; type: string }[];
   damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
@@ -666,6 +670,8 @@ interface SecurityCardPerson {
   mfaEnrolled?: boolean;
   webauthnCredentials?: Array<{ id: string; label: string; createdAt: string }>;
   webauthnEnrolled?: boolean;
+  locked?: boolean;
+  lockedUntil?: string;
 }
 
 function SecurityCard({ person, onChanged }: {
@@ -673,7 +679,7 @@ function SecurityCard({ person, onChanged }: {
   onChanged: () => void;
 }) {
   const { isAdmin } = usePermissions();
-  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset' | 'webauthn-reset'>(null);
+  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset' | 'webauthn-reset' | 'unlock'>(null);
   const [busy, setBusy] = useState(false);
 
   if (!isAdmin) return null;
@@ -715,6 +721,15 @@ function SecurityCard({ person, onChanged }: {
       successToast('Security keys cleared');
       onChanged();
     } catch (err: any) { errorToast(err?.message || 'Could not clear security keys'); }
+    finally { setBusy(false); setConfirm(null); }
+  };
+  const clearLockout = async () => {
+    setBusy(true);
+    try {
+      await apiClient.post('/auth/lockout/admin-clear', { personId: person.id });
+      successToast('Account unlocked');
+      onChanged();
+    } catch (err: any) { errorToast(err?.message || 'Could not clear lockout'); }
     finally { setBusy(false); setConfirm(null); }
   };
 
@@ -812,6 +827,37 @@ function SecurityCard({ person, onChanged }: {
             </button>
           )}
         </div>
+
+        {/* Lockout row — only rendered when the account is currently
+            locked by repeated failed sign-ins. An auto-unlock happens
+            after LOCKOUT_DURATION_MS; this button is the manual
+            override an admin uses after positively identifying the
+            user via another channel. */}
+        {person.locked && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
+            <span style={{
+              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+              background: '#fee2e2', color: '#991b1b',
+              textTransform: 'uppercase', letterSpacing: '0.04em',
+            }}>Locked</span>
+            <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flex: 1 }}>
+              Locked by repeated failed sign-ins{person.lockedUntil ? ` until ${new Date(person.lockedUntil).toLocaleString()}` : ''}. Cannot sign in until cleared or auto-unlock.
+            </span>
+            <button
+              type="button"
+              onClick={() => setConfirm('unlock')}
+              disabled={busy}
+              style={{
+                padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-primary)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: busy ? 'default' : 'pointer',
+              }}
+            >
+              Unlock
+            </button>
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
@@ -848,6 +894,15 @@ function SecurityCard({ person, onChanged }: {
         confirmLabel="Clear keys"
         variant="danger"
         onConfirm={resetWebauthn}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === 'unlock'}
+        title="Clear account lockout?"
+        message={`${person.name} (${person.email}) is currently locked out by the brute-force protection. Only clear this after positively identifying them via another channel (phone, in person). The failure counter and lock will be reset.`}
+        confirmLabel="Unlock"
+        variant="primary"
+        onConfirm={clearLockout}
         onCancel={() => setConfirm(null)}
       />
     </div>
