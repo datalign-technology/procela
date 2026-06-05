@@ -30,10 +30,11 @@ const HELP_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'help-systems', label: '6. Systems' },
   { id: 'help-organizations', label: '7. Organizations' },
   { id: 'help-governance', label: '8. Governance' },
-  { id: 'help-cross-cutting', label: '9. Cross-cutting Features' },
-  { id: 'help-key-concepts', label: '10. Key Concepts' },
-  { id: 'help-faq', label: '11. Frequently Asked Questions' },
-  { id: 'help-shortcuts', label: '12. Keyboard shortcuts' },
+  { id: 'help-security', label: '9. Security & Account' },
+  { id: 'help-cross-cutting', label: '10. Cross-cutting Features' },
+  { id: 'help-key-concepts', label: '11. Key Concepts' },
+  { id: 'help-faq', label: '12. Frequently Asked Questions' },
+  { id: 'help-shortcuts', label: '13. Keyboard shortcuts' },
 ];
 
 const h3Style: React.CSSProperties = {
@@ -416,9 +417,94 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 9. Cross-cutting Features */}
+      {/* 9. Security & Account */}
       <div style={sectionStyle}>
-        <h2 id="help-cross-cutting" style={h2Style}>9. Cross-cutting Features</h2>
+        <h2 id="help-security" style={h2Style}>9. Security &amp; Account</h2>
+        <p style={pStyle}>
+          Procela ships with a layered sign-in stack — federated SSO, second-factor authentication, brute-force defences, and admin controls for credential lifecycle. Most of these are configurable per deployment; the defaults are sensible for a prototype but production deployments will want to set the env vars called out below. All settings below live under <strong>Settings</strong> unless noted; the credential-lifecycle admin actions live on the Person detail page.
+        </p>
+
+        <h3 style={h3Style}>Sign-in providers</h3>
+        <ul style={listStyle}>
+          <li><strong>Dev Mode</strong> (default) — email + optional name, no credential check. For local development only; production refuses to start with a warning if it's still active.</li>
+          <li><strong>Local credentials</strong> — email + password stored on the Person record as Argon2id hashes. Includes forgot-password by email, admin-set passwords, forced password change on first login, and a one-click <em>Migrate everyone to Local</em> action that generates temporary passwords for distribution.</li>
+          <li><strong>OIDC</strong> (Microsoft Entra ID, Okta, generic) — Authorization Code + PKCE flow, JWKS-verified id_tokens, multi-IdP per install. Admins add and rotate providers in <strong>Settings &rarr; Authentication</strong>. Each provider can be scoped to specific email domains so the login page only offers the right buttons for the user typing their address.</li>
+          <li><strong>SAML 2.0</strong> — SP-initiated single sign-on for ADFS, Shibboleth, PingFederate, and any IdP that speaks SAML. Configured via <code>SAML_ENTRY_POINT</code>, <code>SAML_ISSUER</code>, <code>SAML_IDP_CERT</code>, and <code>SAML_CALLBACK_URL</code>. The IdP can import Procela's SP metadata directly from <code>GET /api/v1/auth/saml/metadata</code> — entity ID, ACS, and both SLO bindings are declared there.</li>
+        </ul>
+
+        <h3 style={h3Style}>Two-step verification (TOTP)</h3>
+        <p style={pStyle}>
+          Open <strong>Settings &rarr; Two-step verification</strong> and click <em>Set up two-step verification</em>. Procela renders a QR code plus the underlying secret; scan it with Google Authenticator, 1Password, Authy, or any TOTP app, then enter the 6-digit code to confirm enrolment. On success you get a one-time display of <strong>10 backup codes</strong> — save these somewhere safe (the panel offers a download button); they're the only way to sign in if you lose your authenticator. A nudge appears when fewer than 3 codes remain so you can regenerate before you're locked out.
+        </p>
+        <p style={pStyle}>
+          Once enrolled, every password sign-in is held back until you produce a TOTP code (or a backup code) on the prompt that follows. Admins can reset another user's enrolment on the Person detail page <em>Security</em> panel; the user is then forced through enrolment again on their next sign-in.
+        </p>
+
+        <h3 style={h3Style}>Security keys (WebAuthn / FIDO2)</h3>
+        <p style={pStyle}>
+          Hardware keys (YubiKey, Titan, Feitian) and platform authenticators (Touch ID, Windows Hello, Android fingerprint) work as either a second factor alongside TOTP <em>or</em> a passwordless first factor. Register a key under <strong>Settings &rarr; Two-step verification &rarr; Security keys</strong> — Procela asks for a friendly label so you can tell devices apart later. You can register multiple keys.
+        </p>
+        <ul style={listStyle}>
+          <li>At sign-in, the password prompt offers <em>Sign in with a security key</em> — picking it runs the WebAuthn discoverable-credential ceremony and skips email + password entirely.</li>
+          <li>If you have both TOTP and a security key enrolled, either one satisfies the MFA gate; the prompt at sign-in lets you pick.</li>
+          <li>Admins can clear all registered keys for a user from the Person detail page <em>Security</em> panel.</li>
+        </ul>
+
+        <h3 style={h3Style}>Active sessions</h3>
+        <p style={pStyle}>
+          <strong>Settings &rarr; Active sessions</strong> lists every device or browser you're signed in from. Each row shows the device hint (parsed from the User-Agent), the IP at sign-in, the auth provider, and a relative "last used" timestamp. Your current session is tagged with a <em>This device</em> badge.
+        </p>
+        <ul style={listStyle}>
+          <li><em>Revoke</em> on a single row invalidates that session's refresh token — that device gets booted to the login screen on its next API call. Other devices keep working.</li>
+          <li><em>Sign out everywhere</em> kills every session including the one you're on. Use this if you've lost a device or want a clean slate.</li>
+          <li>Refresh tokens are bound to the IP subnet (<code>/24</code> for IPv4, <code>/64</code> for IPv6) and User-Agent they were minted with — a stolen refresh token replayed from a different network is rejected automatically.</li>
+          <li>Refresh tokens rotate on every use: when your access token expires and the client renews it, the old refresh token is revoked and a new one issued. A stolen token is only useful until the legitimate client next refreshes.</li>
+        </ul>
+
+        <h3 style={h3Style}>Account lockout &amp; CAPTCHA</h3>
+        <p style={pStyle}>
+          Three layers of brute-force defence sit in front of the credential verifier:
+        </p>
+        <ul style={listStyle}>
+          <li><strong>IP rate limiter</strong> — 5 sign-in attempts per minute per (IP, email) pair, 20 per hour. Blocks bursts from one source.</li>
+          <li><strong>Per-account lockout</strong> — 10 failed attempts inside a 30-minute window locks the account for 30 minutes. Catches distributed credential-stuffing where each attempt comes from a different IP. Defaults adjustable via <code>LOCKOUT_THRESHOLD</code> / <code>LOCKOUT_WINDOW_MS</code> / <code>LOCKOUT_DURATION_MS</code>. Admins can clear a lockout immediately from the Person detail page <em>Security</em> panel after positively identifying the user via another channel.</li>
+          <li><strong>CAPTCHA challenge</strong> — after 3 failures from one IP in 15 minutes, every subsequent sign-in from that IP must include a verified CAPTCHA token. Procela uses hCaptcha when <code>HCAPTCHA_SITE_KEY</code> + <code>HCAPTCHA_SECRET</code> are set; without them an "I'm not a robot" checkbox stands in for dev testing.</li>
+        </ul>
+
+        <h3 style={h3Style}>Idle-session timeout</h3>
+        <p style={pStyle}>
+          After <code>VITE_IDLE_TIMEOUT_MINUTES</code> of no mouse, keyboard, scroll, or touch activity (default 30; SOC 2 / HIPAA controls typically want 15) Procela signs you out automatically — even if your access token is still valid. A one-minute warning banner with a <em>Keep me signed in</em> button precedes the actual logout. The countdown is shared across browser tabs, so activity in any tab keeps every Procela tab alive.
+        </p>
+
+        <h3 style={h3Style}>Per-org role assignments (admins)</h3>
+        <p style={pStyle}>
+          A Person can hold a different role in different orgs — Process Owner in Operations, Viewer in Finance, ORG_ADMIN in their own department. On the Person detail page, every assigned-org chip carries an inline role pill. An asterisk on the pill indicates the role is inheriting from the person's default; clicking opens a dropdown where you can set a per-org override or revert. Switching the <em>Working in&hellip;</em> scope in the header re-mints your access token with the role for the new org so authorisation gates update immediately.
+        </p>
+
+        <h3 style={h3Style}>SCIM 2.0 provisioning (IdP admins)</h3>
+        <p style={pStyle}>
+          Procela exposes SCIM 2.0 endpoints under <code>/scim/v2/</code> so Microsoft Entra, Okta, and other identity providers can push user lifecycle events automatically — create on hire, deactivate on offboard, role updates as people move teams. The IdP authenticates with a long-lived bearer token configured via <code>SCIM_BEARER_TOKEN</code>; paste the same value into both Procela and the IdP's provisioning config. Supported resources are <code>/Users</code> and <code>/Groups</code> with full filter / PATCH / soft-delete semantics. When the token isn't set, every SCIM request returns 401.
+        </p>
+
+        <h3 style={h3Style}>GDPR — right to be forgotten (admins)</h3>
+        <p style={pStyle}>
+          The Person detail page <em>Security</em> panel has a <em>Forget person&hellip;</em> action that runs the GDPR Article 17 cascade. The Person record is deleted and every reference across the catalog — ownership, stewardship, group membership, authored comments, role assignments — is scrubbed. Audit log entries authored by that user are <em>tombstoned</em>, not deleted, so the action history survives but the personal identifier is replaced with <code>[deleted]</code>. The confirmation modal requires you to type the literal phrase <code>FORGET &lt;email&gt;</code> to defend against muscle-memory triggers. The response summarises how many stores and rows were touched.
+        </p>
+
+        <h3 style={h3Style}>Audit log integrity</h3>
+        <p style={pStyle}>
+          Every entry on the Audit Log carries a SHA-256 hash chaining it to the previous entry's hash. The <em>Verify integrity</em> button at the top of <strong>Insights &rarr; Audit Log</strong> walks the chain on demand: green means no entry has been altered, reordered, inserted, or deleted since it was written; red points at the first broken row so you can investigate. The chain survives the GDPR redaction pass because hashes are re-computed from the first modified entry onward.
+        </p>
+
+        <h3 style={h3Style}>At-rest encryption for secrets</h3>
+        <p style={pStyle}>
+          TOTP secrets, OIDC client secrets, and SMTP passwords can all be stored encrypted at rest. Set <code>MFA_ENCRYPTION_KEY</code> (32+ chars random) for the local AES-256-GCM backend, or <code>KMS_PROVIDER=aws-kms|azure-kv|gcp-kms</code> with the matching cloud config for envelope encryption via AWS KMS, Azure Key Vault, or GCP KMS. To put an encrypted SMTP password or OIDC client secret in <code>.env</code>, POST the plaintext to <code>/api/v1/auth/encrypt-secret</code> (admin-only) and paste the <code>enc:v1:&hellip;</code> envelope it returns. Procela decrypts at boot.
+        </p>
+      </div>
+
+      {/* 10. Cross-cutting Features */}
+      <div style={sectionStyle}>
+        <h2 id="help-cross-cutting" style={h2Style}>10. Cross-cutting Features</h2>
         <p style={pStyle}>
           A handful of components show up on every detail page so the patterns stay the same as you move around the app.
         </p>
@@ -470,7 +556,7 @@ export default function HelpPage() {
 
       {/* 10. Key Concepts */}
       <div style={sectionStyle}>
-        <h2 id="help-key-concepts" style={h2Style}>10. Key Concepts</h2>
+        <h2 id="help-key-concepts" style={h2Style}>11. Key Concepts</h2>
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
@@ -525,7 +611,7 @@ export default function HelpPage() {
           here was a duplicate of the formatted table further down the
           page. Removed when the L-pass appendix added the better one. */}
       <div style={sectionStyle}>
-        <h2 id="help-faq" style={h2Style}>11. Frequently Asked Questions</h2>
+        <h2 id="help-faq" style={h2Style}>12. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
         <p style={pStyle}>
@@ -643,13 +729,33 @@ export default function HelpPage() {
           In the current prototype, data is stored in JSON files on the server. In production, Procela is designed
           to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
         </p>
+
+        <h3 style={h3Style}>I lost my authenticator app. How do I get back in?</h3>
+        <p style={pStyle}>
+          Use one of the backup codes you saved at enrolment — the sign-in MFA prompt has a <em>Use backup code instead</em> link. Each code is single-use. If you've burned through them, an admin can reset your two-step verification from the Person detail page <em>Security</em> panel; you'll be re-enrolled on your next sign-in. If you registered a security key, you can also use that to sign in passwordlessly and then re-enrol TOTP from Settings.
+        </p>
+
+        <h3 style={h3Style}>Why am I being asked to confirm I'm human?</h3>
+        <p style={pStyle}>
+          Three failed sign-in attempts from your network inside 15 minutes flips the CAPTCHA gate on for that IP. A successful sign-in clears the counter; the gate also lifts automatically after the window passes. If you're seeing it without having mistyped, someone else on the same network may be hammering the login — the gate is doing its job.
+        </p>
+
+        <h3 style={h3Style}>My account is locked. What now?</h3>
+        <p style={pStyle}>
+          10 failed sign-ins inside a 30-minute window lock the account for the next 30 minutes. Wait for the auto-unlock, use the password-reset link to set a new password (success there clears the lock), or ask an admin to clear it manually from the Person detail page after verifying you over another channel.
+        </p>
+
+        <h3 style={h3Style}>I see a session in <em>Active sessions</em> I don't recognise.</h3>
+        <p style={pStyle}>
+          Click <em>Revoke</em> on that row — the device gets booted to the login screen on its next API call. Then change your password from Settings (or use the forgot-password flow if you've forgotten it). If multiple unknown sessions show up, hit <em>Sign out everywhere</em> to invalidate everything in one shot and re-sign in from a known device.
+        </p>
       </div>
 
       {/* Keyboard shortcuts — list the chords plus a button that pops
           the same overlay the user gets from Shift+? globally. Keeps
           discoverability high without forcing users to know the chord. */}
       <div style={sectionStyle}>
-        <h2 id="help-shortcuts" style={h2Style}>12. Keyboard shortcuts</h2>
+        <h2 id="help-shortcuts" style={h2Style}>13. Keyboard shortcuts</h2>
         <p style={pStyle}>
           Procela has a small set of keyboard chords for the things you'll do most often.
           Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere
