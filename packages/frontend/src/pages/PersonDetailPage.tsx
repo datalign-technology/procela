@@ -664,6 +664,8 @@ interface SecurityCardPerson {
   email: string;
   active?: boolean;
   mfaEnrolled?: boolean;
+  webauthnCredentials?: Array<{ id: string; label: string; createdAt: string }>;
+  webauthnEnrolled?: boolean;
 }
 
 function SecurityCard({ person, onChanged }: {
@@ -671,12 +673,13 @@ function SecurityCard({ person, onChanged }: {
   onChanged: () => void;
 }) {
   const { isAdmin } = usePermissions();
-  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset'>(null);
+  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset' | 'webauthn-reset'>(null);
   const [busy, setBusy] = useState(false);
 
   if (!isAdmin) return null;
 
   const active = person.active !== false;
+  const webauthnCount = person.webauthnCredentials?.length ?? (person.webauthnEnrolled ? 1 : 0);
 
   const deactivate = async () => {
     setBusy(true);
@@ -703,6 +706,15 @@ function SecurityCard({ person, onChanged }: {
       successToast('Two-step verification reset');
       onChanged();
     } catch (err: any) { errorToast(err?.message || 'Could not reset MFA'); }
+    finally { setBusy(false); setConfirm(null); }
+  };
+  const resetWebauthn = async () => {
+    setBusy(true);
+    try {
+      await apiClient.post('/auth/mfa/webauthn/admin-reset', { personId: person.id });
+      successToast('Security keys cleared');
+      onChanged();
+    } catch (err: any) { errorToast(err?.message || 'Could not clear security keys'); }
     finally { setBusy(false); setConfirm(null); }
   };
 
@@ -739,18 +751,18 @@ function SecurityCard({ person, onChanged }: {
           </button>
         </div>
 
-        {/* MFA row */}
+        {/* Authenticator app (TOTP) row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
           <span style={{
             fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
             background: person.mfaEnrolled ? '#d1fae5' : '#f1f5f9',
             color: person.mfaEnrolled ? '#065f46' : '#64748b',
             textTransform: 'uppercase', letterSpacing: '0.04em',
-          }}>{person.mfaEnrolled ? 'MFA Enrolled' : 'No MFA'}</span>
+          }}>{person.mfaEnrolled ? 'TOTP Enrolled' : 'No TOTP'}</span>
           <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flex: 1 }}>
             {person.mfaEnrolled
-              ? 'Two-step verification is required at sign-in for this account.'
-              : 'Two-step verification is not configured for this account.'}
+              ? 'Authenticator app is configured for two-step verification.'
+              : 'Authenticator app is not configured.'}
           </span>
           {person.mfaEnrolled && (
             <button
@@ -765,7 +777,38 @@ function SecurityCard({ person, onChanged }: {
                 cursor: busy ? 'default' : 'pointer',
               }}
             >
-              Reset MFA
+              Reset
+            </button>
+          )}
+        </div>
+
+        {/* Security keys (WebAuthn) row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: webauthnCount > 0 ? '#d1fae5' : '#f1f5f9',
+            color: webauthnCount > 0 ? '#065f46' : '#64748b',
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>{webauthnCount > 0 ? `${webauthnCount} Key${webauthnCount === 1 ? '' : 's'}` : 'No Keys'}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flex: 1 }}>
+            {webauthnCount > 0
+              ? 'Hardware / platform security keys are registered for this account.'
+              : 'No security keys are registered.'}
+          </span>
+          {webauthnCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirm('webauthn-reset')}
+              disabled={busy}
+              style={{
+                padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+                background: 'var(--color-surface)',
+                color: 'var(--color-error, #dc2626)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: busy ? 'default' : 'pointer',
+              }}
+            >
+              Clear keys
             </button>
           )}
         </div>
@@ -793,9 +836,18 @@ function SecurityCard({ person, onChanged }: {
         open={confirm === 'mfa-reset'}
         title="Reset two-step verification?"
         message={`${person.name} (${person.email}) will lose their current authenticator setup and backup codes. They'll be prompted to set up two-step verification again on next sign-in. Use this when they've lost their authenticator app or backup codes.`}
-        confirmLabel="Reset MFA"
+        confirmLabel="Reset"
         variant="danger"
         onConfirm={resetMfa}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === 'webauthn-reset'}
+        title="Clear security keys?"
+        message={`${person.name} (${person.email}) will lose every registered hardware key (YubiKey, Touch ID, etc.). They can register new keys after signing in. Use this when they've lost a key or are decommissioning a device.`}
+        confirmLabel="Clear keys"
+        variant="danger"
+        onConfirm={resetWebauthn}
         onCancel={() => setConfirm(null)}
       />
     </div>

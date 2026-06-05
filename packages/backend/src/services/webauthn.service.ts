@@ -159,6 +159,28 @@ export async function buildAuthenticationOptions(args: {
   return generateAuthenticationOptions(opts);
 }
 
+/** Build authentication options for passwordless / discoverable login.
+ *  Empty allowCredentials tells the browser to surface every resident
+ *  credential it has for this RP and let the user pick — the
+ *  resulting assertion carries the userHandle (Procela personId) so
+ *  the server can identify which account the user picked without an
+ *  email-first lookup. */
+export async function buildDiscoverableAuthenticationOptions(args: {
+  req: { protocol: string; host: string };
+}): Promise<ReturnType<typeof generateAuthenticationOptions> extends Promise<infer T> ? T : never> {
+  const rp = readRpConfig(args.req);
+  const opts: GenerateAuthenticationOptionsOpts = {
+    rpID: rp.rpID,
+    // userVerification 'required' for passwordless — without it the
+    // key would skip the PIN / biometric step and the credential
+    // becomes single-factor (just "I have the key"). UV makes it
+    // multi-factor in one tap.
+    userVerification: 'required',
+    allowCredentials: [], // discoverable mode
+  };
+  return generateAuthenticationOptions(opts);
+}
+
 export async function completeAuthentication(args: {
   response: any; // AuthenticationResponseJSON
   expectedChallenge: string;
@@ -194,7 +216,13 @@ export async function completeAuthentication(args: {
 // (mfaToken for the login gate). Single-use; sweep on expiry.
 interface PendingChallenge {
   challenge: string;
-  context: { kind: 'register'; personId: string } | { kind: 'authenticate'; personId: string };
+  context:
+    | { kind: 'register'; personId: string }
+    | { kind: 'authenticate'; personId: string }
+    // Passwordless / discoverable login: no personId yet, the user is
+    // identified after the assertion comes back (userHandle on the
+    // response → personId).
+    | { kind: 'discoverable' };
   expiresAt: number;
 }
 const challenges = new Map<string, PendingChallenge>();

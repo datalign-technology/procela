@@ -191,6 +191,32 @@ export default function LoginPage() {
     await loginWithEmail(email.trim(), undefined, password);
   };
 
+  // Passwordless WebAuthn login. Runs the discoverable-credential
+  // ceremony — the browser surfaces every registered key for this
+  // RP and lets the user pick. The assertion carries the userHandle
+  // (Procela personId) so the backend identifies the user without
+  // an email-first lookup.
+  const signInWithSecurityKey = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      const startRes = await apiClient.post<{ data: any }>('/auth/webauthn/discoverable/login-start', {});
+      const assertion = await startAuthentication({ optionsJSON: startRes.data });
+      const finishRes = await apiClient.post<LoginResponse>(
+        '/auth/webauthn/discoverable/login-finish', { response: assertion });
+      completeLogin(finishRes.data);
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') {
+        // User dismissed the browser prompt — silent.
+        return;
+      }
+      setError(err?.message || 'Could not sign in with a security key');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail.trim()) return;
@@ -353,7 +379,16 @@ export default function LoginPage() {
                     {loading ? 'Signing in...' : 'Sign in'}
                   </button>
                 </form>
-                <div style={{ marginTop: 10, textAlign: 'right' }}>
+                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={signInWithSecurityKey}
+                    disabled={loading}
+                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: loading ? 'default' : 'pointer', padding: 0, textDecoration: 'underline' }}
+                    title="Sign in with a registered security key — no email or password needed."
+                  >
+                    Sign in with a security key
+                  </button>
                   <button
                     type="button"
                     onClick={() => { setForgotEmail(email); setForgotOpen(true); setForgotSubmitted(false); }}

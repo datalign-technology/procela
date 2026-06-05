@@ -101,21 +101,43 @@ class NoOpProvider implements KmsProvider {
 }
 
 // ── Selection ──
+// Priority:
+//   1. KMS_PROVIDER env (aws-kms / azure-kv / gcp-kms) — cloud KMS
+//      activates when the matching SDK is installed and the per-
+//      provider config (key id, vault url, etc.) is present.
+//   2. MFA_ENCRYPTION_KEY env — local AES-256-GCM with a scrypt-
+//      derived key. Self-contained, no external dep. Good for
+//      prototypes and small deployments.
+//   3. Nothing set — no-op passthrough. Logs a warning; the
+//      production readiness check surfaces this loudly at boot.
 
 let provider: KmsProvider;
-const keyMaterial = process.env.MFA_ENCRYPTION_KEY || '';
-if (keyMaterial) {
-  if (keyMaterial.length < 16) {
-    logger.warn({ length: keyMaterial.length }, 'MFA_ENCRYPTION_KEY is shorter than 16 chars — recommend a longer value');
-  }
-  provider = new LocalAesProvider(keyMaterial);
-  logger.info({ backend: provider.name }, 'Crypto service: at-rest encryption ENABLED');
+
+// The KMS selector lives in a separate module (kms-providers.ts) so
+// the SDKs only get pulled in when the user actually picks a cloud
+// provider. Imported here as a function call rather than a module
+// import to keep the dependency graph lazy.
+import { selectKmsProviderFromEnv } from './kms-providers';
+
+const cloudProvider = selectKmsProviderFromEnv();
+if (cloudProvider) {
+  provider = cloudProvider;
+  logger.info({ backend: provider.name }, 'Crypto service: at-rest encryption ENABLED (cloud KMS)');
 } else {
-  provider = new NoOpProvider();
-  // Production-readiness check in index.ts surfaces this as a
-  // warning at boot; here we just log it once so any test or local
-  // run notices.
-  logger.warn('Crypto service: MFA_ENCRYPTION_KEY not set — secrets stored in plaintext');
+  const keyMaterial = process.env.MFA_ENCRYPTION_KEY || '';
+  if (keyMaterial) {
+    if (keyMaterial.length < 16) {
+      logger.warn({ length: keyMaterial.length }, 'MFA_ENCRYPTION_KEY is shorter than 16 chars — recommend a longer value');
+    }
+    provider = new LocalAesProvider(keyMaterial);
+    logger.info({ backend: provider.name }, 'Crypto service: at-rest encryption ENABLED (local AES)');
+  } else {
+    provider = new NoOpProvider();
+    // Production-readiness check in index.ts surfaces this as a
+    // warning at boot; here we just log it once so any test or local
+    // run notices.
+    logger.warn('Crypto service: no encryption configured (KMS_PROVIDER and MFA_ENCRYPTION_KEY both unset) — secrets stored in plaintext');
+  }
 }
 
 /** Register a custom KMS provider (e.g. AWS KMS, Azure Key Vault).
@@ -138,16 +160,68 @@ export async function encryptSecret(plaintext: string): Promise<string> {
   return provider.encrypt(plaintext);
 }
 
-/** Decrypt a string. Legacy plaintext (no envelope prefix) passes
- *  through unchanged so records that predate at-rest encryption
- *  keep working until they're rewritten. */
+/** Decrypt a string. Routes by envelope prefix so a record encrypted
+ *  by one provider can still be decrypted after the operator
+ *  switches providers (as long as the previous provider's SDK +
+ *  config are still available). Legacy plaintext (no envelope
+ *  prefix) passes through unchanged so records that predate at-rest
+ *  encryption keep working until they're rewritten.
+ *
+ *  Known prefixes:
+ *    enc:v1:      legacy local AES-GCM (this file's LocalAesProvider)
+ *    enc:aws:v1:  AWS KMS native ciphertext
+ *    enc:azure:v1: Azure Key Vault native ciphertext
+ *    enc:gcp:v1:  GCP KMS native ciphertext
+ *
+ *  No prefix → plaintext / legacy. */
 export async function decryptSecret(maybeCiphertext: string): Promise<string> {
-  if (!maybeCiphertext.startsWith(CIPHERTEXT_PREFIX)) {
-    // Plaintext / legacy — return as-is. The caller can rewrap on
-    // next save via encryptSecret().
-    return maybeCiphertext;
+  if (!maybeCiphertext.includes(':')) return maybeCiphertext;
+  if (maybeCiphertext.startsWith(CIPHERTEXT_PREFIX)) return provider.decrypt(maybeCiphertext);
+  // Cloud-KMS envelopes — the active provider may already be the
+  // right one (preferred path); if not, lazy-construct a sibling
+  // provider just for decrypt so we can read the record without a
+  // re-encryption migration.
+  if (maybeCiphertext.startsWith('enc:aws:v1:')) {
+    if (provider.name === 'aws-kms') return provider.decrypt(maybeCiphertext);
+    return decryptViaTemporaryProvider('aws', maybeCiphertext);
   }
-  return provider.decrypt(maybeCiphertext);
+  if (maybeCiphertext.startsWith('enc:azure:v1:')) {
+    if (provider.name === 'azure-kv') return provider.decrypt(maybeCiphertext);
+    return decryptViaTemporaryProvider('azure', maybeCiphertext);
+  }
+  if (maybeCiphertext.startsWith('enc:gcp:v1:')) {
+    if (provider.name === 'gcp-kms') return provider.decrypt(maybeCiphertext);
+    return decryptViaTemporaryProvider('gcp', maybeCiphertext);
+  }
+  // Unknown prefix — return as-is rather than throwing; the
+  // failure surfaces at the caller (e.g. "Invalid code" on MFA
+  // verify) instead of crashing the whole route.
+  return maybeCiphertext;
+}
+
+async function decryptViaTemporaryProvider(kind: 'aws' | 'azure' | 'gcp', ciphertext: string): Promise<string> {
+  // We only need to decrypt — no need to register globally. Lazy
+  // import + lazy construct keeps the dep graph clean for installs
+  // that only ever use one provider.
+  const { AwsKmsProvider, AzureKeyVaultProvider, GcpKmsProvider } = await import('./kms-providers');
+  if (kind === 'aws') {
+    const p = new AwsKmsProvider({
+      keyId: process.env.AWS_KMS_KEY_ID || '',
+      region: process.env.AWS_KMS_REGION || process.env.AWS_REGION || undefined,
+    });
+    return p.decrypt(ciphertext);
+  }
+  if (kind === 'azure') {
+    const p = new AzureKeyVaultProvider({
+      vaultUrl: process.env.AZURE_KEYVAULT_URL || '',
+      keyName: process.env.AZURE_KEYVAULT_KEY_NAME || '',
+    });
+    return p.decrypt(ciphertext);
+  }
+  const p = new GcpKmsProvider({
+    keyResource: process.env.GCP_KMS_KEY_RESOURCE || '',
+  });
+  return p.decrypt(ciphertext);
 }
 
 /** Whether at-rest encryption is active. Used by the readiness
