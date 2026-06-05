@@ -31,7 +31,15 @@ const WARNING_SECONDS = 60; // surface a banner this many seconds before logout
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'] as const;
 
 function getIdleMinutes(): number {
-  const raw = (import.meta as any).env?.VITE_IDLE_TIMEOUT_MINUTES;
+  // Read from import.meta.env first (production / vite-built bundle),
+  // fall back to process.env so tests using vi.stubEnv (which writes
+  // to process.env) can override the value at runtime. Vite injects
+  // import.meta.env per-module at build time, so cross-module mutation
+  // doesn't propagate — process.env is the universal escape hatch.
+  const raw =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (import.meta as any).env?.VITE_IDLE_TIMEOUT_MINUTES
+    ?? (typeof process !== 'undefined' ? process.env?.VITE_IDLE_TIMEOUT_MINUTES : undefined);
   const parsed = parseInt(String(raw || ''), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_IDLE_MINUTES;
   return parsed;
