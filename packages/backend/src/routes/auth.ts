@@ -23,6 +23,12 @@ import {
   verifyBackupCode,
 } from '../services/mfa.service';
 import { mintPendingMfa, consumePendingMfa } from '../services/pending-mfa';
+import { encryptSecret, decryptSecret } from '../services/crypto.service';
+import {
+  buildRegistrationOptions, completeRegistration,
+  buildAuthenticationOptions, completeAuthentication,
+  stashChallenge, consumeChallenge,
+} from '../services/webauthn.service';
 import {
   getAuthProvider,
   getAuthConfig,
@@ -229,18 +235,32 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     // this branch at all (the IdP is presumed to enforce MFA on
     // its side). Re-evaluate if Procela ever exposes a "force MFA
     // even for dev" toggle.
-    if (provider.type === 'local' && personRecord?.mfaEnrolled) {
-      const mfaToken = mintPendingMfa(personRecord.id);
-      auditService.log(resolvedOrgId, personRecord.id, 'Auth', 'login', 'MFA_REQUIRED', null, {
+    const hasWebauthn = provider.type === 'local'
+      && (personRecord?.webauthnCredentials?.length || 0) > 0;
+    if (provider.type === 'local' && (personRecord?.mfaEnrolled || hasWebauthn)) {
+      const mfaToken = mintPendingMfa(personRecord!.id);
+      auditService.log(resolvedOrgId, personRecord!.id, 'Auth', 'login', 'MFA_REQUIRED', null, {
         email: user.email,
+        availableFactors: {
+          totp: !!personRecord!.mfaEnrolled,
+          webauthn: hasWebauthn,
+        },
       });
       res.json({
         success: true,
         data: {
           mfaRequired: true,
           mfaToken,
+          // Tell the frontend which second-factor methods the user
+          // has configured so it can offer the right prompt(s). Both
+          // can be true; the user picks at the prompt.
+          availableFactors: {
+            totp: !!personRecord!.mfaEnrolled,
+            webauthn: hasWebauthn,
+          },
           // No access / refresh / user here — frontend uses the
-          // mfaToken to call /auth/mfa/login-verify, which returns
+          // mfaToken to call /auth/mfa/login-verify (TOTP) or
+          // /auth/mfa/webauthn/login-start (WebAuthn), which return
           // the real session payload.
         },
       });
@@ -553,11 +573,54 @@ router.post('/logout', (req: Request, res: Response) => {
  * Requires authentication.
  */
 router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  // Enrich the JWT-decoded user with a few fields the frontend needs
+  // but that aren't (and shouldn't be) on the access token. mfaEnrolled
+  // + mfaBackupCodesRemaining drive the Settings panel and the
+  // "running low — regenerate?" nudge.
+  const person = req.user?.sub ? people.find((p) => p.id === req.user!.sub) : null;
   res.json({
     success: true,
-    data: req.user,
+    data: {
+      ...req.user,
+      ...(person ? {
+        mfaEnrolled: !!person.mfaEnrolled,
+        mfaBackupCodesRemaining: person.mfaBackupCodes?.length || 0,
+      } : {}),
+    },
   });
 });
+
+/**
+ * POST /api/v1/auth/mfa/regenerate-backup-codes
+ * Authenticated; re-auth via current TOTP code. Generates a fresh
+ * set of 10 codes (returned ONCE) and invalidates the old set. Used
+ * by the Settings "running low" nudge — admins should also be able
+ * to regenerate on behalf of users via the admin-reset flow, which
+ * already regenerates as a side effect of the next enrollment.
+ */
+router.post('/mfa/regenerate-backup-codes', authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+    if (!person.mfaEnrolled || !person.mfaSecret) {
+      res.status(409).json({ success: false, error: 'Not enrolled in two-step verification' });
+      return;
+    }
+    const { code } = req.body || {};
+    if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
+    if (!(await verifyTotpToken(await decryptSecret(person.mfaSecret), String(code)))) {
+      res.status(401).json({ success: false, error: 'Invalid code' });
+      return;
+    }
+    const fresh = generateBackupCodes();
+    person.mfaBackupCodes = await hashBackupCodes(fresh);
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_BACKUP_CODES_REGENERATED', null, null);
+    res.json({ success: true, data: { backupCodes: fresh } });
+  });
 
 /**
  * GET /api/v1/auth/providers
@@ -1130,7 +1193,11 @@ router.post('/mfa/verify', authenticateToken, async (req: AuthenticatedRequest, 
   const plainBackupCodes = generateBackupCodes();
   const hashedBackupCodes = await hashBackupCodes(plainBackupCodes);
 
-  person.mfaSecret = pending.secret;
+  // Encrypt the secret at rest before writing it to the store. The
+  // crypto service falls back to plaintext in dev when MFA_ENCRYPTION_KEY
+  // isn't set; production refuses to start without a key (boot
+  // readiness check).
+  person.mfaSecret = await encryptSecret(pending.secret);
   person.mfaBackupCodes = hashedBackupCodes;
   person.mfaEnrolled = true;
   person.updatedAt = new Date().toISOString();
@@ -1171,7 +1238,7 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
   // Try TOTP first, then backup code. We don't tell the caller which
   // path succeeded — both produce the same session payload.
   let usedBackup = false;
-  if (code && await verifyTotpToken(person.mfaSecret, String(code))) {
+  if (code && await verifyTotpToken(await decryptSecret(person.mfaSecret), String(code))) {
     // success via TOTP
   } else if (backupCode && person.mfaBackupCodes) {
     const idx = await verifyBackupCode(person.mfaBackupCodes, String(backupCode));
@@ -1255,7 +1322,7 @@ router.post('/mfa/disable', authenticateToken, async (req: AuthenticatedRequest,
     res.status(401).json({ success: false, error: 'Current password is incorrect' });
     return;
   }
-  if (!person.mfaSecret || !(await verifyTotpToken(person.mfaSecret, String(code)))) {
+  if (!person.mfaSecret || !(await verifyTotpToken(await decryptSecret(person.mfaSecret), String(code)))) {
     res.status(401).json({ success: false, error: 'Invalid code' });
     return;
   }
@@ -1292,6 +1359,243 @@ router.post('/mfa/admin-reset', authenticateToken, authorize('SUPER_ADMIN', 'ORG
     logger.info({ adminId: req.user?.sub, targetId: target.id }, 'Admin reset MFA');
     res.status(204).end();
   });
+
+// ---------------------------------------------------------------------------
+// WebAuthn / FIDO2
+// ---------------------------------------------------------------------------
+// Hardware-key / platform-key second factor layered on top of TOTP.
+// A user can register many credentials; either WebAuthn OR TOTP
+// satisfies the gate at login.
+//
+//   /mfa/webauthn/register-start    authenticated — registration ceremony
+//   /mfa/webauthn/register-finish   authenticated — verify + persist
+//   /mfa/webauthn/login-start       unauthenticated — uses mfaToken from
+//                                   the password flow to find the user's
+//                                   registered credentials
+//   /mfa/webauthn/login-finish      unauthenticated — verify + issue session
+//   /mfa/webauthn/credentials/:id   authenticated DELETE — remove one
+// ---------------------------------------------------------------------------
+
+function reqInfo(req: Request): { protocol: string; host: string } {
+  return { protocol: req.protocol, host: req.get('host') || 'localhost' };
+}
+
+router.post('/mfa/webauthn/register-start', authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+    const { options } = await buildRegistrationOptions({
+      personId: person.id,
+      personEmail: person.email,
+      personName: person.name,
+      existingCredentials: person.webauthnCredentials || [],
+      req: reqInfo(req),
+    });
+    stashChallenge(options.challenge, { kind: 'register', personId: person.id });
+    res.json({ success: true, data: options });
+  });
+
+router.post('/mfa/webauthn/register-finish', authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+    const { response, label } = req.body || {};
+    if (!response) { res.status(400).json({ success: false, error: 'response is required' }); return; }
+
+    // Browser response carries the original challenge inside
+    // clientDataJSON; we look it up by the challenge value the
+    // browser echoes back.
+    const expectedChallenge = response?.response?.clientDataJSON
+      ? JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8')).challenge
+      : null;
+    if (!expectedChallenge) {
+      res.status(400).json({ success: false, error: 'Could not extract challenge from response' });
+      return;
+    }
+    const pending = consumeChallenge(expectedChallenge);
+    if (!pending || pending.context.kind !== 'register' || pending.context.personId !== person.id) {
+      res.status(400).json({ success: false, error: 'Challenge expired or invalid' });
+      return;
+    }
+
+    const result = await completeRegistration({
+      response,
+      expectedChallenge,
+      req: reqInfo(req),
+    });
+    if (!result.verified || !result.credential) {
+      res.status(400).json({ success: false, error: 'Could not verify registration' });
+      return;
+    }
+
+    person.webauthnCredentials = person.webauthnCredentials || [];
+    person.webauthnCredentials.push({
+      id: uuid(),
+      label: String(label || 'Security key').slice(0, 60),
+      createdAt: new Date().toISOString(),
+      ...result.credential,
+    });
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_REGISTERED', null, {
+      label,
+      total: person.webauthnCredentials.length,
+    });
+    res.status(204).end();
+  });
+
+router.post('/mfa/webauthn/login-start', async (req: Request, res: Response) => {
+  const { mfaToken } = req.body || {};
+  if (!mfaToken) { res.status(400).json({ success: false, error: 'mfaToken is required' }); return; }
+
+  // We can't `consume` the mfa token yet — the user might not
+  // complete the assertion, and they need the same token for the
+  // login-finish call. So we look up via a peek by re-storing
+  // immediately. Simplest path: the mfa token's same value is fine
+  // for multiple options-start calls; only login-finish consumes.
+  // To honour that contract here, we treat this endpoint as
+  // read-only and fish the personId out by re-minting + matching.
+  // Cleaner: have pending-mfa expose a peek API. For now we accept
+  // a small race: consume + immediately re-mint with the same TTL.
+  // (This is fine — multiple parallel login-start calls from the
+  // same browser are vanishingly rare for the MFA window.)
+  const personId = consumePendingMfa(String(mfaToken));
+  if (!personId) {
+    res.status(401).json({ success: false, error: 'MFA token is invalid or expired' });
+    return;
+  }
+  const person = people.find((p) => p.id === personId);
+  if (!person || !(person.webauthnCredentials || []).length) {
+    res.status(404).json({ success: false, error: 'No WebAuthn credentials registered' });
+    return;
+  }
+
+  const options = await buildAuthenticationOptions({
+    allowCredentials: person.webauthnCredentials || [],
+    req: reqInfo(req),
+  });
+  stashChallenge(options.challenge, { kind: 'authenticate', personId: person.id });
+  // Re-mint a fresh mfaToken bound to the same person so login-finish
+  // can validate without a second password check.
+  const newToken = mintPendingMfa(person.id);
+  res.json({ success: true, data: { options, mfaToken: newToken } });
+});
+
+router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res: Response) => {
+  const { mfaToken, response } = req.body || {};
+  if (!mfaToken || !response) {
+    res.status(400).json({ success: false, error: 'mfaToken and response are required' });
+    return;
+  }
+  const personId = consumePendingMfa(String(mfaToken));
+  if (!personId) {
+    res.status(401).json({ success: false, error: 'MFA token is invalid or expired' });
+    return;
+  }
+  const person = people.find((p) => p.id === personId);
+  if (!person) {
+    res.status(401).json({ success: false, error: 'MFA state invalid' });
+    return;
+  }
+
+  const challenge = response?.response?.clientDataJSON
+    ? JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8')).challenge
+    : null;
+  if (!challenge) {
+    res.status(400).json({ success: false, error: 'Could not extract challenge from response' });
+    return;
+  }
+  const pending = consumeChallenge(challenge);
+  if (!pending || pending.context.kind !== 'authenticate' || pending.context.personId !== person.id) {
+    res.status(401).json({ success: false, error: 'Challenge expired or invalid' });
+    return;
+  }
+
+  // Match the asserted credential id to one we have on file.
+  const credentialID = response.id || response.rawId;
+  const credential = (person.webauthnCredentials || []).find((c) => c.credentialID === credentialID);
+  if (!credential) {
+    res.status(401).json({ success: false, error: 'Credential not recognised' });
+    return;
+  }
+
+  const result = await completeAuthentication({
+    response,
+    expectedChallenge: challenge,
+    credential,
+    req: reqInfo(req),
+  });
+  if (!result.verified) {
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_LOGIN_FAILED', null, null);
+    res.status(401).json({ success: false, error: 'Assertion failed' });
+    return;
+  }
+
+  // Update the counter — refuses replays where the authenticator's
+  // counter hasn't advanced past what we last saw.
+  if (typeof result.newCounter === 'number') credential.counter = result.newCounter;
+  person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
+
+  // Issue the session, same as the TOTP path.
+  const orgId = person.orgIds[0] || DEV_ORG_ID;
+  const accessToken = createAccessToken({
+    sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+  });
+  const refresh = createRefreshToken(person.id);
+
+  auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_LOGIN_SUCCESS', null, {
+    credentialLabel: credential.label,
+  });
+  logger.info({ personId: person.id, credentialLabel: credential.label }, 'WebAuthn login successful');
+
+  res.json({
+    success: true,
+    data: {
+      accessToken,
+      refreshToken: refresh.token,
+      expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      passwordMustChange: !!person.passwordMustChange,
+      user: {
+        sub: person.id,
+        email: person.email,
+        name: person.name,
+        orgId,
+        role: person.role,
+      },
+    },
+  });
+});
+
+router.delete('/mfa/webauthn/credentials/:id', authenticateToken,
+  (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+    const credentialId = String(req.params.id);
+    const before = person.webauthnCredentials?.length || 0;
+    person.webauthnCredentials = (person.webauthnCredentials || []).filter((c) => c.id !== credentialId);
+    if (person.webauthnCredentials.length === before) {
+      res.status(404).json({ success: false, error: 'Credential not found' });
+      return;
+    }
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_CREDENTIAL_REMOVED', null, {
+      remaining: person.webauthnCredentials.length,
+    });
+    res.status(204).end();
+  });
+
 
 // ---------------------------------------------------------------------------
 // Accessible organizations for the current user

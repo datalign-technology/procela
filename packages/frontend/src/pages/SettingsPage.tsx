@@ -1,4 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  startRegistration as startWebauthnRegistration,
+} from '@simplewebauthn/browser';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
@@ -870,13 +873,23 @@ interface MeResponse {
   data: {
     sub: string;
     mfaEnrolled?: boolean;
+    mfaBackupCodesRemaining?: number;
     role: string;
   };
+}
+
+interface WebauthnCredentialView {
+  id: string;
+  label: string;
+  createdAt: string;
+  transports?: string[];
 }
 
 function MfaPanel() {
   const [loading, setLoading] = useState(true);
   const [enrolled, setEnrolled] = useState(false);
+  const [backupRemaining, setBackupRemaining] = useState<number>(0);
+  const [webauthnCreds, setWebauthnCreds] = useState<WebauthnCredentialView[]>([]);
   const [enrolling, setEnrolling] = useState<{
     secret: string;
     qrDataUrl: string;
@@ -893,20 +906,28 @@ function MfaPanel() {
   const [disablePassword, setDisablePassword] = useState('');
   const [disableCode, setDisableCode] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        // /auth/me returns the JWT-decoded payload; we also fetch
-        // the full person record via /people to get mfaEnrolled,
-        // since it isn't on the JWT (would force a re-issue on every
-        // enrollment change).
-        const me = await apiClient.get<MeResponse>('/auth/me');
-        const personRes = await apiClient.get<{ data: { mfaEnrolled?: boolean } }>(`/people/${me.data.sub}`);
-        setEnrolled(!!personRes.data.mfaEnrolled);
-      } catch { /* default to not enrolled */ }
-      finally { setLoading(false); }
-    })();
+  // Regenerate-backup-codes flow state (separate from the
+  // post-enrollment one-shot display).
+  const [regenOpen, setRegenOpen] = useState(false);
+  const [regenCode, setRegenCode] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      const me = await apiClient.get<MeResponse>('/auth/me');
+      const personRes = await apiClient.get<{
+        data: {
+          mfaEnrolled?: boolean;
+          webauthnCredentials?: WebauthnCredentialView[];
+        };
+      }>(`/people/${me.data.sub}`);
+      setEnrolled(!!personRes.data.mfaEnrolled);
+      setWebauthnCreds(personRes.data.webauthnCredentials || []);
+      setBackupRemaining(me.data.mfaBackupCodesRemaining ?? 0);
+    } catch { /* default to not enrolled */ }
+    finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   const startEnrollment = async () => {
     setErr('');
@@ -952,6 +973,56 @@ function MfaPanel() {
     } finally { setBusy(false); }
   };
 
+  const regenerateBackupCodes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    setBusy(true);
+    try {
+      const res = await apiClient.post<{ data: { backupCodes: string[] } }>(
+        '/auth/mfa/regenerate-backup-codes', { code: regenCode });
+      setBackupCodes(res.data.backupCodes);
+      setRegenOpen(false);
+      setRegenCode('');
+      await refresh();
+    } catch (e: any) {
+      setErr(e?.message || 'Could not regenerate backup codes');
+    } finally { setBusy(false); }
+  };
+
+  // ── WebAuthn enrollment ──
+  const registerWebauthn = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      const startRes = await apiClient.post<{ data: any }>('/auth/mfa/webauthn/register-start', {});
+      // Default label takes a sensible guess from the platform; user
+      // can rename via the API later. Keep it short so the chip in
+      // the credentials list doesn't get unwieldy.
+      const label = window.prompt(
+        'Name this security key (e.g. "YubiKey 5", "MacBook Touch ID"):',
+        'Security key',
+      ) || 'Security key';
+      const attestation = await startWebauthnRegistration({ optionsJSON: startRes.data });
+      await apiClient.post('/auth/mfa/webauthn/register-finish', { response: attestation, label });
+      await refresh();
+    } catch (e: any) {
+      // Browser cancel / user dismissed prompt — silent.
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') return;
+      setErr(e?.message || 'Could not register security key');
+    } finally { setBusy(false); }
+  };
+
+  const removeWebauthn = async (credId: string, label: string) => {
+    if (!window.confirm(`Remove "${label}"? You won't be able to use this security key to sign in.`)) return;
+    setBusy(true);
+    try {
+      await apiClient.delete(`/auth/mfa/webauthn/credentials/${credId}`);
+      await refresh();
+    } catch (e: any) {
+      setErr(e?.message || 'Could not remove security key');
+    } finally { setBusy(false); }
+  };
+
   const downloadBackupCodes = () => {
     if (!backupCodes) return;
     const blob = new Blob([
@@ -970,6 +1041,13 @@ function MfaPanel() {
   if (loading) {
     return <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Loading…</div>;
   }
+
+  // renderTotp encapsulates the four states the TOTP sub-panel can
+  // be in (one-time backup codes display, enrolled, mid-enrollment
+  // QR scan, or the default "Set up" button). Wrapped this way so
+  // the outer return can stack it next to the WebAuthn subsection
+  // without duplicating the auto-layout.
+  const renderTotp = (): React.ReactNode => {
 
   // ── Backup-codes display (post-enrollment, one-time) ──
   if (backupCodes) {
@@ -1232,6 +1310,130 @@ function MfaPanel() {
       >
         {busy ? 'Starting…' : 'Set up two-step verification'}
       </button>
+    </div>
+  );
+
+  }; // end renderTotp
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Authenticator app (TOTP) */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+          Authenticator app
+        </div>
+        {renderTotp()}
+
+        {/* Backup-codes running-low nudge. Shown when enrolled and
+            <= 3 codes remain. Each code is single-use; users who
+            burn through them on lost-authenticator events end up
+            with zero. */}
+        {enrolled && !backupCodes && backupRemaining <= 3 && (
+          <div style={{
+            marginTop: 10, padding: '8px 12px',
+            background: '#fffbeb', border: '1px solid #fde68a',
+            borderRadius: 'var(--radius-md)', fontSize: 12, color: '#92400e',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span>{backupRemaining} backup code{backupRemaining === 1 ? '' : 's'} remaining — regenerate before you run out.</span>
+            <button
+              type="button"
+              onClick={() => { setRegenOpen(true); setErr(''); }}
+              style={{
+                marginLeft: 'auto',
+                padding: '4px 10px', fontSize: 12, fontWeight: 500,
+                background: '#fff', color: '#92400e',
+                border: '1px solid #fde68a', borderRadius: 4, cursor: 'pointer',
+              }}
+            >
+              Regenerate
+            </button>
+          </div>
+        )}
+        {enrolled && !backupCodes && regenOpen && (
+          <form onSubmit={regenerateBackupCodes} style={{
+            marginTop: 8, padding: 12,
+            background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+          }}>
+            <div style={{ fontSize: 12, marginBottom: 6 }}>
+              Confirm with a code from your authenticator to generate a new set of 10 backup codes. The current set will be invalidated.
+            </div>
+            <input
+              type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+              value={regenCode}
+              onChange={(e) => setRegenCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="6-digit code" required
+              style={inputStyle}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => { setRegenOpen(false); setErr(''); }}
+                style={{ padding: '0.4rem 1rem', fontSize: 13, background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="submit" disabled={busy || regenCode.length !== 6}
+                style={{ padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: (busy || regenCode.length !== 6) ? 'default' : 'pointer', opacity: (busy || regenCode.length !== 6) ? 0.5 : 1 }}>
+                {busy ? 'Regenerating…' : 'Regenerate'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* Security keys (WebAuthn / FIDO2). Available regardless of
+          whether TOTP is set up — they're independent second-factor
+          methods, either one (or both) satisfies the login gate. */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+          Security keys
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+          Hardware keys (YubiKey, Titan) or platform authenticators (Touch ID,
+          Windows Hello, Android fingerprint). Faster than typing a code; users
+          who register a key can sign in by tapping it.
+        </p>
+        {webauthnCreds.length === 0 ? (
+          <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-text-muted)', marginBottom: 10 }}>
+            No security keys registered.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {webauthnCreds.map((c) => (
+              <div key={c.id} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px',
+                background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)', fontSize: 13,
+              }}>
+                <span style={{ flex: 1 }}>{c.label}</span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  Added {new Date(c.createdAt).toLocaleDateString()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeWebauthn(c.id, c.label)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--color-error, #dc2626)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={registerWebauthn}
+          disabled={busy}
+          style={{
+            padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-text)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+            cursor: busy ? 'default' : 'pointer',
+          }}
+        >
+          + Register a security key
+        </button>
+      </div>
     </div>
   );
 }

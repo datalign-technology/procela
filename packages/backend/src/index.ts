@@ -270,6 +270,9 @@ function warnOnMissingProdConfig(): void {
   if (!config.anthropicApiKey) {
     missing.push({ name: 'ANTHROPIC_API_KEY', impact: 'AI features (template generation, suggestions, assistant) will fail when invoked' });
   }
+  if (!process.env.MFA_ENCRYPTION_KEY) {
+    missing.push({ name: 'MFA_ENCRYPTION_KEY', impact: 'TOTP secrets are stored in plaintext on the Person record — a database leak exposes every enrolled user\'s second factor' });
+  }
   if (missing.length === 0) {
     logger.info('Production config: all expected env vars are set');
     return;

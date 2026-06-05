@@ -8,6 +8,8 @@ import { errorToast, successToast } from '../lib/errorToast';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
+import { usePermissions } from '../hooks/usePermissions';
+import ConfirmDialog from '../components/ConfirmDialog';
 import SkillPicker from '../components/SkillPicker';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
@@ -23,7 +25,20 @@ import ActivityFeed from '../components/ActivityFeed';
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Person360Data {
-  person: { id: string; orgIds: string[]; accessibleOrgIds: string[]; name: string; email: string; role: string; title: string; skillIds?: string[] };
+  person: {
+    id: string;
+    orgIds: string[];
+    accessibleOrgIds: string[];
+    name: string;
+    email: string;
+    role: string;
+    title: string;
+    skillIds?: string[];
+    // Security flags. Optional because legacy records predate them
+    // and the SecurityCard treats absence-of-active as "active".
+    active?: boolean;
+    mfaEnrolled?: boolean;
+  };
   orgAssignments: { id: string; name: string; type: string }[];
   damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
   governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
@@ -532,6 +547,13 @@ export default function PersonDetailPage() {
         />
       </div>
 
+      {/* Security — admin-only panel for credential lifecycle.
+        *  Surfaces deactivate / reactivate (soft-delete state) and
+        *  Reset MFA (forces the user back through enrollment on
+        *  next login). Hidden for non-admins so the usual people
+        *  page doesn't grow these controls for everyone. */}
+      <SecurityCard person={p} onChanged={fetch360} />
+
       {/* Activity by this person across the org. The userId variant of
         *  the feed answers "what is X working on lately?", complementing
         *  the Discussion thread on the same page. */}
@@ -624,6 +646,158 @@ function DomainResponsibilities({ allDomains, personId, busy, onToggleOwner, onT
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SecurityCard — admin-only panel for credential lifecycle actions:
+//   - Activate / deactivate the account (soft-delete).
+//   - Reset two-step verification (clears MFA enrollment; the user
+//     is forced through enrollment again on next login).
+// Both actions show a Confirm dialog and audit-log on the backend.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface SecurityCardPerson {
+  id: string;
+  name: string;
+  email: string;
+  active?: boolean;
+  mfaEnrolled?: boolean;
+}
+
+function SecurityCard({ person, onChanged }: {
+  person: SecurityCardPerson;
+  onChanged: () => void;
+}) {
+  const { isAdmin } = usePermissions();
+  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset'>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!isAdmin) return null;
+
+  const active = person.active !== false;
+
+  const deactivate = async () => {
+    setBusy(true);
+    try {
+      await apiClient.post(`/people/${person.id}/deactivate`, {});
+      successToast('Account deactivated');
+      onChanged();
+    } catch (err: any) { errorToast(err?.message || 'Could not deactivate'); }
+    finally { setBusy(false); setConfirm(null); }
+  };
+  const reactivate = async () => {
+    setBusy(true);
+    try {
+      await apiClient.post(`/people/${person.id}/reactivate`, {});
+      successToast('Account reactivated');
+      onChanged();
+    } catch (err: any) { errorToast(err?.message || 'Could not reactivate'); }
+    finally { setBusy(false); setConfirm(null); }
+  };
+  const resetMfa = async () => {
+    setBusy(true);
+    try {
+      await apiClient.post('/auth/mfa/admin-reset', { personId: person.id });
+      successToast('Two-step verification reset');
+      onChanged();
+    } catch (err: any) { errorToast(err?.message || 'Could not reset MFA'); }
+    finally { setBusy(false); setConfirm(null); }
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={sectionTitleStyle}>Security</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Account status row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: active ? '#d1fae5' : '#fee2e2',
+            color: active ? '#065f46' : '#991b1b',
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>{active ? 'Active' : 'Deactivated'}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flex: 1 }}>
+            {active
+              ? 'Can sign in and appears in default People lists.'
+              : 'Cannot sign in; hidden from default lists.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setConfirm(active ? 'deactivate' : 'reactivate')}
+            disabled={busy}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-surface)',
+              color: active ? 'var(--color-error, #dc2626)' : 'var(--color-primary)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: busy ? 'default' : 'pointer',
+            }}
+          >
+            {active ? 'Deactivate' : 'Reactivate'}
+          </button>
+        </div>
+
+        {/* MFA row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8, borderTop: '1px solid var(--color-border)' }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: person.mfaEnrolled ? '#d1fae5' : '#f1f5f9',
+            color: person.mfaEnrolled ? '#065f46' : '#64748b',
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>{person.mfaEnrolled ? 'MFA Enrolled' : 'No MFA'}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flex: 1 }}>
+            {person.mfaEnrolled
+              ? 'Two-step verification is required at sign-in for this account.'
+              : 'Two-step verification is not configured for this account.'}
+          </span>
+          {person.mfaEnrolled && (
+            <button
+              type="button"
+              onClick={() => setConfirm('mfa-reset')}
+              disabled={busy}
+              style={{
+                padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+                background: 'var(--color-surface)',
+                color: 'var(--color-error, #dc2626)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: busy ? 'default' : 'pointer',
+              }}
+            >
+              Reset MFA
+            </button>
+          )}
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirm === 'deactivate'}
+        title="Deactivate account?"
+        message={`${person.name} (${person.email}) will be unable to sign in and won't appear in default People lists. Their record, comments, and role assignments are preserved. You can reactivate later.`}
+        confirmLabel="Deactivate"
+        variant="danger"
+        onConfirm={deactivate}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === 'reactivate'}
+        title="Reactivate account?"
+        message={`${person.name} (${person.email}) will be able to sign in again and reappear in default People lists.`}
+        confirmLabel="Reactivate"
+        variant="primary"
+        onConfirm={reactivate}
+        onCancel={() => setConfirm(null)}
+      />
+      <ConfirmDialog
+        open={confirm === 'mfa-reset'}
+        title="Reset two-step verification?"
+        message={`${person.name} (${person.email}) will lose their current authenticator setup and backup codes. They'll be prompted to set up two-step verification again on next sign-in. Use this when they've lost their authenticator app or backup codes.`}
+        confirmLabel="Reset MFA"
+        variant="danger"
+        onConfirm={resetMfa}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   );
 }

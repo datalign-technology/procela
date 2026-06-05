@@ -70,7 +70,11 @@ export default function LoginPage() {
   // mfaToken instead of issuing a session. We hold the token + the
   // password (so forced-change still works if needed) and show the
   // 6-digit prompt until login-verify clears the gate.
-  const [mfaPending, setMfaPending] = useState<{ token: string; currentPassword?: string } | null>(null);
+  const [mfaPending, setMfaPending] = useState<{
+    token: string;
+    currentPassword?: string;
+    availableFactors?: { totp: boolean; webauthn: boolean };
+  } | null>(null);
   // Forgot-password modal state.
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -154,7 +158,11 @@ export default function LoginPage() {
       // an opaque mfaToken instead of a session. Hold the password
       // (for forced-change after MFA clears) and show the code prompt.
       if (res.data.mfaRequired && res.data.mfaToken) {
-        setMfaPending({ token: res.data.mfaToken, currentPassword: loginPassword });
+        setMfaPending({
+          token: res.data.mfaToken,
+          currentPassword: loginPassword,
+          availableFactors: (res.data as any).availableFactors,
+        });
         return;
       }
       completeLogin(res.data, loginPassword);
@@ -450,6 +458,7 @@ export default function LoginPage() {
       {mfaPending && (
         <MfaPromptModal
           mfaToken={mfaPending.token}
+          availableFactors={mfaPending.availableFactors || { totp: true, webauthn: false }}
           onSuccess={(data) => {
             const pwd = mfaPending.currentPassword;
             setMfaPending(null);
@@ -819,25 +828,36 @@ const styles: Record<string, React.CSSProperties> = {
 // authStore.
 // ──────────────────────────────────────────────────────────────────────────
 
-function MfaPromptModal({ mfaToken, onSuccess, onCancel }: {
+function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
   mfaToken: string;
+  availableFactors: { totp: boolean; webauthn: boolean };
   onSuccess: (data: LoginResponse['data']) => void;
   onCancel: () => void;
 }) {
   const [code, setCode] = useState('');
   const [useBackup, setUseBackup] = useState(false);
+  // Default factor: WebAuthn if available (faster + more secure),
+  // else TOTP. User can flip via the "Use … instead" link.
+  const [factor, setFactor] = useState<'webauthn' | 'totp'>(
+    availableFactors.webauthn ? 'webauthn' : 'totp',
+  );
+  // mfaToken can rotate when we call /webauthn/login-start (which
+  // consumes the original and mints a fresh one). Track the current
+  // valid token in state so a TOTP fallback after a WebAuthn attempt
+  // still works.
+  const [currentToken, setCurrentToken] = useState(mfaToken);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const submit = async (e: React.FormEvent) => {
+  const submitTotp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
     if (!code.trim()) return;
     setBusy(true);
     try {
       const body = useBackup
-        ? { mfaToken, backupCode: code.trim() }
-        : { mfaToken, code: code.replace(/\D/g, '') };
+        ? { mfaToken: currentToken, backupCode: code.trim() }
+        : { mfaToken: currentToken, code: code.replace(/\D/g, '') };
       const res = await apiClient.post<LoginResponse>('/auth/mfa/login-verify', body);
       onSuccess(res.data);
     } catch (e: any) {
@@ -845,62 +865,131 @@ function MfaPromptModal({ mfaToken, onSuccess, onCancel }: {
     } finally { setBusy(false); }
   };
 
+  const submitWebauthn = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      // Dynamic import keeps the WebAuthn helper out of the initial
+      // login bundle for users / browsers that never reach this
+      // branch.
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      const startRes = await apiClient.post<{ data: { options: any; mfaToken: string } }>(
+        '/auth/mfa/webauthn/login-start', { mfaToken: currentToken });
+      // Update the token immediately so a fall-through to TOTP after
+      // a user-cancel still has a valid handle.
+      setCurrentToken(startRes.data.mfaToken);
+      const assertion = await startAuthentication({ optionsJSON: startRes.data.options });
+      const finishRes = await apiClient.post<LoginResponse>(
+        '/auth/mfa/webauthn/login-finish',
+        { mfaToken: startRes.data.mfaToken, response: assertion });
+      onSuccess(finishRes.data);
+    } catch (e: any) {
+      // Browser cancel / user-dismissed-prompt — present a soft
+      // fallback rather than an error banner.
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        setErr('No response from the security key — try again, or use your authenticator code.');
+      } else {
+        setErr(e?.message || 'Could not verify security key');
+      }
+    } finally { setBusy(false); }
+  };
+
   return (
     <div style={styles.modalScrim}>
       <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalTitle}>
-          {useBackup ? 'Enter a backup code' : 'Two-step verification'}
+          {factor === 'webauthn'
+            ? 'Use your security key'
+            : useBackup
+              ? 'Enter a backup code'
+              : 'Two-step verification'}
         </div>
         <p style={styles.modalText}>
-          {useBackup
-            ? 'Backup codes are the strings you saved at enrollment. Each one works only once.'
-            : 'Open your authenticator app and enter the 6-digit code it shows.'}
+          {factor === 'webauthn'
+            ? 'Tap the button to use your registered security key (YubiKey, Touch ID, Windows Hello).'
+            : useBackup
+              ? 'Backup codes are the strings you saved at enrollment. Each one works only once.'
+              : 'Open your authenticator app and enter the 6-digit code it shows.'}
         </p>
         {err && <div style={styles.errorBanner}>{err}</div>}
-        <form onSubmit={submit}>
-          <input
-            type="text"
-            inputMode={useBackup ? 'text' : 'numeric'}
-            autoComplete="one-time-code"
-            maxLength={useBackup ? 24 : 6}
-            value={code}
-            onChange={(e) => setCode(useBackup ? e.target.value : e.target.value.replace(/\D/g, ''))}
-            placeholder={useBackup ? 'Backup code' : '6-digit code'}
-            required
-            autoFocus
-            style={styles.input}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+
+        {factor === 'webauthn' ? (
+          <div>
             <button
               type="button"
-              onClick={() => { setUseBackup(!useBackup); setCode(''); setErr(''); }}
-              style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+              onClick={submitWebauthn}
+              disabled={busy}
+              style={{ ...styles.modalPrimary, width: '100%' }}
             >
-              {useBackup ? 'Use authenticator instead' : "Lost your authenticator? Use a backup code"}
+              {busy ? 'Waiting on key…' : 'Use security key'}
             </button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                onClick={onCancel}
-                disabled={busy}
-                style={styles.modalSecondary}
-              >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+              {availableFactors.totp && (
+                <button
+                  type="button"
+                  onClick={() => { setFactor('totp'); setErr(''); }}
+                  style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  Use authenticator code instead
+                </button>
+              )}
+              <button type="button" onClick={onCancel} disabled={busy} style={styles.modalSecondary}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={busy || !code.trim()}
-                style={{
-                  ...styles.modalPrimary,
-                  opacity: (busy || !code.trim()) ? 0.6 : 1,
-                  cursor: (busy || !code.trim()) ? 'default' : 'pointer',
-                }}
-              >
-                {busy ? 'Verifying…' : 'Verify'}
               </button>
             </div>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={submitTotp}>
+            <input
+              type="text"
+              inputMode={useBackup ? 'text' : 'numeric'}
+              autoComplete="one-time-code"
+              maxLength={useBackup ? 24 : 6}
+              value={code}
+              onChange={(e) => setCode(useBackup ? e.target.value : e.target.value.replace(/\D/g, ''))}
+              placeholder={useBackup ? 'Backup code' : '6-digit code'}
+              required
+              autoFocus
+              style={styles.input}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => { setUseBackup(!useBackup); setCode(''); setErr(''); }}
+                  style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', textAlign: 'left' }}
+                >
+                  {useBackup ? 'Use authenticator instead' : 'Lost your authenticator? Use a backup code'}
+                </button>
+                {availableFactors.webauthn && (
+                  <button
+                    type="button"
+                    onClick={() => { setFactor('webauthn'); setCode(''); setUseBackup(false); setErr(''); }}
+                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', textAlign: 'left' }}
+                  >
+                    Use a security key instead
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={onCancel} disabled={busy} style={styles.modalSecondary}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy || !code.trim()}
+                  style={{
+                    ...styles.modalPrimary,
+                    opacity: (busy || !code.trim()) ? 0.6 : 1,
+                    cursor: (busy || !code.trim()) ? 'default' : 'pointer',
+                  }}
+                >
+                  {busy ? 'Verifying…' : 'Verify'}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
