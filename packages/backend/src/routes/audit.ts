@@ -87,4 +87,17 @@ router.get('/', (req: Request, res: Response) => {
   res.json({ success: true, data: enriched });
 });
 
+/** GET /api/v1/audit/verify — walk the hash chain and report integrity.
+ *
+ *  Each entry holds an entryHash = sha256(prevHash + content). If any
+ *  entry has been tampered with, deleted, inserted, or reordered, the
+ *  chain breaks at the first bad index. Surface that index + a reason
+ *  so an admin can investigate. Legacy entries written before the
+ *  chain was added break at position 0 (no hash to verify); that's a
+ *  one-time break and doesn't recur once the log rolls forward. */
+router.get('/verify', (_req: Request, res: Response) => {
+  const result = auditService.verifyChain();
+  res.json({ success: true, data: result });
+});
+
 export default router;

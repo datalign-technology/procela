@@ -582,6 +582,65 @@ router.delete('/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+/**
+ * POST /api/v1/people/:id/forget
+ * Body: { confirm: "FORGET <email>" }
+ *
+ * The GDPR Article 17 cascade — "right to be forgotten". Removes the
+ * person record, scrubs every reference to them across the data
+ * stores (ownership, stewardship, group membership, authored
+ * comments), and tombstones their entries in the audit log so the
+ * action history survives but the personal identifier doesn't.
+ *
+ * Confirmation gate: the request body must include `confirm` set to
+ * the literal string `FORGET <email>` to defend against accidental
+ * triggers. Without this an admin clicking "Forget" by mistake could
+ * cascade an irreversible delete across the catalog.
+ *
+ * Returns a summary of the sweep so the admin sees the blast radius.
+ * Pair with a server restart in production — in-memory store copies
+ * in route modules don't pick up the on-disk scrub until reload.
+ */
+router.post('/:id/forget', (req: Request, res: Response) => {
+  const idx = people.findIndex((p) => p.id === String(req.params.id));
+  if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  const person = people[idx];
+
+  const confirmExpected = `FORGET ${person.email}`;
+  if ((req.body?.confirm || '') !== confirmExpected) {
+    res.status(400).json({
+      success: false,
+      error: `Confirmation phrase did not match. Pass { confirm: "${confirmExpected}" } to proceed.`,
+    });
+    return;
+  }
+
+  // Lazy import to break the route ↔ service circular dependency.
+  // The gdpr service imports auditService which doesn't depend on
+  // routes; importing it at top-level is fine, but require() keeps
+  // the dep graph easy to reason about for someone reading the
+  // delete handler cold.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { erasePersonReferences } = require('../services/gdpr.service') as typeof import('../services/gdpr.service');
+  const report = erasePersonReferences(person.id);
+
+  // Drop the person record itself last so the in-memory people array
+  // reflects the deletion immediately (the on-disk file is rewritten
+  // by saveStore below).
+  people.splice(idx, 1);
+  saveStore('people', people);
+
+  res.json({
+    success: true,
+    data: {
+      personId: person.id,
+      email: person.email,
+      cascadeReport: report,
+      message: 'Person record erased and references scrubbed across stores. Restart the server to flush any cached in-memory copies in long-lived route modules.',
+    },
+  });
+});
+
 /** POST /api/v1/people/:id/deactivate
  *  Soft-delete. The person stays in the store (preserves audit trail,
  *  authored comments, role-assignment history) but can't sign in and

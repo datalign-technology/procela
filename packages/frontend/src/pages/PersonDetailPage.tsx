@@ -786,8 +786,10 @@ function SecurityCard({ person, onChanged }: {
   onChanged: () => void;
 }) {
   const { isAdmin } = usePermissions();
-  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset' | 'webauthn-reset' | 'unlock'>(null);
+  const [confirm, setConfirm] = useState<null | 'deactivate' | 'reactivate' | 'mfa-reset' | 'webauthn-reset' | 'unlock' | 'forget'>(null);
   const [busy, setBusy] = useState(false);
+  const [forgetPhrase, setForgetPhrase] = useState('');
+  const navigate = useNavigate();
 
   if (!isAdmin) return null;
 
@@ -838,6 +840,22 @@ function SecurityCard({ person, onChanged }: {
       onChanged();
     } catch (err: any) { errorToast(err?.message || 'Could not clear lockout'); }
     finally { setBusy(false); setConfirm(null); }
+  };
+  const forgetPerson = async () => {
+    const expected = `FORGET ${person.email}`;
+    if (forgetPhrase !== expected) {
+      errorToast(null, `Type "${expected}" exactly to confirm`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await apiClient.post<{ data: { cascadeReport: { storesModified: number; rowsRemoved: number; rowsModified: number; auditEntriesRedacted: number } } }>(
+        `/people/${person.id}/forget`, { confirm: expected });
+      const r = res.data.cascadeReport;
+      successToast(`Erased. ${r.storesModified} stores changed, ${r.rowsRemoved + r.rowsModified} rows touched, ${r.auditEntriesRedacted} audit entries redacted.`);
+      navigate('/people');
+    } catch (err: any) { errorToast(err?.message || 'Could not erase person'); }
+    finally { setBusy(false); setConfirm(null); setForgetPhrase(''); }
   };
 
   return (
@@ -1012,6 +1030,98 @@ function SecurityCard({ person, onChanged }: {
         onConfirm={clearLockout}
         onCancel={() => setConfirm(null)}
       />
+
+      {/* GDPR / right-to-be-forgotten — separate row outside the
+          standard security grid because it's destructive in a way
+          deactivation isn't. Requires typing the literal confirmation
+          phrase to defend against muscle-memory errors. */}
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+          <strong>Right to be forgotten</strong> — permanently erase this
+          person's record and scrub every reference across the catalog.
+          Audit history is tombstoned, not deleted. Irreversible.
+        </div>
+        <button
+          type="button"
+          onClick={() => { setConfirm('forget'); setForgetPhrase(''); }}
+          disabled={busy}
+          style={{
+            padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-error, #dc2626)',
+            border: '1px solid var(--color-error, #dc2626)', borderRadius: 'var(--radius-md)',
+            cursor: busy ? 'default' : 'pointer',
+          }}
+        >
+          Forget person…
+        </button>
+      </div>
+
+      {confirm === 'forget' && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
+            padding: 24, maxWidth: 480, width: '90%',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              Erase {person.name}?
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>
+              This is the GDPR right-to-be-forgotten cascade. The Person
+              record is deleted and every reference across the catalog
+              (ownership, stewardship, group membership, authored
+              comments) is scrubbed. Audit log entries are tombstoned
+              with the user replaced by <code>[deleted]</code> so the
+              action history survives. <strong>This cannot be undone.</strong>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 6 }}>
+              Type <code style={{ background: 'var(--color-bg)', padding: '1px 4px', borderRadius: 3 }}>FORGET {person.email}</code> to confirm:
+            </div>
+            <input
+              autoFocus
+              value={forgetPhrase}
+              onChange={(e) => setForgetPhrase(e.target.value)}
+              style={{
+                width: '100%', padding: '0.5rem 0.75rem',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)', fontSize: 13, marginBottom: 12,
+                boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => { setConfirm(null); setForgetPhrase(''); }}
+                style={{
+                  padding: '0.5rem 1rem', fontSize: 13,
+                  background: 'transparent', color: 'var(--color-text-muted)',
+                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={forgetPerson}
+                disabled={busy || forgetPhrase !== `FORGET ${person.email}`}
+                style={{
+                  padding: '0.5rem 1rem', fontSize: 13, fontWeight: 500,
+                  background: 'var(--color-error, #dc2626)', color: '#fff',
+                  border: 'none', borderRadius: 'var(--radius-md)',
+                  cursor: (busy || forgetPhrase !== `FORGET ${person.email}`) ? 'not-allowed' : 'pointer',
+                  opacity: (busy || forgetPhrase !== `FORGET ${person.email}`) ? 0.5 : 1,
+                }}
+              >
+                {busy ? 'Erasing…' : 'Erase permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
