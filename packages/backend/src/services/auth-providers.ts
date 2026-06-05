@@ -1,7 +1,9 @@
 import { v4 as uuid } from 'uuid';
 import jwt from 'jsonwebtoken';
+import * as argon2 from 'argon2';
 import config from '../config';
 import logger from '../lib/logger';
+import { people } from '../routes/people';
 
 // ---------------------------------------------------------------------------
 // Auth Provider Abstraction
@@ -15,7 +17,7 @@ export interface AuthResult {
 
 export interface AuthProvider {
   name: string;
-  type: 'dev' | 'oidc' | 'saml';
+  type: 'dev' | 'local' | 'oidc' | 'saml';
   validateCredentials(credentials: any): Promise<AuthResult>;
   getLoginUrl?(redirectUri: string): string;
   handleCallback?(code: string, redirectUri: string): Promise<AuthResult>;
@@ -53,6 +55,97 @@ export class DevAuthProvider implements AuthProvider {
       },
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Local Auth Provider — Procela-owned credentials (email + password)
+// ---------------------------------------------------------------------------
+// For deployments without an enterprise IdP (small teams, demos,
+// air-gapped environments). Credentials live on the Person record as
+// an Argon2id hash; plain text is never stored or logged. The
+// passwordHash field is stripped from every Person response via
+// publicPerson() in the people route.
+//
+// Failure paths are deliberately uniform: the same error message is
+// returned for "user doesn't exist" and "password is wrong", and we
+// run a constant-time verify against a dummy hash when no person is
+// found so timing doesn't leak existence. Brute-force protection
+// belongs at the route layer (rate limiter), not here.
+// ---------------------------------------------------------------------------
+
+// Pre-computed dummy hash used for constant-time response when a user
+// doesn't exist. Generated once at module load so the cost is paid
+// up-front, not per-request. The value is meaningless; the only
+// property that matters is that it parses as a valid Argon2 hash.
+let DUMMY_HASH = '';
+argon2.hash('dummy-password-procela-init', { type: argon2.argon2id })
+  .then((h) => { DUMMY_HASH = h; })
+  .catch((err) => logger.error({ err }, 'Failed to seed dummy password hash'));
+
+export class LocalAuthProvider implements AuthProvider {
+  name = 'Local';
+  type = 'local' as const;
+
+  async validateCredentials(credentials: {
+    email?: string;
+    password?: string;
+  }): Promise<AuthResult> {
+    const { email, password } = credentials;
+
+    if (!email || !password) {
+      return { success: false, error: 'Email and password are required' };
+    }
+
+    const person = people.find((p) => p.email.toLowerCase() === email.toLowerCase());
+
+    // Constant-time branch: when the user doesn't exist, burn the
+    // same amount of CPU as a real verify so the response time
+    // doesn't reveal account existence.
+    if (!person?.passwordHash) {
+      if (DUMMY_HASH) {
+        try { await argon2.verify(DUMMY_HASH, password); } catch { /* */ }
+      }
+      return { success: false, error: 'Invalid email or password' };
+    }
+
+    let ok = false;
+    try {
+      ok = await argon2.verify(person.passwordHash, password);
+    } catch (err) {
+      // Hash format error — treat as invalid credentials so a
+      // corrupted record doesn't expose itself as different from a
+      // wrong password.
+      logger.warn({ err, personId: person.id }, 'Argon2 verify error');
+      return { success: false, error: 'Invalid email or password' };
+    }
+
+    if (!ok) return { success: false, error: 'Invalid email or password' };
+
+    return {
+      success: true,
+      user: {
+        sub: person.id,
+        email: person.email,
+        name: person.name,
+        role: person.role,
+      },
+    };
+  }
+}
+
+// Argon2id parameters used for hashing new passwords. Defaults from
+// the argon2 package are OWASP-recommended (memoryCost 64 MiB,
+// timeCost 3, parallelism 4) — pass explicitly so the values are
+// reviewable here rather than hidden behind a library version bump.
+export const ARGON2_OPTS = {
+  type: argon2.argon2id,
+  memoryCost: 65536,
+  timeCost: 3,
+  parallelism: 4,
+} as const;
+
+export async function hashPassword(plain: string): Promise<string> {
+  return argon2.hash(plain, ARGON2_OPTS);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,17 +250,21 @@ export class OidcAuthProvider implements AuthProvider {
 
 // In-memory mutable auth configuration. The active provider can be changed
 // at runtime via the PUT /api/v1/auth/config endpoint.
+type ProviderName = 'dev' | 'local' | 'oidc' | 'saml';
+const VALID_PROVIDERS: ProviderName[] = ['dev', 'local', 'oidc', 'saml'];
+
 interface AuthConfig {
-  activeProvider: 'dev' | 'oidc' | 'saml';
+  activeProvider: ProviderName;
 }
 
 const authConfig: AuthConfig = {
-  activeProvider: (config.authProvider === 'dev' || config.authProvider === 'oidc' || config.authProvider === 'saml')
-    ? config.authProvider as 'dev' | 'oidc' | 'saml'
+  activeProvider: VALID_PROVIDERS.includes(config.authProvider as ProviderName)
+    ? config.authProvider as ProviderName
     : 'dev',
 };
 
 const devProvider = new DevAuthProvider();
+const localProvider = new LocalAuthProvider();
 const oidcProvider = new OidcAuthProvider({
   issuer: process.env.OIDC_ISSUER || '',
   clientId: process.env.OIDC_CLIENT_ID || '',
@@ -179,6 +276,8 @@ const oidcProvider = new OidcAuthProvider({
  */
 export function getAuthProvider(): AuthProvider {
   switch (authConfig.activeProvider) {
+    case 'local':
+      return localProvider;
     case 'oidc':
       return oidcProvider;
     case 'saml':
@@ -207,11 +306,11 @@ export function getAuthConfig(): {
 
 /** Update the active provider and/or OIDC settings at runtime. */
 export function updateAuthConfig(update: {
-  provider?: 'dev' | 'oidc' | 'saml';
+  provider?: ProviderName;
   oidcIssuer?: string;
   oidcClientId?: string;
 }): void {
-  if (update.provider) {
+  if (update.provider && VALID_PROVIDERS.includes(update.provider)) {
     authConfig.activeProvider = update.provider;
   }
   if (update.oidcIssuer !== undefined || update.oidcClientId !== undefined) {

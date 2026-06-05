@@ -18,16 +18,20 @@ interface AuthConfigResponse {
   data: AuthConfigData;
 }
 
-// The form uses "display" provider values (dev, microsoft, okta)
-// which map to the backend's provider types (dev, oidc)
-type DisplayProvider = 'dev' | 'microsoft' | 'okta';
+// The form uses "display" provider values (dev, local, microsoft,
+// okta) which map to the backend's provider types (dev, local, oidc).
+// Local is its own backend type — credentials stored on the Person
+// record as Argon2 hashes; no IdP required.
+type DisplayProvider = 'dev' | 'local' | 'microsoft' | 'okta';
 
 function displayProviderToBackend(dp: DisplayProvider): string {
   if (dp === 'microsoft' || dp === 'okta') return 'oidc';
+  if (dp === 'local') return 'local';
   return 'dev';
 }
 
 function backendToDisplayProvider(backendProvider: string, issuerUrl: string): DisplayProvider {
+  if (backendProvider === 'local') return 'local';
   if (backendProvider !== 'oidc') return 'dev';
   if (issuerUrl.includes('microsoftonline.com') || issuerUrl.includes('login.microsoft')) return 'microsoft';
   if (issuerUrl.includes('okta.com')) return 'okta';
@@ -232,6 +236,7 @@ export default function SettingsPage() {
   const providerDisplayName = (provider: DisplayProvider) => {
     switch (provider) {
       case 'dev': return 'Dev Mode';
+      case 'local': return 'Local credentials';
       case 'microsoft': return 'Microsoft Entra ID';
       case 'okta': return 'Okta';
       default: return provider;
@@ -419,9 +424,18 @@ export default function SettingsPage() {
                   style={inputStyle}
                 >
                   <option value="dev">Dev Mode</option>
+                  <option value="local">Local credentials (email + password)</option>
                   <option value="microsoft">Microsoft Entra ID (OIDC)</option>
                   <option value="okta">Okta (OIDC)</option>
                 </select>
+                {formProvider === 'local' && (
+                  <div style={{ marginTop: '0.5rem', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    Procela stores Argon2id password hashes on each Person record. Use{' '}
+                    <strong>Migrate to Local</strong> below to generate temporary passwords for
+                    everyone, then distribute them out-of-band. Users will be forced to set a
+                    new password on first login.
+                  </div>
+                )}
               </div>
 
               {/* OIDC Fields */}
@@ -478,6 +492,15 @@ export default function SettingsPage() {
                   {authSaving ? 'Saving...' : 'Save Configuration'}
                 </button>
               </div>
+
+              {/* Local credentials: one-time migration. Always
+                  available so an admin can pre-stage temp passwords
+                  before flipping the provider switch (avoids the
+                  lockout where switching to Local with no hashes set
+                  blocks every login). */}
+              {(formProvider === 'local' || currentProvider === 'local') && (
+                <LocalMigrationPanel />
+              )}
             </div>
           </>
         )}
@@ -655,3 +678,160 @@ const inputStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
 };
 
+
+// ──────────────────────────────────────────────────────────────────────────
+// LocalMigrationPanel — one-time admin action that moves people without
+// a stored credential onto Local auth. Generates a strong temporary
+// password for each, hashes it server-side, returns the plaintext
+// values ONCE so the admin can distribute them out-of-band. Every
+// generated password is marked must-change so the user is forced into
+// the change-password flow on first login.
+//
+// The panel deliberately doesn't ship credentials over email — that
+// integration is a separate concern. The download-as-CSV affordance
+// is the recommended distribution method until SMTP is wired.
+// ──────────────────────────────────────────────────────────────────────────
+
+interface TempCredential {
+  personId: string;
+  email: string;
+  name: string;
+  tempPassword: string;
+}
+
+function LocalMigrationPanel() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ count: number; message: string; tempPasswords: TempCredential[] } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const res = await apiClient.post<{ success: boolean; data: { count: number; message: string; tempPasswords: TempCredential[] } }>(
+        '/auth/migrate-to-local',
+        {},
+      );
+      setResult(res.data);
+    } catch { /* toast already shown by client */ }
+    finally { setBusy(false); setConfirming(false); }
+  };
+
+  const downloadCsv = () => {
+    if (!result) return;
+    const csv = [
+      'Email,Name,Temporary password',
+      ...result.tempPasswords.map((p) => `"${p.email}","${p.name}","${p.tempPassword}"`),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `procela-temp-passwords-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{
+      marginTop: '1rem', padding: '1rem',
+      background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+    }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+        Migrate people to Local auth
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+        Generates a temporary password for every Person without a stored credential.
+        Returns the plaintext values <strong>once</strong> — copy or download them now,
+        because they aren't stored after this response. Every recipient is required to
+        change their password on first login.
+      </div>
+
+      {!result && !confirming && (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          disabled={busy}
+          style={{
+            padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+            background: 'var(--color-surface)', color: 'var(--color-text)',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+            cursor: busy ? 'default' : 'pointer',
+          }}
+        >
+          Generate temporary passwords…
+        </button>
+      )}
+
+      {confirming && !result && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12 }}>Run now? The values are only returned once.</span>
+          <button
+            type="button"
+            onClick={run}
+            disabled={busy}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-primary)', color: '#fff',
+              border: 'none', borderRadius: 'var(--radius-md)',
+              cursor: busy ? 'default' : 'pointer',
+            }}
+          >
+            {busy ? 'Running…' : 'Confirm'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            disabled={busy}
+            style={{
+              padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-surface)', color: 'var(--color-text-muted)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {result && (
+        <div>
+          <div style={{ fontSize: 13, marginBottom: 8 }}>{result.message}</div>
+          {result.tempPasswords.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={downloadCsv}
+                style={{
+                  padding: '0.4rem 1rem', fontSize: 13, fontWeight: 500,
+                  background: 'var(--color-primary)', color: '#fff',
+                  border: 'none', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', marginBottom: 10,
+                }}
+              >
+                Download as CSV
+              </button>
+              <div style={{
+                maxHeight: 220, overflowY: 'auto',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+                fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+                background: 'var(--color-surface)',
+              }}>
+                {result.tempPasswords.map((p) => (
+                  <div key={p.personId} style={{
+                    padding: '6px 10px', borderBottom: '1px solid var(--color-border)',
+                    display: 'flex', gap: 12, justifyContent: 'space-between',
+                  }}>
+                    <span>{p.email}</span>
+                    <span style={{ fontWeight: 600 }}>{p.tempPassword}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

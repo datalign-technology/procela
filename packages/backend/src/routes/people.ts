@@ -28,8 +28,32 @@ export interface StoredPerson {
   title: string;
   jobRole?: string;
   skillIds: string[];
+  /** Argon2id hash of the user's local password. Only present when
+   *  the Local auth provider has been set up for this person. OIDC /
+   *  SAML / Dev users never carry a hash — login federates to the IdP
+   *  or skips credentials entirely. The hash MUST be stripped from
+   *  every API response that surfaces a person record; see
+   *  publicPerson() below. */
+  passwordHash?: string;
+  /** ISO timestamp of the last password change. Drives audit + the
+   *  forced-rotation check on first login after an admin reset. */
+  passwordUpdatedAt?: string;
+  /** When true, the user's current password was set by an admin or
+   *  the dev→local migration and must be changed before the user can
+   *  do anything else. The login flow short-circuits to a "set new
+   *  password" prompt instead of issuing a normal session. */
+  passwordMustChange?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Strip credential fields from a person record before sending over
+ *  the wire. Every read path that returns people MUST use this; the
+ *  raw StoredPerson is internal-only. */
+export function publicPerson(p: StoredPerson): Omit<StoredPerson, 'passwordHash'> {
+  const { passwordHash, ...rest } = p;
+  void passwordHash;
+  return rest;
 }
 
 // ── Org access resolution ──
@@ -236,8 +260,10 @@ router.get('/', (req: Request, res: Response) => {
   };
   // Enrich with both resolved org names (legacy callers) and the full
   // ancestor path so dropdowns can show "Name — Title · Root / Dept".
+  // Credential fields are stripped via publicPerson() before enrichment
+  // so a password hash never reaches a response payload.
   const enriched = filtered.map((p) => ({
-    ...p,
+    ...publicPerson(p),
     orgNames: p.orgIds
       .map((oid) => organizations.find((o) => o.id === oid)?.name)
       .filter((n): n is string => !!n),
@@ -335,7 +361,7 @@ router.get('/:id/360', (req: Request, res: Response) => {
 router.get('/:id', (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  res.json({ success: true, data: person });
+  res.json({ success: true, data: publicPerson(person) });
 });
 
 /** POST /api/v1/people */
@@ -366,7 +392,7 @@ router.post('/', (req: Request, res: Response) => {
   };
   people.push(person);
   saveStore('people', people);
-  res.status(201).json({ success: true, data: person });
+  res.status(201).json({ success: true, data: publicPerson(person) });
 });
 
 /** PUT /api/v1/people/:id */
@@ -392,7 +418,7 @@ router.put('/:id', (req: Request, res: Response) => {
   }
   person.updatedAt = new Date().toISOString();
   saveStore('people', people);
-  res.json({ success: true, data: person });
+  res.json({ success: true, data: publicPerson(person) });
 });
 
 /** GET /api/v1/people/:id/impact — preview what would be affected by deleting this person */
@@ -573,7 +599,7 @@ router.post('/import', (req: Request, res: Response) => {
     if (warnings.length > 0) parts.push(`${warnings.length} fell back to ${org.name}`);
     res.status(201).json({
       success: true,
-      data: created,
+      data: created.map(publicPerson),
       skipped: skipped.length,
       skippedEmails: skipped,
       warnings,
