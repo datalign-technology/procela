@@ -146,11 +146,29 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
         return;
       }
 
-      const redirectUri = req.body.redirectUri || `${req.protocol}://${req.get('host')}/api/v1/auth/callback`;
-      const loginUrl = oidc.getLoginUrl(redirectUri);
+      // redirectUri is where the IdP will send the browser after
+      // authentication. Defaults to /api/v1/auth/callback on the same
+      // origin; the IdP must have this URL registered. returnTo is
+      // where the frontend should land once a Procela session is
+      // issued — preserved across the round-trip via the flow store.
+      const redirectUri = req.body.redirectUri
+        || `${req.protocol}://${req.get('host')}/api/v1/auth/callback`;
+      const returnTo = req.body.returnTo || '/';
 
-      auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'OIDC_LOGIN_REDIRECT', null, { redirectUri });
-      res.json({ success: true, data: { loginUrl, provider: 'oidc' } });
+      try {
+        const { loginUrl } = await oidc.startLogin({
+          providerId: req.body.providerId || 'oidc',
+          redirectUri,
+          returnTo,
+        });
+        auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'OIDC_LOGIN_REDIRECT', null, { redirectUri });
+        res.json({ success: true, data: { loginUrl, provider: 'oidc' } });
+      } catch (err: any) {
+        // Discovery failures (bad issuer, network) end up here. Surface
+        // a clean message so an admin can spot a misconfig.
+        logger.warn({ err: err?.message }, 'OIDC login start failed');
+        res.status(503).json({ success: false, error: err?.message || 'Failed to start OIDC flow' });
+      }
       return;
     }
 
@@ -220,6 +238,109 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
   } catch (err) {
     logger.error({ err }, 'Login error');
     res.status(500).json({ success: false, error: 'Internal authentication error' });
+  }
+});
+
+/**
+ * GET /api/v1/auth/callback
+ *
+ * The OIDC redirect target. The IdP sends ?code=…&state=… here (or
+ * ?error=…&error_description=… on user-cancel). We exchange the code
+ * for tokens, validate the id_token, find or just-in-time-provision
+ * the Person record, issue Procela JWTs, and redirect the browser
+ * back to the frontend with the tokens in the URL fragment.
+ *
+ * URL fragments are not sent in subsequent HTTP requests and don't
+ * appear in proxy / CDN access logs, so they're a safer carrier for
+ * short-lived tokens than query strings. The frontend's
+ * /oidc-complete route reads the fragment and stores via authStore.
+ */
+router.get('/callback', async (req: Request, res: Response) => {
+  const { code, state, error, error_description } = req.query;
+
+  // FRONTEND_URL defaults to the same origin as the API call. In a
+  // typical deployment the frontend and API share a domain via a
+  // reverse proxy; if not, set APP_URL in the env to the frontend's
+  // origin so redirects land on the right host.
+  const frontendBase = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const errorRedirect = (msg: string) =>
+    res.redirect(`${frontendBase}/login?error=${encodeURIComponent(msg)}`);
+
+  if (error) {
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'oidc', 'OIDC_CALLBACK_ERROR', null, {
+      error: String(error),
+      description: String(error_description || ''),
+    });
+    return errorRedirect(String(error_description || error));
+  }
+  if (typeof code !== 'string' || typeof state !== 'string') {
+    return errorRedirect('Missing code or state on OIDC callback');
+  }
+
+  try {
+    const oidc = getOidcProvider();
+    const { user, returnTo } = await oidc.completeCallback({ code, state });
+
+    // Find-or-just-in-time-provision. Treat the IdP's email as the
+    // identity key — when a Person with that email exists, attach the
+    // session to them (preserves orgIds, role, name overrides). When
+    // not, create a minimal Person assigned to the dev org with the
+    // IdP-supplied role (VIEWER unless the IdP emitted a known role
+    // claim). Admins can move them to the right org later.
+    let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    let provisioned = false;
+    if (!person) {
+      const now = new Date().toISOString();
+      person = {
+        id: uuid(),
+        orgIds: [DEV_ORG_ID],
+        accessibleOrgIds: [DEV_ORG_ID],
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        title: '',
+        skillIds: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      people.push(person);
+      saveStore('people', people);
+      provisioned = true;
+    }
+
+    const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const role = person.role || user.role;
+    const accessToken = createAccessToken({
+      sub: person.id, email: person.email, name: person.name, role, orgId,
+    });
+    const refresh = createRefreshToken(person.id);
+
+    auditService.log(orgId, person.id, 'Auth', 'oidc', 'OIDC_CALLBACK_SUCCESS', null, {
+      email: person.email,
+      provisioned,
+      idpSub: user.sub,
+    });
+    logger.info({ personId: person.id, provisioned }, 'OIDC login successful');
+
+    // Tokens travel in the URL fragment — not the query string —
+    // so they don't get captured by proxy / CDN access logs and
+    // don't reach the backend on subsequent requests. The frontend
+    // /oidc-complete route reads the fragment immediately and then
+    // replaces the URL via history.replaceState so the tokens don't
+    // sit in the address bar.
+    const params = new URLSearchParams({
+      accessToken,
+      refreshToken: refresh.token,
+      expiresIn: String(ACCESS_TOKEN_EXPIRY_SECONDS),
+      returnTo,
+    });
+    return res.redirect(`${frontendBase}/oidc-complete#${params.toString()}`);
+  } catch (err: any) {
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'oidc', 'OIDC_CALLBACK_FAILED', null, {
+      error: err?.message || String(err),
+    });
+    logger.warn({ err: err?.message }, 'OIDC callback failed');
+    return errorRedirect(err?.message || 'OIDC callback failed');
   }
 });
 

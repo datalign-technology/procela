@@ -59,6 +59,19 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
 
+  // Surface a back-channel error from the OIDC callback. When the
+  // backend hits a problem (state mismatch, token-exchange failure,
+  // unsigned id_token) it redirects here with ?error=…; we lift that
+  // into the page-level error banner and clear the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    if (err) {
+      setError(err);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   useEffect(() => {
     async function fetchProviders() {
       try {
@@ -147,10 +160,31 @@ export default function LoginPage() {
     setForgotSubmitted(true);
   };
 
-  const handleSsoClick = (provider: AuthProvider | undefined) => {
+  const handleSsoClick = async (provider: AuthProvider | undefined) => {
     if (!provider || !provider.enabled) return;
-    // Future: redirect to OIDC auth URL
-    // For now, SSO providers show as coming soon
+    setError('');
+    setLoading(true);
+    try {
+      // POST hints which OIDC variant (microsoft / okta) so the backend
+      // can route to the right configured provider. The backend mints
+      // state + PKCE + nonce, stashes them, and returns the IdP's
+      // authorization URL. We then hand the browser off to the IdP —
+      // it'll come back to /api/v1/auth/callback which redirects to
+      // our /oidc-complete with tokens in the URL fragment.
+      const res = await apiClient.post<{ success: boolean; data: { loginUrl: string } }>(
+        '/auth/login',
+        { providerId: provider.id, returnTo: '/' },
+      );
+      if (res.data?.loginUrl) {
+        window.location.href = res.data.loginUrl;
+      } else {
+        setError('Failed to start SSO sign-in');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to start SSO sign-in');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

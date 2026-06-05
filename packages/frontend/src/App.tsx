@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
+import OidcCompletePage from '@/pages/OidcCompletePage';
 import ProcessCatalogPage from '@/pages/ProcessCatalogPage';
 import DataAssetsPage from '@/pages/DataAssetsPage';
 import SystemsPage from '@/pages/SystemsPage';
@@ -48,6 +49,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/oidc-complete" element={<OidcCompletePage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/setup" element={<SetupHubPage />} />

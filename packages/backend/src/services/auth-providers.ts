@@ -1,9 +1,11 @@
 import { v4 as uuid } from 'uuid';
 import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
 import * as argon2 from 'argon2';
 import config from '../config';
 import logger from '../lib/logger';
 import { people } from '../routes/people';
+import { mintFlow, consumeFlow, pkceChallenge, type PendingFlow } from './pending-oidc-flows';
 
 // ---------------------------------------------------------------------------
 // Auth Provider Abstraction
@@ -169,10 +171,48 @@ export interface OidcConfig {
   clientSecret: string;
 }
 
+// Cached OIDC discovery document. Refetched if it ages out so a key
+// rotation at the IdP doesn't require a Procela restart.
+interface DiscoveryDoc {
+  authorization_endpoint: string;
+  token_endpoint: string;
+  jwks_uri: string;
+  issuer: string;
+  end_session_endpoint?: string;
+}
+
+interface IdTokenClaims {
+  iss: string;
+  sub: string;
+  aud: string | string[];
+  exp: number;
+  iat: number;
+  nonce?: string;
+  email?: string;
+  email_verified?: boolean;
+  name?: string;
+  preferred_username?: string;
+  given_name?: string;
+  family_name?: string;
+  /** Common group/role claim names from various IdPs; the callback
+   *  handler maps these onto a Procela role. */
+  groups?: string[];
+  roles?: string[];
+}
+
 export class OidcAuthProvider implements AuthProvider {
   name = 'OIDC';
   type = 'oidc' as const;
   private config: OidcConfig;
+
+  // Discovery + JWKS state, cached per provider instance. discoveredAt
+  // is the wall-clock time of the last successful fetch; we refresh
+  // once an hour so a key rotation at the IdP propagates without a
+  // restart.
+  private discovery: DiscoveryDoc | null = null;
+  private discoveredAt = 0;
+  private jwks: jwksClient.JwksClient | null = null;
+  private static DISCOVERY_TTL_MS = 60 * 60 * 1000;
 
   constructor(oidcConfig: OidcConfig) {
     this.config = oidcConfig;
@@ -191,57 +231,210 @@ export class OidcAuthProvider implements AuthProvider {
     };
   }
 
-  /** Update OIDC config at runtime (e.g. from admin settings endpoint). */
+  /** Update OIDC config at runtime (e.g. from admin settings endpoint).
+   *  Invalidates the cached discovery doc so the next call picks up
+   *  the new issuer. */
   updateConfig(partial: Partial<OidcConfig>): void {
     if (partial.issuer !== undefined) this.config.issuer = partial.issuer;
     if (partial.clientId !== undefined) this.config.clientId = partial.clientId;
     if (partial.clientSecret !== undefined) this.config.clientSecret = partial.clientSecret;
+    this.discovery = null;
+    this.discoveredAt = 0;
+    this.jwks = null;
   }
 
   async validateCredentials(_credentials: any): Promise<AuthResult> {
     // OIDC flow uses getLoginUrl + handleCallback, not direct credential validation.
-    return { success: false, error: 'OIDC provider requires redirect-based login. Use getLoginUrl() instead.' };
+    return { success: false, error: 'OIDC provider requires redirect-based login. Use startLogin() instead.' };
   }
 
-  getLoginUrl(redirectUri: string): string {
+  /** Fetch + cache the IdP's OIDC discovery document. Returns the
+   *  cached copy when fresh; refreshes when stale. Throws on network
+   *  or parse failure so callers can surface a meaningful error. */
+  private async getDiscovery(): Promise<DiscoveryDoc> {
+    const now = Date.now();
+    if (this.discovery && now - this.discoveredAt < OidcAuthProvider.DISCOVERY_TTL_MS) {
+      return this.discovery;
+    }
+    const url = `${this.config.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`OIDC discovery failed: ${res.status} from ${url}`);
+    const doc = (await res.json()) as DiscoveryDoc;
+    if (!doc.authorization_endpoint || !doc.token_endpoint || !doc.jwks_uri || !doc.issuer) {
+      throw new Error('OIDC discovery document missing required fields');
+    }
+    this.discovery = doc;
+    this.discoveredAt = now;
+    this.jwks = jwksClient({
+      jwksUri: doc.jwks_uri,
+      cache: true,
+      cacheMaxAge: 60 * 60 * 1000,
+      rateLimit: true,
+      jwksRequestsPerMinute: 10,
+    });
+    logger.info({ issuer: doc.issuer, authEndpoint: doc.authorization_endpoint }, 'OIDC discovery refreshed');
+    return doc;
+  }
+
+  /** Start an Authorization Code + PKCE flow. Mints a state, nonce,
+   *  and PKCE code_verifier; returns the URL the browser should visit
+   *  to begin authenticating at the IdP. */
+  async startLogin(args: {
+    providerId: string;
+    redirectUri: string;
+    returnTo: string;
+  }): Promise<{ loginUrl: string; state: string }> {
     if (!this.isConfigured) {
-      // Return an error indicator — the route layer should check isConfigured first.
-      return '';
+      throw new Error('OIDC provider is not configured');
+    }
+    const doc = await this.getDiscovery();
+
+    const { state, nonce, codeVerifier } = mintFlow({
+      providerId: args.providerId,
+      redirectUri: args.redirectUri,
+      returnTo: args.returnTo,
+    });
+    const codeChallenge = pkceChallenge(codeVerifier);
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.config.clientId,
+      redirect_uri: args.redirectUri,
+      scope: 'openid email profile',
+      state,
+      nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    });
+
+    return {
+      loginUrl: `${doc.authorization_endpoint}?${params.toString()}`,
+      state,
+    };
+  }
+
+  /** Exchange the authorization code for tokens, validate the id_token
+   *  against the cached JWKS, and return the user claims. The caller
+   *  is responsible for translating claims into a Procela session
+   *  (find-or-provision a Person record, issue Procela JWTs). */
+  async completeCallback(args: { code: string; state: string }): Promise<{
+    user: { sub: string; email: string; name: string; role: string };
+    returnTo: string;
+    raw: IdTokenClaims;
+  }> {
+    if (!this.isConfigured) throw new Error('OIDC provider is not configured');
+
+    const flow = consumeFlow(args.state);
+    if (!flow) throw new Error('Invalid or expired state — the OIDC flow has timed out, please sign in again');
+
+    const doc = await this.getDiscovery();
+
+    // ── Exchange code for tokens ──
+    const tokenRes = await fetch(doc.token_endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: args.code,
+        redirect_uri: flow.redirectUri,
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+        code_verifier: flow.codeVerifier,
+      }).toString(),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      logger.warn({ status: tokenRes.status, body: body.slice(0, 200) }, 'OIDC token exchange failed');
+      throw new Error(`Token exchange failed (${tokenRes.status})`);
     }
 
-    // TODO: Replace with real OIDC authorization URL construction.
-    // Real implementation would:
-    //   1. Fetch ${this.config.issuer}/.well-known/openid-configuration
-    //   2. Extract the authorization_endpoint
-    //   3. Build URL with: response_type=code, client_id, redirect_uri, scope=openid email profile, state, nonce
-    //
-    // Example:
-    //   const authEndpoint = discoveryDoc.authorization_endpoint;
-    //   return `${authEndpoint}?response_type=code&client_id=${this.config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid%20email%20profile&state=${state}`;
+    const tokenJson = await tokenRes.json() as { id_token?: string; access_token?: string };
+    if (!tokenJson.id_token) throw new Error('Token response missing id_token');
 
-    return `${this.config.issuer}/authorize?client_id=${this.config.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20email%20profile`;
+    // ── Validate id_token ──
+    const claims = await this.verifyIdToken(tokenJson.id_token, flow);
+
+    const role = roleFromClaims(claims);
+    const email = (claims.email || claims.preferred_username || '').toLowerCase();
+    if (!email) throw new Error('id_token has no email or preferred_username claim');
+
+    const displayName = claims.name
+      || (claims.given_name && claims.family_name ? `${claims.given_name} ${claims.family_name}` : null)
+      || claims.preferred_username
+      || email.split('@')[0];
+
+    return {
+      user: {
+        sub: claims.sub,
+        email,
+        name: displayName,
+        role,
+      },
+      returnTo: flow.returnTo,
+      raw: claims,
+    };
   }
 
-  async handleCallback(_code: string, _redirectUri: string): Promise<AuthResult> {
-    if (!this.isConfigured) {
-      return { success: false, error: 'OIDC not configured' };
+  /** Cryptographically verify an id_token against the IdP's JWKS,
+   *  plus check iss / aud / exp / nonce. Throws on any failure. */
+  private async verifyIdToken(idToken: string, flow: PendingFlow): Promise<IdTokenClaims> {
+    if (!this.jwks) throw new Error('JWKS client not initialised — call getDiscovery() first');
+    const jwksRef = this.jwks;
+
+    const claims = await new Promise<IdTokenClaims>((resolve, reject) => {
+      jwt.verify(
+        idToken,
+        (header, callback) => {
+          if (!header.kid) return callback(new Error('id_token header missing kid'));
+          jwksRef.getSigningKey(header.kid, (err, key) => {
+            if (err) return callback(err);
+            const signingKey = key?.getPublicKey();
+            if (!signingKey) return callback(new Error('JWKS returned no signing key'));
+            callback(null, signingKey);
+          });
+        },
+        {
+          algorithms: ['RS256', 'RS384', 'RS512', 'ES256'],
+          // Accept either the discovery-doc issuer or the configured
+          // issuer URL — Microsoft Entra in particular often differs.
+          issuer: [this.discovery!.issuer, this.config.issuer.replace(/\/$/, '')],
+          audience: this.config.clientId,
+        },
+        (err, decoded) => {
+          if (err) return reject(err);
+          resolve(decoded as IdTokenClaims);
+        },
+      );
+    });
+
+    // jsonwebtoken handles iss/aud/exp; nonce is application-level so
+    // we check it ourselves. A missing or mismatching nonce indicates
+    // a replay or a confused-deputy attack.
+    if (claims.nonce !== flow.nonce) {
+      throw new Error('id_token nonce mismatch');
     }
-
-    // TODO: Replace with real OIDC token exchange.
-    // Real implementation would:
-    //   1. POST to the token_endpoint with grant_type=authorization_code, code, redirect_uri, client_id, client_secret
-    //   2. Validate the returned id_token (signature, issuer, audience, expiry)
-    //   3. Extract user claims (sub, email, name) from the id_token
-    //   4. Return AuthResult with the user info
-    //
-    // Example:
-    //   const tokenResponse = await fetch(tokenEndpoint, { method: 'POST', body: ... });
-    //   const { id_token, access_token } = await tokenResponse.json();
-    //   const claims = jwt.decode(id_token);
-    //   return { success: true, user: { sub: claims.sub, email: claims.email, name: claims.name, role: 'VIEWER' } };
-
-    return { success: false, error: 'OIDC not configured — callback handling not yet implemented' };
+    return claims;
   }
+}
+
+/** Map IdP-supplied claims to a Procela role. The default is the
+ *  least-privileged role; an admin can promote later. Customers that
+ *  want IdP-driven role assignment can configure their IdP to emit
+ *  a `roles` or `groups` claim containing one of Procela's role names. */
+function roleFromClaims(claims: IdTokenClaims): string {
+  const candidates = [
+    ...(claims.roles ?? []),
+    ...(claims.groups ?? []),
+  ].map((s) => String(s).toUpperCase());
+  const known = ['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'];
+  for (const r of known) {
+    if (candidates.includes(r)) return r;
+  }
+  return 'VIEWER';
 }
 
 // ---------------------------------------------------------------------------
