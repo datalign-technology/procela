@@ -702,26 +702,26 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     return { expectedInputs: split(inMatch?.[1]), expectedOutputs: split(outMatch?.[1]) };
   }, [nodeInputsOutputs]);
 
-  function findMatch(placeholder: string, candidates: MappingInfo[]): MappingInfo | null {
+  function findMatches(placeholder: string, candidates: MappingInfo[]): MappingInfo[] {
     const p = placeholder.toLowerCase().trim();
-    if (!p) return null;
-    // Explicit binding wins. When a mapping was created via "Link…"
-    // next to this placeholder, it carries fulfillsExpected — that's
-    // a durable user-asserted match that survives the linked entity
-    // being renamed.
+    if (!p) return [];
+    const out: MappingInfo[] = [];
+    // Explicit bindings first. Any mapping created via "Link…" or
+    // "+ Link another" next to this placeholder carries
+    // fulfillsExpected; user-asserted matches sort ahead of fuzzy
+    // ones and survive the linked entity being renamed.
     for (const m of candidates) {
-      if (m.fulfillsExpected && m.fulfillsExpected.toLowerCase().trim() === p) return m;
+      if (m.fulfillsExpected && m.fulfillsExpected.toLowerCase().trim() === p) out.push(m);
     }
-    // Fall back to fuzzy substring matching for legacy rows and rows
-    // added via the generic "+ Add Input/Output" path (which don't
-    // know which placeholder they correspond to).
+    // Then fuzzy substring matches on legacy rows and untagged ones
+    // added via the generic "+ Add Input/Output" path.
     for (const m of candidates) {
-      if (m.fulfillsExpected) continue; // already considered above
+      if (m.fulfillsExpected) continue;
       const name = (m.assetInfo?.assetName || m.policyInfo?.policyName || m.attachmentInfo?.name || '').toLowerCase();
       if (!name) continue;
-      if (name.includes(p) || p.includes(name)) return m;
+      if (name.includes(p) || p.includes(name)) out.push(m);
     }
-    return null;
+    return out;
   }
 
   // Linked-entity display name, used in toast copy.
@@ -783,18 +783,29 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
     return <span style={{ fontStyle: 'italic', color: 'var(--color-text-muted)' }}>Linked target no longer exists</span>;
   };
 
+  // Style for both the empty-state CTA and the "+ Link another" button
+  // — kept identical so the act of adding another doc reads as the
+  // same affordance whether the slot is empty or already partly filled.
+  const linkCtaStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '4px 12px', fontSize: 11, fontWeight: 500,
+    background: 'var(--color-surface)', color: 'var(--color-primary)',
+    border: '1px dashed var(--color-primary)',
+    borderRadius: 3, cursor: 'pointer', width: '100%', justifyContent: 'flex-start',
+  };
+
   const renderExpected = (placeholder: string, kind: 'input' | 'output') => {
     const candidates = kind === 'input' ? inputs : outputs;
-    const match = findMatch(placeholder, candidates);
-    const filled = !!match;
+    const matches = findMatches(placeholder, candidates);
+    const filled = matches.length > 0;
     const label = placeholder.replace(/^\w/, (c) => c.toUpperCase());
     // Stacked form-field layout: the placeholder name + Required badge
-    // sits on the top line; the linked entity (or CTA when empty) sits
-    // on the second line, indented to read as the field's value. The
-    // panel is rendered side-by-side with the other I/O column, so
-    // each slot only has ~240–400px to work with — going stacked lets
-    // both the label and the value claim the full row width instead
-    // of splitting it.
+    // sits on the top line; each linked entity (or the empty-state CTA)
+    // sits on its own line below, indented to read as the field's
+    // value(s). A "+ Link another" affordance after the list lets the
+    // user pile on more documents under the same slot — the slot reads
+    // as a repeating fieldset rather than a single value.
+    const openPicker = () => { setLinkingExpected(placeholder); setShowAdd(kind); };
     return (
       <div
         key={`expected-${kind}-${placeholder}`}
@@ -816,19 +827,23 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           }}>{filled ? <Check size={9} strokeWidth={3.5} /> : <AlertTriangle size={9} strokeWidth={3} />}</span>
           <span style={{ fontWeight: 600, fontSize: 12 }}>{label}</span>
           <StatusBadge variant="danger">Required</StatusBadge>
+          {matches.length > 1 && (
+            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>· {matches.length} linked</span>
+          )}
         </div>
-        {/* Bottom line — field value. Indented to sit under the label
-            and visually tied to it. */}
+        {/* Value lines — one per linked entity, plus the add affordance
+            below. paddingLeft 20 keeps everything visually tied to the
+            label above. */}
         <div style={{
           marginTop: 4, paddingLeft: 20,
-          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0,
+          display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0,
         }}>
-          {filled ? (
-            <>
-              {renderInlineMapping(match!)}
+          {matches.map((m) => (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+              {renderInlineMapping(m)}
               {!disabled && (
                 <button
-                  onClick={() => unlinkWithUndo(match!)}
+                  onClick={() => unlinkWithUndo(m)}
                   title="Unlink this document"
                   aria-label="Unlink"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '2px 4px', display: 'inline-flex', borderRadius: 3, marginLeft: 'auto' }}
@@ -836,24 +851,21 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
                   <X size={12} strokeWidth={2.2} />
                 </button>
               )}
-            </>
-          ) : !disabled ? (
+            </div>
+          ))}
+          {!disabled ? (
             <button
-              onClick={() => { setLinkingExpected(placeholder); setShowAdd(kind); }}
-              title={`Link a document, asset, or attachment to fulfill "${label}"`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '4px 12px', fontSize: 11, fontWeight: 500,
-                background: 'var(--color-surface)', color: 'var(--color-primary)',
-                border: '1px dashed var(--color-primary)',
-                borderRadius: 3, cursor: 'pointer', width: '100%', justifyContent: 'flex-start',
-              }}
+              onClick={openPicker}
+              title={filled
+                ? `Link another document, asset, or attachment to "${label}"`
+                : `Link a document, asset, or attachment to fulfill "${label}"`}
+              style={linkCtaStyle}
             >
-              + Link document, asset, or attachment
+              {filled ? '+ Link another' : '+ Link document, asset, or attachment'}
             </button>
-          ) : (
+          ) : !filled ? (
             <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>not yet linked</span>
-          )}
+          ) : null}
         </div>
       </div>
     );
@@ -1182,9 +1194,17 @@ function IOPanel({ nodeId, mappings, assetsList, policiesList, disabled, orgId, 
           const linkType = kind === 'input' ? 'consumes' : 'produces';
           // Mappings that fulfill an expected slot already render inline
           // inside that slot's row, so don't duplicate them below.
-          const matchedIds = new Set(expected.map((p) => findMatch(p, list)?.id).filter(Boolean) as string[]);
+          // Every mapping matched by any expected slot — across all
+          // slots, since a slot can hold many — gets folded out of the
+          // "Additional" section so it appears in exactly one place.
+          const matchedIds = new Set<string>();
+          for (const p of expected) {
+            for (const m of findMatches(p, list)) matchedIds.add(m.id);
+          }
           const extras = list.filter((m) => !matchedIds.has(m.id));
-          const filledCount = expected.filter((p) => findMatch(p, list)).length;
+          // A slot counts as filled if it has at least one match —
+          // multiplicity within a slot doesn't bump the counter.
+          const filledCount = expected.filter((p) => findMatches(p, list).length > 0).length;
           return (
             <div key={kind} style={{ flex: 1, minWidth: 240 }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
