@@ -114,6 +114,21 @@ export function consumeFlow(state: string): PendingFlow | null {
   return flow;
 }
 
+/** Look at the flow without consuming. Used by the OIDC callback
+ *  route to find which provider a state belongs to (so the right
+ *  OidcAuthProvider instance handles the redeem) before calling
+ *  completeCallback() which consumes. Returns null when unknown or
+ *  expired — callers should treat both as "no such flow". */
+export function peekFlow(state: string): PendingFlow | null {
+  const flow = flows.get(state);
+  if (!flow) return null;
+  if (flow.expiresAt < Date.now()) {
+    flows.delete(state);
+    return null;
+  }
+  return flow;
+}
+
 /** Test helper. Not exported via any production path. */
 export function _clearAllForTesting(): void {
   flows.clear();

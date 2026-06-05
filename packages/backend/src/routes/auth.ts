@@ -13,12 +13,16 @@ import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
+import { peekFlow } from '../services/pending-oidc-flows';
 import { sendPasswordResetEmail, isConfigured as isMailConfigured } from '../services/mail.service';
 import {
   getAuthProvider,
   getAuthConfig,
   updateAuthConfig,
   getOidcProvider,
+  listOidcProviders,
+  upsertOidcProvider,
+  removeOidcProvider,
   hashPassword,
 } from '../services/auth-providers';
 
@@ -27,11 +31,22 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 // ---------------------------------------------------------------------------
 // In-memory refresh token store
 // ---------------------------------------------------------------------------
-// Stores valid refresh token JTIs.  On logout the JTI is removed so the
-// refresh token can no longer be used to mint new access tokens.
+// Stores valid refresh token JTIs alongside per-session context the
+// logout handler needs:
+//   - oidcProviderId / oidcIdToken: present when the session was
+//     issued by an OIDC flow. Used to drive RP-initiated logout —
+//     we send the user to the IdP's end_session_endpoint with the
+//     id_token_hint so the IdP also clears its session, not just
+//     Procela's. Without this round-trip, logging out of Procela
+//     leaves the user signed in at Microsoft / Okta and a fresh
+//     "Sign in with Microsoft" click silently logs them back in.
 // In production this would be backed by Redis or a database table.
 // ---------------------------------------------------------------------------
-const validRefreshTokens = new Set<string>();
+interface RefreshTokenContext {
+  oidcProviderId?: string;
+  oidcIdToken?: string;
+}
+const validRefreshTokens = new Map<string, RefreshTokenContext>();
 
 // ---------------------------------------------------------------------------
 // Token helpers
@@ -75,11 +90,11 @@ function createAccessToken(user: {
   return jwt.sign(payload, config.jwtSecret, { expiresIn: ACCESS_TOKEN_EXPIRY });
 }
 
-function createRefreshToken(sub: string): { token: string; jti: string } {
+function createRefreshToken(sub: string, context: RefreshTokenContext = {}): { token: string; jti: string } {
   const jti = uuid();
   const payload: RefreshTokenPayload = { sub, type: 'refresh', jti };
   const token = jwt.sign(payload, config.jwtSecret, { expiresIn: REFRESH_TOKEN_EXPIRY });
-  validRefreshTokens.add(jti);
+  validRefreshTokens.set(jti, context);
   return { token, jti };
 }
 
@@ -137,11 +152,17 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
 
     // ── OIDC redirect flow ──
     if (provider.type === 'oidc') {
-      const oidc = getOidcProvider();
-      if (!oidc.isConfigured) {
+      // providerId on the request selects which configured OIDC
+      // provider to drive. Missing → use the first configured one.
+      // Frontend passes it from the SSO button click; callers without
+      // the multi-IdP UI get backward-compatible single-provider
+      // behaviour.
+      const providerId: string = req.body.providerId || 'default';
+      const oidc = getOidcProvider(providerId) || getOidcProvider();
+      if (!oidc || !oidc.isConfigured) {
         res.status(503).json({
           success: false,
-          error: 'OIDC provider is not configured. Set issuer and clientId first.',
+          error: `OIDC provider "${providerId}" is not configured.`,
         });
         return;
       }
@@ -157,16 +178,16 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
 
       try {
         const { loginUrl } = await oidc.startLogin({
-          providerId: req.body.providerId || 'oidc',
+          providerId,
           redirectUri,
           returnTo,
         });
-        auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'OIDC_LOGIN_REDIRECT', null, { redirectUri });
-        res.json({ success: true, data: { loginUrl, provider: 'oidc' } });
+        auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'OIDC_LOGIN_REDIRECT', null, { providerId, redirectUri });
+        res.json({ success: true, data: { loginUrl, provider: 'oidc', providerId } });
       } catch (err: any) {
         // Discovery failures (bad issuer, network) end up here. Surface
         // a clean message so an admin can spot a misconfig.
-        logger.warn({ err: err?.message }, 'OIDC login start failed');
+        logger.warn({ err: err?.message, providerId }, 'OIDC login start failed');
         res.status(503).json({ success: false, error: err?.message || 'Failed to start OIDC flow' });
       }
       return;
@@ -278,8 +299,20 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 
   try {
-    const oidc = getOidcProvider();
-    const { user, returnTo } = await oidc.completeCallback({ code, state });
+    // Peek the pending flow to find which configured OIDC provider
+    // this state was minted from. Multi-IdP installs need the right
+    // provider's clientId / clientSecret / issuer for the token
+    // exchange and JWKS verification. completeCallback() consumes
+    // the flow after this peek.
+    const flow = peekFlow(state);
+    if (!flow) {
+      return errorRedirect('Invalid or expired state — the OIDC flow has timed out, please sign in again');
+    }
+    const oidc = getOidcProvider(flow.providerId) || getOidcProvider();
+    if (!oidc) {
+      return errorRedirect(`OIDC provider "${flow.providerId}" is no longer configured`);
+    }
+    const { user, returnTo, idToken } = await oidc.completeCallback({ code, state });
 
     // Find-or-just-in-time-provision. Treat the IdP's email as the
     // identity key — when a Person with that email exists, attach the
@@ -313,7 +346,15 @@ router.get('/callback', async (req: Request, res: Response) => {
     const accessToken = createAccessToken({
       sub: person.id, email: person.email, name: person.name, role, orgId,
     });
-    const refresh = createRefreshToken(person.id);
+    // Capture the OIDC providerId + id_token on the refresh-token
+    // entry so /auth/logout can drive RP-initiated logout. The
+    // id_token is verified, contains no Procela secret, and is only
+    // valid as a logout hint for this specific IdP session — safe
+    // to hold for the refresh-token lifetime.
+    const refresh = createRefreshToken(person.id, {
+      oidcProviderId: flow.providerId,
+      oidcIdToken: idToken,
+    });
 
     auditService.log(orgId, person.id, 'Auth', 'oidc', 'OIDC_CALLBACK_SUCCESS', null, {
       email: person.email,
@@ -395,8 +436,13 @@ router.post('/refresh', (req: Request, res: Response) => {
 /**
  * POST /api/v1/auth/logout
  *
- * Accepts { refreshToken } and invalidates it so it can no longer be used
- * to obtain new access tokens.
+ * Accepts { refreshToken } and invalidates it so it can no longer be
+ * used to obtain new access tokens. When the session was originally
+ * issued by an OIDC flow AND the IdP advertises an end_session_endpoint,
+ * the response carries a `logoutUrl` the frontend should redirect to —
+ * that's the RP-initiated logout per the OIDC spec. Without that
+ * round-trip, the IdP still considers the user signed in and a fresh
+ * "Sign in" click silently logs them back in.
  */
 router.post('/logout', (req: Request, res: Response) => {
   const { refreshToken } = req.body;
@@ -414,15 +460,38 @@ router.post('/logout', (req: Request, res: Response) => {
       return;
     }
 
+    // Pull the session context BEFORE deleting so we can build the
+    // RP-initiated logout URL with the original id_token.
+    const ctx = validRefreshTokens.get(decoded.jti) || {};
     const wasValid = validRefreshTokens.delete(decoded.jti);
+
+    let logoutUrl: string | null = null;
+    if (ctx.oidcProviderId && ctx.oidcIdToken) {
+      const oidc = getOidcProvider(ctx.oidcProviderId);
+      if (oidc) {
+        const postLogoutRedirectUri = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '') + '/login';
+        logoutUrl = oidc.buildLogoutUrl({
+          idToken: ctx.oidcIdToken,
+          postLogoutRedirectUri,
+        });
+      }
+    }
 
     auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'logout', 'LOGOUT', null, {
       jti: decoded.jti,
       wasValid,
+      rpInitiated: !!logoutUrl,
+      oidcProviderId: ctx.oidcProviderId || null,
     });
-    logger.info({ sub: decoded.sub }, 'User logged out');
+    logger.info({ sub: decoded.sub, rpInitiated: !!logoutUrl }, 'User logged out');
 
-    res.json({ success: true, data: { message: 'Logged out successfully' } });
+    res.json({
+      success: true,
+      data: {
+        message: 'Logged out successfully',
+        ...(logoutUrl ? { logoutUrl } : {}),
+      },
+    });
   } catch {
     // Even if the token is expired/invalid, treat as a successful logout —
     // the token is unusable regardless.
@@ -449,14 +518,28 @@ router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) 
  * Returns available auth providers and current active provider.
  * Public endpoint (no auth required).
  */
-router.get('/providers', (_req: Request, res: Response) => {
+router.get('/providers', (req: Request, res: Response) => {
   const authCfg = getAuthConfig();
-  const oidcPub = getOidcProvider().getPublicConfig();
+  const allOidc = listOidcProviders();
 
-  // Determine which specific OIDC provider is configured (Microsoft vs Okta)
-  const issuer = oidcPub.issuer || '';
-  const isMicrosoft = issuer.includes('microsoftonline.com') || issuer.includes('login.microsoft');
-  const isOkta = issuer.includes('okta.com');
+  // When the caller knows the user's email (e.g. a "what's your work
+  // address?" prompt on the login page), scope the OIDC list to
+  // providers whose allowedEmailDomains either match or are empty
+  // (global). When no email hint is provided, show every configured
+  // OIDC provider — the user picks.
+  const emailHint = String(req.query.emailHint || '').toLowerCase();
+  const domain = emailHint.includes('@') ? emailHint.split('@')[1] : '';
+  const oidcForUser = allOidc.filter((p) => {
+    if (!p.allowedEmailDomains || p.allowedEmailDomains.length === 0) return true;
+    return p.allowedEmailDomains.map((d) => d.toLowerCase()).includes(domain);
+  });
+
+  const oidcButtons = oidcForUser.map((p) => ({
+    id: p.id,
+    name: p.displayName,
+    type: 'oidc',
+    enabled: authCfg.provider === 'oidc' && p.isConfigured,
+  }));
 
   res.json({
     success: true,
@@ -464,18 +547,7 @@ router.get('/providers', (_req: Request, res: Response) => {
       current: authCfg.provider,
       currentName: authCfg.providerName,
       providers: [
-        {
-          id: 'microsoft',
-          name: 'Microsoft Entra ID',
-          type: 'oidc',
-          enabled: authCfg.provider === 'oidc' && authCfg.oidcConfigured && isMicrosoft,
-        },
-        {
-          id: 'okta',
-          name: 'Okta',
-          type: 'oidc',
-          enabled: authCfg.provider === 'oidc' && authCfg.oidcConfigured && isOkta,
-        },
+        ...oidcButtons,
         {
           id: 'local',
           name: 'Local credentials',
@@ -508,18 +580,63 @@ router.get('/providers', (_req: Request, res: Response) => {
  */
 router.get('/config', (_req: Request, res: Response) => {
   const authCfg = getAuthConfig();
-  const oidcPub = getOidcProvider().getPublicConfig();
+  // Legacy: the first OIDC provider gets surfaced as issuerUrl /
+  // clientId for back-compat with single-IdP frontends. The full
+  // list lives under oidcProviders.
+  const first = getOidcProvider();
+  const firstPub = first?.getPublicConfig();
   res.json({
     success: true,
     data: {
       provider: authCfg.provider,
       providerName: authCfg.providerName,
       oidcConfigured: authCfg.oidcConfigured,
-      issuerUrl: oidcPub.issuer || '',
-      clientId: oidcPub.clientId || '',
+      issuerUrl: firstPub?.issuer || '',
+      clientId: firstPub?.clientId || '',
+      oidcProviders: listOidcProviders(),
     },
   });
 });
+
+/**
+ * POST /api/v1/auth/oidc-providers
+ * PUT  /api/v1/auth/oidc-providers/:id
+ *
+ * Upsert an OIDC provider for multi-IdP installs. Admin-only. Body:
+ *   { id, displayName, issuer, clientId, clientSecret, allowedEmailDomains? }
+ *
+ * id is the stable handle the frontend passes as providerId on
+ * /auth/login (and matches the entry in /auth/providers). clientSecret
+ * is never echoed back; updates are write-only.
+ */
+router.post('/oidc-providers', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { id, displayName, issuer, clientId, clientSecret, allowedEmailDomains } = req.body;
+    if (!id || !displayName || !issuer || !clientId || !clientSecret) {
+      res.status(400).json({ success: false, error: 'id, displayName, issuer, clientId, clientSecret are required' });
+      return;
+    }
+    upsertOidcProvider({
+      id, displayName, issuer, clientId, clientSecret,
+      ...(Array.isArray(allowedEmailDomains) ? { allowedEmailDomains } : {}),
+    });
+    auditService.log(DEV_ORG_ID, req.user?.sub || null, 'Auth', 'oidc', 'OIDC_PROVIDER_UPSERTED', null, {
+      id, displayName, issuer,
+    });
+    res.json({ success: true, data: { id, displayName, issuer } });
+  });
+
+router.delete('/oidc-providers/:id', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const id = String(req.params.id);
+    const removed = removeOidcProvider(id);
+    if (!removed) {
+      res.status(404).json({ success: false, error: 'Provider not found' });
+      return;
+    }
+    auditService.log(DEV_ORG_ID, req.user?.sub || null, 'Auth', 'oidc', 'OIDC_PROVIDER_REMOVED', null, { id });
+    res.json({ success: true });
+  });
 
 /**
  * PUT /api/v1/auth/config

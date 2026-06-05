@@ -229,9 +229,30 @@ export default function Layout() {
     return null;
   }
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    // Tell the backend to revoke the refresh token + look up the
+    // OIDC RP-initiated-logout URL. When the session came from an
+    // OIDC flow AND the IdP advertises an end_session_endpoint, the
+    // response carries a logoutUrl we should redirect to — otherwise
+    // the IdP still considers the user signed in and the next "Sign
+    // in" click silently logs them right back in.
+    let logoutUrl: string | null = null;
+    try {
+      const refreshToken = useAuthStore.getState().refreshToken;
+      if (refreshToken) {
+        const res = await apiClient.post<{ success: boolean; data: { logoutUrl?: string } }>(
+          '/auth/logout',
+          { refreshToken },
+        );
+        logoutUrl = res.data?.logoutUrl || null;
+      }
+    } catch { /* always clear local session even when the backend call fails */ }
     logout();
-    navigate('/login');
+    if (logoutUrl) {
+      window.location.href = logoutUrl;
+    } else {
+      navigate('/login');
+    }
   };
 
   const handleOrgChange = (id: string) => {

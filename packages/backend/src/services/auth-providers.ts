@@ -166,9 +166,21 @@ export async function hashPassword(plain: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export interface OidcConfig {
+  /** Stable identifier — exposed to the frontend and used as the
+   *  providerId on /auth/login. Examples: "microsoft", "okta",
+   *  "customer-a-entra". Lower-case + hyphen-separated by convention. */
+  id: string;
+  /** Display name for the login-page button. */
+  displayName: string;
   issuer: string;
   clientId: string;
   clientSecret: string;
+  /** Optional. When set, this provider only appears on the login page
+   *  for users whose email matches one of these domains. The legacy
+   *  "type the providerId" path still works for everyone, but the UI
+   *  scoping is how org-level IdP isolation surfaces in the browser
+   *  ("@customer-a.com → Customer A SSO only"). */
+  allowedEmailDomains?: string[];
 }
 
 // Cached OIDC discovery document. Refetched if it ages out so a key
@@ -223,12 +235,36 @@ export class OidcAuthProvider implements AuthProvider {
   }
 
   /** Returns a safe view of the config (no secrets). */
-  getPublicConfig(): { issuer: string; clientId: string; configured: boolean } {
+  getPublicConfig(): {
+    id: string;
+    displayName: string;
+    issuer: string;
+    clientId: string;
+    configured: boolean;
+    isConfigured: boolean;
+    allowedEmailDomains?: string[];
+  } {
     return {
+      id: this.config.id,
+      displayName: this.config.displayName,
       issuer: this.config.issuer,
       clientId: this.config.clientId,
       configured: this.isConfigured,
+      isConfigured: this.isConfigured,
+      ...(this.config.allowedEmailDomains?.length
+        ? { allowedEmailDomains: this.config.allowedEmailDomains }
+        : {}),
     };
+  }
+
+  /** Whether the given email is allowed to use this provider, based
+   *  on the configured allowedEmailDomains. When the list is empty
+   *  the provider is global (all emails allowed). */
+  isAllowedForEmail(email: string): boolean {
+    const domains = this.config.allowedEmailDomains;
+    if (!domains || domains.length === 0) return true;
+    const domain = (email.split('@')[1] || '').toLowerCase();
+    return domains.map((d) => d.toLowerCase()).includes(domain);
   }
 
   /** Update OIDC config at runtime (e.g. from admin settings endpoint).
@@ -316,11 +352,18 @@ export class OidcAuthProvider implements AuthProvider {
   /** Exchange the authorization code for tokens, validate the id_token
    *  against the cached JWKS, and return the user claims. The caller
    *  is responsible for translating claims into a Procela session
-   *  (find-or-provision a Person record, issue Procela JWTs). */
+   *  (find-or-provision a Person record, issue Procela JWTs).
+   *
+   *  Returns the raw id_token (verified) so the caller can stash it
+   *  for RP-initiated logout — the id_token_hint sent to the IdP's
+   *  end_session_endpoint must be the same id_token that this flow
+   *  issued, otherwise the IdP can't correlate the logout with the
+   *  session it minted. */
   async completeCallback(args: { code: string; state: string }): Promise<{
     user: { sub: string; email: string; name: string; role: string };
     returnTo: string;
     raw: IdTokenClaims;
+    idToken: string;
   }> {
     if (!this.isConfigured) throw new Error('OIDC provider is not configured');
 
@@ -376,7 +419,22 @@ export class OidcAuthProvider implements AuthProvider {
       },
       returnTo: flow.returnTo,
       raw: claims,
+      idToken: tokenJson.id_token,
     };
+  }
+
+  /** Build the RP-initiated logout URL per the OIDC spec. Returns
+   *  null when the IdP doesn't advertise an end_session_endpoint
+   *  (older or non-conformant providers) — caller should fall back
+   *  to just clearing the local session. */
+  buildLogoutUrl(args: { idToken: string; postLogoutRedirectUri: string }): string | null {
+    if (!this.discovery || !this.discovery.end_session_endpoint) return null;
+    const params = new URLSearchParams({
+      id_token_hint: args.idToken,
+      post_logout_redirect_uri: args.postLogoutRedirectUri,
+      client_id: this.config.clientId,
+    });
+    return `${this.discovery.end_session_endpoint}?${params.toString()}`;
   }
 
   /** Cryptographically verify an id_token against the IdP's JWKS,
@@ -458,21 +516,56 @@ const authConfig: AuthConfig = {
 
 const devProvider = new DevAuthProvider();
 const localProvider = new LocalAuthProvider();
-const oidcProvider = new OidcAuthProvider({
-  issuer: process.env.OIDC_ISSUER || '',
-  clientId: process.env.OIDC_CLIENT_ID || '',
-  clientSecret: process.env.OIDC_CLIENT_SECRET || '',
-});
+
+// Multi-IdP registry. Procela can be configured with many OIDC
+// providers simultaneously — Entra for one customer, Okta for
+// another, a generic OIDC for a third. Each carries its own id +
+// display name + issuer + credentials + optional allowed-email-domains
+// for org-level scoping.
+//
+// Bootstrap from env: OIDC_ISSUER / OIDC_CLIENT_ID / OIDC_CLIENT_SECRET
+// produce a single "default" provider for backward compatibility.
+// Additional providers are added at runtime via updateAuthConfig().
+// In production the right home for the per-provider config is the
+// orgs / branding store; this commit keeps it in process memory so
+// the wire-up is observable without a schema change.
+const oidcProviders = new Map<string, OidcAuthProvider>();
+
+function loadInitialOidcProviders(): void {
+  const issuer = process.env.OIDC_ISSUER || '';
+  const clientId = process.env.OIDC_CLIENT_ID || '';
+  const clientSecret = process.env.OIDC_CLIENT_SECRET || '';
+  if (issuer || clientId) {
+    // Default provider — id "default" since we can't reliably guess
+    // whether the IdP is Microsoft / Okta / generic from env alone.
+    // Admin can rename via updateOidcProvider() once configured.
+    oidcProviders.set('default', new OidcAuthProvider({
+      id: 'default',
+      displayName: 'Single sign-on',
+      issuer,
+      clientId,
+      clientSecret,
+    }));
+  }
+}
+loadInitialOidcProviders();
 
 /**
  * Returns the currently active auth provider based on configuration.
+ * For OIDC, returns the first configured provider — useful for the
+ * dev / local / saml branches that only have one slot. OIDC callers
+ * that need a specific provider should use getOidcProvider(id).
  */
 export function getAuthProvider(): AuthProvider {
   switch (authConfig.activeProvider) {
     case 'local':
       return localProvider;
-    case 'oidc':
-      return oidcProvider;
+    case 'oidc': {
+      const first = oidcProviders.values().next().value;
+      if (first) return first;
+      logger.warn('OIDC provider selected but none configured; falling back to dev provider');
+      return devProvider;
+    }
     case 'saml':
       // SAML not yet implemented — fall back to dev with a warning
       logger.warn('SAML provider requested but not implemented; falling back to dev provider');
@@ -493,11 +586,14 @@ export function getAuthConfig(): {
   return {
     provider: authConfig.activeProvider,
     providerName: provider.name,
-    oidcConfigured: oidcProvider.isConfigured,
+    oidcConfigured: oidcProviders.size > 0
+      && Array.from(oidcProviders.values()).some((p) => p.isConfigured),
   };
 }
 
-/** Update the active provider and/or OIDC settings at runtime. */
+/** Update the active provider and/or OIDC settings at runtime.
+ *  Accepts a single-provider update for backwards compatibility; use
+ *  upsertOidcProvider() for multi-IdP management. */
 export function updateAuthConfig(update: {
   provider?: ProviderName;
   oidcIssuer?: string;
@@ -507,14 +603,55 @@ export function updateAuthConfig(update: {
     authConfig.activeProvider = update.provider;
   }
   if (update.oidcIssuer !== undefined || update.oidcClientId !== undefined) {
-    oidcProvider.updateConfig({
-      issuer: update.oidcIssuer,
-      clientId: update.oidcClientId,
-    });
+    // Backwards-compat: when only issuer/clientId are provided,
+    // update the "default" provider (or create it if it didn't exist).
+    const existing = oidcProviders.get('default');
+    if (existing) {
+      existing.updateConfig({
+        issuer: update.oidcIssuer,
+        clientId: update.oidcClientId,
+      });
+    } else if (update.oidcIssuer || update.oidcClientId) {
+      oidcProviders.set('default', new OidcAuthProvider({
+        id: 'default',
+        displayName: 'Single sign-on',
+        issuer: update.oidcIssuer || '',
+        clientId: update.oidcClientId || '',
+        clientSecret: '',
+      }));
+    }
   }
 }
 
-/** Direct access to the OIDC provider (used by auth routes). */
-export function getOidcProvider(): OidcAuthProvider {
-  return oidcProvider;
+/** Add or replace an OIDC provider by id. Used by the multi-IdP admin
+ *  flow — the same call serves "configure Entra for the first time"
+ *  and "rotate the Okta client secret". */
+export function upsertOidcProvider(cfg: OidcConfig): void {
+  if (!cfg.id) throw new Error('OIDC provider id is required');
+  oidcProviders.set(cfg.id, new OidcAuthProvider(cfg));
+  logger.info({ id: cfg.id, displayName: cfg.displayName }, 'OIDC provider upserted');
+}
+
+export function removeOidcProvider(id: string): boolean {
+  return oidcProviders.delete(id);
+}
+
+/** Direct access to a specific OIDC provider. */
+export function getOidcProvider(id?: string): OidcAuthProvider | null {
+  if (id) return oidcProviders.get(id) || null;
+  const first = oidcProviders.values().next().value;
+  return first || null;
+}
+
+/** List all configured OIDC providers. The returned array is safe to
+ *  expose to the frontend — no secrets, just the public config
+ *  (id, displayName, issuer, isConfigured, allowedEmailDomains). */
+export function listOidcProviders(): Array<{
+  id: string;
+  displayName: string;
+  issuer: string;
+  isConfigured: boolean;
+  allowedEmailDomains?: string[];
+}> {
+  return Array.from(oidcProviders.values()).map((p) => p.getPublicConfig());
 }

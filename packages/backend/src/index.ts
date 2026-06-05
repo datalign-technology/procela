@@ -17,6 +17,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
+import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
 import processCatalogRouter from './routes/process-catalog';
 import systemsRouter from './routes/systems';
@@ -84,6 +85,11 @@ app.use(express.json({ limit: '2mb' }));
 // ---------------------------------------------------------------------------
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
+// SCIM 2.0 lives at /scim/v2 per spec convention (not under /api/v1).
+// Bearer-token auth is enforced inside the router — no Express-level
+// authenticateToken middleware because SCIM uses its own static token
+// rather than Procela's user-issued JWTs.
+app.use('/scim/v2', scimRouter);
 app.use('/api/v1/docs', docsRouter);
 // Branding is partially public: the GET is reachable without auth so the
 // login screen can apply the customer's theme. The PUT/POST handlers
