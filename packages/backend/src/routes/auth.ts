@@ -8,7 +8,7 @@ import { AuthenticatedRequest, authenticateToken, authorize } from '../middlewar
 import { rateLimit } from '../middleware/rate-limit';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
-import { people, computeAccessibleOrgs, isActive as isPersonActive } from './people';
+import { people, computeAccessibleOrgs, isActive as isPersonActive, getRoleForOrg } from './people';
 import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
@@ -345,10 +345,15 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
 
     const user = result.user;
 
-    // Resolve user's org and role from people records (if they exist)
+    // Resolve user's org and role from people records (if they exist).
+    // The role at the resolved org wins over the person.role fallback —
+    // someone who is ORG_ADMIN in Operations but VIEWER in Finance gets
+    // the Operations role when their first-listed org is Operations.
     const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
     const resolvedOrgId = personRecord?.orgIds?.[0] || DEV_ORG_ID;
-    const resolvedRole = personRecord?.role || user.role;
+    const resolvedRole = personRecord
+      ? getRoleForOrg(personRecord, resolvedOrgId)
+      : user.role;
 
     // Successful credential check resets the lockout counter +
     // unlocks the account if it had been locked by an earlier burst.
@@ -537,7 +542,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
-    const role = person.role || user.role;
+    const role = getRoleForOrg(person, orgId) || user.role;
     const accessToken = createAccessToken({
       sub: person.id, email: person.email, name: person.name, role, orgId,
     });
@@ -1965,6 +1970,57 @@ router.delete('/sessions', authenticateToken, (req: AuthenticatedRequest, res: R
   }
   auditService.log(DEV_ORG_ID, userId, 'Auth', 'session', 'SESSION_REVOKED_ALL', null, { revoked });
   res.json({ success: true, data: { revoked } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/switch-org
+// ---------------------------------------------------------------------------
+// Re-mints an access token bound to a different org, picking up that
+// org's per-org role from orgRoles. The original refresh token stays
+// valid — the access token is the only thing being rotated. The
+// frontend calls this when the user picks a new org from the
+// switcher and wants their role chip / authorisation gates to update
+// without a full re-login.
+//
+// The target org must be in the caller's accessibleOrgIds (or be one
+// of their assigned orgIds). SUPER_ADMINs can switch to any org.
+// ---------------------------------------------------------------------------
+router.post('/switch-org', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const { orgId } = req.body || {};
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  const person = people.find((p) => p.id === userId);
+  if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+  // Membership check — SUPER_ADMIN bypasses, everyone else has to
+  // either be assigned to the org or have it in the computed
+  // accessible list.
+  let allowed = person.role === 'SUPER_ADMIN' || person.orgIds.includes(orgId);
+  if (!allowed) {
+    const accessible = computeAccessibleOrgs(person);
+    allowed = accessible.some((o) => o.id === orgId);
+  }
+  if (!allowed) {
+    res.status(403).json({ success: false, error: 'You do not have access to that org' });
+    return;
+  }
+
+  const role = getRoleForOrg(person, orgId);
+  const accessToken = createAccessToken({
+    sub: person.id, email: person.email, name: person.name, role, orgId,
+  });
+  auditService.log(orgId, person.id, 'Auth', 'switch-org', 'ORG_SWITCHED', null, {
+    from: req.user?.orgId, to: orgId, role,
+  });
+  res.json({
+    success: true,
+    data: {
+      accessToken,
+      expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      user: { sub: person.id, email: person.email, name: person.name, orgId, role },
+    },
+  });
 });
 
 // Admin unlock — clear a target user's lockout state. Useful when an

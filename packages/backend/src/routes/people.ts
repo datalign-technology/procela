@@ -24,7 +24,16 @@ export interface StoredPerson {
   accessibleOrgIds: string[];
   name: string;
   email: string;
+  /** Default / fallback role used when the active org does not have a
+   *  per-org override in orgRoles. A holdover from the single-role
+   *  model; new installs should set per-org roles instead, but the
+   *  fallback keeps every existing record valid. */
   role: string;
+  /** Per-org role overrides. Empty / absent → person.role applies in
+   *  every assigned org. When an entry matches the active org, its
+   *  role wins. Useful when one person is a process owner in
+   *  Operations but a viewer in Finance. */
+  orgRoles?: Array<{ orgId: string; role: string }>;
   title: string;
   jobRole?: string;
   skillIds: string[];
@@ -183,6 +192,19 @@ function getAncestorOrgs(orgId: string, levels: string[]): string[] {
 }
 
 const WORKING_LEVELS = ['company', 'division'];
+
+/** Resolve the effective role for a person when acting inside a
+ *  specific org. Per-org overrides win; otherwise the person.role
+ *  fallback applies. SUPER_ADMIN never gets downgraded by an entry —
+ *  if a record somehow carries an orgRoles entry that demotes a
+ *  super-admin, we ignore it (defence in depth against admin-API
+ *  misuse). */
+export function getRoleForOrg(person: StoredPerson, orgId?: string | null): string {
+  if (person.role === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (!orgId || !person.orgRoles?.length) return person.role;
+  const entry = person.orgRoles.find((r) => r.orgId === orgId);
+  return entry?.role || person.role;
+}
 
 export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string; name: string; type: string; parentId: string | null }> {
   const allWorkingOrgs = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
@@ -589,6 +611,36 @@ router.post('/:id/reactivate', (req: Request, res: Response) => {
   }
   person.active = true;
   person.deactivatedAt = undefined;
+  person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
+  res.json({ success: true, data: publicPerson(person) });
+});
+
+/**
+ * PUT /api/v1/people/:id/org-role
+ * Body: { orgId, role | null }
+ *
+ * Set or clear a per-org role override for the given person. Clearing
+ * (role: null or empty string) removes the override so the person.role
+ * fallback applies in that org again. The orgId must be one of the
+ * person's assigned orgIds — we don't accept overrides for orgs the
+ * person can't act in. The login flow and /auth/switch-org consult
+ * orgRoles via getRoleForOrg() at token-mint time.
+ */
+router.put('/:id/org-role', (req: Request, res: Response) => {
+  const person = people.find((p) => p.id === String(req.params.id));
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  const { orgId, role } = req.body || {};
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  if (!person.orgIds.includes(orgId)) {
+    res.status(400).json({ success: false, error: 'Person is not assigned to that org' });
+    return;
+  }
+  const next = (person.orgRoles || []).filter((r) => r.orgId !== orgId);
+  if (role && typeof role === 'string') {
+    next.push({ orgId, role });
+  }
+  person.orgRoles = next;
   person.updatedAt = new Date().toISOString();
   saveStore('people', people);
   res.json({ success: true, data: publicPerson(person) });

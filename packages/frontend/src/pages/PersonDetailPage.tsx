@@ -34,6 +34,9 @@ interface Person360Data {
     role: string;
     title: string;
     skillIds?: string[];
+    // Per-org role overrides. When absent for a given org the
+    // person.role fallback applies.
+    orgRoles?: Array<{ orgId: string; role: string }>;
     // Security flags. Optional because legacy records predate them
     // and the SecurityCard treats absence-of-active as "active".
     active?: boolean;
@@ -84,6 +87,84 @@ const sectionTitleStyle: React.CSSProperties = {
 };
 
 interface FlatOrg { id: string; parentId: string | null; name: string; type: string; }
+
+const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'SUPER_ADMIN', label: 'Super Admin' },
+  { value: 'ORG_ADMIN', label: 'Org Admin' },
+  { value: 'PROCESS_OWNER', label: 'Process Owner' },
+  { value: 'DATA_STEWARD', label: 'Data Steward' },
+  { value: 'CONTRIBUTOR', label: 'Contributor' },
+  { value: 'VIEWER', label: 'Viewer' },
+];
+
+// OrgRolePill — small inline editor for the per-org role override.
+// Click the role chip to open a select; choosing "Use default" clears
+// the override so the person.role fallback applies in that org.
+function OrgRolePill({ role, isOverride, disabled, onChange }: {
+  role: string;
+  isOverride: boolean;
+  disabled?: boolean;
+  onChange: (role: string | null) => void;
+}) {
+  const { isAdmin } = usePermissions();
+  const [open, setOpen] = useState(false);
+  const label = ROLE_OPTIONS.find((r) => r.value === role)?.label || role;
+
+  if (!isAdmin) {
+    return (
+      <span style={{
+        fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+        background: '#fff', color: 'var(--color-primary)',
+        textTransform: 'uppercase', letterSpacing: '0.04em',
+      }}>{label}</span>
+    );
+  }
+
+  if (open) {
+    return (
+      <select
+        autoFocus
+        value={isOverride ? role : ''}
+        disabled={disabled}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v ? v : null);
+          setOpen(false);
+        }}
+        onBlur={() => setOpen(false)}
+        style={{
+          fontSize: 11, padding: '2px 4px',
+          border: '1px solid var(--color-border)', borderRadius: 4,
+          background: '#fff', color: 'var(--color-text)',
+        }}
+      >
+        <option value="">Use default ({role})</option>
+        {ROLE_OPTIONS.map((r) => (
+          <option key={r.value} value={r.value}>{r.label}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      disabled={disabled}
+      title={isOverride ? 'Per-org override — click to change' : 'Default role — click to set a per-org override'}
+      style={{
+        fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+        background: isOverride ? 'var(--color-primary)' : '#fff',
+        color: isOverride ? '#fff' : 'var(--color-primary)',
+        textTransform: 'uppercase', letterSpacing: '0.04em',
+        border: '1px solid var(--color-primary)',
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      {label}{isOverride ? '' : ' *'}
+    </button>
+  );
+}
 
 function InlineField({ label, value, field, personId, onSaved }: {
   label: string; value: string; field: string; personId: string; onSaved: () => void;
@@ -179,6 +260,21 @@ export default function PersonDetailPage() {
     } catch (err) {
       setData(snapshot);
       errorToast(err, 'Failed to update org assignment');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Set / clear a per-org role override for the person at one org.
+  // Pass role=null to clear (the person.role fallback then applies).
+  const setOrgRole = async (orgId: string, role: string | null) => {
+    if (!data) return;
+    setBusy(true);
+    try {
+      await apiClient.put(`/people/${data.person.id}/org-role`, { orgId, role });
+      await fetch360();
+    } catch (err) {
+      errorToast(err, 'Failed to update org role');
     } finally {
       setBusy(false);
     }
@@ -347,26 +443,37 @@ export default function PersonDetailPage() {
           <div style={sectionTitleStyle}>Assigned organizations ({(data.person.orgIds || []).length})</div>
           {busy && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Saving\u2026</span>}
         </div>
-        {/* Selected chips — compact summary above the picker. */}
+        {/* Selected chips — compact summary above the picker. Each
+            chip shows the effective role at that org. Click the role
+            pill to swap in a per-org override; click the × to
+            unassign. */}
         {(data.person.orgIds || []).length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
             {(data.person.orgIds || []).map((oid) => {
               const o = allOrgs.find((x) => x.id === oid);
               if (!o) return null;
               const isLast = (data.person.orgIds || []).length === 1;
+              const override = (data.person.orgRoles || []).find((r) => r.orgId === oid);
+              const effectiveRole = override?.role || data.person.role;
               return (
-                <span key={oid}
+                <div key={oid}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    display: 'flex', alignItems: 'center', gap: 8,
                     padding: '4px 4px 4px 10px',
-                    borderRadius: 999,
+                    borderRadius: 8,
                     background: 'var(--color-primary-light)',
                     color: 'var(--color-primary)',
                     fontSize: 12,
                   }}
                 >
-                  <strong>{o.name}</strong>
+                  <strong style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</strong>
                   <span style={{ fontSize: 10, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{o.type}</span>
+                  <OrgRolePill
+                    role={effectiveRole}
+                    isOverride={!!override}
+                    disabled={busy}
+                    onChange={(role) => setOrgRole(oid, role)}
+                  />
                   <button
                     onClick={() => toggleOrgAssignment(oid)}
                     disabled={isLast || busy}
@@ -380,7 +487,7 @@ export default function PersonDetailPage() {
                       opacity: isLast ? 0.4 : 1,
                     }}
                   >&times;</button>
-                </span>
+                </div>
               );
             })}
           </div>
