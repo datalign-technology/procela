@@ -43,8 +43,28 @@ export interface StoredPerson {
    *  do anything else. The login flow short-circuits to a "set new
    *  password" prompt instead of issuing a normal session. */
   passwordMustChange?: boolean;
+  /** Soft-delete flag. Absent or true → the person can sign in and
+   *  appears in default list views. False → the person is preserved
+   *  for audit but cannot authenticate, doesn't appear in default
+   *  lists, and is exposed to SCIM as active=false. Set by SCIM PUT /
+   *  PATCH with active=false (the standard offboarding signal IdPs
+   *  send) and by the admin "Deactivate" action. Reactivation just
+   *  flips the flag back. SCIM DELETE still hard-deletes — explicit
+   *  is explicit. */
+  active?: boolean;
+  /** Timestamp of the active=false transition. Lets the People page
+   *  show "Deactivated 12 days ago" and audit reports surface
+   *  recently-disabled accounts. */
+  deactivatedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A person is "active" when the flag is absent OR true. Existing
+ *  records predate the field; treating absence as active is the
+ *  only safe back-compat read. */
+export function isActive(p: StoredPerson): boolean {
+  return p.active !== false;
 }
 
 /** Strip credential fields from a person record before sending over
@@ -235,10 +255,17 @@ router.delete('/all', (_req: Request, res: Response) => {
   res.json({ success: true, deleted: count });
 });
 
-/** GET /api/v1/people */
+/** GET /api/v1/people
+ *  Query params:
+ *    orgId             scope to a specific org
+ *    includeInactive   when "true", include soft-deleted records.
+ *                      Defaults to false so the standard People page
+ *                      stays clean. Admin views explicitly opt in. */
 router.get('/', (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
+  const { orgId, includeInactive } = req.query;
+  const includeDeactivated = String(includeInactive) === 'true';
+  let filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
+  if (!includeDeactivated) filtered = filtered.filter(isActive);
   // Build "Root / Parent / Child" for a single org id by walking up
   // parentId. Cached per request via the closure so a person assigned
   // to many siblings doesn't re-walk the same ancestry repeatedly.
@@ -446,6 +473,40 @@ router.delete('/:id', (req: Request, res: Response) => {
   people.splice(idx, 1);
   saveStore('people', people);
   res.status(204).send();
+});
+
+/** POST /api/v1/people/:id/deactivate
+ *  Soft-delete. The person stays in the store (preserves audit trail,
+ *  authored comments, role-assignment history) but can't sign in and
+ *  doesn't appear in the default People list. Reverse with the
+ *  /reactivate endpoint below. */
+router.post('/:id/deactivate', (req: Request, res: Response) => {
+  const person = people.find((p) => p.id === req.params.id);
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  if (person.active === false) {
+    res.json({ success: true, data: publicPerson(person), message: 'Already deactivated' });
+    return;
+  }
+  person.active = false;
+  person.deactivatedAt = new Date().toISOString();
+  person.updatedAt = person.deactivatedAt;
+  saveStore('people', people);
+  res.json({ success: true, data: publicPerson(person) });
+});
+
+/** POST /api/v1/people/:id/reactivate */
+router.post('/:id/reactivate', (req: Request, res: Response) => {
+  const person = people.find((p) => p.id === req.params.id);
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  if (person.active !== false) {
+    res.json({ success: true, data: publicPerson(person), message: 'Already active' });
+    return;
+  }
+  person.active = true;
+  person.deactivatedAt = undefined;
+  person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
+  res.json({ success: true, data: publicPerson(person) });
 });
 
 /**

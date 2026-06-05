@@ -2,8 +2,20 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
-import { people, type StoredPerson } from './people';
+import { people, isActive, type StoredPerson } from './people';
 import { saveStore } from '../lib/persistence';
+import {
+  scimGroups,
+  findGroup,
+  createGroup,
+  replaceGroup,
+  deleteGroup,
+  addMembers,
+  removeMembers,
+  removeMemberFromAllGroups,
+  type StoredScimGroup,
+  type ScimGroupMember,
+} from '../services/scim-groups';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SCIM 2.0 — push provisioning endpoint.
@@ -49,6 +61,7 @@ import { saveStore } from '../lib/persistence';
 // ──────────────────────────────────────────────────────────────────────────
 
 const SCIM_USER_SCHEMA = 'urn:ietf:params:scim:schemas:core:2.0:User';
+const SCIM_GROUP_SCHEMA = 'urn:ietf:params:scim:schemas:core:2.0:Group';
 const SCIM_LIST_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:ListResponse';
 const SCIM_ERROR_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:Error';
 const SCIM_PATCH_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:PatchOp';
@@ -113,7 +126,7 @@ function toScimUser(p: StoredPerson, baseUrl: string): ScimUser {
     schemas: [SCIM_USER_SCHEMA],
     id: p.id,
     userName: p.email,
-    active: true,
+    active: isActive(p),
     name: {
       givenName: given || undefined,
       familyName: family || undefined,
@@ -134,16 +147,178 @@ function baseUrlFor(req: Request): string {
   return `${req.protocol}://${req.get('host')}/scim/v2`;
 }
 
+function toScimGroup(g: StoredScimGroup, baseUrl: string): Record<string, unknown> {
+  return {
+    schemas: [SCIM_GROUP_SCHEMA],
+    id: g.id,
+    displayName: g.displayName,
+    ...(g.externalId ? { externalId: g.externalId } : {}),
+    members: g.members.map((m) => ({
+      value: m.value,
+      display: m.display,
+      type: m.type || 'User',
+      $ref: `${baseUrl}/Users/${m.value}`,
+    })),
+    meta: {
+      resourceType: 'Group',
+      created: g.createdAt,
+      lastModified: g.updatedAt,
+      location: `${baseUrl}/Groups/${g.id}`,
+    },
+  };
+}
+
 // ── Filter parser ──
-// Supports only `<attr> eq "<value>"`. Spec allows much more (and,
-// or, contains, starts-with, complex value selectors) but Entra and
-// Okta default to simple userName/email equality which is what 99%
-// of provisioning traffic looks like.
-function parseFilter(filter?: string): { attr: string; value: string } | null {
-  if (!filter) return null;
-  const m = filter.match(/^\s*([\w.]+)\s+eq\s+"([^"]+)"\s*$/i);
-  if (!m) return null;
-  return { attr: m[1].toLowerCase(), value: m[2].toLowerCase() };
+// SCIM 2.0 filter grammar (RFC 7644 §3.4.2.2) — a recursive-descent
+// parser that handles the operators IdPs actually send:
+//   eq pr co sw ew  on a single attribute
+//   and or          to combine
+//   ()              for grouping
+// "ne" "gt" "ge" "lt" "le" are deliberately skipped — Procela's
+// people model has no numeric or date fields that show up in SCIM
+// queries, so they would silently always evaluate false and confuse
+// callers. Reject explicitly instead.
+//
+// Returns a predicate that takes a StoredPerson; throws on syntax
+// errors so the route can return 400. The whole filter is parsed up
+// front so the per-person cost is just predicate evaluation.
+
+type FilterPredicate = (p: StoredPerson) => boolean;
+
+function attrValue(p: StoredPerson, attr: string): string | null {
+  const a = attr.toLowerCase();
+  if (a === 'username') return p.email;
+  if (a === 'emails.value' || a === 'email') return p.email;
+  if (a === 'id') return p.id;
+  if (a === 'displayname' || a === 'name.formatted') return p.name;
+  if (a === 'name.givenname') return (p.name || '').split(' ')[0] || '';
+  if (a === 'name.familyname') return (p.name || '').split(' ').slice(1).join(' ');
+  if (a === 'active') return String(isActive(p));
+  return null;
+}
+
+interface FilterToken {
+  type: 'word' | 'string' | 'lparen' | 'rparen';
+  value: string;
+}
+
+function tokenize(input: string): FilterToken[] {
+  const tokens: FilterToken[] = [];
+  let i = 0;
+  while (i < input.length) {
+    const c = input[i];
+    if (c === ' ' || c === '\t' || c === '\n') { i++; continue; }
+    if (c === '(') { tokens.push({ type: 'lparen', value: '(' }); i++; continue; }
+    if (c === ')') { tokens.push({ type: 'rparen', value: ')' }); i++; continue; }
+    if (c === '"') {
+      let end = i + 1;
+      while (end < input.length && input[end] !== '"') end++;
+      if (end >= input.length) throw new Error('Unterminated string in filter');
+      tokens.push({ type: 'string', value: input.slice(i + 1, end) });
+      i = end + 1;
+      continue;
+    }
+    // Word: identifier (attr, operator, true/false). Stops at whitespace
+    // or paren or quote.
+    let end = i;
+    while (end < input.length && !/[\s()"]/.test(input[end])) end++;
+    tokens.push({ type: 'word', value: input.slice(i, end) });
+    i = end;
+  }
+  return tokens;
+}
+
+function parseFilterExpr(input: string): FilterPredicate {
+  const tokens = tokenize(input);
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const eat = () => tokens[pos++];
+  const eatWord = (expect?: string): string => {
+    const t = eat();
+    if (!t || t.type !== 'word') throw new Error(`Expected word, got ${t?.value ?? 'EOF'}`);
+    if (expect && t.value.toLowerCase() !== expect.toLowerCase()) {
+      throw new Error(`Expected "${expect}", got "${t.value}"`);
+    }
+    return t.value;
+  };
+
+  // Grammar: orExpr → andExpr (OR andExpr)*
+  //          andExpr → unary (AND unary)*
+  //          unary → atom
+  //          atom → ( orExpr ) | comparison
+  //          comparison → attr op [value]
+  const parseAtom = (): FilterPredicate => {
+    const t = peek();
+    if (!t) throw new Error('Unexpected end of filter');
+    if (t.type === 'lparen') {
+      eat();
+      const inner = parseOr();
+      const close = eat();
+      if (!close || close.type !== 'rparen') throw new Error('Missing closing paren');
+      return inner;
+    }
+    if (t.type !== 'word') throw new Error(`Unexpected token "${t.value}"`);
+    const attr = eatWord();
+    const op = eatWord().toLowerCase();
+    if (op === 'pr') {
+      return (p) => {
+        const v = attrValue(p, attr);
+        return v !== null && v !== '' && v !== undefined;
+      };
+    }
+    const valTok = eat();
+    if (!valTok || (valTok.type !== 'string' && valTok.type !== 'word')) {
+      throw new Error(`Expected value after "${op}"`);
+    }
+    const val = valTok.value;
+    switch (op) {
+      case 'eq': return (p) => (attrValue(p, attr) ?? '').toLowerCase() === val.toLowerCase();
+      case 'co': return (p) => (attrValue(p, attr) ?? '').toLowerCase().includes(val.toLowerCase());
+      case 'sw': return (p) => (attrValue(p, attr) ?? '').toLowerCase().startsWith(val.toLowerCase());
+      case 'ew': return (p) => (attrValue(p, attr) ?? '').toLowerCase().endsWith(val.toLowerCase());
+      default: throw new Error(`Unsupported operator "${op}"`);
+    }
+  };
+  const parseAnd = (): FilterPredicate => {
+    let left = parseAtom();
+    while (peek() && peek().type === 'word' && peek().value.toLowerCase() === 'and') {
+      eat();
+      const right = parseAtom();
+      const l = left; left = (p) => l(p) && right(p);
+    }
+    return left;
+  };
+  const parseOr = (): FilterPredicate => {
+    let left = parseAnd();
+    while (peek() && peek().type === 'word' && peek().value.toLowerCase() === 'or') {
+      eat();
+      const right = parseAnd();
+      const l = left; left = (p) => l(p) || right(p);
+    }
+    return left;
+  };
+
+  const result = parseOr();
+  if (pos < tokens.length) throw new Error(`Unexpected trailing tokens at "${tokens[pos]?.value}"`);
+  return result;
+}
+
+// ── Multi-valued PATCH selector ──
+// SCIM PATCH paths can target a slot inside a multi-valued attribute,
+// e.g. `emails[type eq "work"].value` to set the work email. Procela
+// only stores one email per person, so we accept any selector that
+// resolves to the email slot and replace it. Returns true when the
+// path was a recognized multi-valued selector (caller skips the
+// standard scalar handling), false otherwise.
+function applyEmailSelectorPath(person: StoredPerson, path: string, value: unknown): boolean {
+  // Common shapes Entra / Okta emit:
+  //   emails[type eq "work"].value
+  //   emails[primary eq true].value
+  //   emails.value
+  if (!/^emails(\[.+\])?\.value$/i.test(path)) return false;
+  if (typeof value !== 'string' || !value) return true; // accepted but no-op
+  person.email = value;
+  return true;
 }
 
 const router = Router();
@@ -157,20 +332,22 @@ router.use((_req, res, next) => {
 router.get('/Users', (req: Request, res: Response) => {
   const startIndex = Math.max(1, parseInt(req.query.startIndex as string) || 1);
   const count = Math.max(0, parseInt(req.query.count as string) || 100);
-  const filter = parseFilter(req.query.filter as string | undefined);
-  if (req.query.filter && !filter) {
-    return scimError(res, 400, 'Only simple "<attr> eq \\"<value>\\"" filters are supported');
+  const filterStr = req.query.filter as string | undefined;
+
+  let predicate: FilterPredicate | null = null;
+  if (filterStr) {
+    try {
+      predicate = parseFilterExpr(filterStr);
+    } catch (err: any) {
+      return scimError(res, 400, `Invalid filter: ${err?.message || 'parse error'}`);
+    }
   }
 
-  let filtered = people;
-  if (filter) {
-    filtered = people.filter((p) => {
-      if (filter.attr === 'username') return p.email.toLowerCase() === filter.value;
-      if (filter.attr === 'emails.value' || filter.attr === 'email') return p.email.toLowerCase() === filter.value;
-      if (filter.attr === 'id') return p.id === filter.value;
-      return false;
-    });
-  }
+  // SCIM responses include deactivated users by default — the IdP
+  // is the one driving the active flag and wants to see its own
+  // record back. Local API consumers should still filter on the
+  // active flag when displaying lists to humans.
+  const filtered = predicate ? people.filter(predicate) : people;
 
   const page = filtered.slice(startIndex - 1, startIndex - 1 + count);
   const base = baseUrlFor(req);
@@ -247,23 +424,27 @@ router.put('/Users/:id', (req: Request, res: Response) => {
   else if (body.name?.givenName || body.name?.familyName) {
     person.name = [body.name.givenName, body.name.familyName].filter(Boolean).join(' ');
   } else if (body.displayName) person.name = body.displayName;
-  // active=false is the offboarding signal — most IdPs send PUT or
-  // PATCH with active=false rather than DELETE so the SCIM record
-  // sticks around for audit. Procela has no "inactive" flag yet, so
-  // we delete the person on active=false. Loses audit trail of the
-  // Person record itself — fine for now, follow-up to add a soft-
-  // delete flag if customers demand it.
-  if (body.active === false) {
-    const idx = people.findIndex((p) => p.id === person.id);
-    if (idx !== -1) {
-      people.splice(idx, 1);
-      saveStore('people', people);
-      auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DEACTIVATED', null, {
-        personId: person.id, email: person.email,
-      });
-      logger.info({ personId: person.id }, 'SCIM deactivated user (deleted)');
-      return res.status(204).end();
-    }
+  // active=false is the standard offboarding signal — IdPs send PUT
+  // or PATCH rather than DELETE so the record sticks around for
+  // audit. We flip the active flag and stash a deactivatedAt
+  // timestamp; the record is preserved (still owns its authored
+  // comments, role-assignment history, audit references) but the
+  // person can no longer sign in and drops out of default list
+  // views. SCIM PUTs that flip active=true reactivate.
+  if (body.active === false && isActive(person)) {
+    person.active = false;
+    person.deactivatedAt = new Date().toISOString();
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DEACTIVATED', null, {
+      personId: person.id, email: person.email,
+    });
+    logger.info({ personId: person.id }, 'SCIM deactivated user');
+  } else if (body.active === true && !isActive(person)) {
+    person.active = true;
+    person.deactivatedAt = undefined;
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_REACTIVATED', null, {
+      personId: person.id, email: person.email,
+    });
+    logger.info({ personId: person.id }, 'SCIM reactivated user');
   }
   person.updatedAt = new Date().toISOString();
   saveStore('people', people);
@@ -285,20 +466,31 @@ router.patch('/Users/:id', (req: Request, res: Response) => {
     return scimError(res, 400, `PATCH body must use schema ${SCIM_PATCH_SCHEMA}`);
   }
 
-  let deleted = false;
+  let activeChange: boolean | null = null;
   for (const op of body.Operations) {
     const opType = String(op.op || '').toLowerCase();
-    const path = String(op.path || '').toLowerCase();
+    const rawPath = String(op.path || '');
+    const path = rawPath.toLowerCase();
     const value = op.value;
 
-    if (opType === 'replace') {
-      // Common case: { op: 'replace', value: { active: false } } —
-      // value is an object of attribute updates with no path. Handle
-      // both that shape and the explicit-path variant.
-      const updates = path === '' && value && typeof value === 'object' ? value : { [path]: value };
+    if (opType === 'replace' || opType === 'add') {
+      // Two shapes:
+      //   1) { op: 'replace', value: { active: false, … } } — no
+      //      path; value is an object of attribute updates.
+      //   2) { op: 'replace', path: 'active', value: false } — path
+      //      names the attribute.
+      //   3) { op: 'replace', path: 'emails[type eq "work"].value',
+      //                       value: 'new@example.com' } — multi-
+      //      valued attribute with a value-selector. Supported for
+      //      the primary email since that's how Okta sends email
+      //      changes.
+      const updates = path === '' && value && typeof value === 'object'
+        ? value
+        : { [path]: value };
       for (const [k, v] of Object.entries(updates)) {
+        if (applyEmailSelectorPath(person, k, v)) continue;
         if (k === 'active') {
-          if (v === false) deleted = true;
+          if (v === false || v === true) activeChange = v as boolean;
         } else if (k === 'username') {
           person.email = String(v);
         } else if (k === 'displayname' || k === 'name.formatted') {
@@ -312,22 +504,29 @@ router.patch('/Users/:id', (req: Request, res: Response) => {
         // to skip attributes it doesn't store. Logging would be noisy
         // for IdPs that send a full superset on every patch.
       }
+    } else if (opType === 'remove') {
+      // Common remove: { op: 'remove', path: 'emails[type eq "work"]' }
+      // We don't model removing the primary email (it IS the
+      // identity), so quietly ignore. Removing a value from a
+      // single-value attribute clears it.
+      if (path === 'displayname' || path === 'name.formatted') {
+        // No-op: name is required for our model.
+      }
     }
-    // add / remove / move on multi-valued attributes are deliberately
-    // not supported; falling back to ignore rather than rejecting so
-    // IdPs that send a mix get the parts we DO support.
   }
 
-  if (deleted) {
-    const idx = people.findIndex((p) => p.id === person.id);
-    if (idx !== -1) {
-      people.splice(idx, 1);
-      saveStore('people', people);
-      auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DEACTIVATED', null, {
-        personId: person.id, email: person.email,
-      });
-      return res.status(204).end();
-    }
+  if (activeChange === false && isActive(person)) {
+    person.active = false;
+    person.deactivatedAt = new Date().toISOString();
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DEACTIVATED', null, {
+      personId: person.id, email: person.email,
+    });
+  } else if (activeChange === true && !isActive(person)) {
+    person.active = true;
+    person.deactivatedAt = undefined;
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_REACTIVATED', null, {
+      personId: person.id, email: person.email,
+    });
   }
   person.updatedAt = new Date().toISOString();
   saveStore('people', people);
@@ -338,12 +537,16 @@ router.patch('/Users/:id', (req: Request, res: Response) => {
 });
 
 // ── DELETE /Users/:id ──
+// Hard delete (vs. active=false which is soft-delete). Removes the
+// person from every SCIM group they're in so we don't leave dangling
+// member refs that would 404 on next group read.
 router.delete('/Users/:id', (req: Request, res: Response) => {
   const idx = people.findIndex((p) => p.id === req.params.id);
   if (idx === -1) return scimError(res, 404, `User ${req.params.id} not found`);
   const person = people[idx];
   people.splice(idx, 1);
   saveStore('people', people);
+  removeMemberFromAllGroups(person.id);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DELETED', null, {
     personId: person.id, email: person.email,
   });
@@ -382,7 +585,7 @@ router.get('/ResourceTypes', (req: Request, res: Response) => {
   const base = baseUrlFor(req);
   res.json({
     schemas: [SCIM_LIST_SCHEMA],
-    totalResults: 1,
+    totalResults: 2,
     Resources: [
       {
         schemas: ['urn:ietf:params:scim:schemas:core:2.0:ResourceType'],
@@ -393,16 +596,25 @@ router.get('/ResourceTypes', (req: Request, res: Response) => {
         schema: SCIM_USER_SCHEMA,
         meta: { resourceType: 'ResourceType', location: `${base}/ResourceTypes/User` },
       },
+      {
+        schemas: ['urn:ietf:params:scim:schemas:core:2.0:ResourceType'],
+        id: 'Group',
+        name: 'Group',
+        endpoint: '/Groups',
+        description: 'SCIM-facing flat membership group',
+        schema: SCIM_GROUP_SCHEMA,
+        meta: { resourceType: 'ResourceType', location: `${base}/ResourceTypes/Group` },
+      },
     ],
   });
 });
 
 // ── GET /Schemas ──
-// Minimal — just enough to let an IdP probe that User is supported.
+// Minimal — just enough to let an IdP probe that User + Group are supported.
 router.get('/Schemas', (_req: Request, res: Response) => {
   res.json({
     schemas: [SCIM_LIST_SCHEMA],
-    totalResults: 1,
+    totalResults: 2,
     Resources: [
       {
         id: SCIM_USER_SCHEMA,
@@ -416,18 +628,159 @@ router.get('/Schemas', (_req: Request, res: Response) => {
           { name: 'active', type: 'boolean' },
         ],
       },
+      {
+        id: SCIM_GROUP_SCHEMA,
+        name: 'Group',
+        description: 'SCIM 2.0 core Group (flat membership)',
+        attributes: [
+          { name: 'displayName', type: 'string', required: true },
+          { name: 'members', type: 'complex', multiValued: true },
+        ],
+      },
     ],
   });
 });
 
-// Groups: return empty list rather than 404 so probing IdPs don't
-// throw a confusing error. Real group provisioning is out of scope.
-router.get('/Groups', (_req: Request, res: Response) => {
+// ── Groups ──
+// SCIM Groups are a flat membership directory (id + displayName +
+// members[]). They are intentionally separate from Procela's
+// governance-groups model — SCIM groups represent "what the IdP
+// thinks the directory looks like", governance-groups represent the
+// formal data-governance program. An admin can wire a mapping later
+// if they want SCIM group membership to drive role / org assignment.
+
+router.get('/Groups', (req: Request, res: Response) => {
+  const startIndex = Math.max(1, parseInt(req.query.startIndex as string) || 1);
+  const count = Math.max(0, parseInt(req.query.count as string) || 100);
+  const filterStr = req.query.filter as string | undefined;
+
+  // Simple group filtering: only displayName eq supported. The full
+  // user-filter parser is overkill for groups (they have ~3 queryable
+  // attrs) so we cherry-pick the common case.
+  let filtered = scimGroups;
+  if (filterStr) {
+    const m = filterStr.match(/^\s*displayName\s+eq\s+"([^"]+)"\s*$/i);
+    if (!m) return scimError(res, 400, 'Only "displayName eq \\"<name>\\"" is supported for group filters');
+    const target = m[1].toLowerCase();
+    filtered = scimGroups.filter((g) => g.displayName.toLowerCase() === target);
+  }
+
+  const page = filtered.slice(startIndex - 1, startIndex - 1 + count);
+  const base = baseUrlFor(req);
   res.json({
     schemas: [SCIM_LIST_SCHEMA],
-    totalResults: 0,
-    Resources: [],
+    totalResults: filtered.length,
+    startIndex,
+    itemsPerPage: page.length,
+    Resources: page.map((g) => toScimGroup(g, base)),
   });
+});
+
+router.get('/Groups/:id', (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const group = findGroup(id);
+  if (!group) return scimError(res, 404, `Group ${id} not found`);
+  res.json(toScimGroup(group, baseUrlFor(req)));
+});
+
+router.post('/Groups', (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.displayName) return scimError(res, 400, 'displayName is required');
+  const members: ScimGroupMember[] = Array.isArray(body.members)
+    ? body.members.map((m: any) => ({
+        value: String(m.value),
+        display: m.display ? String(m.display) : undefined,
+        type: m.type === 'Group' ? 'Group' : 'User',
+      }))
+    : [];
+  const group = createGroup({
+    displayName: String(body.displayName),
+    externalId: body.externalId ? String(body.externalId) : undefined,
+    members,
+  });
+  auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_GROUP_CREATED', null, {
+    groupId: group.id, displayName: group.displayName, members: group.members.length,
+  });
+  res.status(201).json(toScimGroup(group, baseUrlFor(req)));
+});
+
+router.put('/Groups/:id', (req: Request, res: Response) => {
+  const body = req.body || {};
+  const members: ScimGroupMember[] | undefined = Array.isArray(body.members)
+    ? body.members.map((m: any) => ({
+        value: String(m.value),
+        display: m.display ? String(m.display) : undefined,
+        type: m.type === 'Group' ? 'Group' : 'User',
+      }))
+    : undefined;
+  const id = String(req.params.id);
+  const group = replaceGroup(id, {
+    displayName: body.displayName,
+    externalId: body.externalId,
+    members,
+  });
+  if (!group) return scimError(res, 404, `Group ${id} not found`);
+  auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_GROUP_REPLACED', null, {
+    groupId: group.id, displayName: group.displayName,
+  });
+  res.json(toScimGroup(group, baseUrlFor(req)));
+});
+
+router.patch('/Groups/:id', (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const group = findGroup(id);
+  if (!group) return scimError(res, 404, `Group ${id} not found`);
+  const body = req.body || {};
+  if (!Array.isArray(body.Operations)) return scimError(res, 400, 'PATCH body must include Operations[]');
+
+  for (const op of body.Operations) {
+    const opType = String(op.op || '').toLowerCase();
+    const path = String(op.path || '');
+    const value = op.value;
+
+    if (opType === 'replace' && (path === 'displayName' || path.toLowerCase() === 'displayname')) {
+      replaceGroup(group.id, { displayName: String(value) });
+    } else if (opType === 'add' && path === 'members') {
+      const toAdd: ScimGroupMember[] = Array.isArray(value)
+        ? value.map((m: any) => ({
+            value: String(m.value),
+            display: m.display ? String(m.display) : undefined,
+            type: m.type === 'Group' ? 'Group' : 'User',
+          }))
+        : [];
+      addMembers(group.id, toAdd);
+    } else if (opType === 'remove' && path.startsWith('members')) {
+      // Two shapes IdPs send for member removal:
+      //   1) { op: 'remove', path: 'members[value eq "abc"]' }     single
+      //   2) { op: 'remove', path: 'members', value: [{value:'abc'}] } batch
+      const m = path.match(/members\[\s*value\s+eq\s+"([^"]+)"\s*\]/i);
+      if (m) {
+        removeMembers(group.id, [m[1]]);
+      } else if (Array.isArray(value)) {
+        removeMembers(group.id, value.map((v: any) => String(v.value)));
+      } else if (path === 'members' && value === undefined) {
+        // "remove all members" — rare but allowed.
+        replaceGroup(group.id, { members: [] });
+      }
+    }
+    // Other op/path combos are ignored — Procela's group model is
+    // intentionally thin (no description, no nested attrs), so any
+    // attribute the IdP wants to track beyond name + members is
+    // dropped on the floor here. SCIM allows it.
+  }
+  const updated = findGroup(group.id)!;
+  auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_GROUP_PATCHED', null, {
+    groupId: group.id, ops: body.Operations.length, memberCount: updated.members.length,
+  });
+  res.json(toScimGroup(updated, baseUrlFor(req)));
+});
+
+router.delete('/Groups/:id', (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const ok = deleteGroup(id);
+  if (!ok) return scimError(res, 404, `Group ${id} not found`);
+  auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_GROUP_DELETED', null, { groupId: id });
+  res.status(204).end();
 });
 
 export default router;

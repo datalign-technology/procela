@@ -8,7 +8,7 @@ import { AuthenticatedRequest, authenticateToken, authorize } from '../middlewar
 import { rateLimit } from '../middleware/rate-limit';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
-import { people, computeAccessibleOrgs } from './people';
+import { people, computeAccessibleOrgs, isActive as isPersonActive } from './people';
 import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
@@ -321,6 +321,18 @@ router.get('/callback', async (req: Request, res: Response) => {
     // IdP-supplied role (VIEWER unless the IdP emitted a known role
     // claim). Admins can move them to the right org later.
     let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+
+    // Deactivated users can't sign in via OIDC either. We let the
+    // IdP do the heavy auth lift and then reject — surface a generic
+    // "Your account is not active" rather than something that leaks
+    // org membership.
+    if (person && !isPersonActive(person)) {
+      auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'oidc', 'OIDC_DEACTIVATED_LOGIN_BLOCKED', null, {
+        email: person.email, idpSub: user.sub,
+      });
+      return errorRedirect('Your Procela account is not active. Contact an administrator.');
+    }
+
     let provisioned = false;
     if (!person) {
       const now = new Date().toISOString();

@@ -4,7 +4,7 @@ import jwksClient from 'jwks-rsa';
 import * as argon2 from 'argon2';
 import config from '../config';
 import logger from '../lib/logger';
-import { people } from '../routes/people';
+import { people, isActive as isPersonActive } from '../routes/people';
 import { mintFlow, consumeFlow, pkceChallenge, type PendingFlow } from './pending-oidc-flows';
 
 // ---------------------------------------------------------------------------
@@ -99,6 +99,17 @@ export class LocalAuthProvider implements AuthProvider {
     }
 
     const person = people.find((p) => p.email.toLowerCase() === email.toLowerCase());
+
+    // Deactivated users can't sign in even with a valid password.
+    // Treat as "invalid credentials" so an attacker can't distinguish
+    // an active account with a wrong password from a deactivated one
+    // — both responses look the same.
+    if (person && !isPersonActive(person)) {
+      if (DUMMY_HASH) {
+        try { await argon2.verify(DUMMY_HASH, password); } catch { /* */ }
+      }
+      return { success: false, error: 'Invalid email or password' };
+    }
 
     // Constant-time branch: when the user doesn't exist, burn the
     // same amount of CPU as a real verify so the response time
