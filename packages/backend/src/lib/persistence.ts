@@ -91,3 +91,35 @@ export function reloadAllStores(): string[] {
   }
   return reloaded;
 }
+
+/** Hard-reset every JSON file under `.procela-data/` AND every
+ *  registered in-memory array. Used by the "Reset everything" admin
+ *  action behind a typed-confirmation gate. Returns a summary of
+ *  what got cleared so the UI can surface counts to the operator.
+ *
+ *  Audit log files are intentionally NOT preserved here — the caller
+ *  records a single ALL_DATA_RESET event after this returns so the
+ *  reset itself is auditable. (Reset writes happen against the
+ *  bootstrap chain immediately, since the prior chain is gone.)
+ *
+ *  Stores that aren't registered still have their files truncated
+ *  on disk; their in-memory copies (if any) only reset on restart.
+ *  Same caveat as the GDPR cascade — the file-level walk catches
+ *  every JSON store including future ones; the in-memory registry
+ *  catches only opted-in modules. */
+export function wipeAllStores(): { filesCleared: number; storesReloaded: string[] } {
+  let filesCleared = 0;
+  if (fs.existsSync(DATA_DIR)) {
+    for (const file of fs.readdirSync(DATA_DIR)) {
+      if (!file.endsWith('.json')) continue;
+      fs.writeFileSync(path.join(DATA_DIR, file), '[]');
+      filesCleared++;
+    }
+  }
+  const storesReloaded: string[] = [];
+  for (const [name, target] of reloadRegistry) {
+    target.splice(0, target.length);
+    storesReloaded.push(name);
+  }
+  return { filesCleared, storesReloaded };
+}

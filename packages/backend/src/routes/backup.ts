@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { saveStore } from '../lib/persistence';
+import { saveStore, wipeAllStores } from '../lib/persistence';
 import logger from '../lib/logger';
+import { authenticateToken, authorize, AuthenticatedRequest } from '../middleware/auth';
+import { auditService, auditLogs } from '../services/audit.service';
 
 // Import all in-memory stores
 import { processNodes, flowRelationships, processVersions } from './process-catalog';
@@ -80,5 +82,81 @@ router.post('/import', (req: Request, res: Response) => {
   logger.info({ imported }, 'Imported backup');
   res.json({ success: true, imported });
 });
+
+const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
+
+/**
+ * POST /api/v1/backup/reset-all
+ * Body: { confirm: "RESET" }
+ *
+ * Hard-reset every store on disk AND every registered in-memory
+ * array. The closest thing Procela has to a factory reset — the
+ * operator gets the same blank slate they'd see after deleting the
+ * `.procela-data/` directory and restarting the server.
+ *
+ * Gates:
+ *   - SUPER_ADMIN role only.
+ *   - Typed confirmation phrase `RESET` to defend against
+ *     muscle-memory triggers. Same defense as the GDPR forget action.
+ *
+ * Behaviour:
+ *   - Every `.procela-data/*.json` file is truncated to `[]`.
+ *   - Every registered in-memory store has its array spliced empty.
+ *   - The audit log is bootstrapped fresh with a single
+ *     ALL_DATA_RESET entry recording the actor + timestamp.
+ *   - The frontend should drop the user's local session and route
+ *     them back to /login so the onboarding wizard fires on the
+ *     next sign-in.
+ */
+router.post(
+  '/reset-all',
+  authenticateToken,
+  authorize('SUPER_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { confirm } = req.body || {};
+    if (confirm !== 'RESET') {
+      res.status(400).json({
+        success: false,
+        error: 'Confirmation phrase did not match. Pass { confirm: "RESET" } to proceed.',
+      });
+      return;
+    }
+
+    // Capture actor before we nuke the audit log so the post-reset
+    // entry knows who triggered the wipe.
+    const actorId = req.user?.sub || null;
+    const actorEmail = req.user?.email || null;
+    const beforeCounts = { auditLogs: auditLogs.length };
+
+    const summary = wipeAllStores();
+
+    // The audit log was just nuked too — record a single bootstrap
+    // entry so the reset is auditable. auditService.log re-creates
+    // the file and starts a fresh hash chain.
+    auditService.log(
+      DEV_ORG_ID,
+      actorId,
+      'System',
+      'all',
+      'ALL_DATA_RESET',
+      beforeCounts,
+      { actorEmail, ...summary },
+    );
+
+    logger.warn(
+      { actorId, actorEmail, summary },
+      'All data reset via /backup/reset-all',
+    );
+
+    res.json({
+      success: true,
+      data: {
+        filesCleared: summary.filesCleared,
+        storesReloaded: summary.storesReloaded.length,
+        message: 'Every store has been cleared. Your session will be invalidated; sign out and complete the onboarding wizard to set up a new organization.',
+      },
+    });
+  },
+);
 
 export default router;

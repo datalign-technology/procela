@@ -486,6 +486,20 @@ export default function HelpPage() {
           Procela exposes SCIM 2.0 endpoints under <code>/scim/v2/</code> so Microsoft Entra, Okta, and other identity providers can push user lifecycle events automatically — create on hire, deactivate on offboard, role updates as people move teams. The IdP authenticates with a long-lived bearer token configured via <code>SCIM_BEARER_TOKEN</code>; paste the same value into both Procela and the IdP's provisioning config. Supported resources are <code>/Users</code> and <code>/Groups</code> with full filter / PATCH / soft-delete semantics. When the token isn't set, every SCIM request returns 401.
         </p>
 
+        <h3 style={h3Style}>Reset everything — start over (super admins)</h3>
+        <p style={pStyle}>
+          Below the Backup & Restore card on the Settings page, super admins
+          see a <em>Reset everything</em> control that performs a true factory
+          reset: every organization, person, process, data asset, system,
+          mapping, governance record, comment, and audit-log entry is deleted.
+          The next sign-in starts the onboarding wizard for a brand-new
+          organization. The confirmation phrase is the literal word{' '}
+          <code>RESET</code>; the panel also surfaces a one-click <em>Export now</em>{' '}
+          shortcut so you can save a recovery backup before nuking anything.
+          A single <code>ALL_DATA_RESET</code> audit entry is written
+          immediately after the wipe so the reset itself is traceable.
+        </p>
+
         <h3 style={h3Style}>GDPR — right to be forgotten (admins)</h3>
         <p style={pStyle}>
           The Person detail page <em>Security</em> panel has a <em>Forget person&hellip;</em> action that runs the GDPR Article 17 cascade. The Person record is deleted and every reference across the catalog — ownership, stewardship, group membership, authored comments, role assignments — is scrubbed. Audit log entries authored by that user are <em>tombstoned</em>, not deleted, so the action history survives but the personal identifier is replaced with <code>[deleted]</code>. The confirmation modal requires you to type the literal phrase <code>FORGET &lt;email&gt;</code> to defend against muscle-memory triggers. The response summarises how many stores and rows were touched.

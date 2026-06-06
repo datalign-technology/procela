@@ -7,6 +7,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
+import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import { useOrgContext } from '../stores/orgContext';
 
 interface AuthConfigData {
@@ -673,6 +674,16 @@ export default function SettingsPage() {
         onConfirm={handleImportConfirm}
         onCancel={() => setImportConfirmOpen(false)}
       />
+
+      {/* Spacer */}
+      <div style={{ height: '1.5rem' }} />
+
+      {/* Reset everything — super-admin only "factory reset" that
+          wipes every store on disk + in memory. Lives next to Backup
+          & Restore so it's reachable from the same scroll position as
+          the Export button, and so the recommended Export-first
+          workflow is one click away. */}
+      <ResetAllDataPanel onExportFirst={handleExportBackup} />
     </div>
   );
 }
