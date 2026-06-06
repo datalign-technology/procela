@@ -186,7 +186,11 @@ export default function ValueStreamWizard() {
   const prettyType = (t: string) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    // Left-anchored to match the Setup Hub and the rest of the app.
+    // maxWidth keeps the wizard form at a comfortable typing width
+    // on ultra-wide displays; dropping `margin: 0 auto` anchors it
+    // at the left rather than centring.
+    <div style={{ maxWidth: 900 }}>
       {/* Header */}
       <PageHeader
         title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}

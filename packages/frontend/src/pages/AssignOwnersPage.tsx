@@ -164,7 +164,11 @@ export default function AssignOwnersPage() {
   }
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto', padding: '8px 0 64px' }}>
+    // Left-anchored to match the rest of the app. The Setup Hub
+    // (Phase 1 of this journey) sits flush with the Layout content
+    // padding; Phase 2 should match so the visual rhythm doesn't
+    // shift as the operator walks through the Get Started steps.
+    <div style={{ maxWidth: 820, padding: '8px 0 64px' }}>
       <button onClick={() => navigate('/setup')}
         style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: 0, marginBottom: 12 }}>
         ← Back to Get Started
