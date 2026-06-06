@@ -322,7 +322,12 @@ export default function SetupHubPage() {
   }
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '8px 0 64px' }}>
+    // Left-anchored to match the other pages — Dashboard, Settings,
+    // Process Catalog all sit flush with the Layout's .content
+    // padding. maxWidth keeps the long-form copy at a readable width;
+    // dropping `margin: 0 auto` lets the page sit at the left rather
+    // than centring on wider monitors and looking indented.
+    <div style={{ maxWidth: 860, padding: '8px 0 64px' }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 18, padding: '20px 24px', marginBottom: 24,
