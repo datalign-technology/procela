@@ -139,7 +139,7 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>Reading the hub</h3>
         <ul style={listStyle}>
-          <li>Each <strong>phase section</strong> and each <strong>task card</strong> is collapsible. A smart default keeps the page focused &mdash; completed items and fully-completed phases collapse on load; in-progress, needs-attention, and not-started items stay open. An explicit click overrides the default for that one item.</li>
+          <li>Each <strong>phase section</strong> and each <strong>task card</strong> is collapsible. Every section starts collapsed so the page opens on a clean three-row overview of the journey. Click any header to expand it; use the <em>Expand all</em> / <em>Collapse all</em> controls in the page header to flip the whole tree at once.</li>
           <li>Every task's CTA deep-links to the same destination the left nav exposes, so the hand-off from journey to workspace is seamless. The hub is for first-run setup and check-ins; the left nav is your persistent workspace once you know the app.</li>
         </ul>
 
