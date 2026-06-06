@@ -321,6 +321,14 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Catalog of competencies attached to people. Seed standard DAMA-aligned skills with one click.</li>
           <li>The Role Detail drawer reads from this catalog to show "Skills typically needed" for each governance role &mdash; chips appear solid when the skill is in your org's catalog, dashed if not yet seeded.</li>
+          <li><strong>Skills drive four cross-page workflows:</strong>
+            <ul style={listStyle}>
+              <li><strong>Qualified-person check.</strong> On a Process activity, if the responsible person's <code>skillIds</code> don't cover the activity's <code>requiredSkillIds</code>, an amber warning chip appears next to the skill picker spelling out which skills are missing. The same gap shows up as a "Skill gaps" column on the People table.</li>
+              <li><strong>Find people by skill.</strong> A skill filter on the People page lets you narrow the roster to everyone who holds a given competency &mdash; useful when staffing a new initiative or backfilling an unqualified assignment.</li>
+              <li><strong>Recommended role assignees.</strong> The Role Detail drawer surfaces a "Best-matching people" list, ranked by how many of the role's required skills each person already holds (case-insensitive name match).</li>
+              <li><strong>Skill-gap report on the dashboard.</strong> The Skill Gaps section ranks the org's most under-staffed required skills (required-by-activities vs held-by-people), with critical "no coverage" calls flagged in red.</li>
+            </ul>
+          </li>
         </ul>
       </div>
 

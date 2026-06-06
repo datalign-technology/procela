@@ -70,6 +70,14 @@ export default function RoleDetailDrawer() {
   // that don't match anything in the catalog are still shown, tagged as
   // "not seeded yet" so users know what they're missing.
   const [orgSkills, setOrgSkills] = useState<SkillRecord[]>([]);
+  // Recommended people for this role, ranked by skill-name overlap
+  // with the role's static `requiredSkills` list. Populated only for
+  // DAMA / governance roles (the "dama" category) since the static
+  // role definitions only carry skills for those. Entity-attached
+  // roles (System Owner etc.) don't have a required-skills list.
+  const [recommendedPeople, setRecommendedPeople] = useState<Array<{
+    personId: string; personName: string; ratio: number; matched: number; required: number;
+  }>>([]);
 
   useEffect(() => {
     if (!roleType || !activeOrgId) return;
@@ -98,20 +106,36 @@ export default function RoleDetailDrawer() {
           .get<{ success: boolean; data: Assignment[] }>(`/dama-roles?orgId=${activeOrgId}`)
           .then((res) => (res.data || []).filter((a) => a.roleType === roleType));
 
+    // Fetch role recommendations in parallel when we have a static
+    // role reference with required skills. Failure is silent — the
+    // panel just hides if recommendations aren't available.
+    const refForRecs = getRoleReference(roleType);
+    const fetchRecs = refForRecs && refForRecs.requiredSkills && refForRecs.requiredSkills.length > 0
+      ? apiClient
+          .get<{ success: boolean; data: Array<{ personId: string; personName: string; ratio: number; matched: number; required: number }> }>(
+            `/skills/recommend-for-role?orgId=${encodeURIComponent(activeOrgId)}&skills=${encodeURIComponent(refForRecs.requiredSkills.join(','))}`,
+          )
+          .then((res) => res.data || [])
+          .catch(() => [])
+      : Promise.resolve([] as Array<{ personId: string; personName: string; ratio: number; matched: number; required: number }>);
+
     fetchPeople
       .then((peopleNames) => Promise.all([
         fetchHolders(peopleNames),
         apiClient.get<{ success: boolean; data: SkillRecord[] }>(`/skills?orgId=${activeOrgId}`),
+        fetchRecs,
       ]))
-      .then(([holders, skillsRes]) => {
+      .then(([holders, skillsRes, recs]) => {
         if (cancelled) return;
         setAssignments(holders);
         setOrgSkills(skillsRes.data || []);
+        setRecommendedPeople(recs);
       })
       .catch(() => {
         if (cancelled) return;
         setAssignments([]);
         setOrgSkills([]);
+        setRecommendedPeople([]);
       })
       .finally(() => {
         if (!cancelled) setLoadingAssignments(false);
@@ -281,6 +305,45 @@ export default function RoleDetailDrawer() {
                     </span>
                   );
                 })}
+              </div>
+            </Section>
+          )}
+
+          {/* Best-matching people. Ranked by skill-name overlap with the
+              required-skills list above. Shown only when we have one or
+              more matches — an empty list would just be noise. Click a
+              name to deep-link into the Person detail page so the
+              operator can promote, assign, or just verify the match. */}
+          {recommendedPeople.length > 0 && (
+            <Section title="Best-matching people">
+              <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Ranked by overlap with the required-skills list above.
+                Useful when you're staffing a new role assignment.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {recommendedPeople.map((rec) => (
+                  <button
+                    key={rec.personId}
+                    onClick={() => { close(); navigate(`/people/${rec.personId}`); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 10px', background: 'var(--color-bg)',
+                      border: '1px solid var(--color-border)', borderRadius: 6,
+                      cursor: 'pointer', fontSize: 12, textAlign: 'left', width: '100%',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontWeight: 500 }}>{rec.personName}</span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600,
+                      padding: '2px 8px', borderRadius: 10,
+                      background: rec.ratio >= 0.75 ? '#d1fae5' : rec.ratio >= 0.5 ? '#dbeafe' : '#fef3c7',
+                      color:      rec.ratio >= 0.75 ? '#065f46' : rec.ratio >= 0.5 ? '#1e3a8a' : '#92400e',
+                    }}>
+                      {rec.matched} / {rec.required} skills
+                    </span>
+                  </button>
+                ))}
               </div>
             </Section>
           )}

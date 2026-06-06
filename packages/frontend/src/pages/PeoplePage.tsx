@@ -54,6 +54,11 @@ function buildOrgPath(orgId: string, orgs: OrgFlat[]): string {
 interface Person {
   id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
   syncConnectionId?: string | null; syncStatus?: string | null;
+  /** Skill catalog ids attached to this person. Drives the
+   *  Skill filter dropdown's match logic; the column we render is
+   *  derived from the backend's /skills/coverage call, not this
+   *  field directly. */
+  skillIds?: string[];
 }
 interface Person360Data {
   person: Person;
@@ -319,6 +324,11 @@ export default function PeoplePage() {
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
   const [filterAppRole, setFilterAppRole] = useState('');
   const [filterGovRole, setFilterGovRole] = useState('');
+  // Skill filter — picks a single skill id. Each person row must hold
+  // it to pass. Useful when staffing a new initiative ("who knows
+  // Data Cataloging?") — the value-loop counterpart to the Person
+  // detail page's SkillPicker, where the data goes IN.
+  const [filterSkillId, setFilterSkillId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Quick-add row state
@@ -351,6 +361,12 @@ export default function PeoplePage() {
   const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
   const [allDamaRoles, setAllDamaRoles] = useState<DamaRoleFull[]>([]);
   const [allDataDomains, setAllDataDomains] = useState<DataDomainFull[]>([]);
+  // Skill catalog drives the "filter by skill" dropdown. Coverage
+  // drives the per-person "Skill gaps" column. Both are scoped to
+  // the selected org so the values are meaningful even when the
+  // person is in multiple orgs.
+  const [allSkills, setAllSkills] = useState<Array<{ id: string; name: string; category: string }>>([]);
+  const [skillCoverageByPerson, setSkillCoverageByPerson] = useState<Record<string, { unqualifiedCount: number; sample: string[] }>>({});
 
   // DAMA role add form state inside 360 modal
   const [showAddDamaRole, setShowAddDamaRole] = useState(false);
@@ -361,12 +377,17 @@ export default function PeoplePage() {
       // Scope the org tree to the active "Working In" context so siblings
       // and ancestors are hidden even when the user has broader permissions.
       const orgQuery = activeOrgId ? `?scopeOrgId=${encodeURIComponent(activeOrgId)}` : '';
-      const [orgRes, peopleRes, govRes, damaRes, domainRes] = await Promise.all([
+      const skillQuery = activeOrgId ? `?orgId=${encodeURIComponent(activeOrgId)}` : '';
+      const [orgRes, peopleRes, govRes, damaRes, domainRes, skillsRes, coverageRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>(`/organizations${orgQuery}`),
         apiClient.get<{ success: boolean; data: Person[]; roles: string[] }>('/people'),
         apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
         apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
         apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; category: string }> }>(`/skills${skillQuery}`).catch(() => ({ data: [] })),
+        activeOrgId
+          ? apiClient.get<{ success: boolean; data: { byPerson: Record<string, { unqualifiedCount: number; sample: string[] }> } }>(`/skills/coverage?orgId=${encodeURIComponent(activeOrgId)}`).catch(() => ({ data: { byPerson: {} } }))
+          : Promise.resolve({ data: { byPerson: {} } }),
       ]);
       const nextFlat = orgRes.data || [];
       setTree(orgRes.tree || []); setFlatOrgs(nextFlat);
@@ -377,6 +398,8 @@ export default function PeoplePage() {
       setAllGovernanceGroups(govRes.data || []);
       setAllDamaRoles(damaRes.data || []);
       setAllDataDomains(domainRes.data || []);
+      setAllSkills(skillsRes.data || []);
+      setSkillCoverageByPerson(coverageRes.data?.byPerson || {});
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -423,6 +446,10 @@ export default function PeoplePage() {
     if (filterGovRole) {
       const hasRole = allDamaRoles.some((r) => r.personId === p.id && r.roleType === filterGovRole);
       if (!hasRole) return false;
+    }
+    if (filterSkillId) {
+      const has = (p.skillIds || []).includes(filterSkillId);
+      if (!has) return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -1000,10 +1027,26 @@ export default function PeoplePage() {
                     <option key={key} value={key}>{label}</option>
                   ))}
                 </select>
-                {(filterAppRole || filterGovRole || searchQuery || selectedOrgId) && (
+                {/* Skill filter — only useful when an org is selected
+                    (skills are org-scoped). Hidden in cross-org views
+                    to avoid implying the value would aggregate. */}
+                {selectedOrgId && allSkills.length > 0 && (
+                  <select
+                    style={{ ...inputStyle, width: 'auto', minWidth: 160, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
+                    value={filterSkillId}
+                    onChange={(e) => setFilterSkillId(e.target.value)}
+                    aria-label="Filter by skill"
+                  >
+                    <option value="">All Skills</option>
+                    {allSkills.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                )}
+                {(filterAppRole || filterGovRole || filterSkillId || searchQuery || selectedOrgId) && (
                   <>
                     <button
-                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setSearchQuery(''); applyOrgFilter(''); }}
+                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setFilterSkillId(''); setSearchQuery(''); applyOrgFilter(''); }}
                       style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
                     >
                       Clear Filters
@@ -1268,6 +1311,9 @@ export default function PeoplePage() {
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
                         <th scope="col" style={thStyle}>Governance</th>
                         <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
+                        {selectedOrgId && (
+                          <th scope="col" style={{ ...thStyle, width: 110 }} title="Process activities this person is responsible for that require a skill they don't hold.">Skill gaps</th>
+                        )}
                         <th scope="col" style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
@@ -1354,6 +1400,33 @@ export default function PeoplePage() {
                             )}
                           </td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                          {selectedOrgId && (
+                            <td style={tdStyle}>
+                              {(() => {
+                                const cov = skillCoverageByPerson[person.id];
+                                if (!cov || cov.unqualifiedCount === 0) {
+                                  return <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>—</span>;
+                                }
+                                const more = cov.unqualifiedCount > cov.sample.length
+                                  ? ` (+${cov.unqualifiedCount - cov.sample.length} more)` : '';
+                                return (
+                                  <span
+                                    title={`Activities lacking required skills:\n  ${cov.sample.join('\n  ')}${more}`}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      fontSize: 11, fontWeight: 600,
+                                      padding: '2px 8px', borderRadius: 4,
+                                      background: '#fef3c7', color: '#92400e',
+                                      border: '1px solid #fde68a',
+                                    }}
+                                  >
+                                    <span aria-hidden="true">⚠</span>
+                                    {cov.unqualifiedCount} {cov.unqualifiedCount === 1 ? 'activity' : 'activities'}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                          )}
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />

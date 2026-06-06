@@ -412,15 +412,16 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
 
-const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
+const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'skillGaps', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
 const SECTION_LABELS: Record<SectionKey, string> = {
   myDashboard: 'My Dashboard',
   overview: 'Overview',
   programMaturity: 'Program Maturity',
   gaps: 'Governance Gaps',
+  skillGaps: 'Skill Gaps',
   whatsNext: "What's Next",
   stewardOnboarding: 'Steward Onboarding',
   quickActions: 'Quick Actions',
@@ -678,6 +679,74 @@ function RecentActivity() {
   );
 }
 
+interface SkillGapRow {
+  skillId: string;
+  skillName: string;
+  category: string;
+  requiredByActivities: number;
+  heldByPeople: number;
+  gapScore: number;
+}
+
+function SkillGaps() {
+  const { activeOrgId } = useOrgContext();
+  const [rows, setRows] = useState<SkillGapRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!activeOrgId) { setRows([]); setLoaded(false); return; }
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: SkillGapRow[] }>(`/skills/gap-report?orgId=${activeOrgId}`);
+        setRows(res.data || []);
+      } catch { setRows([]); }
+      finally { setLoaded(true); }
+    })();
+  }, [activeOrgId]);
+
+  if (!loaded) return null;
+  const top = rows.filter((r) => r.requiredByActivities > 0).slice(0, 5);
+  if (top.length === 0) return null;
+
+  const maxRequired = Math.max(...top.map((r) => r.requiredByActivities), 1);
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Skill Gaps</h2>
+        <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>Find people by skill →</Link>
+      </div>
+      <div style={{ ...cardStyle, padding: '12px 16px' }}>
+        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+          Skills most under-staffed across this org — required by activities vs held by people.
+        </div>
+        {top.map((r) => {
+          const reqPct = (r.requiredByActivities / maxRequired) * 100;
+          const heldPct = (r.heldByPeople / maxRequired) * 100;
+          const critical = r.heldByPeople === 0;
+          const tight = r.heldByPeople > 0 && r.gapScore >= 2;
+          const color = critical ? '#dc2626' : tight ? '#d97706' : '#16a34a';
+          return (
+            <div key={r.skillId} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{r.skillName}</span>
+                <span style={{ fontSize: 11, color }}>
+                  {r.requiredByActivities} required · {r.heldByPeople} held
+                  {critical ? ' · no coverage' : ''}
+                </span>
+              </div>
+              <div style={{ position: 'relative', height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${reqPct}%`, background: '#e5e7eb' }} />
+                <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${heldPct}%`, background: color, borderRadius: 3 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ProgramMaturity() {
   const { activeOrgId } = useOrgContext();
   const [status, setStatus] = useState<any>(null);
@@ -893,6 +962,7 @@ export default function DashboardPage() {
     overview: <StatsOverview stats={stats} />,
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
+    skillGaps: <SkillGaps />,
     whatsNext: <WhatsNext stats={stats} />,
     stewardOnboarding: <StewardOnboarding />,
     quickActions: <QuickActions />,
