@@ -273,3 +273,12 @@ export function getSamlProvider(): SamlAuthProvider | null {
   samlProvider = new SamlAuthProvider(cfg);
   return samlProvider;
 }
+
+/** Replace the singleton with a custom-config provider — test-only.
+ *  Integration tests use this to wire a mock IdP's cert into the
+ *  provider without touching SAML_* env vars (which are read once on
+ *  first getSamlProvider() call and cached). Production code never
+ *  calls this. */
+export function _setSamlProviderForTesting(cfg: SamlConfig | null): void {
+  samlProvider = cfg ? new SamlAuthProvider(cfg) : null;
+}

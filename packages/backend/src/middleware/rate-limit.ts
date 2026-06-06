@@ -118,6 +118,14 @@ interface Counter {
   windowStart: number;
 }
 const memStore = new Map<string, Counter>();
+
+/** Reset the in-memory store. Test-only; production code should never
+ *  call this since the limiter is the only thing protecting login
+ *  routes from brute-force. Exported for the integration tests that
+ *  hammer the auth endpoints in a tight loop. */
+export function _resetRateLimitForTesting(): void {
+  memStore.clear();
+}
 const memSweep = setInterval(() => {
   const now = Date.now();
   for (const [k, c] of memStore) {
