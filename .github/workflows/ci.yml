@@ -1,0 +1,45 @@
+name: CI
+
+# Runs typecheck + tests on every push and PR. Keeps trunk green by
+# catching regressions (missing deps, type errors, broken tests) before
+# they land.
+
+on:
+  push:
+    branches: [create-procela-main]
+  pull_request:
+
+# Cancel any in-flight run for the same ref when a new commit arrives —
+# trunk pushes are sequential so the old run's result is irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Typecheck both workspaces. The lint script in each package is
+      # `tsc --noEmit`, so this also catches missing imports and bad
+      # type signatures.
+      - name: Typecheck
+        run: npm run lint --workspaces --if-present
+
+      # Backend tests run under node:test via tsx; frontend tests run
+      # under vitest. Both surface via `npm test` at the workspace root.
+      - name: Tests
+        run: npm test
