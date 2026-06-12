@@ -56,6 +56,14 @@ interface SkillRecord {
   description: string;
 }
 
+interface RecommendedPerson {
+  personId: string;
+  personName: string;
+  matched: number;
+  required: number;
+  ratio: number;
+}
+
 export default function RoleDetailDrawer() {
   const navigate = useNavigate();
   const { activeOrgId } = useOrgContext();
@@ -70,6 +78,7 @@ export default function RoleDetailDrawer() {
   // that don't match anything in the catalog are still shown, tagged as
   // "not seeded yet" so users know what they're missing.
   const [orgSkills, setOrgSkills] = useState<SkillRecord[]>([]);
+  const [recommendedPeople, setRecommendedPeople] = useState<RecommendedPerson[]>([]);
 
   useEffect(() => {
     if (!roleType || !activeOrgId) return;
@@ -98,20 +107,37 @@ export default function RoleDetailDrawer() {
           .get<{ success: boolean; data: Assignment[] }>(`/dama-roles?orgId=${activeOrgId}`)
           .then((res) => (res.data || []).filter((a) => a.roleType === roleType));
 
+    // Best-matching people for this role: rank by overlap between
+    // their held skills and the role's required-skill names. Only fired
+    // when the reference actually has required skills.
+    const refForRecs = getRoleReference(roleType);
+    const recsParam = refForRecs && refForRecs.requiredSkills.length > 0
+      ? `skills=${encodeURIComponent(refForRecs.requiredSkills.join(','))}&limit=5`
+      : null;
+    const fetchRecs: Promise<RecommendedPerson[]> = recsParam
+      ? apiClient
+          .get<{ success: boolean; data: RecommendedPerson[] }>(`/skills/recommend-for-role?orgId=${activeOrgId}&${recsParam}`)
+          .then((res) => res.data || [])
+          .catch(() => [])
+      : Promise.resolve([]);
+
     fetchPeople
       .then((peopleNames) => Promise.all([
         fetchHolders(peopleNames),
         apiClient.get<{ success: boolean; data: SkillRecord[] }>(`/skills?orgId=${activeOrgId}`),
+        fetchRecs,
       ]))
-      .then(([holders, skillsRes]) => {
+      .then(([holders, skillsRes, recs]) => {
         if (cancelled) return;
         setAssignments(holders);
         setOrgSkills(skillsRes.data || []);
+        setRecommendedPeople(recs);
       })
       .catch(() => {
         if (cancelled) return;
         setAssignments([]);
         setOrgSkills([]);
+        setRecommendedPeople([]);
       })
       .finally(() => {
         if (!cancelled) setLoadingAssignments(false);
@@ -251,6 +277,43 @@ export default function RoleDetailDrawer() {
                     </div>
                   </button>
                 ))}
+              </div>
+            </Section>
+          )}
+
+          {recommendedPeople.length > 0 && (
+            <Section title={`Best-matching people (${recommendedPeople.length})`}>
+              <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Ranked by how many of this role's required skills they already hold.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {recommendedPeople.map((p) => {
+                  const tier = p.ratio >= 0.75 ? { bg: '#dcfce7', fg: '#166534' }
+                    : p.ratio >= 0.5 ? { bg: '#dbeafe', fg: '#1e40af' }
+                    : { bg: '#fef3c7', fg: '#92400e' };
+                  return (
+                    <button
+                      key={p.personId}
+                      onClick={() => { close(); navigate(`/people/${p.personId}`); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        textAlign: 'left', padding: '6px 10px',
+                        background: 'var(--color-bg)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 6, cursor: 'pointer', fontSize: 13,
+                      }}
+                    >
+                      <span>{p.personName}</span>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600,
+                        padding: '2px 8px', borderRadius: 10,
+                        background: tier.bg, color: tier.fg,
+                      }}>
+                        {p.matched} / {p.required} skills
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </Section>
           )}

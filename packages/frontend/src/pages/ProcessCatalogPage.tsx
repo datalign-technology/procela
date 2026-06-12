@@ -1300,7 +1300,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule, skillCoverageByNode }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1365,6 +1365,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   /** Simple hides Compliance, Frequency, Risk Level, Automation and
    *  Est. Duration from the per-node panel. Advanced shows everything. */
   viewMode: 'simple' | 'advanced';
+  /** Per-node skill-coverage gap: missing skill ids/names when the
+   *  Responsible person lacks one or more of this node's required
+   *  skills. Drives the amber warning chip next to the SkillPicker. */
+  skillCoverageByNode: Record<string, { missingSkillIds: string[]; missingSkillNames: string[] }>;
 }) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
@@ -1692,6 +1696,25 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                     </>
                   )}
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
+                  {(() => {
+                    const cov = skillCoverageByNode[node.id];
+                    if (!cov || cov.missingSkillNames.length === 0) return null;
+                    const n = cov.missingSkillNames.length;
+                    return (
+                      <div
+                        title={`Responsible person is missing: ${cov.missingSkillNames.join(', ')}`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          marginTop: 6, padding: '4px 10px', borderRadius: 4,
+                          background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 500,
+                          border: '1px solid #fde68a',
+                        }}
+                      >
+                        <span aria-hidden="true">⚠</span>
+                        Responsible person lacks {n} required {n === 1 ? 'skill' : 'skills'}
+                      </div>
+                    );
+                  })()}
                   {/* Agent execution — have an agent PERFORM this activity.
                       Scoped to the governance value stream; the backend enforces
                       the same rule. */}
@@ -2288,7 +2311,8 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           schedulesByActivity={schedulesByActivity}
           onCreateSchedule={onCreateSchedule}
           onToggleSchedule={onToggleSchedule}
-          onDeleteSchedule={onDeleteSchedule} />
+          onDeleteSchedule={onDeleteSchedule}
+          skillCoverageByNode={skillCoverageByNode} />
       ))}
     </div>
   );
@@ -2395,6 +2419,7 @@ export default function ProcessCatalogPage() {
   const [policiesList, setPoliciesList] = useState<PolicyRef[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
+  const [skillCoverageByNode, setSkillCoverageByNode] = useState<Record<string, { missingSkillIds: string[]; missingSkillNames: string[] }>>({});
   // When the user picks an asset whose owner org is on a different
   // vertical axis from the process node's value-stream org (e.g.
   // a Water activity reaching for an Electric asset, sibling
@@ -2456,7 +2481,7 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
@@ -2469,6 +2494,9 @@ export default function ProcessCatalogPage() {
         apiClient.get<{ success: boolean; data: SystemRef[] }>(`/systems${qp}`),
         apiClient.get<{ success: boolean; data: MappingInfo[] }>(`/mappings${qp}`),
         apiClient.get<{ success: boolean; data: RoleAssignment[] }>(`/dama-roles${qp}`),
+        activeOrgId
+          ? apiClient.get<{ success: boolean; data: { byPerson: Record<string, unknown>; byNode: Record<string, { missingSkillIds: string[]; missingSkillNames: string[] }> } }>(`/skills/coverage?orgId=${activeOrgId}`)
+          : Promise.resolve({ success: true, data: { byPerson: {}, byNode: {} } } as any),
       ]);
       const byStep: Record<string, MappingInfo[]> = {};
       for (const m of (mappingsRes.data || [])) {
@@ -2486,6 +2514,7 @@ export default function ProcessCatalogPage() {
       setPoliciesList((policiesRes.data || []).map((p: any) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
       setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
       setRoleAssignments((rolesRes.data || []).map((r: any) => ({ personId: r.personId, roleType: r.roleType })));
+      setSkillCoverageByNode(coverageRes.data?.byNode || {});
       // Fetch agent executions, DAMA roles, and schedules for agent-assigned activities
       try {
         const [execsRes, rolesRes, schedRes] = await Promise.all([
@@ -3517,7 +3546,8 @@ export default function ProcessCatalogPage() {
               schedulesByActivity={schedulesByActivity}
               onCreateSchedule={handleCreateSchedule}
               onToggleSchedule={handleToggleSchedule}
-              onDeleteSchedule={handleDeleteSchedule} />
+              onDeleteSchedule={handleDeleteSchedule}
+              skillCoverageByNode={skillCoverageByNode} />
           ))
         )}
       </div>

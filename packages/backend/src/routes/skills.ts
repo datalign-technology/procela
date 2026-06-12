@@ -2,6 +2,12 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import {
+  listUnqualifiedAssignments,
+  unqualifiedSummaryByPerson,
+  rankPeopleByRoleSkills,
+  orgSkillGapReport,
+} from '../services/skill-coverage';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills — DAMA-aligned capabilities that agents (and people) can possess.
@@ -95,6 +101,56 @@ const SEED_SKILLS: Array<{ name: string; category: SkillCategory; description: s
   { name: 'Business Translation', category: 'COMMUNICATION', description: 'Translate between technical data concepts and business language for stakeholders.' },
   { name: 'Executive Reporting', category: 'COMMUNICATION', description: 'Prepare executive-level summaries and presentations on data governance outcomes.' },
 ];
+
+// ── Skill-coverage value loops ───────────────────────────────────────────
+// These routes are mounted before the generic /:id handler so the literal
+// path segments don't get captured as ids.
+
+/** GET /api/v1/skills/coverage?orgId=… — qualified-person check across the
+ *  catalog. Returns per-person summary plus per-node missing skills, so
+ *  the People table can show a "Skill gaps" column and the Process
+ *  Catalog can render an amber chip on each unqualified activity. */
+router.get('/coverage', (req: Request, res: Response) => {
+  const orgId = String(req.query.orgId || '');
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+
+  const summary = unqualifiedSummaryByPerson(orgId);
+  const detailed = listUnqualifiedAssignments(orgId);
+
+  const byPerson: Record<string, { unqualifiedCount: number; sample: string[] }> = {};
+  for (const [pid, entry] of summary.entries()) byPerson[pid] = entry;
+
+  const byNode: Record<string, { missingSkillIds: string[]; missingSkillNames: string[] }> = {};
+  for (const list of detailed.values()) {
+    for (const a of list) {
+      byNode[a.nodeId] = { missingSkillIds: a.missingSkillIds, missingSkillNames: a.missingSkillNames };
+    }
+  }
+
+  res.json({ success: true, data: { byPerson, byNode } });
+});
+
+/** GET /api/v1/skills/recommend-for-role?orgId=…&skills=A,B,C&limit=5 —
+ *  Rank people for a role by overlap between their held skills and the
+ *  role's required-skill names (case-insensitive). */
+router.get('/recommend-for-role', (req: Request, res: Response) => {
+  const orgId = String(req.query.orgId || '');
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  const skillsParam = String(req.query.skills || '');
+  const requiredSkillNames = skillsParam.split(',').map((s) => s.trim()).filter(Boolean);
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 5;
+  res.json({ success: true, data: rankPeopleByRoleSkills(orgId, requiredSkillNames, limit) });
+});
+
+/** GET /api/v1/skills/gap-report?orgId=… — org-wide gap report:
+ *  required-by-activities vs held-by-people per skill, sorted
+ *  highest-gap-first. Drives the dashboard widget. */
+router.get('/gap-report', (req: Request, res: Response) => {
+  const orgId = String(req.query.orgId || '');
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  res.json({ success: true, data: orgSkillGapReport(orgId) });
+});
 
 /** GET /api/v1/skills — list all skills, optionally filtered by ?orgId= */
 router.get('/', (req: Request, res: Response) => {

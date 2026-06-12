@@ -54,7 +54,10 @@ function buildOrgPath(orgId: string, orgs: OrgFlat[]): string {
 interface Person {
   id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
   syncConnectionId?: string | null; syncStatus?: string | null;
+  skillIds?: string[];
 }
+interface SkillRef { id: string; name: string; category: string; }
+interface PersonSkillGap { unqualifiedCount: number; sample: string[]; }
 interface Person360Data {
   person: Person;
   orgAssignments: { id: string; name: string; type: string }[];
@@ -319,7 +322,10 @@ export default function PeoplePage() {
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
   const [filterAppRole, setFilterAppRole] = useState('');
   const [filterGovRole, setFilterGovRole] = useState('');
+  const [filterSkillId, setFilterSkillId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [allSkills, setAllSkills] = useState<SkillRef[]>([]);
+  const [skillGapByPerson, setSkillGapByPerson] = useState<Record<string, PersonSkillGap>>({});
 
   // Quick-add row state
   const [quickName, setQuickName] = useState('');
@@ -361,12 +367,18 @@ export default function PeoplePage() {
       // Scope the org tree to the active "Working In" context so siblings
       // and ancestors are hidden even when the user has broader permissions.
       const orgQuery = activeOrgId ? `?scopeOrgId=${encodeURIComponent(activeOrgId)}` : '';
-      const [orgRes, peopleRes, govRes, damaRes, domainRes] = await Promise.all([
+      const skillsUrl = activeOrgId ? `/skills?orgId=${encodeURIComponent(activeOrgId)}` : '/skills';
+      const coverageUrl = activeOrgId ? `/skills/coverage?orgId=${encodeURIComponent(activeOrgId)}` : null;
+      const [orgRes, peopleRes, govRes, damaRes, domainRes, skillsRes, coverageRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>(`/organizations${orgQuery}`),
         apiClient.get<{ success: boolean; data: Person[]; roles: string[] }>('/people'),
         apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
         apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
         apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
+        apiClient.get<{ success: boolean; data: SkillRef[] }>(skillsUrl),
+        coverageUrl
+          ? apiClient.get<{ success: boolean; data: { byPerson: Record<string, PersonSkillGap>; byNode: Record<string, unknown> } }>(coverageUrl)
+          : Promise.resolve({ success: true, data: { byPerson: {}, byNode: {} } } as any),
       ]);
       const nextFlat = orgRes.data || [];
       setTree(orgRes.tree || []); setFlatOrgs(nextFlat);
@@ -377,6 +389,8 @@ export default function PeoplePage() {
       setAllGovernanceGroups(govRes.data || []);
       setAllDamaRoles(damaRes.data || []);
       setAllDataDomains(domainRes.data || []);
+      setAllSkills(skillsRes.data || []);
+      setSkillGapByPerson(coverageRes.data?.byPerson || {});
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -423,6 +437,9 @@ export default function PeoplePage() {
     if (filterGovRole) {
       const hasRole = allDamaRoles.some((r) => r.personId === p.id && r.roleType === filterGovRole);
       if (!hasRole) return false;
+    }
+    if (filterSkillId) {
+      if (!(p.skillIds || []).includes(filterSkillId)) return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -1000,10 +1017,26 @@ export default function PeoplePage() {
                     <option key={key} value={key}>{label}</option>
                   ))}
                 </select>
-                {(filterAppRole || filterGovRole || searchQuery || selectedOrgId) && (
+                {allSkills.length > 0 && (
+                  <select
+                    style={{ ...inputStyle, width: 'auto', minWidth: 160, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
+                    value={filterSkillId}
+                    onChange={(e) => setFilterSkillId(e.target.value)}
+                    aria-label="Filter by skill"
+                  >
+                    <option value="">All Skills</option>
+                    {allSkills
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                  </select>
+                )}
+                {(filterAppRole || filterGovRole || filterSkillId || searchQuery || selectedOrgId) && (
                   <>
                     <button
-                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setSearchQuery(''); applyOrgFilter(''); }}
+                      onClick={() => { setFilterAppRole(''); setFilterGovRole(''); setFilterSkillId(''); setSearchQuery(''); applyOrgFilter(''); }}
                       style={{ ...btnSecondary, padding: '5px 12px', fontSize: 12 }}
                     >
                       Clear Filters
@@ -1268,6 +1301,7 @@ export default function PeoplePage() {
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
                         <th scope="col" style={thStyle}>Governance</th>
                         <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
+                        {selectedOrgId && <th scope="col" style={{ ...thStyle, textAlign: 'center', minWidth: 90 }}>Skill gaps</th>}
                         <th scope="col" style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
@@ -1305,6 +1339,7 @@ export default function PeoplePage() {
                               style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
                             />
                           </td>
+                          {selectedOrgId && <td style={tdStyle}></td>}
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <button
                               onClick={handleQuickAdd}
@@ -1354,6 +1389,30 @@ export default function PeoplePage() {
                             )}
                           </td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
+                          {selectedOrgId && (() => {
+                            const gap = skillGapByPerson[person.id];
+                            if (!gap || gap.unqualifiedCount === 0) {
+                              return (
+                                <td style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 11 }}>--</td>
+                              );
+                            }
+                            const more = gap.unqualifiedCount - gap.sample.length;
+                            const tip = `Unqualified for ${gap.unqualifiedCount} activit${gap.unqualifiedCount === 1 ? 'y' : 'ies'}: ${gap.sample.join(', ')}${more > 0 ? ` (+${more} more)` : ''}`;
+                            return (
+                              <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                <span
+                                  title={tip}
+                                  style={{
+                                    display: 'inline-block', padding: '2px 8px', borderRadius: 10,
+                                    fontSize: 11, fontWeight: 600,
+                                    background: '#fef3c7', color: '#92400e',
+                                  }}
+                                >
+                                  {gap.unqualifiedCount}
+                                </span>
+                              </td>
+                            );
+                          })()}
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
