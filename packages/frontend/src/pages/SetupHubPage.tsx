@@ -348,10 +348,9 @@ export default function SetupHubPage() {
   return (
     // Left-anchored to match the other pages — Dashboard, Settings,
     // Process Catalog all sit flush with the Layout's .content
-    // padding. maxWidth keeps the long-form copy at a readable width;
-    // dropping `margin: 0 auto` lets the page sit at the left rather
-    // than centring on wider monitors and looking indented.
-    <div style={{ maxWidth: 860, padding: '8px 0 64px' }}>
+    // padding. Width matches the rest of the app (no inner maxWidth)
+    // so the page doesn't render narrower than its siblings.
+    <div style={{ padding: '8px 0 64px' }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 18, padding: '20px 24px', marginBottom: 24,
@@ -376,7 +375,7 @@ export default function SetupHubPage() {
           operator wants the dense layout. */}
       {!loading && (
         <div style={{
-          display: 'flex', justifyContent: 'flex-end', gap: 4,
+          display: 'flex', justifyContent: 'flex-start', gap: 4,
           alignItems: 'center', fontSize: 12, marginBottom: 12,
         }}>
           <button type="button" onClick={expandAll} style={textBtnStyle}>Expand all</button>
