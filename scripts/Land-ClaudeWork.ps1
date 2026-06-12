@@ -39,6 +39,15 @@ function Land-ClaudeWork {
         return
     }
 
+    # Refuse to land trunk onto itself. Without this guard, the script
+    # tries to git push --delete the target at the end and the remote
+    # rightly refuses to delete its default branch -- a noisy no-op
+    # that hides the real success message above it.
+    if ($Branch -eq $Target) {
+        Write-Error "Refusing to land $Target onto itself. Pass a feature branch as the source."
+        return
+    }
+
     # Working tree must be clean -- never run this with uncommitted edits
     $dirty = git status --porcelain
     if ($dirty) {

@@ -1,4 +1,4 @@
-import { skills } from '../routes/skills';
+import { skills } from '../stores/skills';
 import { people } from '../routes/people';
 import { processNodes } from '../routes/process-catalog';
 

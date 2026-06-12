@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import {
   unqualifiedSummaryByPerson,
@@ -8,37 +8,22 @@ import {
   rankPeopleByRoleSkills,
   orgSkillGapReport,
 } from '../services/skill-coverage';
+import {
+  SKILL_CATEGORIES,
+  skills,
+  type SkillCategory,
+  type StoredSkill,
+} from '../stores/skills';
+
+// Re-export so existing imports keep working without a churn diff.
+export { skills, SKILL_CATEGORIES };
+export type { StoredSkill };
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills — DAMA-aligned capabilities that agents (and people) can possess.
 // Phase 1 of the AI agent automation feature. Each skill belongs to a
 // category and an org; the seed endpoint populates a standard taxonomy.
 // ──────────────────────────────────────────────────────────────────────────
-
-const SKILL_CATEGORIES = [
-  'DATA_QUALITY',
-  'METADATA',
-  'ARCHITECTURE',
-  'SECURITY',
-  'INTEGRATION',
-  'ANALYTICS',
-  'GOVERNANCE',
-  'COMMUNICATION',
-] as const;
-
-type SkillCategory = typeof SKILL_CATEGORIES[number];
-
-export interface StoredSkill {
-  id: string;
-  orgId: string;
-  name: string;
-  category: SkillCategory;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export const skills: StoredSkill[] = loadStore<StoredSkill>('skills');
 
 const router = Router();
 
