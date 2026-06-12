@@ -18,6 +18,7 @@ import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
+import UnqualifiedPersonChip from '../components/UnqualifiedPersonChip';
 import { GOVERNANCE_ROLES } from '../types';
 import { useDomainLensStore, useDomainLens, passesLens } from '../stores/domainLensStore';
 import { processDomain } from '../lib/entityDomain';
@@ -1698,31 +1699,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                     </>
                   )}
                   <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
-                  {/* Skill-coverage warning. Shown when the
-                      responsible person assigned to this activity is
-                      missing one or more of the Required Skills above.
-                      Tooltip lists the specific skill names so the
-                      operator can decide whether to swap people or
-                      grow the assignee's skill list. */}
-                  {(() => {
-                    const cov = skillCoverageByNode[node.id];
-                    if (!cov || cov.missingSkillNames.length === 0) return null;
-                    return (
-                      <div
-                        title={`Responsible person is missing: ${cov.missingSkillNames.join(', ')}`}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 6,
-                          marginTop: 6, padding: '4px 10px',
-                          fontSize: 11, fontWeight: 600,
-                          background: '#fef3c7', color: '#92400e',
-                          border: '1px solid #fde68a', borderRadius: 4,
-                        }}
-                      >
-                        <span aria-hidden="true">⚠</span>
-                        Responsible person lacks {cov.missingSkillNames.length} required {cov.missingSkillNames.length === 1 ? 'skill' : 'skills'}
-                      </div>
-                    );
-                  })()}
+                  <UnqualifiedPersonChip missingSkillNames={skillCoverageByNode[node.id]?.missingSkillNames || []} />
                   {/* Agent execution — have an agent PERFORM this activity.
                       Scoped to the governance value stream; the backend enforces
                       the same rule. */}
@@ -1997,7 +1974,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               )}
               {/* Task fields — required skills */}
               {node.level === 'TASK' && (
-                <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
+                <>
+                  <SkillPicker compact orgId={node.orgIds?.[0]} selectedSkillIds={node.requiredSkillIds || []} onChange={(ids) => onUpdate(node.id, { requiredSkillIds: ids })} disabled={isLocked} label="Required Skills" />
+                  <UnqualifiedPersonChip missingSkillNames={skillCoverageByNode[node.id]?.missingSkillNames || []} />
+                </>
               )}
               {/* Systems this step runs on — first-class link, distinct
                  from the data-asset mappings below (a step may run on a

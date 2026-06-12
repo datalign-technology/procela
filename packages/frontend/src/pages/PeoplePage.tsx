@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -1402,29 +1403,7 @@ export default function PeoplePage() {
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
                           {selectedOrgId && (
                             <td style={tdStyle}>
-                              {(() => {
-                                const cov = skillCoverageByPerson[person.id];
-                                if (!cov || cov.unqualifiedCount === 0) {
-                                  return <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>—</span>;
-                                }
-                                const more = cov.unqualifiedCount > cov.sample.length
-                                  ? ` (+${cov.unqualifiedCount - cov.sample.length} more)` : '';
-                                return (
-                                  <span
-                                    title={`Activities lacking required skills:\n  ${cov.sample.join('\n  ')}${more}`}
-                                    style={{
-                                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                                      fontSize: 11, fontWeight: 600,
-                                      padding: '2px 8px', borderRadius: 4,
-                                      background: '#fef3c7', color: '#92400e',
-                                      border: '1px solid #fde68a',
-                                    }}
-                                  >
-                                    <span aria-hidden="true">⚠</span>
-                                    {cov.unqualifiedCount} {cov.unqualifiedCount === 1 ? 'activity' : 'activities'}
-                                  </span>
-                                );
-                              })()}
+                              <SkillGapBadge gap={skillCoverageByPerson[person.id]} />
                             </td>
                           )}
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
