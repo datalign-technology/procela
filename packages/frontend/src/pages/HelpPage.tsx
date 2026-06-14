@@ -1,4 +1,5 @@
 import PageHeader from '../components/PageHeader';
+import Page from '../components/Page';
 
 const sectionStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
@@ -73,7 +74,7 @@ const kbdStyle: React.CSSProperties = {
 
 export default function HelpPage() {
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto' }}>
+    <Page width="narrow">
       <PageHeader
         title="Help Guide"
         actions={
@@ -829,6 +830,6 @@ export default function HelpPage() {
           Open keyboard shortcuts overlay
         </button>
       </div>
-    </div>
+    </Page>
   );
 }

@@ -5,6 +5,7 @@ import { apiClient } from '@/api/client';
 import { useOrgContext } from '@/stores/orgContext';
 import { useSetupStore } from '@/stores/setupStore';
 import ProgressRing from '@/components/ProgressRing';
+import Page from '@/components/Page';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SetupHubPage — "Get Started". A resumable, data-driven journey that walks
@@ -346,11 +347,7 @@ export default function SetupHubPage() {
   }
 
   return (
-    // Left-anchored to match the other pages — Dashboard, Settings,
-    // Process Catalog all sit flush with the Layout's .content
-    // padding. Width matches the rest of the app (no inner maxWidth)
-    // so the page doesn't render narrower than its siblings.
-    <div style={{ padding: '8px 0 64px' }}>
+    <Page padding="8px 0 64px">
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 18, padding: '20px 24px', marginBottom: 24,
@@ -487,7 +484,7 @@ export default function SetupHubPage() {
           );
         })
       )}
-    </div>
+    </Page>
   );
 }
 
