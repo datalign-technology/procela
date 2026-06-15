@@ -56,6 +56,28 @@ interface DomainOption {
   name: string;
 }
 
+interface SystemOption {
+  id: string;
+  name: string;
+}
+
+interface AssetOption {
+  id: string;
+  name: string;
+}
+
+// Roles for which the Governance Roles page shows per-domain gap rows.
+// Lifted from the same set used on the Governance Groups page so the
+// two surfaces agree on which roles are "domain-scoped" in spirit.
+const DOMAIN_SCOPED_ROLES = new Set<string>([
+  'DATA_OWNER',
+  'DATA_DOMAIN_OWNER',
+  'DATA_STEWARD',
+  'DATA_DOMAIN_STEWARD',
+  'BUSINESS_DATA_STEWARD',
+  'DATA_ARCHITECT',
+]);
+
 const ROLE_TYPE_LABELS: Record<string, string> = {
   // Executive/Strategic
   CDO: 'Chief Data Officer',
@@ -136,7 +158,9 @@ export default function DamaRolesPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [orgs, setOrgs] = useState<OrgOption[]>([]);
-  const [, setDomains] = useState<DomainOption[]>([]);
+  const [domains, setDomains] = useState<DomainOption[]>([]);
+  const [systems, setSystems] = useState<SystemOption[]>([]);
+  const [dataAssets, setDataAssets] = useState<AssetOption[]>([]);
   // Counts come from the local `roles` list now (see roleCounts below);
   // the /summary endpoint is still fetched so future per-role analytics
   // have a single source of truth, but the result is intentionally
@@ -160,13 +184,15 @@ export default function DamaRolesPage() {
   const fetchData = useCallback(async () => {
     try {
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes] = await Promise.all([
+      const [rolesRes, summaryRes, peopleRes, agentsRes, orgsRes, domainsRes, systemsRes, assetsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Record<string, number> }>(`/dama-roles/summary${query}`),
         apiClient.get<{ success: boolean; data: Person[] }>('/people'),
         apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${query}`),
         apiClient.get<{ success: boolean; data: OrgOption[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: DomainOption[] }>(`/data-domains${query}`),
+        apiClient.get<{ success: boolean; data: SystemOption[] }>(`/systems${query}`).catch(() => ({ data: [] } as any)),
+        apiClient.get<{ success: boolean; data: AssetOption[] }>(`/data-assets${query}`).catch(() => ({ data: [] } as any)),
       ]);
       setRoles(rolesRes.data || []);
       setRoleTypes(rolesRes.roleTypes || []);
@@ -175,6 +201,8 @@ export default function DamaRolesPage() {
       setAgents((agentsRes.data || []).filter((a) => a.status === 'ACTIVE'));
       setOrgs(orgsRes.data || []);
       setDomains(domainsRes.data || []);
+      setSystems(systemsRes.data || []);
+      setDataAssets(assetsRes.data || []);
     } catch { /* API may not be running */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -262,9 +290,24 @@ export default function DamaRolesPage() {
   const roleCounts: Record<string, number> = {};
   for (const r of roles) roleCounts[r.roleType] = (roleCounts[r.roleType] || 0) + 1;
 
-  const scopeName = (scopeId: string) => {
-    return orgs.find((o) => o.id === scopeId)?.name || scopeId;
+  // Resolve a role assignment's scopeId against every kind it might
+  // point at (org / data domain / system / data asset) and return the
+  // name plus a kind tag so the row can render a typed badge. Falls
+  // back to a short-id chip when nothing resolves — the same pattern
+  // we use on the Data Mapping page for orphans.
+  const resolveScope = (scopeId: string): { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string } => {
+    const org = orgs.find((o) => o.id === scopeId);
+    if (org) return { kind: 'ORG', name: org.name };
+    const dom = domains.find((d) => d.id === scopeId);
+    if (dom) return { kind: 'DOMAIN', name: dom.name };
+    const sys = systems.find((s) => s.id === scopeId);
+    if (sys) return { kind: 'SYSTEM', name: sys.name };
+    const ast = dataAssets.find((a) => a.id === scopeId);
+    if (ast) return { kind: 'ASSET', name: ast.name };
+    return { kind: 'UNKNOWN', name: scopeId.length > 8 ? `${scopeId.slice(0, 8)}…` : scopeId };
   };
+
+  const scopeName = (scopeId: string) => resolveScope(scopeId).name;
 
   const roleBadge = (roleType: string): React.CSSProperties => {
     const c = ROLE_TYPE_COLORS[roleType] || { bg: '#f1f5f9', color: '#64748b' };
@@ -504,7 +547,8 @@ export default function DamaRolesPage() {
                 catalog={(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS))}
                 filterRoleType={filterRoleType}
                 roleBadge={roleBadge}
-                scopeName={scopeName}
+                resolveScope={resolveScope}
+                domains={domains}
                 openRoleDrawer={openRoleDrawer}
                 onAssign={openAddForRole}
                 setConfirmDelete={setConfirmDelete}
@@ -546,7 +590,7 @@ function SidebarItem({ label, count, active, onClick, accent }: {
 // ── By-Role view ──────────────────────────────────────────────────────────
 // One section per role type, showing the people who hold that role. The
 // section header is clickable to open the Role Detail drawer.
-function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, openRoleDrawer, onAssign, setConfirmDelete }: {
+function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, openRoleDrawer, onAssign, setConfirmDelete }: {
   roles: DamaRoleAssignment[];
   /** Full governance-role catalog so every role is listed even with
    *  zero holders (consistent with the Governance Groups expected-role
@@ -554,7 +598,14 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
   catalog: string[];
   filterRoleType: string | null;
   roleBadge: (rt: string) => React.CSSProperties;
-  scopeName: (id: string) => string;
+  /** Resolve a scopeId to its kind + name. The kind drives the small
+   *  badge rendered alongside each holder so users can tell at a glance
+   *  whether a role is scoped to an org, a data domain, a system, or
+   *  a data asset (and spot unknown / dangling scope refs). */
+  resolveScope: (id: string) => { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
+  /** All data domains in scope. Used to render per-domain gap rows
+   *  for domain-scoped roles (Data Owner, Steward, Architect, etc.). */
+  domains: DomainOption[];
   openRoleDrawer: (rt: string) => void;
   onAssign: (rt: string) => void;
   setConfirmDelete: (id: string) => void;
@@ -675,7 +726,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
                 <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   {displayName}
                 </span>
-                <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>{scopeName(r.scopeId)}</span>
+                <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
                 <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
                 <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
               </li>
@@ -687,6 +738,32 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
             {criticalGap ? 'This role is required and has no holder — assign someone to close the gap.' : 'No one holds this role yet.'}
           </div>
         ))}
+        {/* Per-domain gap rows. For domain-scoped roles (Data Owner /
+            Steward / Architect family), list each data domain that
+            has no holder of this role scoped to it. Mirrors the
+            "no data domains assigned" line on Governance Groups, just
+            from the role-side perspective: instead of "this person
+            has no domains" we say "this domain has no role-holder". */}
+        {roleOpen && DOMAIN_SCOPED_ROLES.has(rt) && domains.length > 0 && (() => {
+          const scopedDomainIds = new Set(list.map((r) => r.scopeId));
+          const unfilled = domains.filter((d) => !scopedDomainIds.has(d.id));
+          if (unfilled.length === 0) return null;
+          return (
+            <div style={{ borderTop: '1px solid var(--color-border)', padding: '8px 14px 10px', background: '#fffbeb' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                Unfilled for {unfilled.length} domain{unfilled.length === 1 ? '' : 's'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {unfilled.map((d) => (
+                  <span key={d.id} title={`No ${ROLE_TYPE_LABELS[rt] || rt} scoped to ${d.name}`}
+                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                    {d.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -757,6 +834,42 @@ function RolesChevron({ open }: { open: boolean }) {
     >
       <path d="M9 5 L15 12 L9 19" />
     </svg>
+  );
+}
+
+// Per-holder scope display. The small leading tag tells the user what
+// the assignment is scoped to (Org / Domain / System / Asset) so a
+// Data Architect attached to "Customer Data" no longer reads as a raw
+// UUID. UNKNOWN renders amber so a deleted scope ref is obvious.
+function ScopeChip({ scope, rawId }: {
+  scope: { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
+  rawId: string;
+}) {
+  const palette: Record<typeof scope.kind, { bg: string; fg: string }> = {
+    ORG:     { bg: '#e0e7ff', fg: '#3730a3' },
+    DOMAIN:  { bg: '#dcfce7', fg: '#166534' },
+    SYSTEM:  { bg: '#fee2e2', fg: '#991b1b' },
+    ASSET:   { bg: '#dbeafe', fg: '#1e40af' },
+    UNKNOWN: { bg: '#fef3c7', fg: '#92400e' },
+  };
+  const c = palette[scope.kind];
+  const isUnknown = scope.kind === 'UNKNOWN';
+  return (
+    <span
+      title={isUnknown
+        ? `Scope id ${rawId} did not resolve to any org, domain, system, or asset — likely deleted.`
+        : `${scope.kind}: ${scope.name}`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}
+    >
+      <span style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+        padding: '1px 6px', borderRadius: 3,
+        background: c.bg, color: c.fg,
+      }}>
+        {scope.kind}
+      </span>
+      {isUnknown ? <em>unresolved</em> : scope.name}
+    </span>
   );
 }
 
