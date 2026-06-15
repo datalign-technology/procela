@@ -8,6 +8,11 @@ subsidiaries, sized to exercise most of Procela's entity model:
   - **Tidewater Water** — 400K customers, potable + wastewater
   - **Shared Services** — IT, Finance, HR, Regulatory, Safety
 
+> **New here?** See [`TRAINING.md`](./TRAINING.md) — a 90-minute
+> click-by-click training walkthrough that uses this data set to teach
+> Procela's model end-to-end. This README is the data reference; the
+> training guide is the workflow.
+
 ## Contents
 
 | File | Purpose | Notes |
