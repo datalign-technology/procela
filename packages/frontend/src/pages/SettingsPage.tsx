@@ -693,7 +693,6 @@ const sectionStyle: React.CSSProperties = {
   borderRadius: 'var(--radius-md)',
   border: '1px solid var(--color-border)',
   padding: '1.5rem',
-  maxWidth: 600,
 };
 
 const sectionTitleStyle: React.CSSProperties = {
