@@ -9,22 +9,13 @@ import { useToastStore } from '../stores/toastStore';
 const ExecutiveReportPage = lazy(() => import('./ExecutiveReportPage'));
 const ScorecardPage       = lazy(() => import('./ScorecardPage'));
 
-type ReportTab = 'user' | 'executive' | 'scorecard' | 'analysis';
+type ReportTab = 'user' | 'executive' | 'scorecard';
 
 const TABS: { id: ReportTab; label: string; description: string }[] = [
   { id: 'user',      label: 'My Reports',       description: 'Reports you and your org have built against the Procela data model.' },
   { id: 'executive', label: 'Executive Report', description: 'One-page overview for leadership.' },
   { id: 'scorecard', label: 'Scorecard',        description: 'Data and governance health by dimension.' },
-  { id: 'analysis',  label: 'Analysis',         description: 'Saved cube pivots — the same reports you build on the Analysis page.' },
 ];
-
-interface SavedAnalysisReport {
-  id: string;
-  name: string;
-  description: string | null;
-  ownerName: string | null;
-  updatedAt: string;
-}
 
 interface UserReportSummary {
   id: string;
@@ -126,57 +117,6 @@ function UserReportsTab() {
   );
 }
 
-// ── Existing Analysis tab kept verbatim ───────────────────────────────────
-
-function AnalysisReportsTab() {
-  const { activeOrgId } = useOrgContext();
-  const [reports, setReports] = useState<SavedAnalysisReport[] | null>(null);
-
-  useEffect(() => {
-    const q = activeOrgId ? `?orgId=${encodeURIComponent(activeOrgId)}` : '';
-    apiClient.get<{ success: boolean; data: SavedAnalysisReport[] }>(`/analysis-reports${q}`)
-      .then((r) => setReports(r.data || []))
-      .catch(() => setReports([]));
-  }, [activeOrgId]);
-
-  return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          Pivot reports are built and edited on the Analysis page; saved ones appear here too.
-        </div>
-        <Link to="/analysis" style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none' }}>
-          Open Analysis builder →
-        </Link>
-      </div>
-      {reports === null ? (
-        <SkeletonRows rows={4} columnWidths={[220, null, 120]} />
-      ) : reports.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '24px 0', textAlign: 'center' }}>
-          No saved analysis reports yet. Build a pivot on the Analysis page and save it.
-        </div>
-      ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-          {reports.map((r) => (
-            <li key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{r.name}</div>
-                {r.description && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{r.description}</div>}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                {r.ownerName ? `by ${r.ownerName}` : ''}
-              </div>
-              <Link to="/analysis" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                Open →
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 export default function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as ReportTab | null;
@@ -193,7 +133,6 @@ export default function ReportsPage() {
       case 'user':      return <UserReportsTab />;
       case 'executive': return <ExecutiveReportPage />;
       case 'scorecard': return <ScorecardPage />;
-      case 'analysis':  return <AnalysisReportsTab />;
     }
   })();
 
