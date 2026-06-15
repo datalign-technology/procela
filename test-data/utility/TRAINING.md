@@ -149,9 +149,19 @@ hyperlink:
 - **Avg Health** → Data Assets sorted by health ascending (worst at
   top)
 
-Skim the other dashboard sections: **My Dashboard** (your owned items),
-**Program Maturity** (current governance phase), **Skill Gaps** (more
-on this in Module 6).
+The personal **My Dashboard** strip at the top has its own four tiles
+— also hyperlinks — that scope to the signed-in user:
+
+- **Open Tasks** → Governance Work (Tasks tab)
+- **Open Issues** → Governance Work (Issues tab)
+- **My Domains** → Data Domains (the ones you own or steward)
+- **Upcoming Events** → Governance Calendar
+
+Sub-counts surface when relevant (e.g. *"3 overdue"* in red under
+Open Tasks). Zero-count tiles fade the number but still link through.
+
+Skim the rest of the page: **Program Maturity** (current governance
+phase), **Skill Gaps** (more on this in Module 6).
 
 ### 2.3 The org tree
 
@@ -383,7 +393,32 @@ the People page.
 Data Owner is intentionally **per-division** in this fixture; one
 person isn't responsible for the whole enterprise's data.
 
-### 7.3 Governance Groups
+After assigning, notice each holder row shows a small kind tag next
+to their scope: `ORG: Tidewater Electric` (indigo), or `DOMAIN:
+Customer Data` (green) if you scoped them to a domain instead, or
+`SYSTEM` / `ASSET` for entity-attached roles like System Owner.
+Any holder row whose tag reads `UNKNOWN: unresolved` (amber) means
+the scoped entity has been deleted — the same dangling-reference
+signal you'll see on the Data Mapping page.
+
+### 7.3 Domain coverage check
+
+Scroll down to a domain-scoped role card (Data Owner, Data Steward,
+Data Architect, etc.). Each card has a footer panel:
+
+> **UNFILLED FOR 2 DOMAINS**
+>   [Operational Data] [Regulatory Data]
+
+That's every data domain in the org that has no holder of this
+role scoped to it. Pair it with the inline holder list above
+(`Devon Kershaw — DOMAIN: Customer Data`) and you can read the
+coverage gap end-to-end without leaving the page.
+
+To exercise this: assign Devon Kershaw as Data Owner for *Customer
+Data* (scope = domain). The Customer Data chip moves out of the
+amber Unfilled panel into the holder list. Repeat for the others.
+
+### 7.4 Governance Groups
 
 1. *Working in…* → **Tidewater Utilities**.
 2. **Governance → Groups** → click **Generate standard structure**.
@@ -396,7 +431,7 @@ person isn't responsible for the whole enterprise's data.
    holder lists their owned/stewarded domains, or `no data domains
    assigned` in red if they have none.
 
-### 7.4 RACI Matrix
+### 7.5 RACI Matrix
 
 1. **Governance → Roles** → **RACI Matrix tab**.
 2. The matrix is auto-derived from your role assignments and
