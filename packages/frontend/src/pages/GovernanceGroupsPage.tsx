@@ -74,6 +74,27 @@ interface DamaRoleAssignment {
   since: string;
 }
 
+interface DataDomain {
+  id: string;
+  name: string;
+  ownerId: string | null;
+  stewardIds: string[];
+}
+
+// Roles where "which data domain(s) does this person own / steward" is
+// a meaningful question. For these, the Expected Roles panel shows a
+// sub-line under each holder listing their domain assignments — or
+// "(no domains assigned)" so the gap is visible. Driven by reads from
+// the DataDomain entity, not by a separate per-role mapping.
+const DOMAIN_SCOPED_ROLE_TYPES = new Set<string>([
+  'DATA_OWNER',
+  'DATA_DOMAIN_OWNER',
+  'DATA_STEWARD',
+  'DATA_DOMAIN_STEWARD',
+  'BUSINESS_DATA_STEWARD',
+  'DATA_ARCHITECT',
+]);
+
 interface Agent {
   id: string;
   name: string;
@@ -362,6 +383,10 @@ export default function GovernanceGroupsPage() {
   // person isn't (yet) a member of this group — keeps the two pages
   // consistent.
   const [orgDamaRoles, setOrgDamaRoles] = useState<DamaRoleAssignment[]>([]);
+  // Data domains in the active org. Used to look up which domains each
+  // domain-scoped role holder owns or stewards, so the Expected Roles
+  // chips can show that gap inline.
+  const [dataDomains, setDataDomains] = useState<DataDomain[]>([]);
   const [agentsList, setAgentsList] = useState<Agent[]>([]);
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
   const [assignRoleAgentId, setAssignRoleAgentId] = useState('');
@@ -437,13 +462,15 @@ export default function GovernanceGroupsPage() {
 
       // Fetch DAMA roles and agents
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, agentsRes] = await Promise.all([
+      const [rolesRes, agentsRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`),
+        apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
       ]);
       const allRoles = rolesRes.data || [];
       setOrgDamaRoles(allRoles);
       setAgentsList(Array.isArray(agentsRes.data) ? agentsRes.data.filter((a) => a.status === 'ACTIVE') : []);
+      setDataDomains(Array.isArray(domainsRes.data) ? domainsRes.data : []);
 
       if (detail?.members?.length > 0) {
         const memberIds = new Set(detail.members.map((m: GroupMember) => m.personId));
@@ -1141,6 +1168,47 @@ export default function GovernanceGroupsPage() {
                                           )}
                                           <button type="button" onClick={() => handleRemoveDamaRole(a.id)} aria-label="Remove role assignment" title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>
                                         </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {/* Domain assignments — only for roles
+                                    where this question is meaningful
+                                    (Data Owner, Domain Owner, Steward,
+                                    Architect, etc.). Reads straight
+                                    from the DataDomain entity; nothing
+                                    domain-related is duplicated onto
+                                    the role assignment. Agents are
+                                    skipped — domain ownership /
+                                    stewardship is people-only today. */}
+                                {DOMAIN_SCOPED_ROLE_TYPES.has(expected.roleType) && assigned.length > 0 && (
+                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {assigned.filter((a) => !a.agentId && a.personId).map((a) => {
+                                      const isOwnerRole = expected.roleType === 'DATA_OWNER' || expected.roleType === 'DATA_DOMAIN_OWNER';
+                                      const isStewardRole = expected.roleType === 'DATA_STEWARD'
+                                        || expected.roleType === 'DATA_DOMAIN_STEWARD'
+                                        || expected.roleType === 'BUSINESS_DATA_STEWARD';
+                                      // Architect / unspecified: surface anywhere they're attached.
+                                      const ownedDomains = dataDomains.filter((d) => d.ownerId === a.personId);
+                                      const stewardedDomains = dataDomains.filter((d) => (d.stewardIds || []).includes(a.personId!));
+                                      const showOwned = isOwnerRole || (!isOwnerRole && !isStewardRole);
+                                      const showStewarded = isStewardRole || (!isOwnerRole && !isStewardRole);
+                                      const ownedNames = showOwned ? ownedDomains.map((d) => d.name) : [];
+                                      const stewardedNames = showStewarded ? stewardedDomains.map((d) => d.name) : [];
+                                      const noAssignments = ownedNames.length === 0 && stewardedNames.length === 0;
+                                      const parts: string[] = [];
+                                      if (ownedNames.length) parts.push(`owns ${ownedNames.join(', ')}`);
+                                      if (stewardedNames.length) parts.push(`stewards ${stewardedNames.join(', ')}`);
+                                      return (
+                                        <div key={`dom-${a.id}`} style={{
+                                          fontSize: 11, color: noAssignments ? '#b91c1c' : 'var(--color-text-secondary)',
+                                          paddingLeft: 6,
+                                        }}>
+                                          <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>{a.personName || 'Unknown'}:</strong>{' '}
+                                          {noAssignments
+                                            ? <em>no data domains assigned</em>
+                                            : parts.join(' · ')}
+                                        </div>
                                       );
                                     })}
                                   </div>
