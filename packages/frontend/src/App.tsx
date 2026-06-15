@@ -9,6 +9,7 @@ import SystemsPage from '@/pages/SystemsPage';
 import MappingsPage from '@/pages/MappingsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import HelpPage from '@/pages/HelpPage';
+import HelpTrainingPage from '@/pages/HelpTrainingPage';
 import ValueStreamWizard from '@/pages/ValueStreamWizard';
 import OrganizationsPage from '@/pages/OrganizationsPage';
 import OrgVisualizationPage from '@/pages/OrgVisualizationPage';
@@ -113,6 +114,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/branding" element={<BrandingPage />} />
         <Route path="/help" element={<HelpPage />} />
+        <Route path="/help/training" element={<HelpTrainingPage />} />
       </Route>
     </Routes>
   );

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import Page from '../components/Page';
 
@@ -78,18 +79,32 @@ export default function HelpPage() {
       <PageHeader
         title="Help Guide"
         actions={
-          <button
-            onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
-            style={{
-              padding: '8px 16px', background: 'var(--color-surface)',
-              color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
-              borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              flexShrink: 0,
-            }}
-            title="Show the three-phase Define / Connect / Discover intro again"
-          >
-            Replay intro
-          </button>
+          <div style={{ display: 'inline-flex', gap: 8 }}>
+            <Link
+              to="/help/training"
+              style={{
+                padding: '8px 16px', background: 'var(--color-primary)',
+                color: '#fff', textDecoration: 'none',
+                borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600,
+                flexShrink: 0,
+              }}
+              title="90-minute walkthrough using the Tidewater Utilities fixture data"
+            >
+              Open Training Guide →
+            </Link>
+            <button
+              onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
+              style={{
+                padding: '8px 16px', background: 'var(--color-surface)',
+                color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+                borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                flexShrink: 0,
+              }}
+              title="Show the three-phase Define / Connect / Discover intro again"
+            >
+              Replay intro
+            </button>
+          </div>
         }
       />
       <p style={{ ...pStyle, marginBottom: 16 }}>
