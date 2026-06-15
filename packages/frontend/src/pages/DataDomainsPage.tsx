@@ -290,9 +290,15 @@ export default function DataDomainsPage() {
       if (!industry) { errorToast(null, 'No industry set on this organization or its parents.'); setGenerating(false); return; }
       const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>('/data-domains/generate', { industry });
       const suggestions = (res.data || []).map((d) => ({ ...d, selected: true }));
-      if (suggestions.length === 0) { errorToast(null, 'No suggestions returned.'); setGenerating(false); return; }
+      if (suggestions.length === 0) { errorToast(null, 'No suggestions returned. Retry — Claude occasionally returns prose; a retry usually fixes it.'); setGenerating(false); return; }
       setGeneratedDomains(suggestions); setShowGeneratePreview(true);
-    } catch (err) { errorToast(err, 'Generation failed'); }
+    } catch (err: any) {
+      // The backend attaches a `rawSnippet` of the model's raw response
+      // when JSON extraction failed — show it so the operator can see
+      // what came back rather than only "Generation failed".
+      const snippet = err?.body?.rawSnippet ? `\n\n— AI returned: ${err.body.rawSnippet}` : '';
+      errorToast(err, `Generation failed.${snippet}`);
+    }
     finally { setGenerating(false); }
   };
 

@@ -90,12 +90,40 @@ router.post('/generate', async (req: Request, res: Response) => {
   }
   try {
     const suggestions = await aiService.generateDataDomains(industry);
-    // The AI returns either a JSON array or an object with a `raw` key.
-    const domains = Array.isArray(suggestions) ? suggestions : [];
+    // The shared extractJson helper always returns a parsed value; we
+    // still want a friendly error when the AI returned a *valid* but
+    // wrong-shaped response (e.g. `{ items: [...] }` instead of the
+    // top-level array we asked for). Tolerate both shapes here so a
+    // single quirky generation doesn't bubble up as "no suggestions".
+    let domains: Array<unknown> = [];
+    if (Array.isArray(suggestions)) {
+      domains = suggestions;
+    } else if (suggestions && typeof suggestions === 'object') {
+      const obj = suggestions as Record<string, unknown>;
+      for (const v of Object.values(obj)) {
+        if (Array.isArray(v)) { domains = v; break; }
+      }
+    }
+    if (domains.length === 0) {
+      logger.warn({ industry, suggestions }, 'Domain generation returned no array');
+      res.status(502).json({
+        success: false,
+        error: 'The AI response did not contain a list of domains. Try again — Claude occasionally returns prose; a retry usually fixes it.',
+      });
+      return;
+    }
     res.json({ success: true, data: domains });
   } catch (err: any) {
-    logger.error({ err, industry }, 'Data domain generation failed');
-    res.status(500).json({ success: false, error: err?.message || 'AI generation failed' });
+    // Surface the raw model response when available so the UI can show
+    // what came back instead of just "failed".
+    const message = err?.message || 'AI generation failed';
+    const raw = err?.rawResponse as string | undefined;
+    logger.error({ err, industry, raw }, 'Data domain generation failed');
+    res.status(500).json({
+      success: false,
+      error: message,
+      ...(raw ? { rawSnippet: raw.slice(0, 300) } : {}),
+    });
   }
 });
 

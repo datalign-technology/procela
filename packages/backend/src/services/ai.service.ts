@@ -6,6 +6,76 @@ const MODEL = 'claude-sonnet-4-20250514';
 
 let _client: Anthropic | null = null;
 
+/**
+ * Pull the first top-level JSON value (array or object) out of a free-
+ * form Claude response. Tolerates:
+ *
+ *   - Markdown code fences in any common variant (```json, ```, ~~~).
+ *   - Narrative prefaces ("Here are the domains:") or trailing notes
+ *     after the JSON.
+ *   - Mixed-content responses where the JSON is embedded.
+ *
+ * Uses a small bracket-balance scanner that respects string literals
+ * and escape sequences so `]` inside a description doesn't fool it.
+ * Throws an Error carrying the raw text when nothing parseable is
+ * found — that surfaces upstream as a real error in the UI instead of
+ * a silent empty array.
+ */
+function extractJson(text: string): unknown {
+  if (!text) throw aiParseError('Empty response from AI', text);
+
+  // Strip the common code-fence variants up front. This handles the
+  // "everything inside one fence" case quickly without touching the
+  // bracket scanner.
+  const stripped = text
+    .replace(/```json\b/gi, '```')
+    .replace(/~~~/g, '```')
+    .replace(/```/g, '')
+    .trim();
+
+  // Fast path: the whole stripped body parses cleanly.
+  try { return JSON.parse(stripped); } catch { /* fall through */ }
+
+  // Scan for the first top-level [ ... ] or { ... } that balances and
+  // attempt to parse it.
+  for (const [open, close] of [['[', ']'], ['{', '}']] as const) {
+    const start = stripped.indexOf(open);
+    if (start < 0) continue;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < stripped.length; i++) {
+      const ch = stripped[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === open) depth++;
+      else if (ch === close) {
+        depth--;
+        if (depth === 0) {
+          const candidate = stripped.slice(start, i + 1);
+          try { return JSON.parse(candidate); } catch { break; }
+        }
+      }
+    }
+  }
+
+  throw aiParseError(
+    "Couldn't parse JSON from the AI response. The model returned text " +
+    'that isn\'t a recognised JSON array or object.',
+    text,
+  );
+}
+
+interface AiParseError extends Error { rawResponse?: string }
+
+function aiParseError(message: string, raw: string): AiParseError {
+  const err: AiParseError = new Error(message);
+  err.rawResponse = raw;
+  return err;
+}
+
 function getClient(): Anthropic {
   if (!_client) {
     const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
@@ -129,13 +199,7 @@ Guidelines:
 
     const text =
       response.content[0].type === 'text' ? response.content[0].text : '';
-    try {
-      // Handle potential markdown code fences in response
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
-    } catch {
-      return { raw: text };
-    }
+    return extractJson(text) as object;
   }
 
   /**
@@ -175,12 +239,7 @@ Guidelines:
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    try {
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
-    } catch {
-      return { raw: text };
-    }
+    return extractJson(text) as object;
   }
 
   /**
@@ -202,11 +261,7 @@ Guidelines:
 
     const text =
       response.content[0].type === 'text' ? response.content[0].text : '';
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { raw: text };
-    }
+    return extractJson(text) as object;
   }
 
   /**
@@ -299,3 +354,6 @@ Guidelines:
 }
 
 export const aiService: AiService = new AnthropicAiService();
+
+// Internal helper exposed for unit tests. Not part of the public API.
+export const _extractJsonForTests = extractJson;
