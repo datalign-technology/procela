@@ -228,26 +228,35 @@ function MyDashboard() {
         Welcome back, {data.person.name}. Here’s what needs your attention.
       </p>
 
-      {/* Summary KPIs */}
+      {/* Summary KPIs — each tile is a hyperlink to the surface where
+          that count lives. Same affordance as the org Overview strip
+          below (hover lift, muted-but-still-linked at zero, tooltip
+          announces the destination for keyboard / screen-reader). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)' }}>{s.openTasks || 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Open Tasks</div>
-          {s.overdueTasks > 0 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>{s.overdueTasks} overdue</div>}
-        </div>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)' }}>{s.openIssues || 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Open Issues</div>
-          {s.criticalIssues > 0 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>{s.criticalIssues} critical</div>}
-        </div>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{(s.domainsOwned || 0) + (s.domainsSteward || 0)}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>My Domains</div>
-        </div>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{s.upcomingEventsCount || 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Upcoming Events</div>
-        </div>
+        <MyDashboardTile
+          to="/governance-work?tab=tasks"
+          label="Open Tasks"
+          value={s.openTasks || 0}
+          valueColor={s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)'}
+          sub={s.overdueTasks > 0 ? { text: `${s.overdueTasks} overdue`, color: '#dc2626' } : null}
+        />
+        <MyDashboardTile
+          to="/governance-work?tab=issues"
+          label="Open Issues"
+          value={s.openIssues || 0}
+          valueColor={s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)'}
+          sub={s.criticalIssues > 0 ? { text: `${s.criticalIssues} critical`, color: '#dc2626' } : null}
+        />
+        <MyDashboardTile
+          to="/data-domains"
+          label="My Domains"
+          value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
+        />
+        <MyDashboardTile
+          to="/governance-calendar"
+          label="Upcoming Events"
+          value={s.upcomingEventsCount || 0}
+        />
       </div>
 
       {/* Two-column: Attention + Schedule */}
@@ -372,6 +381,45 @@ function MyDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Single tile in the My Dashboard summary strip. Mirrors the
+ *  affordance of StatsOverview's KPI tiles — a Link with hover-lift,
+ *  zero-count muted text, and a tooltip carrying the destination. */
+function MyDashboardTile({ to, label, value, valueColor, sub }: {
+  to: string;
+  label: string;
+  value: number;
+  valueColor?: string;
+  sub?: { text: string; color: string } | null;
+}) {
+  const zero = value === 0;
+  return (
+    <Link
+      to={to}
+      title={zero ? `No ${label.toLowerCase()} — open ${label}` : `Open ${label}`}
+      style={{
+        ...cardStyle, padding: '12px 16px', textAlign: 'center',
+        textDecoration: 'none', display: 'block',
+        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--color-primary)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--color-border)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+        e.currentTarget.style.transform = '';
+      }}
+    >
+      <div style={{ fontSize: 22, fontWeight: 700, color: zero ? 'var(--color-text-muted)' : (valueColor || 'var(--color-text)') }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{label}</div>
+      {sub && <div style={{ fontSize: 10, color: sub.color, marginTop: 2 }}>{sub.text}</div>}
+    </Link>
   );
 }
 

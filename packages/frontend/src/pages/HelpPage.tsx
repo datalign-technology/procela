@@ -180,7 +180,7 @@ export default function HelpPage() {
         <h2 id="help-dashboard" style={h2Style}>3. Dashboard</h2>
         <p style={pStyle}>The dashboard is personalized to your login. You must have a People record with your email to see personalized data.</p>
         <ul style={listStyle}>
-          <li><strong>My Dashboard</strong> &mdash; Open tasks, issues, domains you own/steward, upcoming events</li>
+          <li><strong>My Dashboard</strong> &mdash; Open tasks, issues, domains you own/steward, upcoming events. Each tile is a hyperlink &mdash; <em>Open Tasks</em> jumps to Governance Work (Tasks tab), <em>Open Issues</em> to the Issues tab, <em>My Domains</em> to the Data Domains page, and <em>Upcoming Events</em> to the Governance Calendar. Hover lifts the tile to signal it's interactive; zero-count tiles fade the number but still link through to the destination's empty state.</li>
           <li><strong>Needs My Attention</strong> &mdash; Overdue tasks, critical issues, pending policy reviews</li>
           <li><strong>My Schedule</strong> &mdash; Governance events in the next 14 days</li>
           <li><strong>Overview</strong> &mdash; Organization-wide KPIs (value streams, assets, coverage, health). Each tile is a hyperlink — click <em>Value Streams</em> / <em>Processes</em> to jump into the Process Catalog, <em>Data Assets</em> / <em>Systems</em> to their catalogs, <em>Coverage</em> straight to Data Mapping (where the unmapped-activity and unlinked-asset banners surface), and <em>Avg Health</em> to Data Assets sorted by health ascending so the worst-scoring assets are at the top. Hover lifts the tile to signal it's interactive; zero-count tiles fade the number but still link through to the destination's empty state.</li>
