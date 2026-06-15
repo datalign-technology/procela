@@ -559,6 +559,14 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
   onAssign: (rt: string) => void;
   setConfirmDelete: (id: string) => void;
 }) {
+  // Expand / collapse state. Defaults to all-expanded so first load
+  // matches what users see today; Expand all / Collapse all flips the
+  // whole tree, individual chevrons toggle one row. We store the
+  // *collapsed* set rather than expanded so new roles / categories
+  // added to the catalog later default open without a migration.
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+  const [collapsedRoles, setCollapsedRoles] = useState<Set<string>>(new Set());
+
   const byRole = new Map<string, DamaRoleAssignment[]>();
   for (const r of roles) {
     if (!byRole.has(r.roleType)) byRole.set(r.roleType, []);
@@ -571,6 +579,22 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
   const ordered = Object.keys(ROLE_TYPE_LABELS)
     .filter((rt) => catalogSet.has(rt))
     .filter((rt) => !filterRoleType || rt === filterRoleType);
+
+  const toggleCat = (cat: string) => setCollapsedCats((prev) => {
+    const next = new Set(prev);
+    next.has(cat) ? next.delete(cat) : next.add(cat);
+    return next;
+  });
+  const toggleRole = (rt: string) => setCollapsedRoles((prev) => {
+    const next = new Set(prev);
+    next.has(rt) ? next.delete(rt) : next.add(rt);
+    return next;
+  });
+  const expandAll = () => { setCollapsedCats(new Set()); setCollapsedRoles(new Set()); };
+  const collapseAll = () => {
+    setCollapsedCats(new Set(CATEGORY_ORDER as readonly string[]));
+    setCollapsedRoles(new Set(ordered));
+  };
   // Render a single role as a card. Coloured left border keys it to
   // the role's badge palette; required roles with no holders go red.
   const renderRoleCard = (rt: string) => {
@@ -583,6 +607,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
     const required = REQUIRED_ROLE_TYPES.has(rt);
     const criticalGap = required && !filled;
     const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
+    const roleOpen = !collapsedRoles.has(rt);
     return (
       <div
         key={rt}
@@ -595,6 +620,16 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+          <button
+            type="button"
+            onClick={() => toggleRole(rt)}
+            aria-expanded={roleOpen}
+            aria-label={`${roleOpen ? 'Collapse' : 'Expand'} ${ROLE_TYPE_LABELS[rt] || rt}`}
+            title={roleOpen ? 'Collapse role' : 'Expand role'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-secondary)' }}
+          >
+            <RolesChevron open={roleOpen} />
+          </button>
           <button
             type="button"
             onClick={() => openRoleDrawer(rt)}
@@ -622,7 +657,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
             + Assign
           </button>
         </div>
-        {filled ? (
+        {roleOpen && (filled ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--color-border)' }}>
             {list.map((r) => {
               const isAgent = !!r.agentId;
@@ -651,7 +686,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
           <div style={{ padding: '4px 14px 10px', fontSize: 12, color: criticalGap ? '#7f1d1d' : 'var(--color-text-muted)' }}>
             {criticalGap ? 'This role is required and has no holder — assign someone to close the gap.' : 'No one holds this role yet.'}
           </div>
-        )}
+        ))}
       </div>
     );
   };
@@ -659,25 +694,74 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, scopeName, open
   // Group the ordered role list under Executive / Business /
   // Technical headers so the page reads as a staffing chart, not a
   // flat list. When a single-role filter is active we drop the
-  // headers (one role, no need for a section title).
+  // headers (one role, no need for a section title) and the
+  // expand/collapse controls (one card, no need).
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {!filterRoleType && (
+        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 4, alignItems: 'center', fontSize: 12 }}>
+          <button type="button" onClick={expandAll} style={rolesTextBtn}>Expand all</button>
+          <span style={{ color: 'var(--color-border)' }}>·</span>
+          <button type="button" onClick={collapseAll} style={rolesTextBtn}>Collapse all</button>
+        </div>
+      )}
       {filterRoleType
         ? ordered.map(renderRoleCard)
         : CATEGORY_ORDER.map((cat) => {
             const inCat = ordered.filter((rt) => ROLE_CATEGORIES[rt] === cat);
             if (inCat.length === 0) return null;
+            const catOpen = !collapsedCats.has(cat);
             return (
               <div key={cat}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => toggleCat(cat)}
+                  aria-expanded={catOpen}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'none', border: 'none', padding: '2px 0',
+                    marginBottom: catOpen ? 8 : 0,
+                    cursor: 'pointer',
+                    fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <RolesChevron open={catOpen} />
                   {cat}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {inCat.map(renderRoleCard)}
-                </div>
+                  <span style={{ fontWeight: 500, letterSpacing: 'normal', textTransform: 'none', color: 'var(--color-text-muted)' }}>
+                    ({inCat.length})
+                  </span>
+                </button>
+                {catOpen && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {inCat.map(renderRoleCard)}
+                  </div>
+                )}
               </div>
             );
           })}
     </div>
   );
 }
+
+// ── Small atoms used by the expand/collapse controls ─────────────────────
+
+function RolesChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="12" height="12" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+      aria-hidden="true" focusable="false"
+      style={{ flexShrink: 0, opacity: 0.55, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'none' }}
+    >
+      <path d="M9 5 L15 12 L9 19" />
+    </svg>
+  );
+}
+
+const rolesTextBtn: React.CSSProperties = {
+  background: 'none', border: 'none', padding: '2px 4px',
+  color: 'var(--color-primary)', cursor: 'pointer',
+  fontSize: 12, fontFamily: 'inherit',
+};
