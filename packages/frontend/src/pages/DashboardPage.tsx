@@ -379,13 +379,30 @@ function MyDashboard() {
 // ── Stats Overview — compact KPI strip ──
 
 function StatsOverview({ stats }: { stats: DashboardStats }) {
-  const kpis = [
-    { label: 'Value Streams', value: stats.valueStreams, color: '#0f4f46' },
-    { label: 'Processes', value: stats.processes, color: '#92400e' },
-    { label: 'Data Assets', value: stats.dataAssets, color: '#1e40af' },
-    { label: 'Systems', value: stats.systems, color: '#5b21b6' },
-    { label: 'Coverage', value: `${stats.coverage.percentage}%`, color: stats.coverage.percentage >= 80 ? '#16a34a' : stats.coverage.percentage >= 50 ? '#ca8a04' : '#dc2626' },
-    { label: 'Avg Health', value: `${stats.averageHealth}%`, color: stats.averageHealth >= 80 ? '#16a34a' : stats.averageHealth >= 50 ? '#ca8a04' : '#dc2626' },
+  // Each KPI tile is a hyperlink to the surface where that count lives.
+  // Two derived metrics get more specific deep-links:
+  //   - Coverage → Data Mapping (the page that surfaces unmapped-activity
+  //     and unlinked-asset banners natively).
+  //   - Avg Health → Data Assets sorted by health ascending, so the
+  //     cohort dragging the average down is at the top of the table.
+  // Zero counts still link through, but render with a muted cursor so
+  // users land on the empty-state CTA on the destination page rather
+  // than dead-clicking from a 0 tile.
+  const kpis: Array<{ label: string; value: string | number; color: string; to: string; zero: boolean }> = [
+    { label: 'Value Streams', value: stats.valueStreams,                color: '#0f4f46',
+      to: '/processes', zero: stats.valueStreams === 0 },
+    { label: 'Processes',     value: stats.processes,                   color: '#92400e',
+      to: '/processes', zero: stats.processes === 0 },
+    { label: 'Data Assets',   value: stats.dataAssets,                  color: '#1e40af',
+      to: '/data-assets', zero: stats.dataAssets === 0 },
+    { label: 'Systems',       value: stats.systems,                     color: '#5b21b6',
+      to: '/systems', zero: stats.systems === 0 },
+    { label: 'Coverage',      value: `${stats.coverage.percentage}%`,
+      color: stats.coverage.percentage >= 80 ? '#16a34a' : stats.coverage.percentage >= 50 ? '#ca8a04' : '#dc2626',
+      to: '/mappings', zero: stats.coverage.percentage === 0 },
+    { label: 'Avg Health',    value: `${stats.averageHealth}%`,
+      color: stats.averageHealth >= 80 ? '#16a34a' : stats.averageHealth >= 50 ? '#ca8a04' : '#dc2626',
+      to: '/data-assets?sort=healthScore&dir=asc', zero: stats.averageHealth === 0 },
   ];
   return (
     <div style={{ marginBottom: 24 }}>
@@ -401,10 +418,30 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
       <DomainLensActiveBanner pageKey="dashboard" entityLabel="process counts" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         {kpis.map((k) => (
-          <div key={k.label} style={{ ...cardStyle, padding: '14px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: k.color }}>{k.value}</div>
+          <Link
+            key={k.label}
+            to={k.to}
+            title={k.zero ? `No ${k.label.toLowerCase()} yet — open ${k.label} to add one` : `Open ${k.label}`}
+            style={{
+              ...cardStyle, padding: '14px 16px', textAlign: 'center',
+              textDecoration: 'none', display: 'block',
+              transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-primary)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+              e.currentTarget.style.transform = '';
+            }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 700, color: k.zero ? 'var(--color-text-muted)' : k.color }}>{k.value}</div>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{k.label}</div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
