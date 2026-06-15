@@ -28,6 +28,7 @@ import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
 import AnalyzePage from '@/pages/AnalyzePage';
 import ConnectionsPage from '@/pages/ConnectionsPage';
 import ReportsPage from '@/pages/ReportsPage';
+import ReportBuilderPage from '@/pages/ReportBuilderPage';
 import AuditLogPage from '@/pages/AuditLogPage';
 import BrandingPage from '@/pages/BrandingPage';
 import EnterpriseViewPage from '@/pages/EnterpriseViewPage';
@@ -106,6 +107,8 @@ export default function App() {
         <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
         <Route path="/analysis" element={<AnalysisPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/reports/builder" element={<ReportBuilderPage />} />
+        <Route path="/reports/builder/:id" element={<ReportBuilderPage />} />
         <Route path="/audit-log" element={<AuditLogPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/branding" element={<BrandingPage />} />

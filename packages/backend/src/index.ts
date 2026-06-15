@@ -65,6 +65,7 @@ import businessGlossaryRouter from './routes/business-glossary';
 import operationsManualsRouter from './routes/operations-manuals';
 import skillsRouter from './routes/skills';
 import dataModelRouter from './routes/data-model';
+import reportsRouter from './routes/reports';
 import agentExecutionsRouter from './routes/agent-executions';
 import agentSchedulesRouter from './routes/agent-schedules';
 
@@ -213,6 +214,7 @@ app.use('/api/v1/business-glossary', authenticateToken, businessGlossaryRouter);
 app.use('/api/v1/operations-manuals', authenticateToken, operationsManualsRouter);
 app.use('/api/v1/skills', authenticateToken, skillsRouter);
 app.use('/api/v1/data-model', authenticateToken, dataModelRouter);
+app.use('/api/v1/reports', authenticateToken, reportsRouter);
 app.use('/api/v1/agent-executions', authenticateToken, agentExecutionsRouter);
 app.use('/api/v1/agent-schedules', authenticateToken, agentSchedulesRouter);
 
