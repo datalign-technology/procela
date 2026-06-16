@@ -368,7 +368,7 @@ export default function AgentsPage() {
       {/* Header */}
       <PageHeader
         title="Agents"
-        subtitle="Non-human actors \u2014 AI, service accounts, pipelines, bots \u2014 assigned to organizations like people."
+        subtitle="Non-human actors — AI, service accounts, pipelines, bots — assigned to organizations like people."
         actions={
           <>
             <label style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Organization:</label>
