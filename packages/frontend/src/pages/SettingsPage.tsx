@@ -8,6 +8,8 @@ import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
+import TerminologyToggle from '../components/TerminologyToggle';
+import DensityToggle from '../components/DensityToggle';
 import { useOrgContext } from '../stores/orgContext';
 
 interface AuthConfigData {
@@ -272,6 +274,40 @@ export default function SettingsPage() {
           </button>
         }
       />
+
+      {/* Display preferences — terminology + UI density. Were
+          previously inline controls in the Layout's top bar; moved
+          here so the header reads cleaner and the toggles sit next
+          to their explanatory copy. Live-applied via Zustand
+          stores; no Save needed. */}
+      <div style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Display preferences</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+          How labels and rows render across the app. Both take effect immediately and persist per browser.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 280px', minWidth: 200 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Terminology</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                <strong>Plain</strong> uses business-friendly labels (default — best for non-technical users).
+                <strong> DAMA</strong> uses the formal DAMA-DMBOK vocabulary (Custodian, Steward, etc.).
+              </div>
+            </div>
+            <TerminologyToggle />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 280px', minWidth: 200 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Density</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                <strong>Cozy</strong> keeps generous spacing on rows and panels.
+                <strong> Compact</strong> tightens padding so more data fits without scrolling — useful on big tables.
+              </div>
+            </div>
+            <DensityToggle />
+          </div>
+        </div>
+      </div>
 
       {/* Branding — quick link to the dedicated theming page */}
       <div style={sectionStyle}>

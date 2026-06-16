@@ -22,8 +22,6 @@ import {
   type NavItem,
 } from './navConfig';
 
-import DensityToggle from './DensityToggle';
-import TerminologyToggle from './TerminologyToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
@@ -498,8 +496,6 @@ export default function Layout() {
             </button>
             {/* Notifications bell + dropdown */}
             <NotificationsMenu />
-            <TerminologyToggle />
-            <DensityToggle />
             <div className={styles.userMenu}>
               <div className={styles.userAvatar}>{userInitial}</div>
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
