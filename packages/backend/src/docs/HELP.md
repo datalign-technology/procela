@@ -51,7 +51,7 @@ Settings and Help sit at the bottom of the sidebar.
 
 - Search box (Cmd/Ctrl + K or /) — Universal command palette. Searches processes, data assets, systems, people, domains, and groups in your active org. Results are ranked and link directly to the matching item.
 - Working in … — Organization selector. Scopes every page to the selected org. Divisions are listed nested under their parent company (Tidewater Utilities ▸ Electric / Water), so you can drop into a division-scoped view without leaving the page. Single-tier companies render as a flat list.
-- Display preferences — the Plain / DAMA terminology toggle and the Cozy / Compact density toggle live on the Settings page under Display preferences. Plain English + Cozy are the defaults; both persist per browser and take effect immediately, no Save needed.
+- Display preferences — the Plain / DAMA terminology toggle and the Cozy / Compact density toggle live in the user menu (click your name / avatar in the top-right corner). Per-user, persisted per browser, applied immediately. The Settings page is admin-only and holds org-wide configuration instead.
 
 ## 3. Dashboard
 
@@ -436,7 +436,7 @@ Every value stream, data asset, and system is owned by exactly one org. Only the
 
 ### Plain English vs. DAMA terminology
 
-The Settings page has a Plain / DAMA toggle under Display preferences that flips jargon-heavy labels between business-friendly and canonical DAMA wording. Plain is the default so business users aren't met with unfamiliar terms; data professionals can switch to DAMA mode for the formal vocabulary.
+The user menu (click your name / avatar in the top-right corner) has a Plain / DAMA toggle under Display preferences that flips jargon-heavy labels between business-friendly and canonical DAMA wording. Plain is the default so business users aren't met with unfamiliar terms; data professionals can switch to DAMA mode for the formal vocabulary.
 
 - Custodian (DAMA) ↔ Operator (Plain)
 - Governance Tier (DAMA) ↔ Trust Level (Plain)
@@ -522,7 +522,7 @@ Click any role chip or label anywhere in the app — on Governance Groups, on th
 
 ### How do I switch between plain English and DAMA terminology?
 
-Open Settings → Display preferences and flip the Plain / DAMA toggle (alongside the Cozy / Compact density toggle). Plain is the default; the choice persists in your browser. It flips labels like Custodian / Operator, Governance Tier / Trust Level, and Uncertified / Untrusted across the app.
+Click your name / avatar in the top-right corner of any page to open the user menu, then flip the Plain / DAMA toggle (alongside the Cozy / Compact density toggle). Plain is the default; the choice persists in your browser. It flips labels like Custodian / Operator, Governance Tier / Trust Level, and Uncertified / Untrusted across the app.
 
 ### Why are there two ways to remove someone from a governance group?
 

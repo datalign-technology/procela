@@ -8,8 +8,8 @@ import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
-import TerminologyToggle from '../components/TerminologyToggle';
-import DensityToggle from '../components/DensityToggle';
+import { useAuthStore } from '@/stores/authStore';
+import { Link } from 'react-router-dom';
 import { useOrgContext } from '../stores/orgContext';
 
 interface AuthConfigData {
@@ -46,8 +46,41 @@ function backendToDisplayProvider(backendProvider: string, issuerUrl: string): D
   return 'microsoft';
 }
 
+// Roles allowed to see the Settings page. Settings holds org-wide
+// configuration (auth provider, lifecycle mode, branding, MFA, backup
+// + reset everything) — none of which a non-admin should touch.
+// Per-user concerns (display preferences, sign out) live in the
+// top-right user menu instead.
+const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'ORG_ADMIN']);
+
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = !!user?.role && ADMIN_ROLES.has(user.role);
+  if (!isAdmin) {
+    return (
+      <div style={{ maxWidth: 560, margin: '64px auto', padding: '32px', textAlign: 'center', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Admins only</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+          The Settings page holds organization-wide configuration that
+          only administrators can change. For your personal display
+          preferences (Plain / DAMA, Cozy / Compact), click your name
+          in the top-right corner of any page.
+        </p>
+        <Link
+          to="/"
+          style={{
+            display: 'inline-block', padding: '8px 16px',
+            fontSize: 13, fontWeight: 600,
+            background: 'var(--color-primary)', color: '#fff',
+            borderRadius: 'var(--radius-md)', textDecoration: 'none',
+          }}
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    );
+  }
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   // Org-level lifecycle mode (Simple = 3 statuses, Advanced = 6).
   // The toggle used to live on the Organizations page but it
@@ -274,40 +307,6 @@ export default function SettingsPage() {
           </button>
         }
       />
-
-      {/* Display preferences — terminology + UI density. Were
-          previously inline controls in the Layout's top bar; moved
-          here so the header reads cleaner and the toggles sit next
-          to their explanatory copy. Live-applied via Zustand
-          stores; no Save needed. */}
-      <div style={sectionStyle}>
-        <h2 style={sectionTitleStyle}>Display preferences</h2>
-        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
-          How labels and rows render across the app. Both take effect immediately and persist per browser.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 280px', minWidth: 200 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Terminology</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                <strong>Plain</strong> uses business-friendly labels (default — best for non-technical users).
-                <strong> DAMA</strong> uses the formal DAMA-DMBOK vocabulary (Custodian, Steward, etc.).
-              </div>
-            </div>
-            <TerminologyToggle />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 280px', minWidth: 200 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Density</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                <strong>Cozy</strong> keeps generous spacing on rows and panels.
-                <strong> Compact</strong> tightens padding so more data fits without scrolling — useful on big tables.
-              </div>
-            </div>
-            <DensityToggle />
-          </div>
-        </div>
-      </div>
 
       {/* Branding — quick link to the dedicated theming page */}
       <div style={sectionStyle}>

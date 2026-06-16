@@ -13,6 +13,7 @@ import OnboardingWizard from './OnboardingWizard';
 import CommandPalette from './CommandPalette';
 import MobileNavDrawer from './MobileNavDrawer';
 import NotificationsMenu from './NotificationsMenu';
+import UserMenu from './UserMenu';
 import Sidebar from './Sidebar';
 import {
   navSections,
@@ -27,17 +28,15 @@ import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { usePermissions } from '@/hooks/usePermissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 
 
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey, triggerRefresh } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
-  const { role } = usePermissions();
 
   // Apply the customer's theme (company name, logo, colors) as early as
   // possible. The store also fetches from /login via brandingStore bootstrap;
@@ -266,8 +265,6 @@ export default function Layout() {
       } catch { /* */ }
     }
   };
-
-  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
   // Focused reading mode for the Help guide *and* the Training Guide:
   // when the route is /help or /help/training we strip the sidebar,
@@ -499,30 +496,7 @@ export default function Layout() {
             </button>
             {/* Notifications bell + dropdown */}
             <NotificationsMenu />
-            <div className={styles.userMenu}>
-              <div className={styles.userAvatar}>{userInitial}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-                <span>{user?.name || 'User'}</span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {role.replace('_', ' ')}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              style={{
-                padding: '6px 14px',
-                fontSize: '13px',
-                background: 'transparent',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--color-text-secondary)',
-                cursor: 'pointer',
-              }}
-            >
-              Sign out
-            </button>
+            <UserMenu onSignOut={handleSignOut} />
           </div>
         </header>
         <main id="main-content" className={styles.content}>
