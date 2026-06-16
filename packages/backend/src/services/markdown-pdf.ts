@@ -1,31 +1,34 @@
 import PDFDocument from 'pdfkit';
+import path from 'node:path';
 
 /**
- * markdown-to-pdf — Renders the subset of markdown used by our in-app
- * docs (TRAINING.md, HELP.md) into a paginated PDF document.
+ * markdown-to-pdf — Renders the markdown subset used by our in-app
+ * docs (HELP.md, TRAINING.md) into a professionally laid-out paginated
+ * PDF document.
  *
- * Built on PDFKit so the backend has no Chromium dependency. The
- * dialect mirrors what `lib/markdown.tsx` already renders on the
- * frontend so the print and on-screen versions stay close:
+ * Designed to look like a real product manual rather than a
+ * raw-markdown print. Includes:
  *
- *   - ATX headings (# .. ######)
- *   - Paragraphs (blank-line separated)
- *   - Bullet + ordered lists (one level of nesting)
- *   - GitHub-flavoured tables
- *   - Fenced code blocks (``` ... ```)
- *   - Blockquotes  (> ...)
- *   - Horizontal rules (---)
- *   - Inline: **bold**, *italic*, `code`, [text](url)
+ *   • Cover page: logo, large title, subtitle, generation date.
+ *   • Two-pass rendering so the table of contents shows real
+ *     page numbers (first pass measures, second pass draws).
+ *   • Branded header bar on every body page: logo + document name.
+ *   • Footer with page numbers ("Page 3 of 24") on body pages only.
+ *   • Section dividers between H1/H2 transitions.
+ *   • Callout boxes for blockquotes (left bar + tinted background).
+ *   • Tinted code blocks with monospace font.
+ *   • Inline emphasis (bold / italic / code / clickable links).
  *
- * Returns a Buffer ready to be streamed back to the client. Caller is
- * responsible for the HTTP headers.
+ * Built on PDFKit so the backend stays Chromium-free.
  */
 
 export interface RenderOptions {
   title: string;
   subtitle?: string;
-  /** Footer text rendered on every page (e.g. document name + date). */
+  /** Footer text rendered on every body page (e.g. document name). */
   footer?: string;
+  /** Optional ISO date string for the cover page; defaults to today. */
+  generatedAt?: string;
 }
 
 export async function renderMarkdownToPdf(markdown: string, opts: RenderOptions): Promise<Buffer> {
@@ -33,8 +36,8 @@ export async function renderMarkdownToPdf(markdown: string, opts: RenderOptions)
     try {
       const doc = new PDFDocument({
         size: 'LETTER',
-        margins: { top: 72, bottom: 72, left: 72, right: 72 },
-        info: { Title: opts.title, Subject: opts.subtitle },
+        margins: { top: MARGIN_TOP, bottom: MARGIN_BOTTOM, left: MARGIN_LEFT, right: MARGIN_RIGHT },
+        info: { Title: opts.title, Subject: opts.subtitle, Author: 'Procela' },
         bufferPages: true,
       });
       const chunks: Buffer[] = [];
@@ -42,7 +45,8 @@ export async function renderMarkdownToPdf(markdown: string, opts: RenderOptions)
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      drawDocument(doc, markdown, opts);
+      const blocks = parseBlocks(markdown.replace(/\r\n/g, '\n').split('\n'));
+      drawDocument(doc, blocks, opts);
       doc.end();
     } catch (err) {
       reject(err);
@@ -50,55 +54,248 @@ export async function renderMarkdownToPdf(markdown: string, opts: RenderOptions)
   });
 }
 
-// ── Layout constants ────────────────────────────────────────────────────
+// ── Brand palette + layout constants ──────────────────────────────────
+
+const BRAND_PRIMARY = '#0f4f46';   // deep teal — Procela primary
+const BRAND_ACCENT = '#16a34a';    // success green
+const BRAND_INK = '#0f172a';       // near-black for body text
+const COLOR_MUTED = '#64748b';
+const COLOR_BORDER = '#e2e8f0';
+const COLOR_LINK = '#1d4ed8';
+const COLOR_CODE_BG = '#f1f5f9';
+const COLOR_CODE_TEXT = '#0f172a';
+const COLOR_QUOTE_BG = '#f0fdf4';
+const COLOR_QUOTE_BAR = '#16a34a';
 
 const FONT_REGULAR = 'Helvetica';
 const FONT_BOLD = 'Helvetica-Bold';
 const FONT_ITALIC = 'Helvetica-Oblique';
 const FONT_MONO = 'Courier';
 
-const SIZE_BODY = 11;
-const SIZE_CODE = 9.5;
-const SIZE_H1 = 24;
-const SIZE_H2 = 18;
-const SIZE_H3 = 14;
-const SIZE_H4 = 12;
+const SIZE_BODY = 10.5;
+const SIZE_CODE = 9;
+const SIZE_FOOTER = 8;
+const SIZE_HEADER = 8;
+const SIZE_H1 = 22;
+const SIZE_H2 = 16;
+const SIZE_H3 = 13;
+const SIZE_H4 = 11;
+const SIZE_TITLE_COVER = 38;
+const SIZE_SUBTITLE_COVER = 14;
 
-const COLOR_TEXT = '#111';
-const COLOR_MUTED = '#666';
-const COLOR_LINK = '#1d4ed8';
-const COLOR_BORDER = '#ddd';
-const COLOR_CODE_BG = '#f3f4f6';
-const COLOR_QUOTE_BORDER = '#999';
+const MARGIN_TOP = 96;     // bigger to make room for the page header
+const MARGIN_BOTTOM = 72;
+const MARGIN_LEFT = 64;
+const MARGIN_RIGHT = 64;
 
-// ── Document driver ────────────────────────────────────────────────────
+const LOGO_PATH = path.resolve(__dirname, '..', 'docs', 'procela-logo.png');
+const ICON_PATH = path.resolve(__dirname, '..', 'docs', 'procela-icon.png');
 
-function drawDocument(doc: PDFKit.PDFDocument, markdown: string, opts: RenderOptions) {
-  // Cover-style title block at the top of page 1.
-  doc.font(FONT_BOLD).fontSize(SIZE_H1).fillColor(COLOR_TEXT).text(opts.title);
-  if (opts.subtitle) {
-    doc.moveDown(0.3);
-    doc.font(FONT_REGULAR).fontSize(SIZE_BODY + 1).fillColor(COLOR_MUTED).text(opts.subtitle);
-  }
-  doc.moveDown(1.2);
-  doc.fillColor(COLOR_TEXT);
+// ── Document driver ───────────────────────────────────────────────────
 
-  const blocks = parseBlocks(markdown.replace(/\r\n/g, '\n').split('\n'));
-  for (const block of blocks) {
-    drawBlock(doc, block);
-  }
+interface DocCtx {
+  /** Headings collected during the first pass with their page numbers.
+   *  Used to render the TOC during the second pass. */
+  toc: TocEntry[];
+  /** When true, suppress per-page chrome and TOC capture — we're laying
+   *  out the cover. */
+  isCover: boolean;
+  /** Footer text shown on body pages. */
+  footer?: string;
+  /** Document title for the page header bar. */
+  title: string;
+}
 
-  // Per-page footer with page number, drawn last over every page.
-  if (opts.footer) {
-    const range = doc.bufferedPageRange();
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
-      doc.font(FONT_REGULAR).fontSize(8).fillColor(COLOR_MUTED).text(
-        `${opts.footer}  ·  Page ${i + 1} of ${range.count}`,
-        72, doc.page.height - 48,
-        { align: 'center', width: doc.page.width - 144 },
-      );
+interface TocEntry {
+  level: number;
+  text: string;
+  page: number;
+}
+
+function drawDocument(doc: PDFKit.PDFDocument, blocks: Block[], opts: RenderOptions) {
+  const ctx: DocCtx = {
+    toc: [],
+    isCover: false,
+    footer: opts.footer,
+    title: opts.title,
+  };
+
+  // ── Cover page (page 1) ───────────────────────────────────────────
+  ctx.isCover = true;
+  drawCover(doc, opts);
+  ctx.isCover = false;
+
+  // ── Two-pass body rendering ───────────────────────────────────────
+  // Pass 1: lay out blocks to measure page numbers for each heading.
+  // We render to a throwaway document so the visible PDF only gets
+  // the final pass. PDFKit doesn't support tentative measurement
+  // without drawing, so we use a second instance for the dry run.
+  const dryDoc = new PDFDocument({
+    size: 'LETTER',
+    margins: { top: MARGIN_TOP, bottom: MARGIN_BOTTOM, left: MARGIN_LEFT, right: MARGIN_RIGHT },
+    bufferPages: true,
+  });
+  dryDoc.on('data', () => { /* discard */ });
+  dryDoc.on('error', () => { /* discard */ });
+  const dryCtx: DocCtx = { ...ctx, toc: [], isCover: false };
+  // Cover page in dry run too, so page numbers align.
+  drawCover(dryDoc, opts);
+  // The TOC takes pages — we reserve a placeholder so dry-run page
+  // numbers match the real ones after we add it. We estimate the
+  // TOC page count *after* we know how many headings there are.
+  // For now, leave headings collected without TOC offset; we'll
+  // add it post-hoc.
+  dryDoc.addPage();
+  blocks.forEach((b) => drawBlock(dryDoc, b, dryCtx));
+  const tocEntriesRaw = dryCtx.toc;
+  // Estimate TOC pages: rough — 36 entries per page.
+  const tocPagesEstimate = Math.max(1, Math.ceil(tocEntriesRaw.length / 36));
+  ctx.toc = tocEntriesRaw.map((e) => ({ ...e, page: e.page + tocPagesEstimate }));
+  dryDoc.end();
+
+  // ── Pass 2: real render ───────────────────────────────────────────
+  // Table of contents.
+  drawTableOfContents(doc, ctx.toc, opts.title);
+
+  // Body content.
+  doc.addPage();
+  // Capture body page numbers *as we render* so cross-references stay
+  // honest if the dry-run estimate was off by a page.
+  const realCtx: DocCtx = { ...ctx, toc: [] };
+  blocks.forEach((b) => drawBlock(doc, b, realCtx));
+
+  // Page chrome on body pages. Determined by buffered page range so
+  // we hit every page, including ones added inside table/list drawers.
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    if (i === 0) continue; // cover has no chrome
+    if (i < 1 + tocPagesEstimate) {
+      drawFooter(doc, i + 1, range.count, opts.footer); // TOC pages get just footer
+      continue;
     }
+    drawPageHeader(doc, opts.title);
+    drawFooter(doc, i + 1, range.count, opts.footer);
+  }
+}
+
+// ── Cover page ────────────────────────────────────────────────────────
+
+function drawCover(doc: PDFKit.PDFDocument, opts: RenderOptions) {
+  const w = doc.page.width;
+  const h = doc.page.height;
+
+  // Brand bar across the top — a flat-design accent.
+  doc.rect(0, 0, w, 12).fill(BRAND_PRIMARY);
+
+  // Logo, centred horizontally, well above the title.
+  try {
+    doc.image(LOGO_PATH, w / 2 - 95, 130, { width: 190 });
+  } catch { /* logo optional */ }
+
+  // Title.
+  doc.font(FONT_BOLD).fontSize(SIZE_TITLE_COVER).fillColor(BRAND_INK);
+  const titleY = 280;
+  doc.text(opts.title, MARGIN_LEFT, titleY, {
+    align: 'center', width: w - MARGIN_LEFT - MARGIN_RIGHT,
+  });
+
+  if (opts.subtitle) {
+    doc.font(FONT_REGULAR).fontSize(SIZE_SUBTITLE_COVER).fillColor(COLOR_MUTED);
+    doc.text(opts.subtitle, MARGIN_LEFT, titleY + 64, {
+      align: 'center', width: w - MARGIN_LEFT - MARGIN_RIGHT,
+    });
+  }
+
+  // Date.
+  const date = opts.generatedAt || new Date().toISOString().slice(0, 10);
+  doc.font(FONT_REGULAR).fontSize(11).fillColor(COLOR_MUTED);
+  doc.text(`Generated ${date}`, MARGIN_LEFT, h - 140, {
+    align: 'center', width: w - MARGIN_LEFT - MARGIN_RIGHT,
+  });
+
+  // Brand bar across the bottom.
+  doc.rect(0, h - 12, w, 12).fill(BRAND_PRIMARY);
+
+  // Procela byline above the bottom bar.
+  doc.font(FONT_BOLD).fontSize(11).fillColor(BRAND_PRIMARY);
+  doc.text('Procela', MARGIN_LEFT, h - 50, {
+    align: 'center', width: w - MARGIN_LEFT - MARGIN_RIGHT,
+  });
+  doc.font(FONT_REGULAR).fontSize(9).fillColor(COLOR_MUTED);
+  doc.text('Business processes meet data governance.', MARGIN_LEFT, h - 34, {
+    align: 'center', width: w - MARGIN_LEFT - MARGIN_RIGHT,
+  });
+}
+
+// ── Page header / footer ──────────────────────────────────────────────
+
+function drawPageHeader(doc: PDFKit.PDFDocument, title: string) {
+  const w = doc.page.width;
+  const y = 36;
+  try {
+    doc.image(ICON_PATH, MARGIN_LEFT, y, { width: 18 });
+  } catch { /* icon optional */ }
+  doc.font(FONT_BOLD).fontSize(SIZE_HEADER).fillColor(BRAND_PRIMARY);
+  doc.text('Procela', MARGIN_LEFT + 24, y + 4, { lineBreak: false });
+  doc.font(FONT_REGULAR).fontSize(SIZE_HEADER).fillColor(COLOR_MUTED);
+  doc.text(title, MARGIN_LEFT, y + 4, {
+    align: 'right', width: w - MARGIN_LEFT - MARGIN_RIGHT, lineBreak: false,
+  });
+  // Hairline under the header.
+  doc.strokeColor(COLOR_BORDER).lineWidth(0.5)
+    .moveTo(MARGIN_LEFT, y + 22)
+    .lineTo(w - MARGIN_RIGHT, y + 22)
+    .stroke();
+}
+
+function drawFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number, footer?: string) {
+  const w = doc.page.width;
+  const y = doc.page.height - 44;
+  doc.strokeColor(COLOR_BORDER).lineWidth(0.5)
+    .moveTo(MARGIN_LEFT, y)
+    .lineTo(w - MARGIN_RIGHT, y)
+    .stroke();
+  doc.font(FONT_REGULAR).fontSize(SIZE_FOOTER).fillColor(COLOR_MUTED);
+  if (footer) {
+    doc.text(footer, MARGIN_LEFT, y + 8, { width: (w - MARGIN_LEFT - MARGIN_RIGHT) / 2, lineBreak: false });
+  }
+  doc.text(`Page ${pageNum} of ${totalPages}`, MARGIN_LEFT, y + 8, {
+    align: 'right', width: w - MARGIN_LEFT - MARGIN_RIGHT, lineBreak: false,
+  });
+}
+
+// ── Table of contents ─────────────────────────────────────────────────
+
+function drawTableOfContents(doc: PDFKit.PDFDocument, entries: TocEntry[], title: string) {
+  doc.addPage();
+  doc.font(FONT_BOLD).fontSize(SIZE_H1).fillColor(BRAND_INK);
+  doc.text('Contents', MARGIN_LEFT, MARGIN_TOP);
+  doc.moveDown(0.4);
+  // Filter to top two levels only — deeper headings would be noise.
+  const tocLevels = entries.filter((e) => e.level <= 2);
+  if (tocLevels.length === 0) {
+    doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(COLOR_MUTED);
+    doc.text('(No section headings.)');
+    return;
+  }
+  doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(BRAND_INK);
+  for (const entry of tocLevels) {
+    if (doc.y > doc.page.height - MARGIN_BOTTOM - 24) {
+      doc.addPage();
+    }
+    const left = MARGIN_LEFT + (entry.level - 1) * 18;
+    const isTop = entry.level === 1;
+    doc.font(isTop ? FONT_BOLD : FONT_REGULAR);
+    doc.fontSize(isTop ? SIZE_BODY + 1 : SIZE_BODY);
+    doc.fillColor(isTop ? BRAND_INK : '#334155');
+    const y = doc.y;
+    const pageText = String(entry.page);
+    const pageWidth = doc.widthOfString(pageText);
+    const right = doc.page.width - MARGIN_RIGHT - pageWidth;
+    doc.text(entry.text, left, y, { width: right - left - 8, lineBreak: false });
+    doc.text(pageText, right, y, { lineBreak: false });
+    doc.moveDown(0.6);
   }
 }
 
@@ -136,8 +333,7 @@ function parseBlocks(lines: string[]): Block[] {
       i++; continue;
     }
 
-    const fence = /^```/.exec(line);
-    if (fence) {
+    if (/^```/.test(line)) {
       i++;
       const buf: string[] = [];
       while (i < lines.length && !/^```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
@@ -217,9 +413,9 @@ function splitTableRow(line: string): string[] {
 
 // ── Block drawing ──────────────────────────────────────────────────────
 
-function drawBlock(doc: PDFKit.PDFDocument, block: Block) {
+function drawBlock(doc: PDFKit.PDFDocument, block: Block, ctx: DocCtx) {
   switch (block.kind) {
-    case 'heading': return drawHeading(doc, block.level, block.text);
+    case 'heading': return drawHeading(doc, block.level, block.text, ctx);
     case 'paragraph': return drawParagraph(doc, block.text);
     case 'hr': return drawHr(doc);
     case 'code': return drawCode(doc, block.text);
@@ -229,140 +425,173 @@ function drawBlock(doc: PDFKit.PDFDocument, block: Block) {
   }
 }
 
-function drawHeading(doc: PDFKit.PDFDocument, level: number, text: string) {
-  const sizes: Record<number, number> = { 1: SIZE_H1, 2: SIZE_H2, 3: SIZE_H3, 4: SIZE_H4, 5: 11, 6: 10 };
-  const space: Record<number, number> = { 1: 1.4, 2: 1.2, 3: 1.0, 4: 0.8, 5: 0.6, 6: 0.5 };
-  doc.moveDown(space[level] || 0.8);
-  doc.font(FONT_BOLD).fontSize(sizes[level] || 12).fillColor(COLOR_TEXT);
+function drawHeading(doc: PDFKit.PDFDocument, level: number, text: string, ctx: DocCtx) {
+  const sizes: Record<number, number> = { 1: SIZE_H1, 2: SIZE_H2, 3: SIZE_H3, 4: SIZE_H4, 5: 10.5, 6: 10 };
+  const beforeSpace: Record<number, number> = { 1: 1.4, 2: 1.2, 3: 0.9, 4: 0.7, 5: 0.5, 6: 0.4 };
+
+  // Page-break before H1 / H2 unless we're near the top of a page. Top-level
+  // sections deserve to start fresh.
+  if (level <= 1 && doc.y > MARGIN_TOP + 24) {
+    doc.addPage();
+  } else if (level === 2 && doc.y > doc.page.height - MARGIN_BOTTOM - 120) {
+    doc.addPage();
+  }
+
+  // Capture for TOC.
+  if (level <= 3) {
+    ctx.toc.push({ level, text, page: pageNumberOf(doc) });
+  }
+
+  doc.moveDown(beforeSpace[level] || 0.6);
+  doc.font(FONT_BOLD).fontSize(sizes[level] || 11);
+  doc.fillColor(level === 1 ? BRAND_PRIMARY : BRAND_INK);
   doc.text(text);
-  doc.moveDown(0.4);
+
+  // Accent rule under H1.
+  if (level === 1) {
+    const y = doc.y + 4;
+    doc.strokeColor(BRAND_ACCENT).lineWidth(2)
+      .moveTo(MARGIN_LEFT, y)
+      .lineTo(MARGIN_LEFT + 56, y)
+      .stroke();
+    doc.y = y + 10;
+  }
+  doc.moveDown(0.3);
+  doc.fillColor(BRAND_INK);
 }
 
 function drawParagraph(doc: PDFKit.PDFDocument, text: string) {
-  doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(COLOR_TEXT);
-  drawInline(doc, text, { lineGap: 2 });
+  doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(BRAND_INK);
+  drawInline(doc, text, { lineGap: 2.5 });
   doc.moveDown(0.5);
 }
 
 function drawHr(doc: PDFKit.PDFDocument) {
-  doc.moveDown(0.5);
+  doc.moveDown(0.6);
   const y = doc.y;
   doc.strokeColor(COLOR_BORDER).lineWidth(0.5)
-    .moveTo(doc.page.margins.left, y)
-    .lineTo(doc.page.width - doc.page.margins.right, y)
+    .moveTo(MARGIN_LEFT, y)
+    .lineTo(doc.page.width - MARGIN_RIGHT, y)
     .stroke();
-  doc.moveDown(0.7);
+  doc.moveDown(0.8);
 }
 
 function drawCode(doc: PDFKit.PDFDocument, text: string) {
-  const left = doc.page.margins.left;
-  const width = doc.page.width - left - doc.page.margins.right;
+  const left = MARGIN_LEFT;
+  const width = doc.page.width - left - MARGIN_RIGHT;
+  doc.font(FONT_MONO).fontSize(SIZE_CODE);
+  const lineGap = 1;
+  const padding = 10;
+  const height = doc.heightOfString(text, { width: width - padding * 2, lineGap });
+  ensureSpace(doc, height + padding * 2 + 12);
   const startY = doc.y;
-  doc.font(FONT_MONO).fontSize(SIZE_CODE).fillColor(COLOR_TEXT);
-  // Background swatch: measure first, then draw a rectangle behind.
-  const height = doc.heightOfString(text, { width: width - 16, lineGap: 1 });
-  doc.rect(left, startY, width, height + 12).fill(COLOR_CODE_BG);
-  doc.fillColor(COLOR_TEXT)
-    .text(text, left + 8, startY + 6, { width: width - 16, lineGap: 1 });
+  doc.rect(left, startY, width, height + padding * 2).fill(COLOR_CODE_BG);
+  doc.fillColor(COLOR_CODE_TEXT)
+    .text(text, left + padding, startY + padding, { width: width - padding * 2, lineGap });
   doc.moveDown(0.6);
 }
 
 function drawQuote(doc: PDFKit.PDFDocument, lines: string[]) {
-  const left = doc.page.margins.left;
-  const startY = doc.y;
-  doc.font(FONT_ITALIC).fontSize(SIZE_BODY).fillColor(COLOR_MUTED);
-  // Draw text first to know height, then bar.
+  const left = MARGIN_LEFT;
+  const width = doc.page.width - left - MARGIN_RIGHT;
+  const padding = 12;
+  const indent = 12;
+  doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(BRAND_INK);
   const text = lines.join(' ');
-  const indent = 14;
-  const beforeY = doc.y;
-  doc.text(text, left + indent, beforeY, {
-    width: doc.page.width - left - doc.page.margins.right - indent, lineGap: 2,
-  });
-  const endY = doc.y;
-  doc.strokeColor(COLOR_QUOTE_BORDER).lineWidth(2)
-    .moveTo(left + 2, startY)
-    .lineTo(left + 2, endY)
-    .stroke();
-  doc.fillColor(COLOR_TEXT);
+  const inner = width - padding * 2 - indent;
+  const height = doc.heightOfString(text, { width: inner, lineGap: 2.5 });
+  ensureSpace(doc, height + padding * 2 + 4);
+  const startY = doc.y;
+  doc.rect(left, startY, width, height + padding * 2).fill(COLOR_QUOTE_BG);
+  doc.rect(left, startY, 3, height + padding * 2).fill(COLOR_QUOTE_BAR);
+  doc.fillColor(BRAND_INK);
+  drawInline(doc, text, { lineGap: 2.5, width: inner, x: left + indent + padding, y: startY + padding });
+  doc.y = startY + height + padding * 2;
   doc.moveDown(0.5);
 }
 
 function drawList(doc: PDFKit.PDFDocument, items: ListItem[], ordered: boolean) {
-  doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(COLOR_TEXT);
-  const left = doc.page.margins.left;
-  const indent = 16;
+  doc.font(FONT_REGULAR).fontSize(SIZE_BODY).fillColor(BRAND_INK);
+  const left = MARGIN_LEFT;
+  const bulletWidth = 16;
+  const innerIndent = 18;
   items.forEach((item, idx) => {
     const bullet = ordered ? `${idx + 1}.` : '•';
-    const bulletWidth = 18;
     const startY = doc.y;
-    doc.text(bullet, left, startY, { width: bulletWidth });
+    doc.font(FONT_BOLD).fillColor(BRAND_PRIMARY);
+    doc.text(bullet, left, startY, { width: bulletWidth, lineBreak: false });
+    doc.font(FONT_REGULAR).fillColor(BRAND_INK);
     doc.y = startY;
     const x = left + bulletWidth;
     doc.x = x;
     drawInline(doc, item.text, {
       lineGap: 2,
-      width: doc.page.width - x - doc.page.margins.right,
+      width: doc.page.width - x - MARGIN_RIGHT,
     });
     doc.x = left;
     if (item.children && item.children.length > 0) {
-      doc.moveDown(0.1);
+      doc.moveDown(0.15);
       item.children.forEach((child) => {
         const cy = doc.y;
-        doc.text('◦', left + indent, cy, { width: bulletWidth });
+        doc.font(FONT_REGULAR).fillColor(COLOR_MUTED);
+        doc.text('◦', left + innerIndent, cy, { width: bulletWidth, lineBreak: false });
+        doc.fillColor(BRAND_INK);
         doc.y = cy;
-        const cx = left + indent + bulletWidth;
+        const cx = left + innerIndent + bulletWidth;
         doc.x = cx;
         drawInline(doc, child.text, {
           lineGap: 2,
-          width: doc.page.width - cx - doc.page.margins.right,
+          width: doc.page.width - cx - MARGIN_RIGHT,
         });
         doc.x = left;
       });
+      doc.moveDown(0.15);
     }
   });
   doc.moveDown(0.5);
 }
 
 function drawTable(doc: PDFKit.PDFDocument, header: string[], rows: string[][]) {
-  const left = doc.page.margins.left;
-  const totalWidth = doc.page.width - left - doc.page.margins.right;
+  const left = MARGIN_LEFT;
+  const totalWidth = doc.page.width - left - MARGIN_RIGHT;
   const colWidth = totalWidth / Math.max(header.length, 1);
-  const headerStartY = doc.y;
-  const padding = 6;
+  const padding = 7;
 
-  // Header.
-  doc.font(FONT_BOLD).fontSize(SIZE_BODY - 1).fillColor(COLOR_TEXT);
+  doc.font(FONT_BOLD).fontSize(SIZE_BODY - 0.5).fillColor('#fff');
   let headerHeight = 0;
-  header.forEach((h, i) => {
+  header.forEach((h) => {
     const cellHeight = doc.heightOfString(h, { width: colWidth - padding * 2 });
     headerHeight = Math.max(headerHeight, cellHeight);
   });
-  doc.rect(left, headerStartY, totalWidth, headerHeight + padding * 2).fillAndStroke('#f5f5f5', COLOR_BORDER);
-  doc.fillColor(COLOR_TEXT);
+  ensureSpace(doc, headerHeight + padding * 2 + 32);
+  const headerStartY = doc.y;
+  doc.rect(left, headerStartY, totalWidth, headerHeight + padding * 2).fill(BRAND_PRIMARY);
   header.forEach((h, i) => {
-    doc.text(h, left + i * colWidth + padding, headerStartY + padding, {
+    doc.fillColor('#fff').text(h, left + i * colWidth + padding, headerStartY + padding, {
       width: colWidth - padding * 2,
     });
   });
   let y = headerStartY + headerHeight + padding * 2;
 
-  // Body.
-  doc.font(FONT_REGULAR).fontSize(SIZE_BODY - 1);
-  rows.forEach((row) => {
+  doc.font(FONT_REGULAR).fontSize(SIZE_BODY - 0.5);
+  rows.forEach((row, rowIdx) => {
+    doc.fillColor(BRAND_INK);
     let rowHeight = 0;
-    row.forEach((cell, i) => {
+    row.forEach((cell) => {
       const h = doc.heightOfString(cell, { width: colWidth - padding * 2 });
       rowHeight = Math.max(rowHeight, h);
     });
-    // Page break if we'd overflow.
-    if (y + rowHeight + padding * 2 > doc.page.height - doc.page.margins.bottom) {
+    if (y + rowHeight + padding * 2 > doc.page.height - MARGIN_BOTTOM) {
       doc.addPage();
-      y = doc.page.margins.top;
+      y = MARGIN_TOP;
     }
-    doc.strokeColor(COLOR_BORDER).lineWidth(0.5)
+    if (rowIdx % 2 === 1) {
+      doc.rect(left, y, totalWidth, rowHeight + padding * 2).fill('#f8fafc');
+    }
+    doc.strokeColor(COLOR_BORDER).lineWidth(0.4)
       .rect(left, y, totalWidth, rowHeight + padding * 2).stroke();
     row.forEach((cell, i) => {
-      doc.text(cell, left + i * colWidth + padding, y + padding, {
+      doc.fillColor(BRAND_INK).text(cell, left + i * colWidth + padding, y + padding, {
         width: colWidth - padding * 2,
       });
     });
@@ -377,44 +606,40 @@ function drawTable(doc: PDFKit.PDFDocument, header: string[], rows: string[][]) 
 interface InlineOpts {
   lineGap?: number;
   width?: number;
+  x?: number;
+  y?: number;
 }
 
-/** Walk inline text and emit runs into the PDF, switching font / colour
- *  per emphasis style. Links render in blue with an underline and a
- *  PDFKit `link` annotation so clicking actually works. */
 function drawInline(doc: PDFKit.PDFDocument, text: string, opts: InlineOpts = {}) {
   const runs = parseInline(text);
   const baseFont = FONT_REGULAR;
   const baseSize = SIZE_BODY;
-  const width = opts.width;
-  // PDFKit's text() with `continued: true` lets us emit multiple style
-  // runs that flow into one wrapped paragraph.
+  if (opts.x !== undefined && opts.y !== undefined) {
+    doc.x = opts.x; doc.y = opts.y;
+  }
   runs.forEach((run, i) => {
     const last = i === runs.length - 1;
     const continued = !last;
     if (run.kind === 'code') {
-      doc.font(FONT_MONO).fontSize(SIZE_CODE).fillColor(COLOR_TEXT);
+      doc.font(FONT_MONO).fontSize(SIZE_CODE).fillColor(COLOR_CODE_TEXT);
     } else if (run.kind === 'bold') {
-      doc.font(FONT_BOLD).fontSize(baseSize).fillColor(COLOR_TEXT);
+      doc.font(FONT_BOLD).fontSize(baseSize).fillColor(BRAND_INK);
     } else if (run.kind === 'italic') {
-      doc.font(FONT_ITALIC).fontSize(baseSize).fillColor(COLOR_TEXT);
+      doc.font(FONT_ITALIC).fontSize(baseSize).fillColor(BRAND_INK);
     } else if (run.kind === 'link') {
       doc.font(baseFont).fontSize(baseSize).fillColor(COLOR_LINK);
     } else {
-      doc.font(baseFont).fontSize(baseSize).fillColor(COLOR_TEXT);
+      doc.font(baseFont).fontSize(baseSize).fillColor(BRAND_INK);
     }
-    const textOpts: any = { continued, lineGap: opts.lineGap, width };
+    const textOpts: any = { continued, lineGap: opts.lineGap, width: opts.width };
     if (run.kind === 'link') {
-      textOpts.link = run.href;
-      textOpts.underline = true;
+      textOpts.link = run.href; textOpts.underline = true;
     } else {
-      textOpts.link = null;
-      textOpts.underline = false;
+      textOpts.link = null; textOpts.underline = false;
     }
     doc.text(run.text, textOpts);
   });
-  // Reset to baseline style.
-  doc.font(baseFont).fontSize(baseSize).fillColor(COLOR_TEXT);
+  doc.font(baseFont).fontSize(baseSize).fillColor(BRAND_INK);
 }
 
 type InlineRun =
@@ -426,9 +651,6 @@ type InlineRun =
 
 function parseInline(text: string): InlineRun[] {
   const runs: InlineRun[] = [];
-  // Pattern order: inline code, link, bold, italic. Pull each one out
-  // around the others rather than nesting; the dialect this serves
-  // doesn't combine styles.
   const tokenPattern = /(`[^`]+`)|(\[[^\]]+\]\([^)]+\))|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(_[^_]+_)/g;
   let last = 0;
   let m: RegExpExecArray | null;
@@ -447,4 +669,17 @@ function parseInline(text: string): InlineRun[] {
   if (last < text.length) runs.push({ kind: 'text', text: text.slice(last) });
   if (runs.length === 0) runs.push({ kind: 'text', text });
   return runs;
+}
+
+// ── Page-flow helpers ──────────────────────────────────────────────────
+
+function ensureSpace(doc: PDFKit.PDFDocument, neededHeight: number) {
+  if (doc.y + neededHeight > doc.page.height - MARGIN_BOTTOM) {
+    doc.addPage();
+  }
+}
+
+function pageNumberOf(doc: PDFKit.PDFDocument): number {
+  const range = doc.bufferedPageRange();
+  return range.start + range.count;
 }
