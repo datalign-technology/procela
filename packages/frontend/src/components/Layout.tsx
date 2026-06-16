@@ -271,14 +271,17 @@ export default function Layout() {
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
-  // Focused reading mode for the Help guide: when the route is
-  // /help we strip the sidebar, header, chat panel and every other
-  // bit of app chrome so the user gets a clean, single-purpose
-  // reading view. Only a thin top bar remains, with the Procela
-  // logo and a Close button. Close prefers history.back() so the
-  // user returns to wherever they came from, but falls back to "/"
-  // when help was opened cold from a deep link.
-  if (location.pathname === '/help') {
+  // Focused reading mode for the Help guide *and* the Training Guide:
+  // when the route is /help or /help/training we strip the sidebar,
+  // header, chat panel and every other bit of app chrome so the user
+  // gets a clean, single-purpose reading view. Only a thin top bar
+  // remains, with the Procela logo, a context label, and a Close
+  // button. Close prefers window.close() (these pages are opened in
+  // their own popup), then history.back(), then falls back to "/"
+  // for deep links.
+  const isReadingMode = location.pathname === '/help' || location.pathname === '/help/training';
+  const readingModeLabel = location.pathname === '/help/training' ? 'Training Guide' : 'Help Guide';
+  if (isReadingMode) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
         <header style={{
@@ -293,7 +296,7 @@ export default function Layout() {
               alt={branding.companyName || 'Procela'}
               style={{ height: 32, width: 'auto' }}
             />
-            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Help Guide</span>
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{readingModeLabel}</span>
           </div>
           <button
             type="button"
@@ -321,7 +324,7 @@ export default function Layout() {
               border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
-            title="Close the help guide window"
+            title={`Close the ${readingModeLabel.toLowerCase()} window`}
           >
             × Close
           </button>

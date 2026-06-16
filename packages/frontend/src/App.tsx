@@ -52,10 +52,6 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/oidc-complete" element={<OidcCompletePage />} />
-      {/* /help/training is a chrome-free reading view served outside
-          the Layout wrapper. It's opened via target="_blank" from the
-          Help page so the in-app session stays put. */}
-      <Route path="/help/training" element={<HelpTrainingPage />} />
       <Route element={<Layout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/setup" element={<SetupHubPage />} />
@@ -118,6 +114,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/branding" element={<BrandingPage />} />
         <Route path="/help" element={<HelpPage />} />
+        <Route path="/help/training" element={<HelpTrainingPage />} />
       </Route>
     </Routes>
   );

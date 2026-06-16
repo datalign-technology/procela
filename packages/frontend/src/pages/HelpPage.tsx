@@ -1,5 +1,6 @@
 import PageHeader from '../components/PageHeader';
 import Page from '../components/Page';
+import { openTrainingWindow } from '../components/navConfig';
 
 const sectionStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
@@ -79,20 +80,19 @@ export default function HelpPage() {
         title="Help Guide"
         actions={
           <div style={{ display: 'inline-flex', gap: 8 }}>
-            <a
-              href="/help/training"
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={openTrainingWindow}
               style={{
                 padding: '8px 16px', background: 'var(--color-primary)',
-                color: '#fff', textDecoration: 'none',
+                color: '#fff', border: 'none',
                 borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600,
-                flexShrink: 0,
+                cursor: 'pointer', flexShrink: 0,
               }}
               title="Opens in a new window — 90-minute walkthrough using the Tidewater Utilities fixture data"
             >
               Open Training Guide ↗
-            </a>
+            </button>
             <button
               onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
               style={{

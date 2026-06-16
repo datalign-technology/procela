@@ -45,6 +45,13 @@ export function openHelpWindow() {
   window.open('/help', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
+// Opens the Training Guide in its own popup window, matching the Help
+// guide pattern exactly — same dimensions, same chrome-stripped reading
+// view, separate named target so the two windows can coexist.
+export function openTrainingWindow() {
+  window.open('/help/training', 'procela-training', 'popup,width=1100,height=900,noopener,noreferrer');
+}
+
 // Plain-noun buckets so users can find things by what they ARE, not
 // by which DAMA phase they belong to. The Organizations section is
 // the "who" of the platform — the company structure plus the humans
