@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import Page from '../components/Page';
 
@@ -80,18 +79,20 @@ export default function HelpPage() {
         title="Help Guide"
         actions={
           <div style={{ display: 'inline-flex', gap: 8 }}>
-            <Link
-              to="/help/training"
+            <a
+              href="/help/training"
+              target="_blank"
+              rel="noreferrer"
               style={{
                 padding: '8px 16px', background: 'var(--color-primary)',
                 color: '#fff', textDecoration: 'none',
                 borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600,
                 flexShrink: 0,
               }}
-              title="90-minute walkthrough using the Tidewater Utilities fixture data"
+              title="Opens in a new window — 90-minute walkthrough using the Tidewater Utilities fixture data"
             >
-              Open Training Guide →
-            </Link>
+              Open Training Guide ↗
+            </a>
             <button
               onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
               style={{
