@@ -37,19 +37,20 @@ export type NavSection = {
   adminOnly?: boolean;
 };
 
-// Opens the Help guide in a separate window. Shared by the top-bar
-// Help button and the sidebar Help item so both behave identically.
-// The named target means repeated clicks focus the same window
+// Opens the Help guide PDF in a separate window. The browser's native
+// PDF viewer renders the file directly, so users get a real document
+// (with bookmarks, scroll, search, save, print) rather than an HTML
+// reading view. The named target focuses an already-open window
 // instead of spawning duplicates.
 export function openHelpWindow() {
-  window.open('/help', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
+  window.open('/api/v1/docs/help.pdf', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
-// Opens the Training Guide in its own popup window, matching the Help
-// guide pattern exactly — same dimensions, same chrome-stripped reading
-// view, separate named target so the two windows can coexist.
+// Same pattern for the Training Guide — opens the generated PDF
+// directly in the browser's PDF viewer. Distinct named target so the
+// two windows can coexist without stealing focus from each other.
 export function openTrainingWindow() {
-  window.open('/help/training', 'procela-training', 'popup,width=1100,height=900,noopener,noreferrer');
+  window.open('/api/v1/docs/training.pdf', 'procela-training', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
 // Plain-noun buckets so users can find things by what they ARE, not
