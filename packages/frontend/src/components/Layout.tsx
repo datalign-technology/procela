@@ -347,32 +347,9 @@ export default function Layout() {
       <div className={styles.main}>
         <header className={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
-            {/* Command palette trigger — full search lives in the Cmd-K modal. */}
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 10px', borderRadius: 'var(--radius-md)',
-                background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                cursor: 'pointer', color: 'var(--color-text-muted)',
-                fontSize: 13, width: 'min(280px, 40vw)', textAlign: 'left',
-              }}
-              title="Search (press / or Ctrl+K)"
-            >
-              <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Search anything...
-              </span>
-              <span style={{
-                display: 'inline-block', padding: '1px 5px', fontSize: 10,
-                fontFamily: 'var(--font-mono, monospace)',
-                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                borderRadius: 3,
-              }}>
-                {navigator.platform.toUpperCase().includes('MAC') ? '⌘K' : 'Ctrl+K'}
-              </span>
-            </button>
+            {/* Organization picker — placed FIRST so the active-scope
+                control sits at the leading edge of the header, the
+                same position users instinctively check for context. */}
             {(() => {
               if (orgOptions.length === 0) return (
                 <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>No organization defined</span>
@@ -450,6 +427,32 @@ export default function Layout() {
                 </div>
               );
             })()}
+            {/* Command palette trigger — full search lives in the Cmd-K modal. */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 'var(--radius-md)',
+                background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                cursor: 'pointer', color: 'var(--color-text-muted)',
+                fontSize: 13, width: 'min(280px, 40vw)', textAlign: 'left',
+              }}
+              title="Search (press / or Ctrl+K)"
+            >
+              <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Search anything...
+              </span>
+              <span style={{
+                display: 'inline-block', padding: '1px 5px', fontSize: 10,
+                fontFamily: 'var(--font-mono, monospace)',
+                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                borderRadius: 3,
+              }}>
+                {navigator.platform.toUpperCase().includes('MAC') ? '⌘K' : 'Ctrl+K'}
+              </span>
+            </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {/* Ask AI — surfaces the ChatPanel from the top bar. The
