@@ -40,6 +40,7 @@ subsidiaries, sized to exercise most of Procela's entity model:
 | `people-regulatory.csv` | NERC CIP, EPA SDWA, rate filings. | Assign to **Regulatory Affairs**. |
 | `people-safety.csv` | Safety, environmental, emergency prep. | Assign to **Safety & Environmental**. |
 | `agents.csv` | AI models, pipelines, bots, service accounts — the kind an analytics utility runs. | Assign to **Tidewater Utilities** (or a more specific org if you prefer). |
+| `dbt-manifest.json` | dbt manifest fixture for a fictional `tidewater_analytics` project. Exercises the Data Lineage **Import dbt manifest** feature — 16 sources (SCADA, CIS, AMI, GIS, LIMS, hydraulic model, etc.), 21 models (staging → intermediate → marts for both electric and water), 3 reference seeds, 1 snapshot, and 8 dbt tests (`not_null`, `unique`, `accepted_values`, `relationships`) so the importer creates Data Quality rules across all four dimensions. | Drop on **Insights → Data Lineage** → *Import dbt manifest*. |
 
 ## Recommended import order
 
