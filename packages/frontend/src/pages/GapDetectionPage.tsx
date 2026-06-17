@@ -1,5 +1,6 @@
 import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
@@ -245,12 +246,15 @@ export default function GapDetectionPage() {
         subtitle="Identifies gaps in process coverage, data governance, ownership, and data quality across the organization."
       />
 
-      {/* Summary cards */}
+      {/* Summary cards — clickable. Scroll to the first non-zero
+          section of the matching severity so the user lands on the
+          actionable thing instead of just seeing a count. Total Gaps
+          scrolls to whatever the first non-zero section is. */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        <SummaryCard label="Total Gaps" count={summary.totalGaps} color="#64748b" />
-        <SummaryCard label="Critical" count={criticalCount} color="#dc2626" />
-        <SummaryCard label="Warning" count={warningCount} color="#d97706" />
-        <SummaryCard label="Informational" count={infoCount} color="#2563eb" />
+        <SummaryCard label="Total Gaps" count={summary.totalGaps} color="#64748b" onClick={() => scrollToFirstGap(data, null)} />
+        <SummaryCard label="Critical" count={criticalCount} color="#dc2626" onClick={() => scrollToFirstGap(data, 'critical')} />
+        <SummaryCard label="Warning" count={warningCount} color="#d97706" onClick={() => scrollToFirstGap(data, 'warning')} />
+        <SummaryCard label="Informational" count={infoCount} color="#2563eb" onClick={() => scrollToFirstGap(data, 'info')} />
       </div>
 
       {summary.totalGaps === 0 && criticalCount === 0 && warningCount === 0 && infoCount === 0 ? (
@@ -272,11 +276,16 @@ export default function GapDetectionPage() {
             const sev = SEVERITY_CONFIG[section.severity];
             const isOpen = expandedSections.has(section.key);
             return (
-              <div key={section.key} style={{
-                background: 'var(--color-surface)', border: `1px solid ${count > 0 ? sev.border : 'var(--color-border)'}`,
-                borderRadius: 'var(--radius-md)', overflow: 'hidden',
-                borderLeft: `4px solid ${count > 0 ? sev.badge : '#e2e8f0'}`,
-              }}>
+              <div
+                key={section.key}
+                id={sectionAnchorId(section.key)}
+                style={{
+                  background: 'var(--color-surface)', border: `1px solid ${count > 0 ? sev.border : 'var(--color-border)'}`,
+                  borderRadius: 'var(--radius-md)', overflow: 'hidden',
+                  borderLeft: `4px solid ${count > 0 ? sev.badge : '#e2e8f0'}`,
+                  scrollMarginTop: 80,
+                }}
+              >
                 {/* Section header */}
                 <div
                   onClick={() => count > 0 && toggleSection(section.key)}
@@ -329,17 +338,63 @@ export default function GapDetectionPage() {
 
 // ── Summary card ──
 
-function SummaryCard({ label, count, color }: { label: string; count: number; color: string }) {
+function SummaryCard({ label, count, color, onClick }: {
+  label: string; count: number; color: string;
+  onClick?: () => void;
+}) {
+  const interactive = !!onClick && count > 0;
   return (
-    <div style={{
-      flex: 1, minWidth: 120, padding: '12px 16px', borderRadius: 'var(--radius-md)',
-      background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-      borderLeft: `4px solid ${color}`,
-    }}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!interactive}
+      title={interactive ? `Jump to first ${label.toLowerCase()} section` : undefined}
+      style={{
+        flex: 1, minWidth: 120, padding: '12px 16px', borderRadius: 'var(--radius-md)',
+        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+        borderLeft: `4px solid ${color}`,
+        textAlign: 'left', font: 'inherit',
+        cursor: interactive ? 'pointer' : 'default',
+        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+      }}
+      onMouseEnter={(e) => {
+        if (!interactive) return;
+        e.currentTarget.style.borderColor = 'var(--color-primary)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        if (!interactive) return;
+        e.currentTarget.style.borderColor = 'var(--color-border)';
+        e.currentTarget.style.boxShadow = '';
+        e.currentTarget.style.transform = '';
+      }}
+    >
       <div style={{ fontSize: 22, fontWeight: 700, color: count > 0 ? color : '#16a34a' }}>{count}</div>
       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 500 }}>{label}</div>
-    </div>
+    </button>
   );
+}
+
+// Stable DOM id per gap section so SummaryCard clicks can scrollIntoView.
+function sectionAnchorId(key: keyof GapData): string {
+  return `gap-section-${String(key)}`;
+}
+
+// Scroll the page to the first non-zero gap section, optionally filtered
+// to a severity. Falls back silently if nothing matches (the summary
+// cards disable themselves when their count is zero, so this is a
+// belt-and-braces no-op).
+function scrollToFirstGap(data: GapData, severity: 'critical' | 'warning' | 'info' | null) {
+  const candidate = GAP_SECTIONS.find((s) => {
+    const items = data[s.key] as any[];
+    if (items.length === 0) return false;
+    if (severity && s.severity !== severity) return false;
+    return true;
+  });
+  if (!candidate) return;
+  const el = document.getElementById(sectionAnchorId(candidate.key));
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── Render items for each gap type ──
@@ -347,19 +402,40 @@ function SummaryCard({ label, count, color }: { label: string; count: number; co
 function renderItems(key: string, items: any[]) {
   const rowStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '6px 0', borderBottom: '1px solid var(--color-border)', fontSize: 13, gap: 8,
+    padding: '6px 8px', borderBottom: '1px solid var(--color-border)', fontSize: 13, gap: 8,
+    textDecoration: 'none', color: 'var(--color-text)',
+    transition: 'background 0.12s',
+    borderRadius: 4,
   };
   const mutedStyle: React.CSSProperties = { fontSize: 11, color: 'var(--color-text-muted)' };
   const badgeStyle = (bg: string, color: string): React.CSSProperties => ({
     fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 3, background: bg, color,
   });
 
+  // Wraps an item row in a Link with a hover affordance so the row reads
+  // as a navigable thing rather than a static list line.
+  const Row = ({ to, title, children }: { to: string; title?: string; children: React.ReactNode }) => (
+    <Link
+      to={to}
+      title={title || 'Open the affected item'}
+      style={rowStyle}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}
+    >
+      {children}
+    </Link>
+  );
+
   switch (key) {
     case 'unmappedSteps':
       return items.map((s: UnmappedStep) => {
         const sc = s.status ? getStatusColor(s.status) : null;
         return (
-          <div key={s.id} style={rowStyle}>
+          <Row
+            key={s.id}
+            to={`/processes?highlight=${encodeURIComponent(s.id)}`}
+            title={`Open ${s.name} in the Process Catalog to link a data asset`}
+          >
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 500 }}>{s.name}</div>
               <div style={mutedStyle}>
@@ -370,83 +446,115 @@ function renderItems(key: string, items: any[]) {
               <span style={badgeStyle('#f1f5f9', '#475569')}>{s.level.replace('_', ' ')}</span>
               {sc && <span style={badgeStyle(sc.bg, sc.color)}>{s.status.replace('_', ' ')}</span>}
             </div>
-          </div>
+          </Row>
         );
       });
 
     case 'ungovernedAssets':
       return items.map((a: UngovervedAsset) => (
-        <div key={a.id} style={rowStyle}>
+        <Row
+          key={a.id}
+          to={`/data-assets?highlight=${encodeURIComponent(a.id)}`}
+          title={`Open ${a.name} on Data Assets to raise its trust tier`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
           <span style={badgeStyle('#fed7aa', '#9a3412')}>{tierLabel('BRONZE')}</span>
           <span style={mutedStyle}>{a.healthScore}% health</span>
-        </div>
+        </Row>
       ));
 
     case 'lowHealthAssets':
       return items.map((a: LowHealthAsset) => (
-        <div key={a.id} style={rowStyle}>
+        <Row
+          key={a.id}
+          to={`/data-assets?highlight=${encodeURIComponent(a.id)}`}
+          title={`Open ${a.name} on Data Assets to address quality issues`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
           <span style={badgeStyle(a.healthScore < 30 ? '#fee2e2' : '#fef3c7', a.healthScore < 30 ? '#991b1b' : '#92400e')}>
             {a.healthScore}%
           </span>
-        </div>
+        </Row>
       ));
 
     case 'ownerlessProcesses':
       return items.map((p: OwnerlessProcess) => {
         const sc = p.status ? getStatusColor(p.status) : null;
         return (
-          <div key={p.id} style={rowStyle}>
+          <Row
+            key={p.id}
+            to={`/processes?highlight=${encodeURIComponent(p.id)}`}
+            title={`Open ${p.name} on the Process Catalog to assign an owner`}
+          >
             <span style={{ fontWeight: 500, flex: 1 }}>{p.name}</span>
             <span style={badgeStyle('#f1f5f9', '#475569')}>{p.level.replace('_', ' ')}</span>
             {sc && <span style={badgeStyle(sc.bg, sc.color)}>{p.status.replace('_', ' ')}</span>}
-          </div>
+          </Row>
         );
       });
 
     case 'unownedDomains':
       return items.map((d: UnownedDomain) => (
-        <div key={d.id} style={rowStyle}>
+        <Row
+          key={d.id}
+          to={`/data-domains?highlight=${encodeURIComponent(d.id)}`}
+          title={`Open ${d.name} on Data Domains to assign an owner`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>{d.name}</span>
           <span style={mutedStyle}>{d.assetCount} assets</span>
-        </div>
+        </Row>
       ));
 
     case 'orphanedAssets':
       return items.map((a: OrphanedAsset) => (
-        <div key={a.id} style={rowStyle}>
+        <Row
+          key={a.id}
+          to={`/data-assets?highlight=${encodeURIComponent(a.id)}`}
+          title={`Open ${a.name} on Data Assets to put it in a domain`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
           <span style={badgeStyle(badgeColor('tier', a.governanceTier).bg, badgeColor('tier', a.governanceTier).color)}>{a.governanceTier}</span>
-        </div>
+        </Row>
       ));
 
     case 'unlinkedAssets':
       return items.map((a: UnlinkedAsset) => (
-        <div key={a.id} style={rowStyle}>
+        <Row
+          key={a.id}
+          to={`/data-assets?highlight=${encodeURIComponent(a.id)}`}
+          title={`Open ${a.name} on Data Assets to link it to a process activity`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>{a.name}</span>
           <span style={badgeStyle('#f1f5f9', '#475569')}>{a.governanceTier}</span>
-        </div>
+        </Row>
       ));
 
     case 'unassignedPeople':
       return items.map((p: UnassignedPerson) => (
-        <div key={p.id} style={rowStyle}>
+        <Row
+          key={p.id}
+          to={`/people/${encodeURIComponent(p.id)}`}
+          title={`Open ${p.name}'s profile to give them ownership or stewardship`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>{p.name}</span>
           <span style={mutedStyle}>{p.role.replace('_', ' ')}</span>
-        </div>
+        </Row>
       ));
 
     case 'duplicateAssetNames':
       return items.map((g: DuplicateAssetGroup) => (
-        <div key={g.name} style={{ ...rowStyle, alignItems: 'flex-start' }}>
+        <Row
+          key={g.name}
+          to={`/data-assets?search=${encodeURIComponent(g.name)}`}
+          title={`Filter Data Assets by "${g.name}" to compare or merge them`}
+        >
           <span style={{ fontWeight: 500, flex: 1 }}>
             {g.name}
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400 }}>
               ({g.assets.length} assets share this name)
             </span>
           </span>
-        </div>
+        </Row>
       ));
 
     default:
