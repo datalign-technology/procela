@@ -1173,16 +1173,47 @@ function DbtCloudConnectionForm({
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <FormRow label="Name">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="My dbt project" style={connInputStyle} autoFocus />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My dbt project"
+              style={connInputStyle}
+              autoFocus
+              autoComplete="off"
+              name="procela-dbt-connection-name"
+            />
           </FormRow>
           <FormRow label="Host">
-            <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="cloud.getdbt.com" style={connInputStyle} />
+            <input
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              placeholder="cloud.getdbt.com"
+              style={connInputStyle}
+              autoComplete="off"
+              name="procela-dbt-host"
+            />
           </FormRow>
           <FormRow label="Account ID">
-            <input value={accountId} onChange={(e) => setAccountId(e.target.value)} placeholder="12345" style={connInputStyle} />
+            <input
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              placeholder="12345"
+              style={connInputStyle}
+              autoComplete="off"
+              inputMode="numeric"
+              name="procela-dbt-account-id"
+            />
           </FormRow>
           <FormRow label="Job ID">
-            <input value={jobId} onChange={(e) => setJobId(e.target.value)} placeholder="98765" style={connInputStyle} />
+            <input
+              value={jobId}
+              onChange={(e) => setJobId(e.target.value)}
+              placeholder="98765"
+              style={connInputStyle}
+              autoComplete="off"
+              inputMode="numeric"
+              name="procela-dbt-job-id"
+            />
           </FormRow>
           <FormRow label={existing ? 'API token (leave blank to keep current)' : 'API token'}>
             <input
@@ -1191,6 +1222,8 @@ function DbtCloudConnectionForm({
               onChange={(e) => setToken(e.target.value)}
               placeholder={existing?.hasToken ? '••••••••' : 'dbtc_xxx...'}
               style={connInputStyle}
+              autoComplete="new-password"
+              name="procela-dbt-api-token"
             />
           </FormRow>
           <FormRow label="Polling schedule">
