@@ -2,7 +2,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import config from '../config';
 import { ProcessContext, OrgContext, ChatMessage } from '../types';
 
-const MODEL = 'claude-sonnet-4-20250514';
+// Resolved from config (ANTHROPIC_MODEL env, falling back to the
+// current Sonnet release). Kept as a getter so tests / dev workflows
+// can flip the env var without restarting Node — though in practice
+// config is read once at boot.
+const MODEL = config.anthropicModel;
 
 let _client: Anthropic | null = null;
 

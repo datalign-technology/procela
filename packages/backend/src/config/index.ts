@@ -19,6 +19,11 @@ export const config = {
 
   // AI
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  // Anthropic model used for every server-side Claude call (process
+  // template generation, data-domain suggestions, asset suggestions,
+  // governance activity runs, chat). Override with ANTHROPIC_MODEL
+  // when bumping to a new model release without a code change.
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
 
   // Storage
   storageProvider: process.env.STORAGE_PROVIDER || 'local',
