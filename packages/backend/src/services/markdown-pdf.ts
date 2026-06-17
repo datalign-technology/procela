@@ -40,6 +40,7 @@ export async function renderMarkdownToPdf(markdown: string, opts: RenderOptions)
         info: { Title: opts.title, Subject: opts.subtitle, Author: 'Procela' },
         bufferPages: true,
       });
+      registerFonts(doc);
       const chunks: Buffer[] = [];
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -67,10 +68,31 @@ const COLOR_CODE_TEXT = '#0f172a';
 const COLOR_QUOTE_BG = '#f0fdf4';
 const COLOR_QUOTE_BAR = '#16a34a';
 
-const FONT_REGULAR = 'Helvetica';
-const FONT_BOLD = 'Helvetica-Bold';
-const FONT_ITALIC = 'Helvetica-Oblique';
-const FONT_MONO = 'Courier';
+// Font registration keys. PDFKit's built-in Helvetica is WinAnsi-only,
+// so circled digits (① ② ③), arrows (→ ←), checkmarks (✓), warning
+// icons (⚠), and many other characters our docs use fall back to the
+// font's .notdef glyph or to byte-code sequences that show up as
+// "$`a" garbage in the rendered PDF. Switching to embedded TTF fonts
+// (Liberation Sans for body, DejaVu Sans Mono for code) gives us
+// full BMP Unicode coverage at the cost of ~1.5 MB of font assets.
+const FONT_REGULAR = 'ProcelaSans';
+const FONT_BOLD = 'ProcelaSans-Bold';
+const FONT_ITALIC = 'ProcelaSans-Italic';
+const FONT_MONO = 'ProcelaMono';
+
+const FONTS_DIR = path.resolve(__dirname, '..', 'docs', 'fonts');
+const FONT_FILES = {
+  [FONT_REGULAR]: path.join(FONTS_DIR, 'LiberationSans-Regular.ttf'),
+  [FONT_BOLD]:    path.join(FONTS_DIR, 'LiberationSans-Bold.ttf'),
+  [FONT_ITALIC]:  path.join(FONTS_DIR, 'LiberationSans-Italic.ttf'),
+  [FONT_MONO]:    path.join(FONTS_DIR, 'DejaVuSansMono.ttf'),
+};
+
+function registerFonts(doc: PDFKit.PDFDocument): void {
+  for (const [name, filePath] of Object.entries(FONT_FILES)) {
+    doc.registerFont(name, filePath);
+  }
+}
 
 const SIZE_BODY = 10.5;
 const SIZE_CODE = 9;
@@ -135,6 +157,7 @@ function drawDocument(doc: PDFKit.PDFDocument, blocks: Block[], opts: RenderOpti
     margins: { top: MARGIN_TOP, bottom: MARGIN_BOTTOM, left: MARGIN_LEFT, right: MARGIN_RIGHT },
     bufferPages: true,
   });
+  registerFonts(dryDoc);
   dryDoc.on('data', () => { /* discard */ });
   dryDoc.on('error', () => { /* discard */ });
   const dryCtx: DocCtx = { ...ctx, toc: [], isCover: false };
