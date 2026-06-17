@@ -92,12 +92,19 @@ function flushPara() {
   bufText = '';
 }
 
+// Decode the safe entities up front. We deliberately do NOT decode
+// &lt; / &gt; here — HelpPage uses those as literal angle-bracket
+// placeholders inside example dialog text ("<Target> is owned by
+// <Other Division>...") and decoding them before the tag-strip would
+// turn them into things the tag stripper eats as if they were HTML.
+// We swap to a sentinel during the inline pass and put them back after
+// the strip.
 function decodeEntities(s) {
   return s
     .replace(/&mdash;/g, '—').replace(/&ndash;/g, '–')
     .replace(/&hellip;/g, '…').replace(/&rarr;/g, '→')
     .replace(/&larr;/g, '←').replace(/&harr;/g, '↔')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 }
 
@@ -110,6 +117,10 @@ function unwrapJSXExpression(s) {
 // before we walk top-level structure.
 function inlineToMd(s) {
   s = decodeEntities(s);
+  // Swap &lt;X&gt; placeholders to a sentinel so the catch-all tag
+  // strip below doesn't eat them. We restore real angle brackets at
+  // the very end.
+  s = s.replace(/&lt;/g, 'LT').replace(/&gt;/g, 'GT');
   s = unwrapJSXExpression(s);
   s = s.replace(/<strong>([\s\S]*?)<\/strong>/g, (_, t) => `**${t.trim()}**`);
   s = s.replace(/<em>([\s\S]*?)<\/em>/g, (_, t) => `*${t.trim()}*`);
@@ -117,6 +128,10 @@ function inlineToMd(s) {
   // Drop any remaining inline tags.
   s = s.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/g, (_, href, t) => `[${t.trim()}](${href})`);
   s = s.replace(/<[^>]+>/g, '');
+  // Restore the angle-bracket placeholders we swapped out before the
+  // tag strip. By now the only `<` and `>` that come back belong to
+  // example dialog text the author wrote intentionally.
+  s = s.replace(/LT/g, '<').replace(/GT/g, '>');
   return s;
 }
 
@@ -180,6 +195,23 @@ let out = lines.join('\n')
   .replace(/^\s*\{\s*$/gm, '')
   // "On this page" navigation crumb (the in-app ToC).
   .replace(/^On this page\s*$/gm, '')
+  // Collapse the empty-string ghosts left behind when a JSX expression
+  // like {orgName} was stripped from inside backticks or quotes. We
+  // see remnants such as `` is owned by `` or "" sits in "" — turn
+  // them into a placeholder so the sentence stays readable.
+  .replace(/``/g, '`<value>`')
+  .replace(/""(?=\s|[,.;!?])/g, '"<value>"')
+  // Collapse runs of 2+ spaces inside a line down to a single space.
+  // Generated naturally from stripping inline JSX expressions in the
+  // middle of a sentence ("... in  the ..." after `{orgName}` is gone).
+  .replace(/[ \t]{2,}/g, ' ')
+  // Strip trailing whitespace from every line so the PDF renderer
+  // doesn't measure invisible characters and so the markdown reads
+  // cleanly in a diff.
+  .replace(/[ \t]+$/gm, '')
+  // Drop orphan bullets: a "- " line followed only by whitespace or
+  // a heading is meaningless and gets rendered as a lone bullet.
+  .replace(/^[-*]\s*$/gm, '')
   // Squash 3+ blank lines to 2.
   .replace(/\n{3,}/g, '\n\n')
   .trim() + '\n';

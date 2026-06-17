@@ -538,7 +538,40 @@ function drawList(doc: PDFKit.PDFDocument, items: ListItem[], ordered: boolean) 
   const left = MARGIN_LEFT;
   const bulletWidth = 16;
   const innerIndent = 18;
+
+  // Width budgets used by both the measurement pass and the render pass.
+  const parentTextWidth = doc.page.width - (left + bulletWidth) - MARGIN_RIGHT;
+  const childTextWidth = doc.page.width - (left + innerIndent + bulletWidth) - MARGIN_RIGHT;
+
+  // Strip inline markdown for *measurement only* so we don't double-count
+  // characters that won't render (the *bold*, _italic_, `code` markers
+  // are dropped on the way to PDF). Same approach drawInline uses.
+  const measureText = (s: string): string => s
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
   items.forEach((item, idx) => {
+    // Measure the item's total height (bullet line + every nested
+    // child line + the small inter-row gaps) so we can decide whether
+    // to break the page BEFORE the bullet is drawn. Without this, a
+    // bullet can land at the bottom of a page with its content auto-
+    // flowing to the top of the next page — the classic orphan bullet.
+    doc.font(FONT_REGULAR).fontSize(SIZE_BODY);
+    let itemHeight = doc.heightOfString(measureText(item.text), { width: parentTextWidth, lineGap: 2 });
+    if (item.children && item.children.length > 0) {
+      itemHeight += 4; // moveDown(0.15) on each side
+      for (const child of item.children) {
+        itemHeight += doc.heightOfString(measureText(child.text), { width: childTextWidth, lineGap: 2 });
+      }
+      itemHeight += 4;
+    }
+    if (doc.y + itemHeight > doc.page.height - MARGIN_BOTTOM) {
+      doc.addPage();
+    }
+
     const bullet = ordered ? `${idx + 1}.` : '•';
     const startY = doc.y;
     doc.font(FONT_BOLD).fillColor(BRAND_PRIMARY);
@@ -547,10 +580,7 @@ function drawList(doc: PDFKit.PDFDocument, items: ListItem[], ordered: boolean) 
     doc.y = startY;
     const x = left + bulletWidth;
     doc.x = x;
-    drawInline(doc, item.text, {
-      lineGap: 2,
-      width: doc.page.width - x - MARGIN_RIGHT,
-    });
+    drawInline(doc, item.text, { lineGap: 2, width: parentTextWidth });
     doc.x = left;
     if (item.children && item.children.length > 0) {
       doc.moveDown(0.15);
@@ -562,10 +592,7 @@ function drawList(doc: PDFKit.PDFDocument, items: ListItem[], ordered: boolean) 
         doc.y = cy;
         const cx = left + innerIndent + bulletWidth;
         doc.x = cx;
-        drawInline(doc, child.text, {
-          lineGap: 2,
-          width: doc.page.width - cx - MARGIN_RIGHT,
-        });
+        drawInline(doc, child.text, { lineGap: 2, width: childTextWidth });
         doc.x = left;
       });
       doc.moveDown(0.15);

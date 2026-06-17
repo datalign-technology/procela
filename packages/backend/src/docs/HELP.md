@@ -4,7 +4,7 @@ Procela is a DAMA-aligned governance operating platform that helps organizations
 
 ---
 
-        data governance using workflows, accountability models, and structured procedures.
+ data governance using workflows, accountability models, and structured procedures.
 
 ## 1. Getting Started
 
@@ -74,7 +74,7 @@ Click Customize to reorder or hide dashboard sections. Layout is saved automatic
 ### Process Catalog
 
 - Hierarchical process catalog: Value Stream → Process → Activity (with optional Sub-Process and Task levels for detail).
-- AI-powered Value Stream Wizard generates process hierarchies tailored to the active org, not just the industry. Running the wizard scoped to Tidewater Electric produces electric-utility processes (SCADA, outage management, transmission & distribution); scoping to Tidewater Water produces water-utility processes (treatment, distribution mains, wastewater). The active org's name, type, and description ride along with the industry to the AI prompt so output reflects this specific division rather than generic Utilities content. The result is cached per (industry + org) on the server — first user pays the 10–30 second Claude call, every subsequent run for the same org returns the same template instantly, and each division caches independently. A Cached / Fresh from AI badge plus a Specialised:  chip on the review screen tells you what's been tailored; the Regenerate from AI button next to the standard Regenerate bypasses the cache and replaces the stored copy with a brand-new Claude generation.
+- AI-powered Value Stream Wizard generates process hierarchies tailored to the active org, not just the industry. Running the wizard scoped to Tidewater Electric produces electric-utility processes (SCADA, outage management, transmission & distribution); scoping to Tidewater Water produces water-utility processes (treatment, distribution mains, wastewater). The active org's name, type, and description ride along with the industry to the AI prompt so output reflects this specific division rather than generic Utilities content. The result is cached per (industry + org) on the server — first user pays the 10–30 second Claude call, every subsequent run for the same org returns the same template instantly, and each division caches independently. A Cached / Fresh from AI badge plus a Specialised: <Org> chip on the review screen tells you what's been tailored; the Regenerate from AI button next to the standard Regenerate bypasses the cache and replaces the stored copy with a brand-new Claude generation.
 - Level-specific attributes: frequency, risk level, responsible role, automation level.
 - Status lifecycle: Draft → Active → Deprecated.
 - Operational / Governance lens. A segmented control (All · Operational · Governance) at the top filters which value streams show. Governance value streams (created by the governance template) carry a persisted domain classifier; business value streams are operational. The lens is per page — the Process Catalog always opens on All, and your choice here is independent of the lens on other pages.
@@ -83,7 +83,7 @@ Click Customize to reorder or hide dashboard sections. Layout is saved automatic
 - Operational vs governance node fields. Governance nodes (those under a value stream with domain === 'GOVERNANCE') skip the Where it runs summary and the Systems picker — governance happens in policies, decisions and meetings, not on systems, and showing perpetually-zero system / data-asset counts on a governance activity was just noise. Operational nodes keep the full layout. The Inputs / Outputs note and the data-asset linker stay available on governance nodes too, since edge cases (an Audit Log Review activity consuming the audit log) are still legitimate.
 - Inputs / Outputs panel — picker varies by domain. Operational activities can link a row to a Data Asset (operational I/O), a Governance Document (a charter or policy the activity references), or an Attachment (uploaded file / URL). Governance activities lose the Data Asset tab — their I/O is documents and attachments only, since they don't produce or consume operational data. The + Add Input / Output picker is segmented across the available kinds; pick what kind first, then the specific target. A row's label is clickable: a data asset opens the asset detail, a document jumps to Governance Documents, an attachment downloads. So Define Data Governance Charter defaults to the Document tab and can link the actual Data Governance Charter policy (CHA-001) as its Output, with the signed PDF uploaded as a separate output row.
 - Qualified-person check. When an activity carries a Responsible person and required skills, Procela compares the person's skillIds against the activity's requiredSkillIds. If anything's missing, an amber chip appears next to the Required Skills picker on the activity panel — "Responsible person lacks N required skill(s)" — with the missing names in the tooltip. The same gap surfaces as a Skill gaps count on the People table, so you can spot under-qualified assignments from either end. The check is per-org and updates live as you change the person or the required-skill list.
-- Cross-division link warning. When you add a data-asset or document link to an activity, Procela checks whether the target's owner org is on the same vertical axis as the activity's value-stream org (i.e. same org, ancestor, or descendant). If it isn't — typically a Tidewater Water activity reaching for a Tidewater Electric asset — a confirm pops first: " is owned by , but  sits in . Cross-division links usually mean the wrong target was picked — pick again, or confirm if this is genuinely a shared dependency." The default is warn, not block: confirming creates the link normally; cancelling drops it. Cross-axis links to shared parent-company targets (a Water activity using the corporate Customer Master, or the enterprise Data Governance Charter) go through silently because the target is in scope by inheritance. Attachments skip the check since they're scoped to the activity directly.
+- Cross-division link warning. When you add a data-asset or document link to an activity, Procela checks whether the target's owner org is on the same vertical axis as the activity's value-stream org (i.e. same org, ancestor, or descendant). If it isn't — typically a Tidewater Water activity reaching for a Tidewater Electric asset — a confirm pops first: "<Target> is owned by <Other Division>, but <Activity> sits in <This Division>. Cross-division links usually mean the wrong target was picked — pick again, or confirm if this is genuinely a shared dependency." The default is warn, not block: confirming creates the link normally; cancelling drops it. Cross-axis links to shared parent-company targets (a Water activity using the corporate Customer Master, or the enterprise Data Governance Charter) go through silently because the target is in scope by inheritance. Attachments skip the check since they're scoped to the activity directly.
 Where value streams can be created. Streams attach to the active org in the Working in&hellip; header, but only at the company or division level. Two cases block the create UI (the + Add value stream button, the wizard wand, the governance-template wand, and the empty-state buttons all hide; Visualize / Compare / Export stay available):
 
 - Wrong level. The active org is a department, team, or anything below division. Pick a parent org from Working in….
@@ -111,7 +111,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Bulk set Trust Level / owner / steward.
 - Where Used in the detail modal shows every process, mapping, and policy referencing the asset.
 - Data Assets is operational-only. Governance documents (charters, policies, standards, frameworks) live under Governance → Documents, not here. The earlier All · Operational · Governance lens was removed from this page when the governance template stopped seeding placeholder data assets and started seeding real Policies instead.
-- Org scope and inheritance. Each asset is owned by exactly one org, and only company or division levels can own — departments and teams can't. If the active Working in… scope isn't an owning level, the + Add data asset button is hidden and a banner explains why (the list still renders so users can read inherited rows from above). When you're scoped to a division, the list shows division-owned assets plus assets owned at the parent company — the parent-owned ones carry a small Owned by  badge and their edit / delete / inline-cell affordances are disabled with a "Switch the Working in… scope to  to edit" tooltip. Conversely, a company-scoped user sees everything below (a rollup view) with the same badge on division-owned rows. Sibling divisions don't see each other's assets. The level guard is enforced server-side too — a direct API call with a department-level orgId is rejected with a 400.
+- Org scope and inheritance. Each asset is owned by exactly one org, and only company or division levels can own — departments and teams can't. If the active Working in… scope isn't an owning level, the + Add data asset button is hidden and a banner explains why (the list still renders so users can read inherited rows from above). When you're scoped to a division, the list shows division-owned assets plus assets owned at the parent company — the parent-owned ones carry a small Owned by <Company> badge and their edit / delete / inline-cell affordances are disabled with a "Switch the Working in… scope to <Company> to edit" tooltip. Conversely, a company-scoped user sees everything below (a rollup view) with the same badge on division-owned rows. Sibling divisions don't see each other's assets. The level guard is enforced server-side too — a direct API call with a department-level orgId is rejected with a 400.
 
 ### Business Glossary
 
@@ -156,7 +156,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Clicking a system name opens the detail modal; inline editing is reserved for the Type column. Rename via the row's Edit pencil.
 - Owner, Deputy Owner, and Operators (DAMA: Custodians) per system — the people on the hook day-to-day. Clicking any of those role badges opens the Role Detail drawer for that entity-attached role, so users see the same definition / responsibilities / required-skills view as for DAMA roles.
 - Where Used panel shows every data asset, connection, and process touching the system. A Discussion (comments) and Activity section sit at the bottom of the modal.
-- Org scope and inheritance. Same rule as Data Assets — each system is owned by exactly one org (company or division), departments and teams can't own. The + Add system button hides when the active scope is a non-owning level; rows whose owner doesn't match the active Working in… scope carry an Owned by  badge and have their edit / delete affordances disabled with a switch-scope tooltip. The level guard is enforced server-side.
+- Org scope and inheritance. Same rule as Data Assets — each system is owned by exactly one org (company or division), departments and teams can't own. The + Add system button hides when the active scope is a non-owning level; rows whose owner doesn't match the active Working in… scope carry an Owned by <Org> badge and have their edit / delete affordances disabled with a switch-scope tooltip. The level guard is enforced server-side.
 
 ### Connections
 
@@ -198,8 +198,6 @@ Skills drive four cross-page workflows:
 - Find people by skill. A skill filter on the People page lets you narrow the roster to everyone who holds a given competency — useful when staffing a new initiative or backfilling an unqualified assignment.
 - Recommended role assignees. The Role Detail drawer surfaces a "Best-matching people" list, ranked by how many of the role's required skills each person already holds (case-insensitive name match).
 - Skill-gap report on the dashboard. The Skill Gaps section ranks the org's most under-staffed required skills (required-by-activities vs held-by-people), with critical "no coverage" calls flagged in red.
-
-- 
 
 ## 8. Governance
 
@@ -295,7 +293,7 @@ Skills drive four cross-page workflows:
 ### Dependency Enforcement
 
 Governance pages show prerequisite banners when prior steps haven't been completed.
-          For example, the RACI page shows "Create domains and governance groups first" until those exist.
+ For example, the RACI page shows "Create domains and governance groups first" until those exist.
 
 ## 9. Security & Account
 
@@ -354,19 +352,19 @@ Procela exposes SCIM 2.0 endpoints under /scim/v2/ so Microsoft Entra, Okta, and
 ### Reset everything — start over (super admins)
 
 Below the Backup & Restore card on the Settings page, super admins
-          see a Reset everything control that performs a true factory
-          reset: every organization, person, process, data asset, system,
-          mapping, governance record, comment, and audit-log entry is deleted.
-          The next sign-in starts the onboarding wizard for a brand-new
-          organization. The confirmation phrase is the literal word 
-          RESET; the panel also surfaces a one-click Export now 
-          shortcut so you can save a recovery backup before nuking anything.
-          A single ALL_DATA_RESET audit entry is written
-          immediately after the wipe so the reset itself is traceable.
+ see a Reset everything control that performs a true factory
+ reset: every organization, person, process, data asset, system,
+ mapping, governance record, comment, and audit-log entry is deleted.
+ The next sign-in starts the onboarding wizard for a brand-new
+ organization. The confirmation phrase is the literal word
+ RESET; the panel also surfaces a one-click Export now
+ shortcut so you can save a recovery backup before nuking anything.
+ A single ALL_DATA_RESET audit entry is written
+ immediately after the wipe so the reset itself is traceable.
 
 ### GDPR — right to be forgotten (admins)
 
-The Person detail page Security panel has a Forget person… action that runs the GDPR Article 17 cascade. The Person record is deleted and every reference across the catalog — ownership, stewardship, group membership, authored comments, role assignments — is scrubbed. Audit log entries authored by that user are tombstoned, not deleted, so the action history survives but the personal identifier is replaced with [deleted]. The confirmation modal requires you to type the literal phrase FORGET  to defend against muscle-memory triggers. The response summarises how many stores and rows were touched.
+The Person detail page Security panel has a Forget person… action that runs the GDPR Article 17 cascade. The Person record is deleted and every reference across the catalog — ownership, stewardship, group membership, authored comments, role assignments — is scrubbed. Audit log entries authored by that user are tombstoned, not deleted, so the action history survives but the personal identifier is replaced with [deleted]. The confirmation modal requires you to type the literal phrase FORGET <email> to defend against muscle-memory triggers. The response summarises how many stores and rows were touched.
 
 ### Audit log integrity
 
@@ -423,15 +421,15 @@ The Comments panel and Activity feed live together on every detail surface, with
 ### DAMA Framework
 
 Procela follows the DAMA (Data Management Association) framework for data governance. The governance
-          structure, roles, and processes align with DAMA best practices.
+ structure, roles, and processes align with DAMA best practices.
 
 ### Org scoping and inheritance
 
 Every value stream, data asset, and system is owned by exactly one org. Only the company and division levels can own — departments and teams inherit visibility from above but can't themselves be owners. The org you pick in the Working in… header decides which artefacts you see and which you can edit, following the same rule everywhere in the app.
 
 - Visibility rolls down, never sideways. Scoping to Tidewater Water shows Water-owned artefacts plus everything owned at Tidewater Utilities (the parent company). Sibling divisions (Electric, Shared Services) don't show up. Scoping to the parent company shows the full rollup view — Water, Electric, Shared Services and the company-owned artefacts together.
-- Editing is local. A row whose owner doesn't match the active scope renders with an Owned by  badge and its edit / delete / inline-cell affordances are disabled with a Switch the Working in… scope to  to edit tooltip. The same rule applies whether the row is inherited from above (a Water user seeing a corporate asset) or rolled up from below (a corporate user seeing a Water asset).
-- Create flows enforce the rule on both ends. The + Add value stream, + Add data asset, and + Add system buttons hide when the active scope is a department or team, and the backend rejects a direct API call with a non-owning orgId with a 400. For value streams there's a second guard: generating operational processes at a multi-division company is blocked (with one-click Switch to:  chips in the warning) because each division should own its own process catalog. Governance processes are exempt from that second guard — corporate governance is one enterprise-wide program by design, so the Generate governance processes wand still works at the parent.
+- Editing is local. A row whose owner doesn't match the active scope renders with an Owned by <Org> badge and its edit / delete / inline-cell affordances are disabled with a Switch the Working in… scope to <Org> to edit tooltip. The same rule applies whether the row is inherited from above (a Water user seeing a corporate asset) or rolled up from below (a corporate user seeing a Water asset).
+- Create flows enforce the rule on both ends. The + Add value stream, + Add data asset, and + Add system buttons hide when the active scope is a department or team, and the backend rejects a direct API call with a non-owning orgId with a 400. For value streams there's a second guard: generating operational processes at a multi-division company is blocked (with one-click Switch to: <Division> chips in the warning) because each division should own its own process catalog. Governance processes are exempt from that second guard — corporate governance is one enterprise-wide program by design, so the Generate governance processes wand still works at the parent.
 - Cross-division links warn before saving. Linking a Water activity to an Electric asset (sibling divisions, neither an ancestor of the other) pops a confirm — the reference almost always means the wrong asset was picked. Cross-axis links to shared parent-company assets (a Water activity using the corporate Customer Master) go through silently because the asset is in scope by inheritance.
 
 ### Plain English vs. DAMA terminology
@@ -472,12 +470,12 @@ Every list page has an Export button with format choices: CSV (open in any sprea
 ### What is Procela?
 
 Procela connects your business processes to the data and systems that support them, giving you a single
-          place to define how the business works, assign ownership, and govern data quality across every level.
+ place to define how the business works, assign ownership, and govern data quality across every level.
 
 ### What is the Governance Program page?
 
 It guides you through a 4-phase approach to building a governance program: Foundation, Structural Design,
-          People & Processes, and Operationalization. Progress is tracked automatically based on your actual data.
+ People & Processes, and Operationalization. Progress is tracked automatically based on your actual data.
 
 ### How do SOPs work?
 
@@ -494,7 +492,7 @@ Read-only surfaces (Visualize, Compare, Export) stay available even when create 
 
 ### Why can't I edit this data asset (or system)?
 
-The row carries an Owned by  badge — its owner is a different org from the one you're scoped to. The list shows it because visibility rolls down (corporate assets are visible to every division) and up (the parent rolls up everything below), but edits are local: you can only edit a row from the scope where it's owned. Hover the disabled Edit pencil for a switch-scope tooltip, or use the Working in… dropdown directly. Sibling divisions never see each other's rows, so if you're scoped to Tidewater Water you'll never see a Tidewater Electric asset at all.
+The row carries an Owned by <Org> badge — its owner is a different org from the one you're scoped to. The list shows it because visibility rolls down (corporate assets are visible to every division) and up (the parent rolls up everything below), but edits are local: you can only edit a row from the scope where it's owned. Hover the disabled Edit pencil for a switch-scope tooltip, or use the Working in… dropdown directly. Sibling divisions never see each other's rows, so if you're scoped to Tidewater Water you'll never see a Tidewater Electric asset at all.
 
 ### Why am I being warned about a cross-division link?
 
@@ -551,17 +549,17 @@ They're different roles. System Custodian is the technical caretaker of one spec
 ### Can I undo a delete?
 
 Yes — when you delete a single item (data asset, system, person), a toast notification appears with an
-          "Undo" button. Click it within 6 seconds to restore the item.
+ "Undo" button. Click it within 6 seconds to restore the item.
 
 ### What governance framework does Procela follow?
 
 Procela follows the DAMA (Data Management Association) framework for data governance. Roles, groups,
-          processes, and the governance hierarchy are all aligned with DAMA best practices.
+ processes, and the governance hierarchy are all aligned with DAMA best practices.
 
 ### Where is my data stored?
 
 In the current prototype, data is stored in JSON files on the server. In production, Procela is designed
-          to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
+ to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
 
 ### I lost my authenticator app. How do I get back in?
 
@@ -582,7 +580,7 @@ Click Revoke on that row — the device gets booted to the login screen on its n
 ## 13. Keyboard shortcuts
 
 Procela has a small set of keyboard chords for the things you'll do most often.
-          Press Shift + ? anywhere
-          to open the full reference, or use the button below.
+ Press Shift + ? anywhere
+ to open the full reference, or use the button below.
 
 {[ ['/', 'Open command palette'], ['Ctrl / Cmd + K', 'Open command palette'], ['Shift + ?', 'Show all keyboard shortcuts'], ['g then d', 'Go to Dashboard'], ['g then o', 'Go to Organizations'], ['g then p', 'Go to People'], ['g then c', 'Go to Processes'], ['g then a', 'Go to Data Assets'], ['g then s', 'Go to Systems'], ['g then m', 'Go to Data Mapping (mappings)'], ['g then l', 'Go to Lineage'], ['g then q', 'Go to Data Quality'], ['g then g', 'Go to Governance Program'], ['g then r', 'Go to Reports'], ['g then e', 'Go to Enterprise View'], ['g then h', 'Go to Help'], ['Escape', 'Close the palette, drawers, modals, and dropdowns'], ].map(([keys, what]) => ( {keys} {what} ))}
