@@ -104,6 +104,7 @@ router.get('/stats', (req: Request, res: Response) => {
       flows: filteredFlows.length,
       systems: filteredSystems.length,
       dataAssets: filteredAssets.length,
+      dataDomains: filteredDomains.length,
       mappings: filteredMappings.length,
       organizations: organizations.length,
       people: filteredPeople.length,

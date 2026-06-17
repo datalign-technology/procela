@@ -31,6 +31,7 @@ interface DashStats {
   activities: number;
   systems: number;
   dataAssets: number;
+  dataDomains: number;
   coverage: { mapped: number; unmapped: number; percentage: number };
   governance: { bronze: number; silver: number; gold: number };
   gaps: {
@@ -213,8 +214,16 @@ export default function SetupHubPage() {
             key: 'unowned-domains',
             title: 'Data domain ownership',
             why: 'Data domains group related assets under a single accountable owner.',
-            status: !s ? 'todo' : s.gaps.ungovernedDomains === 0 ? 'done' : 'attention',
-            detail: !s ? '—' : s.gaps.ungovernedDomains === 0 ? 'all assigned' : `${s.gaps.ungovernedDomains} unowned`,
+            // Match the "Process ownership" pattern above: the step
+            // is 'todo' until at least one domain exists. Without
+            // this guard, an empty org has zero unowned domains and
+            // the step misleadingly flips to 'done'.
+            status: !s || s.dataDomains === 0 ? 'todo'
+              : s.gaps.ungovernedDomains === 0 ? 'done' : 'attention',
+            detail: !s ? '—'
+              : s.dataDomains === 0 ? 'no domains defined yet'
+              : s.gaps.ungovernedDomains === 0 ? 'all assigned'
+              : `${s.gaps.ungovernedDomains} unowned`,
             ctaLabel: 'Review & assign',
             to: '/setup/owners',
             secondaryLabel: 'Manage domains',
