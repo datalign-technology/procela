@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
@@ -24,7 +25,7 @@ import { GOVERNANCE_ROLES } from '../types';
 const REQUIRED_ROLE_TYPES = new Set(GOVERNANCE_ROLES.filter((r) => r.required).map((r) => r.roleType));
 
 // Category display order for the grouped By-Role view.
-const CATEGORY_ORDER = ['Executive', 'Business', 'Technical'] as const;
+const CATEGORY_ORDER = ['Executive', 'Business', 'Technical', 'Entity-attached'] as const;
 
 interface DamaRoleAssignment {
   id: string;
@@ -54,29 +55,63 @@ interface OrgOption {
 interface DomainOption {
   id: string;
   name: string;
+  ownerId?: string | null;
+  stewardIds?: string[];
 }
 
 interface SystemOption {
   id: string;
   name: string;
+  ownerPersonId?: string | null;
+  deputyOwnerId?: string | null;
+  custodianIds?: string[];
 }
 
 interface AssetOption {
   id: string;
   name: string;
+  ownerPersonId?: string | null;
+  stewardIds?: string[];
 }
 
-// Roles for which the Governance Roles page shows per-domain gap rows.
-// Lifted from the same set used on the Governance Groups page so the
-// two surfaces agree on which roles are "domain-scoped" in spirit.
-const DOMAIN_SCOPED_ROLES = new Set<string>([
-  'DATA_OWNER',
-  'DATA_DOMAIN_OWNER',
-  'DATA_STEWARD',
-  'DATA_DOMAIN_STEWARD',
-  'BUSINESS_DATA_STEWARD',
-  'DATA_ARCHITECT',
-]);
+// ── Entity-scoped role catalogue ────────────────────────────────────────
+//
+// Each entry tells the matrix renderer which entity type this role
+// owns and which foreign-key field on the host entity holds the
+// assignment. Only roles whose holders live directly on a host record
+// (Domain.ownerId, System.custodianIds, DataAsset.stewardIds, …)
+// belong here; pure DAMA roles (CDO, Data Steward at org level, …)
+// stay in the original holder-list view because they don't have a
+// per-entity dimension.
+//
+// `cardinality` mirrors the host-entity field — single FK = `one`,
+// array FK = `many`.
+
+type DomainField = 'ownerId' | 'stewardIds';
+type SystemField = 'ownerPersonId' | 'deputyOwnerId' | 'custodianIds';
+type AssetField  = 'ownerPersonId' | 'stewardIds';
+
+type EntityRoleScope =
+  | { entityType: 'domain'; field: DomainField; cardinality: 'one' | 'many' }
+  | { entityType: 'system'; field: SystemField; cardinality: 'one' | 'many' }
+  | { entityType: 'asset';  field: AssetField;  cardinality: 'one' | 'many' };
+
+const ENTITY_SCOPED_ROLE_INFO: Record<string, EntityRoleScope> = {
+  // Domain-scoped — fields on the DataDomain entity.
+  DATA_DOMAIN_OWNER:       { entityType: 'domain', field: 'ownerId',       cardinality: 'one'  },
+  DATA_DOMAIN_STEWARD:     { entityType: 'domain', field: 'stewardIds',    cardinality: 'many' },
+  // System-scoped — fields on the System entity.
+  SYSTEM_OWNER:            { entityType: 'system', field: 'ownerPersonId', cardinality: 'one'  },
+  SYSTEM_DEPUTY_OWNER:     { entityType: 'system', field: 'deputyOwnerId', cardinality: 'one'  },
+  SYSTEM_CUSTODIAN:        { entityType: 'system', field: 'custodianIds',  cardinality: 'many' },
+  // Data Asset-scoped — fields on the DataAsset entity.
+  DATA_ASSET_OWNER:        { entityType: 'asset',  field: 'ownerPersonId', cardinality: 'one'  },
+  DATA_ASSET_STEWARD:      { entityType: 'asset',  field: 'stewardIds',    cardinality: 'many' },
+};
+
+function entityRoleInfo(roleType: string): EntityRoleScope | null {
+  return ENTITY_SCOPED_ROLE_INFO[roleType] || null;
+}
 
 const ROLE_TYPE_LABELS: Record<string, string> = {
   // Executive/Strategic
@@ -92,13 +127,32 @@ const ROLE_TYPE_LABELS: Record<string, string> = {
   DATA_ARCHITECT: 'Data Architect',
   DATA_ENGINEER: 'Data Engineer',
   DATABASE_ADMINISTRATOR: 'Database Administrator',
+  // Entity-attached (one-row-per-host-record assignments — see the
+  // ENTITY_SCOPED_ROLE_INFO map above for storage details)
+  DATA_DOMAIN_OWNER: 'Data Domain Owner',
+  DATA_DOMAIN_STEWARD: 'Data Domain Steward',
+  SYSTEM_OWNER: 'System Owner',
+  SYSTEM_DEPUTY_OWNER: 'System Deputy Owner',
+  SYSTEM_CUSTODIAN: 'System Custodian',
+  DATA_ASSET_OWNER: 'Data Asset Owner',
+  DATA_ASSET_STEWARD: 'Data Asset Steward',
+  DATA_STEWARD: 'Data Steward',
 };
 
 const ROLE_CATEGORIES: Record<string, string> = {
   CDO: 'Executive', DATA_GOVERNANCE_LEAD: 'Executive',
   DATA_OWNER: 'Business', BUSINESS_DATA_STEWARD: 'Business', DATA_QUALITY_ANALYST: 'Business',
+  DATA_STEWARD: 'Business',
   TECHNICAL_DATA_STEWARD: 'Technical', DATA_CUSTODIAN: 'Technical', DATA_ARCHITECT: 'Technical',
   DATA_ENGINEER: 'Technical', DATABASE_ADMINISTRATOR: 'Technical',
+  // Entity-attached roles get their own category so they're easy to
+  // distinguish from enterprise-level DAMA roles. Single-host roles
+  // (Domain / System / Asset Owner / Steward / Custodian) cluster
+  // together — these are the rows that get the per-entity matrix.
+  DATA_DOMAIN_OWNER: 'Entity-attached', DATA_DOMAIN_STEWARD: 'Entity-attached',
+  SYSTEM_OWNER: 'Entity-attached', SYSTEM_DEPUTY_OWNER: 'Entity-attached',
+  SYSTEM_CUSTODIAN: 'Entity-attached',
+  DATA_ASSET_OWNER: 'Entity-attached', DATA_ASSET_STEWARD: 'Entity-attached',
 };
 
 const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
@@ -115,6 +169,17 @@ const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   DATA_ARCHITECT: { bg: '#e0e7ff', color: '#3730a3' },
   DATA_ENGINEER: { bg: '#fef9c3', color: '#854d0e' },
   DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#64748b' },
+  // Extra business roles that landed with the entity matrix work.
+  DATA_STEWARD:        { bg: '#d1f0eb', color: '#0f4f46' },
+  DATA_DOMAIN_OWNER:   { bg: '#dbeafe', color: '#1e40af' },
+  DATA_DOMAIN_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
+  // Entity-attached — slate / cool greys so they're visually distinct
+  // from the enterprise DAMA roles above.
+  SYSTEM_OWNER:        { bg: '#e0f2fe', color: '#075985' },
+  SYSTEM_DEPUTY_OWNER: { bg: '#e0f2fe', color: '#0c4a6e' },
+  SYSTEM_CUSTODIAN:    { bg: '#f1f5f9', color: '#334155' },
+  DATA_ASSET_OWNER:    { bg: '#fef3c7', color: '#92400e' },
+  DATA_ASSET_STEWARD:  { bg: '#fef9c3', color: '#854d0e' },
 };
 
 const inputStyle: React.CSSProperties = {
@@ -220,7 +285,29 @@ export default function DamaRolesPage() {
     setShowForm(true);
   };
 
-  // Open the assign form pre-filled with a specific governance role —
+  // Quick-lookup map: personId → display name. Used by the per-entity
+  // matrix renderer to resolve entity-attached holder ids
+  // (system.ownerPersonId, asset.stewardIds, etc.) without having to
+  // pass the people array around.
+  const personById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of people) m.set(p.id, p.name);
+    return m;
+  }, [people]);
+
+  // Entity-attached roles aren't stored in damaRoles — they're FK
+  // fields on the host record. Send the user to the host page with
+  // the entity highlighted so they can use the existing owner /
+  // steward / custodian pickers there.
+  const navigate = useNavigate();
+  const navigateToEntity = (entityType: 'domain' | 'system' | 'asset', entityId: string) => {
+    const base =
+      entityType === 'domain' ? '/data-domains' :
+      entityType === 'system' ? '/systems'      :
+                                '/data-assets';
+    navigate(`${base}?highlight=${encodeURIComponent(entityId)}`);
+  };
+
   // used by the "By Role" catalog so an unfilled role is one click from
   // being assigned (mirrors the Governance Groups expected-role slate).
   const openAddForRole = (roleType: string) => {
@@ -549,8 +636,12 @@ export default function DamaRolesPage() {
                 roleBadge={roleBadge}
                 resolveScope={resolveScope}
                 domains={domains}
+                systems={systems}
+                dataAssets={dataAssets}
+                personById={personById}
                 openRoleDrawer={openRoleDrawer}
                 onAssign={openAddForRole}
+                navigateToEntity={navigateToEntity}
                 setConfirmDelete={setConfirmDelete}
               />
             )}
@@ -590,7 +681,7 @@ function SidebarItem({ label, count, active, onClick, accent }: {
 // ── By-Role view ──────────────────────────────────────────────────────────
 // One section per role type, showing the people who hold that role. The
 // section header is clickable to open the Role Detail drawer.
-function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, openRoleDrawer, onAssign, setConfirmDelete }: {
+function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, systems, dataAssets, personById, openRoleDrawer, onAssign, navigateToEntity, setConfirmDelete }: {
   roles: DamaRoleAssignment[];
   /** Full governance-role catalog so every role is listed even with
    *  zero holders (consistent with the Governance Groups expected-role
@@ -598,16 +689,21 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
   catalog: string[];
   filterRoleType: string | null;
   roleBadge: (rt: string) => React.CSSProperties;
-  /** Resolve a scopeId to its kind + name. The kind drives the small
-   *  badge rendered alongside each holder so users can tell at a glance
-   *  whether a role is scoped to an org, a data domain, a system, or
-   *  a data asset (and spot unknown / dangling scope refs). */
+  /** Resolve a scopeId to its kind + name. */
   resolveScope: (id: string) => { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
-  /** All data domains in scope. Used to render per-domain gap rows
-   *  for domain-scoped roles (Data Owner, Steward, Architect, etc.). */
+  /** Entities used by the per-entity matrix renderer. */
   domains: DomainOption[];
+  systems: SystemOption[];
+  dataAssets: AssetOption[];
+  /** Quick lookup for resolving holder ids to display names in the
+   *  entity matrix. */
+  personById: Map<string, string>;
   openRoleDrawer: (rt: string) => void;
   onAssign: (rt: string) => void;
+  /** Drill-down: send the user to the host page with the entity
+   *  highlighted so they can edit the owner/steward/custodian field
+   *  using the existing picker on that page. */
+  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
   setConfirmDelete: (id: string) => void;
 }) {
   // Expand / collapse state. Defaults to all-expanded so first load
@@ -708,59 +804,56 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
             + Assign
           </button>
         </div>
-        {roleOpen && (filled ? (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--color-border)' }}>
-            {list.map((r) => {
-              const isAgent = !!r.agentId;
-              const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
-              return (
-              <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
-                <span title={isAgent ? 'AI Agent' : 'Person'} style={{
-                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                  background: isAgent ? '#ede9fe' : c.bg, color: isAgent ? '#5b21b6' : c.color,
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 10, fontWeight: 700,
-                }}>
-                  {isAgent ? <Bot size={13} strokeWidth={2.4} /> : displayName.charAt(0).toUpperCase()}
-                </span>
-                <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  {displayName}
-                </span>
-                <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
-                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
-                <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
-              </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div style={{ padding: '4px 14px 10px', fontSize: 12, color: criticalGap ? '#7f1d1d' : 'var(--color-text-muted)' }}>
-            {criticalGap ? 'This role is required and has no holder — assign someone to close the gap.' : 'No one holds this role yet.'}
-          </div>
-        ))}
-        {/* Per-domain gap rows. For domain-scoped roles (Data Owner /
-            Steward / Architect family), list each data domain that
-            has no holder of this role scoped to it. Mirrors the
-            "no data domains assigned" line on Governance Groups, just
-            from the role-side perspective: instead of "this person
-            has no domains" we say "this domain has no role-holder". */}
-        {roleOpen && DOMAIN_SCOPED_ROLES.has(rt) && domains.length > 0 && (() => {
-          const scopedDomainIds = new Set(list.map((r) => r.scopeId));
-          const unfilled = domains.filter((d) => !scopedDomainIds.has(d.id));
-          if (unfilled.length === 0) return null;
+        {roleOpen && (() => {
+          const entInfo = entityRoleInfo(rt);
+          // Entity-attached roles get the per-entity matrix view —
+          // every domain / system / asset listed with its current
+          // holder(s) and a drill-down to the source page where the
+          // assignment lives. Org-scoped DAMA roles (CDO, Data Owner,
+          // Data Steward, etc.) keep the simple holder-list view
+          // because there's no per-entity dimension to lay out.
+          if (entInfo) {
+            return renderEntityMatrix({
+              info: entInfo,
+              domains,
+              systems,
+              dataAssets,
+              personById,
+              navigateToEntity,
+            });
+          }
+          // Org-scoped roles — original holder list.
+          if (filled) {
+            return (
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--color-border)' }}>
+                {list.map((r) => {
+                  const isAgent = !!r.agentId;
+                  const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
+                  return (
+                  <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
+                    <span title={isAgent ? 'AI Agent' : 'Person'} style={{
+                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                      background: isAgent ? '#ede9fe' : c.bg, color: isAgent ? '#5b21b6' : c.color,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 700,
+                    }}>
+                      {isAgent ? <Bot size={13} strokeWidth={2.4} /> : displayName.charAt(0).toUpperCase()}
+                    </span>
+                    <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {displayName}
+                    </span>
+                    <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
+                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
+                  </li>
+                  );
+                })}
+              </ul>
+            );
+          }
           return (
-            <div style={{ borderTop: '1px solid var(--color-border)', padding: '8px 14px 10px', background: '#fffbeb' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                Unfilled for {unfilled.length} domain{unfilled.length === 1 ? '' : 's'}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {unfilled.map((d) => (
-                  <span key={d.id} title={`No ${ROLE_TYPE_LABELS[rt] || rt} scoped to ${d.name}`}
-                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
-                    {d.name}
-                  </span>
-                ))}
-              </div>
+            <div style={{ padding: '4px 14px 10px', fontSize: 12, color: criticalGap ? '#7f1d1d' : 'var(--color-text-muted)' }}>
+              {criticalGap ? 'This role is required and has no holder — assign someone to close the gap.' : 'No one holds this role yet.'}
             </div>
           );
         })()}
@@ -878,3 +971,166 @@ const rolesTextBtn: React.CSSProperties = {
   color: 'var(--color-primary)', cursor: 'pointer',
   fontSize: 12, fontFamily: 'inherit',
 };
+
+// ── Per-entity matrix renderer ─────────────────────────────────────────
+// Renders one row per host entity (domain / system / asset) that this
+// role can attach to. Each row shows the entity name plus the holder(s)
+// currently assigned via the entity's FK field, with a Manage link that
+// drills into the source page for editing. Unfilled rows surface
+// visibly so staffing gaps are immediately obvious.
+function renderEntityMatrix({ info, domains, systems, dataAssets, personById, navigateToEntity }: {
+  info: EntityRoleScope;
+  domains: DomainOption[];
+  systems: SystemOption[];
+  dataAssets: AssetOption[];
+  personById: Map<string, string>;
+  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
+}) {
+  // Pull the right collection + holder extractor for this role.
+  const rows: Array<{ id: string; name: string; holderIds: string[] }> = (() => {
+    if (info.entityType === 'domain') {
+      return domains.map((d) => ({
+        id: d.id,
+        name: d.name,
+        holderIds: info.field === 'ownerId'
+          ? (d.ownerId ? [d.ownerId] : [])
+          : (d.stewardIds || []),
+      }));
+    }
+    if (info.entityType === 'system') {
+      return systems.map((s) => ({
+        id: s.id,
+        name: s.name,
+        holderIds: info.field === 'custodianIds'
+          ? (s.custodianIds || [])
+          : info.field === 'ownerPersonId'
+            ? (s.ownerPersonId ? [s.ownerPersonId] : [])
+            : (s.deputyOwnerId ? [s.deputyOwnerId] : []),
+      }));
+    }
+    return dataAssets.map((a) => ({
+      id: a.id,
+      name: a.name,
+      holderIds: info.field === 'ownerPersonId'
+        ? (a.ownerPersonId ? [a.ownerPersonId] : [])
+        : (a.stewardIds || []),
+    }));
+  })();
+
+  const entityLabel =
+    info.entityType === 'domain' ? 'data domain'
+    : info.entityType === 'system' ? 'system'
+    : 'data asset';
+  const entityLabelPlural =
+    info.entityType === 'domain' ? 'data domains'
+    : info.entityType === 'system' ? 'systems'
+    : 'data assets';
+
+  if (rows.length === 0) {
+    return (
+      <div style={{ padding: '4px 14px 10px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+        No {entityLabelPlural} defined yet — create one to assign this role.
+      </div>
+    );
+  }
+
+  // Filled count drives the header summary; matches the holder-list
+  // view's "N holders" feel but per-entity.
+  const filledCount = rows.filter((r) => r.holderIds.length > 0).length;
+  const totalCount = rows.length;
+
+  return (
+    <div style={{ borderTop: '1px solid var(--color-border)' }}>
+      <div style={{
+        padding: '6px 14px',
+        fontSize: 11,
+        color: 'var(--color-text-muted)',
+        background: 'var(--color-bg)',
+        borderBottom: '1px solid var(--color-border)',
+      }}>
+        {filledCount} of {totalCount} {entityLabelPlural} have this role assigned
+      </div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {rows.map((row) => {
+          const empty = row.holderIds.length === 0;
+          return (
+            <li
+              key={row.id}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 2fr auto',
+                alignItems: 'center',
+                gap: 12,
+                padding: '8px 14px',
+                fontSize: 13,
+                borderTop: '1px solid var(--color-border)',
+                background: empty ? '#fffbeb' : 'transparent',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => navigateToEntity(info.entityType, row.id)}
+                style={{
+                  background: 'none', border: 'none', padding: 0,
+                  textAlign: 'left', cursor: 'pointer',
+                  color: 'var(--color-primary)', fontWeight: 500,
+                  fontSize: 13, fontFamily: 'inherit',
+                }}
+                title={`Open ${row.name}`}
+              >
+                {row.name}
+              </button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {empty ? (
+                  <span style={{ fontSize: 12, color: '#b45309', fontStyle: 'italic' }}>
+                    No holder — unassigned
+                  </span>
+                ) : (
+                  row.holderIds.map((pid) => (
+                    <span
+                      key={pid}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '2px 8px', borderRadius: 999,
+                        background: 'var(--color-bg)',
+                        border: '1px solid var(--color-border)',
+                        fontSize: 12,
+                      }}
+                    >
+                      <span style={{
+                        width: 16, height: 16, borderRadius: '50%',
+                        background: '#e0e7ff', color: '#3730a3',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, fontWeight: 700,
+                      }}>
+                        {(personById.get(pid) || '?').charAt(0).toUpperCase()}
+                      </span>
+                      {personById.get(pid) || 'Unknown person'}
+                    </span>
+                  ))
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => navigateToEntity(info.entityType, row.id)}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  padding: '2px 10px',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  color: 'var(--color-primary)',
+                  whiteSpace: 'nowrap',
+                }}
+                title={`Manage on the ${entityLabel} page`}
+              >
+                {empty ? '+ Assign' : info.cardinality === 'many' ? 'Manage' : 'Change'}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
