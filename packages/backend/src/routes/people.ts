@@ -425,6 +425,9 @@ router.get('/:id/360', (req: Request, res: Response) => {
       if (r.scopeType === 'ORG') {
         const org = organizations.find((o) => o.id === r.scopeId);
         if (org) scopeName = org.name;
+      } else if (r.scopeType === 'DOMAIN') {
+        const dom = dataDomains.find((d) => d.id === r.scopeId);
+        if (dom) scopeName = dom.name;
       }
       return { ...r, scopeName };
     });

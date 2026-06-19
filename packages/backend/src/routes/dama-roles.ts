@@ -7,6 +7,7 @@ import { people } from './people';
 import { agents } from './agents';
 import { skills } from './skills';
 import { governanceTasks } from './governance-tasks';
+import { dataDomains } from './data-domains';
 
 export const DAMA_ROLE_TYPES = [
   // Executive/Strategic
@@ -24,14 +25,36 @@ export const DAMA_ROLE_TYPES = [
   'DATABASE_ADMINISTRATOR',     // Manages database instances, performance, maintenance
 ] as const;
 
+// Roles that may be scoped to a specific data domain (in addition to
+// being scoped org-wide). These are the DAMA roles whose
+// accountability is meaningful per-domain — Data Owner for a single
+// domain, a Steward focused on one domain, etc. Org-only roles
+// (CDO, Governance Lead, generalist quality analyst, DBA) stay ORG.
+const DOMAIN_SCOPABLE_ROLES = new Set<string>([
+  'DATA_OWNER',
+  'BUSINESS_DATA_STEWARD',
+  'TECHNICAL_DATA_STEWARD',
+  'DATA_ARCHITECT',
+  'DATA_CUSTODIAN',
+]);
+
+// Roles where there can be only one holder per scope. Owner-shaped
+// roles are single (one Data Owner per domain, one CDO per org);
+// steward / custodian / architect roles allow multiple holders.
+const SINGLE_HOLDER_ROLES = new Set<string>([
+  'CDO',
+  'DATA_GOVERNANCE_LEAD',
+  'DATA_OWNER',
+]);
+
 export interface StoredDamaRole {
   id: string;
   personId: string | null;
   agentId: string | null;
   agentName: string | null;
-  roleType: string;    // one of DAMA_ROLE_TYPES
-  scopeType: 'ORG';    // always org-scoped; domain ownership lives on the domain itself
-  scopeId: string;     // orgId
+  roleType: string;                  // one of DAMA_ROLE_TYPES
+  scopeType: 'ORG' | 'DOMAIN';       // ORG = enterprise-wide; DOMAIN = scoped to a single data domain
+  scopeId: string;                   // orgId when scopeType=ORG; dataDomain.id when scopeType=DOMAIN
   since: string;
   createdAt: string;
 }
@@ -39,18 +62,7 @@ export interface StoredDamaRole {
 export const damaRoles: StoredDamaRole[] = loadStore<StoredDamaRole>('damaRoles');
 registerStore('damaRoles', damaRoles);
 
-// Migration: any existing DOMAIN-scoped role is removed. Domain ownership
-// is now managed exclusively via DataDomain.ownerId / stewardIds.
-const preMigrationCount = damaRoles.length;
-for (let i = damaRoles.length - 1; i >= 0; i--) {
-  if ((damaRoles[i].scopeType as string) === 'DOMAIN') damaRoles.splice(i, 1);
-}
-if (damaRoles.length < preMigrationCount) {
-  saveStore('damaRoles', damaRoles);
-  logger.info({ removed: preMigrationCount - damaRoles.length }, 'Removed DOMAIN-scoped DAMA roles (ownership lives on the domain now)');
-}
-
-// Migration: backfill agentId/agentName on legacy records
+// Backfill agentId/agentName on legacy records
 {
   let backfilled = 0;
   for (const r of damaRoles) {
@@ -63,6 +75,20 @@ if (damaRoles.length < preMigrationCount) {
     saveStore('damaRoles', damaRoles);
     logger.info({ backfilled }, 'Backfilled agentId/agentName on existing DAMA role assignments');
   }
+}
+
+// Resolve the orgId that a role assignment belongs to. ORG-scoped
+// assignments store the orgId directly in scopeId; DOMAIN-scoped
+// assignments need a lookup through the parent domain. Used by the
+// list / summary / per-person handlers so an `?orgId=` filter reaches
+// both kinds.
+function roleOrgId(r: StoredDamaRole): string | null {
+  if (r.scopeType === 'ORG') return r.scopeId;
+  if (r.scopeType === 'DOMAIN') {
+    const d = dataDomains.find((dd) => dd.id === r.scopeId);
+    return d ? d.orgId : null;
+  }
+  return null;
 }
 
 const router = Router();
@@ -83,7 +109,10 @@ router.get('/', (req: Request, res: Response) => {
   let filtered = [...damaRoles];
 
   if (orgId) {
-    filtered = filtered.filter((r) => r.scopeType === 'ORG' && r.scopeId === orgId);
+    // Include both ORG-scoped assignments for this org AND DOMAIN-
+    // scoped assignments whose domain belongs to this org, so the
+    // Governance Roles page sees both kinds when filtering by org.
+    filtered = filtered.filter((r) => roleOrgId(r) === orgId);
   }
   if (personId) {
     filtered = filtered.filter((r) => r.personId === personId);
@@ -115,11 +144,26 @@ router.post('/', (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: `Invalid roleType. Must be one of: ${DAMA_ROLE_TYPES.join(', ')}` });
     return;
   }
-  if (!scopeType || scopeType !== 'ORG') {
-    res.status(400).json({ success: false, error: 'scopeType must be ORG. Domain ownership is managed on the Data Domain itself.' });
+  if (!scopeType || (scopeType !== 'ORG' && scopeType !== 'DOMAIN')) {
+    res.status(400).json({ success: false, error: 'scopeType must be ORG or DOMAIN.' });
     return;
   }
   if (!scopeId) { res.status(400).json({ success: false, error: 'scopeId is required' }); return; }
+
+  // Domain-scoped assignments are only allowed for roles that have a
+  // per-domain meaning. Reject DOMAIN for org-only roles (CDO,
+  // Governance Lead, etc.) so the catalog stays coherent.
+  if (scopeType === 'DOMAIN') {
+    if (!DOMAIN_SCOPABLE_ROLES.has(roleType)) {
+      res.status(400).json({
+        success: false,
+        error: `Role ${roleType} cannot be scoped to a data domain. Assign it at the organization level.`,
+      });
+      return;
+    }
+    const domain = dataDomains.find((d) => d.id === scopeId);
+    if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  }
 
   let person: typeof people[number] | undefined;
   let agent: typeof agents[number] | undefined;
@@ -143,6 +187,22 @@ router.post('/', (req: Request, res: Response) => {
     const entityLabel = personId ? 'person' : 'agent';
     res.status(409).json({ success: false, error: `This ${entityLabel} already has this role for the given scope.` });
     return;
+  }
+
+  // Single-holder roles allow at most one holder per scope. The
+  // Governance Roles UI enforces this client-side, but a stray POST
+  // (or AI-driven assignment) could still try to add a second — fail
+  // loudly so the caller surfaces the existing holder instead of
+  // silently double-booking.
+  if (SINGLE_HOLDER_ROLES.has(roleType)) {
+    const existing = damaRoles.find((r) => r.roleType === roleType && r.scopeId === scopeId);
+    if (existing) {
+      res.status(409).json({
+        success: false,
+        error: `${roleType} already has a holder for this scope. Remove the existing assignment first.`,
+      });
+      return;
+    }
   }
 
   const now = new Date().toISOString();
@@ -323,7 +383,7 @@ router.get('/summary', (req: Request, res: Response) => {
   const { orgId } = req.query;
   let filtered = [...damaRoles];
   if (orgId) {
-    filtered = filtered.filter((r) => r.scopeType === 'ORG' && r.scopeId === orgId);
+    filtered = filtered.filter((r) => roleOrgId(r) === orgId);
   }
   const counts: Record<string, number> = {};
   for (const rt of DAMA_ROLE_TYPES) {

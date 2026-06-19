@@ -77,36 +77,51 @@ interface AssetOption {
 // ── Entity-scoped role catalogue ────────────────────────────────────────
 //
 // Each entry tells the matrix renderer which entity type this role
-// owns and which foreign-key field on the host entity holds the
-// assignment. Only roles whose holders live directly on a host record
-// (Domain.ownerId, System.custodianIds, DataAsset.stewardIds, …)
-// belong here; pure DAMA roles (CDO, Data Steward at org level, …)
-// stay in the original holder-list view because they don't have a
-// per-entity dimension.
+// attaches to and where its holders live:
 //
-// `cardinality` mirrors the host-entity field — single FK = `one`,
-// array FK = `many`.
+//   storage: 'entity' — holder ids live directly on the host record
+//     (Domain.ownerId, System.custodianIds, DataAsset.stewardIds, …).
+//     Assignments are edited on the source page; the matrix drills in
+//     and the +Assign link routes there.
+//
+//   storage: 'dama' — holders are DAMA role assignments with
+//     scopeType='DOMAIN' and scopeId=domain.id. The matrix renders a
+//     row per domain pulling holders from the `dama` list, and the
+//     +Assign link opens this page's form pre-scoped to that domain.
+//
+// `cardinality` mirrors the host-entity field or, for DAMA-storage,
+// the backend's single-holder rule — owner-shaped roles are 'one',
+// steward/architect/custodian-shaped are 'many'.
 
 type DomainField = 'ownerId' | 'stewardIds';
 type SystemField = 'ownerPersonId' | 'deputyOwnerId' | 'custodianIds';
 type AssetField  = 'ownerPersonId' | 'stewardIds';
 
 type EntityRoleScope =
-  | { entityType: 'domain'; field: DomainField; cardinality: 'one' | 'many' }
-  | { entityType: 'system'; field: SystemField; cardinality: 'one' | 'many' }
-  | { entityType: 'asset';  field: AssetField;  cardinality: 'one' | 'many' };
+  | { entityType: 'domain'; storage: 'entity'; field: DomainField; cardinality: 'one' | 'many' }
+  | { entityType: 'system'; storage: 'entity'; field: SystemField; cardinality: 'one' | 'many' }
+  | { entityType: 'asset';  storage: 'entity'; field: AssetField;  cardinality: 'one' | 'many' }
+  | { entityType: 'domain'; storage: 'dama';   cardinality: 'one' | 'many' };
 
 const ENTITY_SCOPED_ROLE_INFO: Record<string, EntityRoleScope> = {
   // Domain-scoped — fields on the DataDomain entity.
-  DATA_DOMAIN_OWNER:       { entityType: 'domain', field: 'ownerId',       cardinality: 'one'  },
-  DATA_DOMAIN_STEWARD:     { entityType: 'domain', field: 'stewardIds',    cardinality: 'many' },
+  DATA_DOMAIN_OWNER:       { entityType: 'domain', storage: 'entity', field: 'ownerId',       cardinality: 'one'  },
+  DATA_DOMAIN_STEWARD:     { entityType: 'domain', storage: 'entity', field: 'stewardIds',    cardinality: 'many' },
+  // Domain-scoped DAMA roles — backed by POST /dama-roles with
+  // scopeType='DOMAIN'. Owners are single per domain; steward /
+  // architect / custodian roles allow multiple holders.
+  DATA_OWNER:              { entityType: 'domain', storage: 'dama',   cardinality: 'one'  },
+  BUSINESS_DATA_STEWARD:   { entityType: 'domain', storage: 'dama',   cardinality: 'many' },
+  TECHNICAL_DATA_STEWARD:  { entityType: 'domain', storage: 'dama',   cardinality: 'many' },
+  DATA_ARCHITECT:          { entityType: 'domain', storage: 'dama',   cardinality: 'many' },
+  DATA_CUSTODIAN:          { entityType: 'domain', storage: 'dama',   cardinality: 'many' },
   // System-scoped — fields on the System entity.
-  SYSTEM_OWNER:            { entityType: 'system', field: 'ownerPersonId', cardinality: 'one'  },
-  SYSTEM_DEPUTY_OWNER:     { entityType: 'system', field: 'deputyOwnerId', cardinality: 'one'  },
-  SYSTEM_CUSTODIAN:        { entityType: 'system', field: 'custodianIds',  cardinality: 'many' },
+  SYSTEM_OWNER:            { entityType: 'system', storage: 'entity', field: 'ownerPersonId', cardinality: 'one'  },
+  SYSTEM_DEPUTY_OWNER:     { entityType: 'system', storage: 'entity', field: 'deputyOwnerId', cardinality: 'one'  },
+  SYSTEM_CUSTODIAN:        { entityType: 'system', storage: 'entity', field: 'custodianIds',  cardinality: 'many' },
   // Data Asset-scoped — fields on the DataAsset entity.
-  DATA_ASSET_OWNER:        { entityType: 'asset',  field: 'ownerPersonId', cardinality: 'one'  },
-  DATA_ASSET_STEWARD:      { entityType: 'asset',  field: 'stewardIds',    cardinality: 'many' },
+  DATA_ASSET_OWNER:        { entityType: 'asset',  storage: 'entity', field: 'ownerPersonId', cardinality: 'one'  },
+  DATA_ASSET_STEWARD:      { entityType: 'asset',  storage: 'entity', field: 'stewardIds',    cardinality: 'many' },
 };
 
 function entityRoleInfo(roleType: string): EntityRoleScope | null {
@@ -141,14 +156,19 @@ const ROLE_TYPE_LABELS: Record<string, string> = {
 
 const ROLE_CATEGORIES: Record<string, string> = {
   CDO: 'Executive', DATA_GOVERNANCE_LEAD: 'Executive',
-  DATA_OWNER: 'Business', BUSINESS_DATA_STEWARD: 'Business', DATA_QUALITY_ANALYST: 'Business',
+  DATA_QUALITY_ANALYST: 'Business',
   DATA_STEWARD: 'Business',
-  TECHNICAL_DATA_STEWARD: 'Technical', DATA_CUSTODIAN: 'Technical', DATA_ARCHITECT: 'Technical',
   DATA_ENGINEER: 'Technical', DATABASE_ADMINISTRATOR: 'Technical',
-  // Entity-attached roles get their own category so they're easy to
-  // distinguish from enterprise-level DAMA roles. Single-host roles
-  // (Domain / System / Asset Owner / Steward / Custodian) cluster
-  // together — these are the rows that get the per-entity matrix.
+  // Entity-attached roles get their own category — these are the rows
+  // that render with the per-entity matrix. Mixes DAMA-storage domain
+  // roles (Data Owner, Business / Technical Data Steward, Architect,
+  // Custodian) with entity-storage host-attached roles (Domain Owner,
+  // System Owner, Asset Steward, etc.).
+  DATA_OWNER: 'Entity-attached',
+  BUSINESS_DATA_STEWARD: 'Entity-attached',
+  TECHNICAL_DATA_STEWARD: 'Entity-attached',
+  DATA_ARCHITECT: 'Entity-attached',
+  DATA_CUSTODIAN: 'Entity-attached',
   DATA_DOMAIN_OWNER: 'Entity-attached', DATA_DOMAIN_STEWARD: 'Entity-attached',
   SYSTEM_OWNER: 'Entity-attached', SYSTEM_DEPUTY_OWNER: 'Entity-attached',
   SYSTEM_CUSTODIAN: 'Entity-attached',
@@ -206,7 +226,7 @@ interface FormData {
   personId: string;
   agentId: string;
   roleType: string;
-  scopeType: 'ORG';
+  scopeType: 'ORG' | 'DOMAIN';
   scopeId: string;
 }
 
@@ -295,7 +315,17 @@ export default function DamaRolesPage() {
     return m;
   }, [people]);
 
-  // Entity-attached roles aren't stored in damaRoles — they're FK
+  // Open the assign form pre-scoped to a specific entity. Used by
+  // the matrix's inline +Assign on DAMA-storage rows — pre-fills
+  // scopeType + scopeId so the user only has to pick a holder.
+  const openAddForEntity = (roleType: string, scopeType: 'DOMAIN', scopeId: string) => {
+    if (!activeOrgId) { addToast('error', 'Select an organization from the header first.'); return; }
+    setForm({ ...emptyForm, roleType, scopeType, scopeId });
+    setError('');
+    setShowForm(true);
+  };
+
+  // Entity-storage roles aren't stored in damaRoles — they're FK
   // fields on the host record. Send the user to the host page with
   // the entity highlighted so they can use the existing owner /
   // steward / custodian pickers there.
@@ -357,8 +387,10 @@ export default function DamaRolesPage() {
   const handleCancel = () => { setShowForm(false); setError(''); setForm(emptyForm); };
 
   const scopeNameForFilter = useCallback((scopeId: string) => {
-    return orgs.find((o) => o.id === scopeId)?.name || '';
-  }, [orgs]);
+    return orgs.find((o) => o.id === scopeId)?.name
+      || domains.find((d) => d.id === scopeId)?.name
+      || '';
+  }, [orgs, domains]);
 
   // Apply role filter and free-text search against person name + org name.
   const filteredRoles = roles.filter((r) => {
@@ -542,19 +574,40 @@ export default function DamaRolesPage() {
                 </optgroup>
               </select>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
-              <select style={{ ...selectStyle, border: roleValidation.fieldError('scopeId') ? inputErrorBorder : selectStyle.border }} value={form.scopeId}
-                onChange={(e) => setForm({ ...form, scopeId: e.target.value })}
-                onBlur={() => { roleValidation.touch('scopeId'); roleValidation.validateField('scopeId', form.scopeId, form); }}>
-                <option value="">-- Select organization --</option>
-                {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-              {roleValidation.fieldError('scopeId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('scopeId')}</div>}
-              <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                Domain ownership (owner/steward) is managed directly on the Data Domain.
+            {form.scopeType === 'DOMAIN' ? (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Data Domain</label>
+                <div style={{
+                  border: '1px solid var(--color-border)', borderRadius: 4,
+                  padding: '6px 10px', fontSize: 13,
+                  background: 'var(--color-bg)', color: 'var(--color-text)',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+                    padding: '1px 6px', borderRadius: 3, background: '#dcfce7', color: '#166534',
+                  }}>DOMAIN</span>
+                  {domains.find((d) => d.id === form.scopeId)?.name || form.scopeId}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  Scoped to this data domain. Edit on the Data Domains page to change scope.
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Organization *</label>
+                <select style={{ ...selectStyle, border: roleValidation.fieldError('scopeId') ? inputErrorBorder : selectStyle.border }} value={form.scopeId}
+                  onChange={(e) => setForm({ ...form, scopeId: e.target.value })}
+                  onBlur={() => { roleValidation.touch('scopeId'); roleValidation.validateField('scopeId', form.scopeId, form); }}>
+                  <option value="">-- Select organization --</option>
+                  {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                {roleValidation.fieldError('scopeId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('scopeId')}</div>}
+                <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                  Org-wide assignment. To scope to a single domain, use the +Assign link on the per-domain row.
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
@@ -641,6 +694,7 @@ export default function DamaRolesPage() {
                 personById={personById}
                 openRoleDrawer={openRoleDrawer}
                 onAssign={openAddForRole}
+                onAssignToEntity={openAddForEntity}
                 navigateToEntity={navigateToEntity}
                 setConfirmDelete={setConfirmDelete}
               />
@@ -681,7 +735,7 @@ function SidebarItem({ label, count, active, onClick, accent }: {
 // ── By-Role view ──────────────────────────────────────────────────────────
 // One section per role type, showing the people who hold that role. The
 // section header is clickable to open the Role Detail drawer.
-function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, systems, dataAssets, personById, openRoleDrawer, onAssign, navigateToEntity, setConfirmDelete }: {
+function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, systems, dataAssets, personById, openRoleDrawer, onAssign, onAssignToEntity, navigateToEntity, setConfirmDelete }: {
   roles: DamaRoleAssignment[];
   /** Full governance-role catalog so every role is listed even with
    *  zero holders (consistent with the Governance Groups expected-role
@@ -700,9 +754,13 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
   personById: Map<string, string>;
   openRoleDrawer: (rt: string) => void;
   onAssign: (rt: string) => void;
-  /** Drill-down: send the user to the host page with the entity
-   *  highlighted so they can edit the owner/steward/custodian field
-   *  using the existing picker on that page. */
+  /** Inline assign-to-entity for DAMA-storage matrix rows — opens the
+   *  page's assign form pre-scoped to a specific domain so the user
+   *  just picks a person and saves. */
+  onAssignToEntity: (rt: string, scopeType: 'DOMAIN', scopeId: string) => void;
+  /** Drill-down for entity-storage matrix rows: send the user to the
+   *  host page with the entity highlighted so they can edit the
+   *  owner/steward/custodian field using the existing picker there. */
   navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
   setConfirmDelete: (id: string) => void;
 }) {
@@ -808,18 +866,22 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
           const entInfo = entityRoleInfo(rt);
           // Entity-attached roles get the per-entity matrix view —
           // every domain / system / asset listed with its current
-          // holder(s) and a drill-down to the source page where the
-          // assignment lives. Org-scoped DAMA roles (CDO, Data Owner,
-          // Data Steward, etc.) keep the simple holder-list view
-          // because there's no per-entity dimension to lay out.
+          // holder(s) and the appropriate inline action. Org-only
+          // DAMA roles (CDO, Governance Lead, Data Quality Analyst,
+          // Engineer, DBA) keep the simple holder-list view because
+          // there's no per-entity dimension to lay out.
           if (entInfo) {
             return renderEntityMatrix({
+              rt,
               info: entInfo,
+              dama: list,
               domains,
               systems,
               dataAssets,
               personById,
+              onAssignToEntity,
               navigateToEntity,
+              setConfirmDelete,
             });
           }
           // Org-scoped roles — original holder list.
@@ -975,45 +1037,71 @@ const rolesTextBtn: React.CSSProperties = {
 // ── Per-entity matrix renderer ─────────────────────────────────────────
 // Renders one row per host entity (domain / system / asset) that this
 // role can attach to. Each row shows the entity name plus the holder(s)
-// currently assigned via the entity's FK field, with a Manage link that
-// drills into the source page for editing. Unfilled rows surface
-// visibly so staffing gaps are immediately obvious.
-function renderEntityMatrix({ info, domains, systems, dataAssets, personById, navigateToEntity }: {
+// currently assigned. Holders come from the host entity's FK field
+// (entity-storage) or from DAMA role assignments scoped to the entity
+// (dama-storage). The trailing action depends on storage too:
+//   - entity-storage → drill into the source page where the picker
+//     lives (Manage / Change / + Assign).
+//   - dama-storage → open the page's own assign form pre-scoped to
+//     this entity (+ Assign), and a × per holder for direct removal.
+// Unfilled rows surface visibly so staffing gaps are obvious.
+function renderEntityMatrix({ rt, info, dama, domains, systems, dataAssets, personById, onAssignToEntity, navigateToEntity, setConfirmDelete }: {
+  rt: string;
   info: EntityRoleScope;
+  /** DAMA role assignments for `rt` (passed already filtered). Only
+   *  used when info.storage === 'dama' — entity-storage roles pull
+   *  holders directly from the entity's FK field. */
+  dama: DamaRoleAssignment[];
   domains: DomainOption[];
   systems: SystemOption[];
   dataAssets: AssetOption[];
   personById: Map<string, string>;
+  onAssignToEntity: (rt: string, scopeType: 'DOMAIN', scopeId: string) => void;
   navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
+  setConfirmDelete: (id: string) => void;
 }) {
-  // Pull the right collection + holder extractor for this role.
-  const rows: Array<{ id: string; name: string; holderIds: string[] }> = (() => {
+  // Holder row carries the *assignment id* per holder for dama-storage
+  // so the × button can target the right record; entity-storage rows
+  // leave assignmentId null because removal is done on the source page.
+  type Holder = { personId: string; assignmentId: string | null };
+
+  const rows: Array<{ id: string; name: string; holders: Holder[] }> = (() => {
+    if (info.storage === 'dama') {
+      // DAMA-storage is always domain-scoped in this catalog.
+      return domains.map((d) => ({
+        id: d.id,
+        name: d.name,
+        holders: dama
+          .filter((r) => r.scopeId === d.id && r.personId)
+          .map((r) => ({ personId: r.personId as string, assignmentId: r.id })),
+      }));
+    }
     if (info.entityType === 'domain') {
       return domains.map((d) => ({
         id: d.id,
         name: d.name,
-        holderIds: info.field === 'ownerId'
-          ? (d.ownerId ? [d.ownerId] : [])
-          : (d.stewardIds || []),
+        holders: info.field === 'ownerId'
+          ? (d.ownerId ? [{ personId: d.ownerId, assignmentId: null }] : [])
+          : (d.stewardIds || []).map((pid) => ({ personId: pid, assignmentId: null })),
       }));
     }
     if (info.entityType === 'system') {
       return systems.map((s) => ({
         id: s.id,
         name: s.name,
-        holderIds: info.field === 'custodianIds'
-          ? (s.custodianIds || [])
+        holders: info.field === 'custodianIds'
+          ? (s.custodianIds || []).map((pid) => ({ personId: pid, assignmentId: null }))
           : info.field === 'ownerPersonId'
-            ? (s.ownerPersonId ? [s.ownerPersonId] : [])
-            : (s.deputyOwnerId ? [s.deputyOwnerId] : []),
+            ? (s.ownerPersonId ? [{ personId: s.ownerPersonId, assignmentId: null }] : [])
+            : (s.deputyOwnerId ? [{ personId: s.deputyOwnerId, assignmentId: null }] : []),
       }));
     }
     return dataAssets.map((a) => ({
       id: a.id,
       name: a.name,
-      holderIds: info.field === 'ownerPersonId'
-        ? (a.ownerPersonId ? [a.ownerPersonId] : [])
-        : (a.stewardIds || []),
+      holders: info.field === 'ownerPersonId'
+        ? (a.ownerPersonId ? [{ personId: a.ownerPersonId, assignmentId: null }] : [])
+        : (a.stewardIds || []).map((pid) => ({ personId: pid, assignmentId: null })),
     }));
   })();
 
@@ -1036,8 +1124,13 @@ function renderEntityMatrix({ info, domains, systems, dataAssets, personById, na
 
   // Filled count drives the header summary; matches the holder-list
   // view's "N holders" feel but per-entity.
-  const filledCount = rows.filter((r) => r.holderIds.length > 0).length;
+  const filledCount = rows.filter((r) => r.holders.length > 0).length;
   const totalCount = rows.length;
+
+  const handleRowAction = (rowId: string) => {
+    if (info.storage === 'dama') onAssignToEntity(rt, 'DOMAIN', rowId);
+    else navigateToEntity(info.entityType, rowId);
+  };
 
   return (
     <div style={{ borderTop: '1px solid var(--color-border)' }}>
@@ -1052,7 +1145,11 @@ function renderEntityMatrix({ info, domains, systems, dataAssets, personById, na
       </div>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {rows.map((row) => {
-          const empty = row.holderIds.length === 0;
+          const empty = row.holders.length === 0;
+          // Single-cardinality roles hide the +Assign action once a
+          // holder is set, since picking a second would be replacing
+          // not adding. The user clicks the row name to drill in.
+          const showRowAction = empty || info.cardinality === 'many';
           return (
             <li
               key={row.id}
@@ -1086,9 +1183,9 @@ function renderEntityMatrix({ info, domains, systems, dataAssets, personById, na
                     No holder — unassigned
                   </span>
                 ) : (
-                  row.holderIds.map((pid) => (
+                  row.holders.map((h) => (
                     <span
-                      key={pid}
+                      key={h.assignmentId || h.personId}
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6,
                         padding: '2px 8px', borderRadius: 999,
@@ -1103,30 +1200,55 @@ function renderEntityMatrix({ info, domains, systems, dataAssets, personById, na
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 9, fontWeight: 700,
                       }}>
-                        {(personById.get(pid) || '?').charAt(0).toUpperCase()}
+                        {(personById.get(h.personId) || '?').charAt(0).toUpperCase()}
                       </span>
-                      {personById.get(pid) || 'Unknown person'}
+                      {personById.get(h.personId) || 'Unknown person'}
+                      {h.assignmentId && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(h.assignmentId as string)}
+                          aria-label={`Remove ${personById.get(h.personId) || 'holder'}`}
+                          title="Remove holder"
+                          style={{
+                            background: 'none', border: 'none', padding: 0,
+                            marginLeft: 2, cursor: 'pointer', lineHeight: 1,
+                            color: 'var(--color-text-muted)', fontSize: 13,
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </span>
                   ))
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => navigateToEntity(info.entityType, row.id)}
-                style={{
-                  background: 'none',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 4,
-                  padding: '2px 10px',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                  color: 'var(--color-primary)',
-                  whiteSpace: 'nowrap',
-                }}
-                title={`Manage on the ${entityLabel} page`}
-              >
-                {empty ? '+ Assign' : info.cardinality === 'many' ? 'Manage' : 'Change'}
-              </button>
+              {showRowAction ? (
+                <button
+                  type="button"
+                  onClick={() => handleRowAction(row.id)}
+                  style={{
+                    background: 'none',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    padding: '2px 10px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    color: 'var(--color-primary)',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={info.storage === 'dama'
+                    ? `Assign on this ${entityLabel}`
+                    : `Manage on the ${entityLabel} page`}
+                >
+                  {empty
+                    ? '+ Assign'
+                    : info.storage === 'dama'
+                      ? '+ Add'
+                      : 'Manage'}
+                </button>
+              ) : (
+                <span />
+              )}
             </li>
           );
         })}
