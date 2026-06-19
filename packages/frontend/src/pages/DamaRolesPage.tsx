@@ -151,13 +151,11 @@ const ROLE_TYPE_LABELS: Record<string, string> = {
   SYSTEM_CUSTODIAN: 'System Custodian',
   DATA_ASSET_OWNER: 'Data Asset Owner',
   DATA_ASSET_STEWARD: 'Data Asset Steward',
-  DATA_STEWARD: 'Data Steward',
 };
 
 const ROLE_CATEGORIES: Record<string, string> = {
   CDO: 'Executive', DATA_GOVERNANCE_LEAD: 'Executive',
   DATA_QUALITY_ANALYST: 'Business',
-  DATA_STEWARD: 'Business',
   DATA_ENGINEER: 'Technical', DATABASE_ADMINISTRATOR: 'Technical',
   // Entity-attached roles get their own category — these are the rows
   // that render with the per-entity matrix. Mixes DAMA-storage domain
@@ -189,8 +187,7 @@ const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   DATA_ARCHITECT: { bg: '#e0e7ff', color: '#3730a3' },
   DATA_ENGINEER: { bg: '#fef9c3', color: '#854d0e' },
   DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#64748b' },
-  // Extra business roles that landed with the entity matrix work.
-  DATA_STEWARD:        { bg: '#d1f0eb', color: '#0f4f46' },
+  // Entity-attached role colours.
   DATA_DOMAIN_OWNER:   { bg: '#dbeafe', color: '#1e40af' },
   DATA_DOMAIN_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
   // Entity-attached — slate / cool greys so they're visually distinct
@@ -556,23 +553,36 @@ export default function DamaRolesPage() {
             )}
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Governance Role *</label>
-              <select style={selectStyle} value={form.roleType} onChange={(e) => setForm({ ...form, roleType: e.target.value })}>
-                <optgroup label="Executive/Strategic">
-                  {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Executive').map((rt) => (
-                    <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Business">
-                  {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Business').map((rt) => (
-                    <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Technical">
-                  {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Technical').map((rt) => (
-                    <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
-                  ))}
-                </optgroup>
-              </select>
+              {form.scopeType === 'DOMAIN' ? (
+                // When the form was opened from a per-entity matrix row,
+                // the role is contextual — changing it would unscope the
+                // assignment. Show it as a read-only badge instead.
+                <div style={{
+                  border: '1px solid var(--color-border)', borderRadius: 4,
+                  padding: '6px 10px', fontSize: 13,
+                  background: 'var(--color-bg)', color: 'var(--color-text)',
+                }}>
+                  {ROLE_TYPE_LABELS[form.roleType] || form.roleType}
+                </div>
+              ) : (
+                <select style={selectStyle} value={form.roleType} onChange={(e) => setForm({ ...form, roleType: e.target.value })}>
+                  <optgroup label="Executive/Strategic">
+                    {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Executive').map((rt) => (
+                      <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Business">
+                    {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Business').map((rt) => (
+                      <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Technical">
+                    {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Technical').map((rt) => (
+                      <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              )}
             </div>
             {form.scopeType === 'DOMAIN' ? (
               <div>
@@ -779,8 +789,11 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
   }
   // Iterate the whole catalog in canonical ROLE_TYPE_LABELS order
   // (executive first), not just roles that happen to have holders. When
-  // a specific role filter is active, show only that section.
-  const catalogSet = new Set(catalog);
+  // a specific role filter is active, show only that section. Entity-
+  // attached roles render from local entity state (not the backend
+  // catalog), so they're always included alongside the DAMA roles the
+  // backend reports.
+  const catalogSet = new Set([...catalog, ...Object.keys(ENTITY_SCOPED_ROLE_INFO)]);
   const ordered = Object.keys(ROLE_TYPE_LABELS)
     .filter((rt) => catalogSet.has(rt))
     .filter((rt) => !filterRoleType || rt === filterRoleType);
