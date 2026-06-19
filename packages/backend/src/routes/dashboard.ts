@@ -286,11 +286,12 @@ router.get('/raci', (req: Request, res: Response) => {
     rolePersonMap[r.roleType].add(r.personId);
   }
 
-  // Governance group members -> person IDs (for Informed)
+  // Governance group members -> person IDs (for Informed). Agent
+  // advisors don't appear in person-keyed sets.
   const groupMemberIds = new Set<string>();
   for (const g of filteredGroups) {
     for (const m of g.members) {
-      groupMemberIds.add(m.personId);
+      if (m.personId) groupMemberIds.add(m.personId);
     }
   }
 
@@ -419,6 +420,11 @@ router.get('/raci', (req: Request, res: Response) => {
 
         if (matches) {
           for (const member of group.members) {
+            // The RACI matrix is keyed by personId. Agent advisors
+            // (member.personId === null) don't appear here — they're
+            // surfaced on the group's own page instead, not in the
+            // person-name matrix.
+            if (!member.personId) continue;
             const raciLetter = GROUP_ROLE_TO_RACI[member.groupRole] || GROUP_ROLE_TO_RACI[(member as any).role] || 'I';
             const personName = people.find((p) => p.id === member.personId)?.name || '';
             // Higher priority wins: A > R > C > I
@@ -515,7 +521,9 @@ router.get('/raci', (req: Request, res: Response) => {
       if (domain) {
         // Find governance groups that might govern this domain
         for (const g of filteredGroups) {
-          for (const m of g.members) informedForRow.add(m.personId);
+          for (const m of g.members) {
+            if (m.personId) informedForRow.add(m.personId);
+          }
         }
       }
     }

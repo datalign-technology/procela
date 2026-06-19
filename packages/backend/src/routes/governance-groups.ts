@@ -5,6 +5,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { dataDomains } from './data-domains';
 import { people } from './people';
+import { agents } from './agents';
 import logger from '../lib/logger';
 
 // Governance Hierarchy Tiers (aligned with data governance best practices)
@@ -38,8 +39,19 @@ const GROUP_TYPE_LABELS: Record<string, string> = {
 
 const GROUP_ROLES = ['CHAIR', 'VICE_CHAIR', 'MEMBER', 'SECRETARY', 'ADVISOR'] as const;
 
+// Agent membership is restricted to the ADVISOR slot. The voting /
+// chairing / signing roles stay people-only so accountability for any
+// decision the group makes — policy approvals, escalations, RACI sign-
+// off — lands on a human name. AI agents can still contribute (drafts,
+// quality monitoring, policy-gap surfacing) in the advisor capacity.
+const AGENT_ALLOWED_GROUP_ROLES = new Set<string>(['ADVISOR']);
+
 interface GroupMember {
-  personId: string;
+  // Exactly one of (personId, agentId) is set on any membership row.
+  // Older records only have personId; the migration below backfills
+  // agentId: null so the discriminator is always present.
+  personId: string | null;
+  agentId: string | null;
   groupRole: string;
   since: string;
 }
@@ -77,6 +89,23 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
     }
     saveStore('governanceGroups', governanceGroups);
     logger.info({ removed: dupeIds.length }, 'Removed duplicate governance groups');
+  }
+}
+
+// Backfill: ensure every membership row has the (personId, agentId)
+// discriminator pair so downstream code can branch on type without
+// undefined checks. Legacy rows only stored personId.
+{
+  let backfilled = 0;
+  for (const g of governanceGroups) {
+    for (const m of g.members) {
+      if ((m as any).agentId === undefined) { (m as any).agentId = null; backfilled++; }
+      if ((m as any).personId === undefined) { (m as any).personId = null; }
+    }
+  }
+  if (backfilled > 0) {
+    saveStore('governanceGroups', governanceGroups);
+    logger.info({ backfilled }, 'Backfilled agentId on existing governance group members');
   }
 }
 
@@ -187,8 +216,12 @@ router.get('/:id', (req: Request, res: Response) => {
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
   const enrichedMembers = group.members.map((m) => {
+    if (m.agentId) {
+      const agent = agents.find((a) => a.id === m.agentId);
+      return { ...m, personName: null, agentName: agent?.name || 'Unknown' };
+    }
     const person = people.find((p) => p.id === m.personId);
-    return { ...m, personName: person?.name || 'Unknown' };
+    return { ...m, personName: person?.name || 'Unknown', agentName: null };
   });
 
   const parent = group.parentId ? governanceGroups.find((g) => g.id === group.parentId) : null;
@@ -373,30 +406,68 @@ router.delete('/:id', (req: Request, res: Response) => {
 router.post('/:id/members', (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
-  const { personId, groupRole } = req.body;
-  if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
+  const { personId, agentId, groupRole } = req.body;
+
+  if (!personId && !agentId) { res.status(400).json({ success: false, error: 'Either personId or agentId is required' }); return; }
+  if (personId && agentId) { res.status(400).json({ success: false, error: 'Provide either personId or agentId, not both' }); return; }
   if (!groupRole || !GROUP_ROLES.includes(groupRole as any)) {
     res.status(400).json({ success: false, error: `Invalid groupRole. Must be one of: ${GROUP_ROLES.join(', ')}` });
     return;
   }
-  if (group.members.find((m) => m.personId === personId)) {
-    res.status(409).json({ success: false, error: 'This person is already a member' });
+
+  // Accountability rule: agents can only sit in the advisor slot. The
+  // voting / chairing / signing roles stay with humans (see
+  // AGENT_ALLOWED_GROUP_ROLES). Reject up front so the UI can surface
+  // the error rather than the row landing in a state a regulator
+  // would later flag.
+  if (agentId && !AGENT_ALLOWED_GROUP_ROLES.has(groupRole)) {
+    res.status(400).json({
+      success: false,
+      error: `Agents may only be added as ADVISOR. The ${groupRole} role requires a person for accountability.`,
+    });
     return;
   }
-  const person = people.find((p) => p.id === personId);
-  if (!person) { res.status(400).json({ success: false, error: 'Person not found' }); return; }
-  group.members.push({ personId, groupRole, since: new Date().toISOString() });
-  group.updatedAt = new Date().toISOString();
+
+  if (personId) {
+    if (group.members.find((m) => m.personId === personId)) {
+      res.status(409).json({ success: false, error: 'This person is already a member' });
+      return;
+    }
+    const person = people.find((p) => p.id === personId);
+    if (!person) { res.status(400).json({ success: false, error: 'Person not found' }); return; }
+    const now = new Date().toISOString();
+    group.members.push({ personId, agentId: null, groupRole, since: now });
+    group.updatedAt = now;
+    saveStore('governanceGroups', governanceGroups);
+    auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { personId, groupRole });
+    res.status(201).json({ success: true, data: { personId, agentId: null, groupRole, personName: person.name, agentName: null, since: now } });
+    return;
+  }
+
+  // Agent membership.
+  if (group.members.find((m) => m.agentId === agentId)) {
+    res.status(409).json({ success: false, error: 'This agent is already a member' });
+    return;
+  }
+  const agent = agents.find((a) => a.id === agentId);
+  if (!agent) { res.status(400).json({ success: false, error: 'Agent not found' }); return; }
+  const now = new Date().toISOString();
+  group.members.push({ personId: null, agentId, groupRole, since: now });
+  group.updatedAt = now;
   saveStore('governanceGroups', governanceGroups);
-  auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { personId, groupRole });
-  res.status(201).json({ success: true, data: { personId, groupRole, personName: person.name, since: group.members[group.members.length - 1].since } });
+  auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { agentId, groupRole });
+  res.status(201).json({ success: true, data: { personId: null, agentId, groupRole, personName: null, agentName: agent.name, since: now } });
 });
 
-/** DELETE /api/v1/governance-groups/:id/members/:personId */
-router.delete('/:id/members/:personId', (req: Request, res: Response) => {
+/** DELETE /api/v1/governance-groups/:id/members/:memberId — :memberId
+ *  resolves to either a personId or an agentId on the membership row.
+ *  We look it up across both so the frontend can use the same delete
+ *  call for either holder kind. */
+router.delete('/:id/members/:memberId', (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
-  const idx = group.members.findIndex((m) => m.personId === req.params.personId);
+  const { memberId } = req.params;
+  const idx = group.members.findIndex((m) => m.personId === memberId || m.agentId === memberId);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Member not found' }); return; }
   group.members.splice(idx, 1);
   group.updatedAt = new Date().toISOString();
