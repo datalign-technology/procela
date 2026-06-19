@@ -42,10 +42,23 @@ import { getRoleReference, RACI_COLOR, RACI_LABEL, Raci } from '../lib/roleDefin
 // ──────────────────────────────────────────────────────────────────────────
 
 interface GroupMember {
-  personId: string;
+  // Exactly one of (personId, agentId) is set. Agent members are
+  // restricted to the ADVISOR groupRole — the backend rejects any
+  // other role for an agent so accountability for voting / chairing
+  // / signing stays with humans.
+  personId: string | null;
+  agentId: string | null;
   groupRole: string;
   since: string;
-  personName?: string;
+  personName?: string | null;
+  agentName?: string | null;
+}
+
+interface AgentOption {
+  id: string;
+  name: string;
+  status: string;
+  orgIds: string[];
 }
 
 interface GroupDetail {
@@ -153,11 +166,17 @@ export default function GovernanceGroupDetailPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [raciRows, setRaciRows] = useState<RaciRow[]>([]);
+  const [agents, setAgents] = useState<AgentOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Add-member / assign-role local state
+  // Add-member / assign-role local state. addMemberType drives the
+  // Person/Agent toggle in the add panel; agents are restricted to
+  // the ADVISOR groupRole so when type flips to 'agent' the role
+  // selector is locked to ADVISOR and hidden.
+  const [addMemberType, setAddMemberType] = useState<'person' | 'agent'>('person');
   const [addMemberPersonId, setAddMemberPersonId] = useState('');
+  const [addMemberAgentId, setAddMemberAgentId] = useState('');
   const [addMemberRole, setAddMemberRole] = useState('MEMBER');
   const [assignRoleSlot, setAssignRoleSlot] = useState<string | null>(null);  // roleType currently being assigned
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
@@ -173,7 +192,7 @@ export default function GovernanceGroupDetailPage() {
     setError(null);
     try {
       const orgQuery = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [groupRes, damaRes, drRes, polRes, calRes, raciRes] = await Promise.all([
+      const [groupRes, damaRes, drRes, polRes, calRes, raciRes, agentsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: GroupDetail }>(`/governance-groups/${id}`),
         apiClient.get<{ success: boolean; data: DamaRole[] }>(`/dama-roles${orgQuery}`),
         apiClient.get<{ success: boolean; data: DecisionRight[] }>(`/decision-rights${orgQuery}`),
@@ -191,12 +210,14 @@ export default function GovernanceGroupDetailPage() {
             matrix: Record<string, Record<string, 'R' | 'A' | 'C' | 'I' | undefined>>;
           };
         }>(`/dashboard/raci${orgQuery}`).catch(() => ({ data: { rows: [], columns: [], matrix: {} } })),
+        apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${orgQuery}`).catch(() => ({ data: [] } as any)),
       ]);
       setGroup(groupRes.data);
       setDamaRoles(damaRes.data || []);
       setDecisionRights(drRes.data || []);
       setPolicies(polRes.data || []);
       setCalendarEvents(calRes.data || []);
+      setAgents(((agentsRes as any).data || []).filter((a: AgentOption) => a.status === 'ACTIVE'));
 
       // Reshape /dashboard/raci into RaciRow[]. The backend ships
       // a matrix keyed by node id × person id; we materialise an
@@ -233,7 +254,13 @@ export default function GovernanceGroupDetailPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Derived: per-member role assignments ──
-  const memberIds = useMemo(() => new Set((group?.members || []).map((m) => m.personId)), [group]);
+  // Person-keyed set used by derived person views (DAMA roles,
+  // calendar attendees, RACI rows). Agent members are advisory only
+  // and don't surface in those person-keyed lookups.
+  const memberIds = useMemo(
+    () => new Set((group?.members || []).map((m) => m.personId).filter((id): id is string => !!id)),
+    [group]
+  );
   const memberRoles = useMemo(
     () => damaRoles.filter((r) => r.personId && memberIds.has(r.personId)),
     [damaRoles, memberIds],
@@ -287,12 +314,20 @@ export default function GovernanceGroupDetailPage() {
 
   // ── Handlers ──
   const handleAddMember = async () => {
-    if (!group || !addMemberPersonId) return;
+    if (!group) return;
+    const isAgent = addMemberType === 'agent';
+    if (isAgent && !addMemberAgentId) return;
+    if (!isAgent && !addMemberPersonId) return;
     try {
-      await apiClient.post(`/governance-groups/${group.id}/members`, { personId: addMemberPersonId, groupRole: addMemberRole });
+      const payload: Record<string, unknown> = isAgent
+        ? { agentId: addMemberAgentId, groupRole: 'ADVISOR' }
+        : { personId: addMemberPersonId, groupRole: addMemberRole };
+      await apiClient.post(`/governance-groups/${group.id}/members`, payload);
       addToast('success', 'Member added');
       setAddMemberPersonId('');
+      setAddMemberAgentId('');
       setAddMemberRole('MEMBER');
+      setAddMemberType('person');
       fetchAll();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Add failed');
@@ -302,7 +337,8 @@ export default function GovernanceGroupDetailPage() {
   const handleRemoveMember = async (m: GroupMember) => {
     if (!group) return;
     try {
-      await apiClient.delete(`/governance-groups/${group.id}/members/${m.personId}`);
+      const memberId = m.agentId || m.personId;
+      await apiClient.delete(`/governance-groups/${group.id}/members/${memberId}`);
       addToast('success', 'Member removed');
       fetchAll();
     } catch (e) {
@@ -509,17 +545,31 @@ export default function GovernanceGroupDetailPage() {
               </td></tr>
             )}
             {group.members.map((m) => {
-              const personRoles = memberRoles.filter((r) => r.personId === m.personId);
+              const isAgent = !!m.agentId;
+              const memberId = (m.agentId || m.personId) as string;
+              const displayName = isAgent ? (m.agentName || m.agentId) : (m.personName || m.personId);
+              const detailPath = isAgent ? `/agents` : `/people/${m.personId}`;
+              const personRoles = isAgent ? [] : memberRoles.filter((r) => r.personId === m.personId);
               return (
-                <tr key={m.personId}>
+                <tr key={memberId}>
                   <td style={td}>
-                    <Link to={`/people/${m.personId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>
-                      {m.personName || m.personId}
+                    <Link to={detailPath} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {isAgent && (
+                        <span title="AI Agent" style={{
+                          fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+                          padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6',
+                        }}>⚙ Agent</span>
+                      )}
+                      {displayName}
                     </Link>
                   </td>
                   <td style={td}>{GROUP_ROLE_LABELS[m.groupRole] || m.groupRole}</td>
                   <td style={td}>
-                    {personRoles.length === 0 ? (
+                    {isAgent ? (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 12, fontStyle: 'italic' }}>
+                        Advisor — no governance roles
+                      </span>
+                    ) : personRoles.length === 0 ? (
                       <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>— no roles yet</span>
                     ) : (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -537,7 +587,7 @@ export default function GovernanceGroupDetailPage() {
                   <td style={{ ...td, textAlign: 'right' }}>
                     <button
                       onClick={() => setConfirmRemoveMember(m)}
-                      aria-label={`Remove ${m.personName || 'member'}`}
+                      aria-label={`Remove ${displayName}`}
                       style={{ background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--color-error, #dc2626)' }}
                     >
                       Remove
@@ -549,32 +599,94 @@ export default function GovernanceGroupDetailPage() {
           </tbody>
         </table>
 
-        {/* Add-member panel */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 4 }}>
+        {/* Add-member panel — supports both people and agent advisors.
+            Agents are locked to the ADVISOR group role so the row keeps
+            its accountability boundary (see backend
+            AGENT_ALLOWED_GROUP_ROLES). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 4, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>Add member:</span>
-          <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
-            <PersonPicker
-              mode="single"
-              valueMode="id"
-              value={addMemberPersonId || null}
-              onChange={(id) => setAddMemberPersonId(id || '')}
-              orgId={activeOrgId || undefined}
-              placeholder="Pick a person…"
-            />
+          <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'hidden' }}>
+            {(['person', 'agent'] as const).map((t) => {
+              const active = addMemberType === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setAddMemberType(t);
+                    setAddMemberPersonId('');
+                    setAddMemberAgentId('');
+                    if (t === 'agent') setAddMemberRole('ADVISOR');
+                    else setAddMemberRole('MEMBER');
+                  }}
+                  style={{
+                    padding: '4px 10px', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                    background: active ? (t === 'agent' ? '#ede9fe' : 'var(--color-surface)') : 'transparent',
+                    color: active ? (t === 'agent' ? '#5b21b6' : 'var(--color-text)') : 'var(--color-text-muted)',
+                    border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
+                  }}
+                >
+                  {t === 'agent' ? '⚙ Agent' : 'Person'}
+                </button>
+              );
+            })}
           </div>
-          <select
-            value={addMemberRole}
-            onChange={(e) => setAddMemberRole(e.target.value)}
-            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
+          {addMemberType === 'person' ? (
+            <div style={{ flex: 1, minWidth: 200, maxWidth: 320 }}>
+              <PersonPicker
+                mode="single"
+                valueMode="id"
+                value={addMemberPersonId || null}
+                onChange={(id) => setAddMemberPersonId(id || '')}
+                orgId={activeOrgId || undefined}
+                placeholder="Pick a person…"
+              />
+            </div>
+          ) : (
+            <select
+              value={addMemberAgentId}
+              onChange={(e) => setAddMemberAgentId(e.target.value)}
+              style={{ flex: 1, minWidth: 200, maxWidth: 320, fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
+            >
+              <option value="">-- Pick an agent --</option>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
+          {addMemberType === 'person' ? (
+            <select
+              value={addMemberRole}
+              onChange={(e) => setAddMemberRole(e.target.value)}
+              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 4 }}
+            >
+              {Object.entries(GROUP_ROLE_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              title="Agents may only serve as Advisor so accountability for voting / chairing / signing stays with humans."
+              style={{
+                fontSize: 11, padding: '4px 8px', borderRadius: 4,
+                background: '#ede9fe', color: '#5b21b6', fontWeight: 500,
+              }}
+            >
+              Advisor only
+            </span>
+          )}
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={handleAddMember}
+            disabled={addMemberType === 'agent' ? !addMemberAgentId : !addMemberPersonId}
           >
-            {Object.entries(GROUP_ROLE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <Button size="sm" variant="primary" onClick={handleAddMember} disabled={!addMemberPersonId}>
             Add
           </Button>
         </div>
+        {addMemberType === 'agent' && agents.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, paddingLeft: 10 }}>
+            No active agents in this org — create one on the Agents page first.
+          </div>
+        )}
       </SectionShell>
 
       {/* ── Section 2: Decision Rights this group owns ── */}
@@ -726,7 +838,7 @@ export default function GovernanceGroupDetailPage() {
       <ConfirmDialog
         open={!!confirmRemoveMember}
         title="Remove this member?"
-        message={confirmRemoveMember ? `Remove ${confirmRemoveMember.personName || 'this person'} from ${group.name}? Their organization-level governance role assignments will not be deleted — only their membership in this group.` : ''}
+        message={confirmRemoveMember ? `Remove ${confirmRemoveMember.agentName || confirmRemoveMember.personName || 'this member'} from ${group.name}? ${confirmRemoveMember.agentId ? 'The agent will remain available to assign elsewhere.' : 'Their organization-level governance role assignments will not be deleted — only their membership in this group.'}` : ''}
         confirmLabel="Remove from group"
         onCancel={() => setConfirmRemoveMember(null)}
         onConfirm={() => confirmRemoveMember && handleRemoveMember(confirmRemoveMember)}
