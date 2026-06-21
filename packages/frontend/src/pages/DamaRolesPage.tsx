@@ -11,8 +11,8 @@ import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
+import PersonPicker from '../components/PersonPicker';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
-import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
 import { clickable } from '../lib/a11y';
@@ -565,12 +565,19 @@ export default function DamaRolesPage() {
             ) : (
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Person *</label>
-              <select style={{ ...selectStyle, border: roleValidation.fieldError('personId') ? inputErrorBorder : selectStyle.border }} value={form.personId}
-                onChange={(e) => setForm({ ...form, personId: e.target.value })}
-                onBlur={() => { roleValidation.touch('personId'); roleValidation.validateField('personId', form.personId, form); }}>
-                <option value="">-- Select person --</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
-              </select>
+              <div
+                style={{ borderRadius: 4, border: roleValidation.fieldError('personId') ? inputErrorBorder : '1px solid transparent' }}
+                onBlur={() => { roleValidation.touch('personId'); roleValidation.validateField('personId', form.personId, form); }}
+              >
+                <PersonPicker
+                  mode="single"
+                  valueMode="id"
+                  value={form.personId || null}
+                  onChange={(id) => setForm({ ...form, personId: (id as string) || '' })}
+                  orgId={activeOrgId || undefined}
+                  placeholder="Pick a person…"
+                />
+              </div>
               {roleValidation.fieldError('personId') && <div style={fieldErrorStyle}>{roleValidation.fieldError('personId')}</div>}
             </div>
             )}
