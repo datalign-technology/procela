@@ -173,31 +173,25 @@ const ROLE_CATEGORIES: Record<string, string> = {
   DATA_ASSET_OWNER: 'Entity-attached', DATA_ASSET_STEWARD: 'Entity-attached',
 };
 
-const ROLE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
-  // Executive — pink/purple
-  CDO: { bg: '#fce7f3', color: '#9d174d' },
-  DATA_GOVERNANCE_LEAD: { bg: '#ede9fe', color: '#5b21b6' },
-  // Business — blue/teal
-  DATA_OWNER: { bg: '#dbeafe', color: '#1e40af' },
-  BUSINESS_DATA_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
-  DATA_QUALITY_ANALYST: { bg: '#f0fdf4', color: '#166534' },
-  // Technical — amber/slate
-  TECHNICAL_DATA_STEWARD: { bg: '#fef3c7', color: '#92400e' },
-  DATA_CUSTODIAN: { bg: '#e2e8f0', color: '#475569' },
-  DATA_ARCHITECT: { bg: '#e0e7ff', color: '#3730a3' },
-  DATA_ENGINEER: { bg: '#fef9c3', color: '#854d0e' },
-  DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#64748b' },
-  // Entity-attached role colours.
-  DATA_DOMAIN_OWNER:   { bg: '#dbeafe', color: '#1e40af' },
-  DATA_DOMAIN_STEWARD: { bg: '#d1f0eb', color: '#0f4f46' },
-  // Entity-attached — slate / cool greys so they're visually distinct
-  // from the enterprise DAMA roles above.
-  SYSTEM_OWNER:        { bg: '#e0f2fe', color: '#075985' },
-  SYSTEM_DEPUTY_OWNER: { bg: '#e0f2fe', color: '#0c4a6e' },
-  SYSTEM_CUSTODIAN:    { bg: '#f1f5f9', color: '#334155' },
-  DATA_ASSET_OWNER:    { bg: '#fef3c7', color: '#92400e' },
-  DATA_ASSET_STEWARD:  { bg: '#fef9c3', color: '#854d0e' },
+// One palette per *category* rather than per role. Eighteen distinct
+// role colours encoded nothing the role label wasn't already telling
+// you — the page read as confetti and reserved no colour budget for
+// real signal (e.g. required-but-unfilled). Four category palettes
+// give scanning value ("this is a business role") and let the red
+// staffing-gap treatment stay loud.
+const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
+  Executive:         { bg: '#ede9fe', color: '#5b21b6' },  // purple
+  Business:          { bg: '#dbeafe', color: '#1e40af' },  // blue
+  Technical:         { bg: '#fef3c7', color: '#92400e' },  // amber
+  'Entity-attached': { bg: '#e2e8f0', color: '#475569' },  // slate
 };
+
+const NEUTRAL_PALETTE = { bg: '#f1f5f9', color: '#64748b' };
+
+function roleColors(roleType: string): { bg: string; color: string } {
+  const cat = ROLE_CATEGORIES[roleType];
+  return (cat && CATEGORY_COLORS[cat]) || NEUTRAL_PALETTE;
+}
 
 const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 4,
@@ -442,7 +436,7 @@ export default function DamaRolesPage() {
   const scopeName = (scopeId: string) => resolveScope(scopeId).name;
 
   const roleBadge = (roleType: string): React.CSSProperties => {
-    const c = ROLE_TYPE_COLORS[roleType] || { bg: '#f1f5f9', color: '#64748b' };
+    const c = roleColors(roleType);
     return {
       display: 'inline-block', padding: '2px 8px', borderRadius: 4,
       fontSize: 11, fontWeight: 600, background: c.bg, color: c.color,
@@ -731,7 +725,7 @@ export default function DamaRolesPage() {
           {Object.keys(ROLE_TYPE_LABELS).map((rt) => {
             const count = roleCounts[rt] || 0;
             const isActive = filterRoleType === rt;
-            const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
+            const c = roleColors(rt);
             return (
               <SidebarItem
                 key={rt}
@@ -840,6 +834,13 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [collapsedRoles, setCollapsedRoles] = useState<Set<string>>(new Set());
 
+  // When the org has no host entities defined yet, the twelve
+  // Entity-attached cards would all repeat "No data domains defined
+  // yet" and bury the rest of the page. Render a single CTA in their
+  // place instead. Computed per-render so it reacts to data arriving
+  // after the initial mount.
+  const noHostEntities = domains.length === 0 && systems.length === 0 && dataAssets.length === 0;
+
   const byRole = new Map<string, DamaRoleAssignment[]>();
   for (const r of roles) {
     if (!byRole.has(r.roleType)) byRole.set(r.roleType, []);
@@ -911,7 +912,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
     const holderLabel = `${holderCount} ${holderCount === 1 ? 'holder' : 'holders'}`;
     const required = REQUIRED_ROLE_TYPES.has(rt);
     const criticalGap = required && !filled;
-    const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
+    const c = roleColors(rt);
     const roleOpen = !collapsedRoles.has(rt);
     return (
       <div
@@ -1043,6 +1044,13 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
             const inCat = ordered.filter((rt) => ROLE_CATEGORIES[rt] === cat);
             if (inCat.length === 0) return null;
             const catOpen = !collapsedCats.has(cat);
+            // Entity-attached pre-launch placeholder. When the org has
+            // no host entities, the twelve cards underneath would each
+            // say "No data domains defined yet" — same message, dozen
+            // times. Collapse to one CTA line that gets the user to
+            // where they can fix it. Once a domain / system / asset
+            // exists, the normal card list shows.
+            const showEntitySetupCta = cat === 'Entity-attached' && noHostEntities;
             return (
               <div key={cat}>
                 <button
@@ -1065,7 +1073,9 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
                     ({inCat.length})
                   </span>
                 </button>
-                {catOpen && (
+                {catOpen && showEntitySetupCta ? (
+                  <EntitySetupCta count={inCat.length} navigateToEntity={navigateToEntity} />
+                ) : catOpen && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {inCat.map(renderRoleCard)}
                   </div>
@@ -1133,6 +1143,39 @@ const rolesTextBtn: React.CSSProperties = {
   color: 'var(--color-primary)', cursor: 'pointer',
   fontSize: 12, fontFamily: 'inherit',
 };
+
+// Replaces the entity-attached card list when the org has no host
+// entities to assign roles against. One sentence + three drill-in
+// links beats twelve cards each repeating the same "no data domains
+// defined yet" line.
+function EntitySetupCta({ count, navigateToEntity }: {
+  count: number;
+  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
+}) {
+  const linkStyle: React.CSSProperties = {
+    background: 'none', border: 'none', padding: 0,
+    color: 'var(--color-primary)', cursor: 'pointer',
+    fontSize: 12, fontFamily: 'inherit', textDecoration: 'underline',
+  };
+  return (
+    <div style={{
+      padding: '14px 16px',
+      background: 'var(--color-surface)',
+      border: '1px dashed var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      fontSize: 13, lineHeight: 1.5,
+      color: 'var(--color-text-secondary)',
+    }}>
+      Define a data domain, system, or data asset to enable the {count} entity-attached
+      roles. Owners and stewards are assigned directly on those records.
+      <div style={{ marginTop: 6, display: 'flex', gap: 14 }}>
+        <button type="button" style={linkStyle} onClick={() => navigateToEntity('domain', '')}>Data Domains →</button>
+        <button type="button" style={linkStyle} onClick={() => navigateToEntity('system', '')}>Systems →</button>
+        <button type="button" style={linkStyle} onClick={() => navigateToEntity('asset', '')}>Data Assets →</button>
+      </div>
+    </div>
+  );
+}
 
 // ── Per-entity matrix renderer ─────────────────────────────────────────
 // Renders one row per host entity (domain / system / asset) that this
