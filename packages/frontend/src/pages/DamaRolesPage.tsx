@@ -402,9 +402,25 @@ export default function DamaRolesPage() {
 
   // Per-role counts for the sidebar - based on the unfiltered roles list
   // so sidebar always shows the full distribution, not what's left after
-  // a search filters things out.
+  // a search filters things out. Entity-storage roles are counted from
+  // the host entity collection (System.ownerPersonId, Domain.stewardIds,
+  // …) since those holders don't appear in the damaRoles list.
   const roleCounts: Record<string, number> = {};
   for (const r of roles) roleCounts[r.roleType] = (roleCounts[r.roleType] || 0) + 1;
+  for (const [rt, info] of Object.entries(ENTITY_SCOPED_ROLE_INFO)) {
+    if (info.storage !== 'entity') continue;
+    const sources =
+      info.entityType === 'domain' ? domains :
+      info.entityType === 'system' ? systems :
+                                     dataAssets;
+    const ids = new Set<string>();
+    for (const e of sources) {
+      const v = (e as any)[info.field];
+      if (Array.isArray(v)) for (const id of v) { if (id) ids.add(id); }
+      else if (v) ids.add(v);
+    }
+    if (ids.size > 0) roleCounts[rt] = (roleCounts[rt] || 0) + ids.size;
+  }
 
   // Resolve a role assignment's scopeId against every kind it might
   // point at (org / data domain / system / data asset) and return the
@@ -821,7 +837,36 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
       const bn = b.agentId ? (b.agentName || '') : (b.personName || '');
       return an.localeCompare(bn);
     });
-    const filled = list.length > 0;
+    // Entity-storage roles (SYSTEM_OWNER, DATA_DOMAIN_STEWARD, etc.)
+    // hold their assignments as foreign-key fields on the host record,
+    // not in the DAMA roles list — so `list.length` is always 0 even
+    // when every entity has an owner. Walk the host collection for
+    // those roles so the header doesn't read "Unfilled" right above a
+    // matrix that proudly announces "2 of 2 systems have this role
+    // assigned". Distinct holders are counted (one person owning two
+    // systems is one holder), matching what users expect "N holders"
+    // to mean.
+    const entityInfoForCard = entityRoleInfo(rt);
+    const entityHolderIds = (() => {
+      if (!entityInfoForCard || entityInfoForCard.storage !== 'entity') return new Set<string>();
+      const { entityType, field } = entityInfoForCard;
+      const sources =
+        entityType === 'domain' ? domains :
+        entityType === 'system' ? systems :
+                                  dataAssets;
+      const ids = new Set<string>();
+      for (const e of sources) {
+        const v = (e as any)[field];
+        if (Array.isArray(v)) for (const id of v) { if (id) ids.add(id); }
+        else if (v) ids.add(v);
+      }
+      return ids;
+    })();
+    const filled = list.length > 0 || entityHolderIds.size > 0;
+    const holderCount = entityInfoForCard?.storage === 'entity'
+      ? entityHolderIds.size
+      : list.length;
+    const holderLabel = `${holderCount} ${holderCount === 1 ? 'holder' : 'holders'}`;
     const required = REQUIRED_ROLE_TYPES.has(rt);
     const criticalGap = required && !filled;
     const c = ROLE_TYPE_COLORS[rt] || { bg: '#f1f5f9', color: '#64748b' };
@@ -857,7 +902,7 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
             {ROLE_TYPE_LABELS[rt] || rt}
           </button>
           {filled ? (
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{list.length} {list.length === 1 ? 'holder' : 'holders'}</span>
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{holderLabel}</span>
           ) : criticalGap ? (
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Unfilled — required
