@@ -221,6 +221,27 @@ export const GOVERNANCE_ROLES: GovernanceRoleDef[] = [
   { roleType: 'DATABASE_ADMINISTRATOR', label: 'Database Administrator', purpose: 'Manages database performance, backups, security, and availability.', priority: 'OPTIONAL', required: false, multiAssign: true, requiredSkillIds: [] },
 ];
 
+// Governance roles that carry executive accountability, business
+// judgement, or signing authority — these cannot be held by an AI
+// agent because a regulator / auditor asking "who's accountable for
+// this?" must land on a human name. The Person/Agent toggles across
+// the app (DAMA Roles assign form, Governance Groups expected-role
+// panel, Governance Program role list) consult this set to disable
+// the agent option, and the backend POST /dama-roles enforces the
+// same rule so a stray API call can't bypass the UI.
+//
+// Technical / monitoring roles (Technical Steward, DQ Analyst,
+// Architect, Engineer, DBA, Custodian) stay agent-eligible — those
+// are execution roles, not accountability-bearing ones.
+export const PEOPLE_ONLY_ROLE_TYPES = new Set<string>([
+  'CDO',
+  'DATA_GOVERNANCE_LEAD',
+  'DATA_OWNER',
+  'BUSINESS_DATA_STEWARD',
+]);
+
+export const PEOPLE_ONLY_REASON = 'Agents can’t hold accountability roles — only a person can hold this role so an auditor asking “who’s accountable?” lands on a human name.';
+
 export interface GovernanceGroupDef {
   groupType: string;
   label: string;

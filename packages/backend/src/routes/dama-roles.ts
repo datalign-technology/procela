@@ -47,6 +47,19 @@ const SINGLE_HOLDER_ROLES = new Set<string>([
   'DATA_OWNER',
 ]);
 
+// Roles that carry executive accountability, business judgement, or
+// signing authority cannot be held by an agent — a regulator /
+// auditor asking "who's accountable?" must land on a human name.
+// Frontend Person/Agent toggles consult the matching constant in
+// types/index.ts and disable the agent option; this set is the
+// server-side enforcement so a stray POST can't bypass the UI.
+const PEOPLE_ONLY_ROLE_TYPES = new Set<string>([
+  'CDO',
+  'DATA_GOVERNANCE_LEAD',
+  'DATA_OWNER',
+  'BUSINESS_DATA_STEWARD',
+]);
+
 export interface StoredDamaRole {
   id: string;
   personId: string | null;
@@ -163,6 +176,18 @@ router.post('/', (req: Request, res: Response) => {
     }
     const domain = dataDomains.find((d) => d.id === scopeId);
     if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  }
+
+  // Accountability rule: only humans can hold roles in
+  // PEOPLE_ONLY_ROLE_TYPES. Reject up front so the caller sees the
+  // reason rather than the row landing in a state an auditor would
+  // later flag.
+  if (agentId && PEOPLE_ONLY_ROLE_TYPES.has(roleType)) {
+    res.status(400).json({
+      success: false,
+      error: `Role ${roleType} requires a person — it carries executive accountability and cannot be held by an agent.`,
+    });
+    return;
   }
 
   let person: typeof people[number] | undefined;

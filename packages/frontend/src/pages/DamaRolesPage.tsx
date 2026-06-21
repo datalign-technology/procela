@@ -16,7 +16,7 @@ import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { SkeletonRows } from '../components/Skeleton';
 import { clickable } from '../lib/a11y';
-import { GOVERNANCE_ROLES } from '../types';
+import { GOVERNANCE_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 
 // Required governance roles (CDO, Data Governance Lead, Data Owner,
 // Business Data Steward). A required role with zero holders is a
@@ -501,27 +501,50 @@ export default function DamaRolesPage() {
               {error}
             </div>
           )}
-          {/* Holder kind toggle — a role can be held by a person or an AI agent. */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>Holder type</label>
-            <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-              {(['person', 'agent'] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setForm({ ...form, assigneeType: t, personId: '', agentId: '' })}
-                  style={{
-                    padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                    background: form.assigneeType === t ? (t === 'agent' ? '#ede9fe' : 'var(--color-bg)') : 'transparent',
-                    color: form.assigneeType === t ? (t === 'agent' ? '#5b21b6' : 'var(--color-text)') : 'var(--color-text-muted)',
-                    border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
-                  }}
-                >
-                  {t === 'agent' ? '⚙ Agent' : 'Person'}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Holder kind toggle — a role can be held by a person or an
+              AI agent. Accountability roles (CDO, Governance Lead, Data
+              Owner, Business Steward — see PEOPLE_ONLY_ROLE_TYPES)
+              disable the Agent option with a tooltip explaining why
+              the human must hold it. */}
+          {(() => {
+            const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(form.roleType);
+            return (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 6 }}>Holder type</label>
+                <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  {(['person', 'agent'] as const).map((t) => {
+                    const disabled = t === 'agent' && isPeopleOnly;
+                    const active = form.assigneeType === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={disabled}
+                        aria-disabled={disabled}
+                        title={disabled ? PEOPLE_ONLY_REASON : undefined}
+                        onClick={() => { if (!disabled) setForm({ ...form, assigneeType: t, personId: '', agentId: '' }); }}
+                        style={{
+                          padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          opacity: disabled ? 0.5 : 1,
+                          background: active ? (t === 'agent' ? '#ede9fe' : 'var(--color-bg)') : 'transparent',
+                          color: active ? (t === 'agent' ? '#5b21b6' : 'var(--color-text)') : 'var(--color-text-muted)',
+                          border: 'none', borderRight: t === 'person' ? '1px solid var(--color-border)' : 'none',
+                        }}
+                      >
+                        {t === 'agent' ? '⚙ Agent' : 'Person'}
+                      </button>
+                    );
+                  })}
+                </div>
+                {isPeopleOnly && (
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    {PEOPLE_ONLY_REASON}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {form.assigneeType === 'agent' ? (
               <div>
@@ -565,7 +588,19 @@ export default function DamaRolesPage() {
                   {ROLE_TYPE_LABELS[form.roleType] || form.roleType}
                 </div>
               ) : (
-                <select style={selectStyle} value={form.roleType} onChange={(e) => setForm({ ...form, roleType: e.target.value })}>
+                <select style={selectStyle} value={form.roleType} onChange={(e) => {
+                  const next = e.target.value;
+                  // If the new role is people-only and Agent is
+                  // currently selected, flip back to Person so the
+                  // form can't submit an invalid combo.
+                  const flipToPerson = PEOPLE_ONLY_ROLE_TYPES.has(next) && form.assigneeType === 'agent';
+                  setForm({
+                    ...form,
+                    roleType: next,
+                    assigneeType: flipToPerson ? 'person' : form.assigneeType,
+                    agentId: flipToPerson ? '' : form.agentId,
+                  });
+                }}>
                   <optgroup label="Executive/Strategic">
                     {(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS)).filter((rt) => ROLE_CATEGORIES[rt] === 'Executive').map((rt) => (
                       <option key={rt} value={rt}>{ROLE_TYPE_LABELS[rt] || rt}</option>

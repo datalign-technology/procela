@@ -6,7 +6,7 @@ import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
-import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { activateOnKey, activateOnKeyStop } from '../lib/a11y';
@@ -1095,8 +1095,15 @@ export default function GovernanceGroupsPage() {
                         const agentsAssigned = assigned.filter((a) => !!a.agentId).length;
                         const isFilled = peopleAssigned > 0;
                         const canAddPerson = expected.multiAssign || peopleAssigned === 0;
-                        const canAddAgent = expected.multiAssign || agentsAssigned === 0;
-                        const canAddMore = canAddPerson || canAddAgent;
+                        // Accountability roles (CDO, Governance Lead,
+                        // Data Owner, Business Steward) hide the agent
+                        // path entirely — even disabled it'd be a
+                        // distraction. The picker below renders a
+                        // disabled placeholder + tooltip so the rule
+                        // is visible without cluttering the slate.
+                        const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(expected.roleType);
+                        const canAddAgent = !isPeopleOnly && (expected.multiAssign || agentsAssigned === 0);
+                        const canAddMore = canAddPerson || canAddAgent || isPeopleOnly;
                         return (
                           <div key={expected.roleType} style={{
                             padding: '10px 14px',
@@ -1255,6 +1262,29 @@ export default function GovernanceGroupsPage() {
                                           style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
                                           disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
                                           onClick={() => handleAssignDamaRole('agent')}
+                                        >
+                                          Assign
+                                        </button>
+                                      </>
+                                    )}
+                                    {isPeopleOnly && (
+                                      <>
+                                        {canAddPerson && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>}
+                                        <select
+                                          aria-disabled="true"
+                                          disabled
+                                          title={PEOPLE_ONLY_REASON}
+                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'not-allowed' }}
+                                          value=""
+                                        >
+                                          <option value="">Agent…</option>
+                                        </select>
+                                        <button
+                                          type="button"
+                                          disabled
+                                          aria-disabled="true"
+                                          title={PEOPLE_ONLY_REASON}
+                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', opacity: 0.6, cursor: 'not-allowed' }}
                                         >
                                           Assign
                                         </button>
