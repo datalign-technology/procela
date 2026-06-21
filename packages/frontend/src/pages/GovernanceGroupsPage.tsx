@@ -1100,14 +1100,16 @@ export default function GovernanceGroupsPage() {
                         const isFilled = peopleAssigned > 0;
                         const canAddPerson = expected.multiAssign || peopleAssigned === 0;
                         // Accountability roles (CDO, Governance Lead,
-                        // Data Owner, Business Steward) hide the agent
-                        // path entirely — even disabled it'd be a
-                        // distraction. The picker below renders a
-                        // disabled placeholder + tooltip so the rule
-                        // is visible without cluttering the slate.
+                        // Data Owner, Business Steward) keep the agent
+                        // path visible-but-disabled with a tooltip
+                        // *only while the role still has an empty seat
+                        // to fill*. Once a person has taken the seat,
+                        // the whole assign panel collapses — the rule
+                        // has nothing left to explain and a disabled
+                        // picker on every satisfied row is pure noise.
                         const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(expected.roleType);
                         const canAddAgent = !isPeopleOnly && (expected.multiAssign || agentsAssigned === 0);
-                        const canAddMore = canAddPerson || canAddAgent || isPeopleOnly;
+                        const canAddMore = canAddPerson || canAddAgent;
                         return (
                           <div key={expected.roleType} style={{
                             padding: '10px 14px',
@@ -1271,9 +1273,9 @@ export default function GovernanceGroupsPage() {
                                         </button>
                                       </>
                                     )}
-                                    {isPeopleOnly && (
+                                    {isPeopleOnly && canAddPerson && (
                                       <>
-                                        {canAddPerson && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>}
+                                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
                                         <select
                                           aria-disabled="true"
                                           disabled
