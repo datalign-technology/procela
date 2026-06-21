@@ -8,7 +8,7 @@ import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { usePermissions } from '../hooks/usePermissions';
-import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 import type { RolePriority } from '../types';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 
@@ -989,13 +989,45 @@ export default function GovernanceProgramPage() {
                                       ) : (<div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>)}
                                     </div>
                                     {!isFilled ? (
-                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
-                                        <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</button>
-                                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
-                                        <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12, borderColor: '#c4b5fd' }} value={roleAgentSelections[role.roleType] || ''} onChange={(e) => { setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Agent…</option>{agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-                                        <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, background: '#7c3aed', opacity: !roleAgentSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleAgentSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleAgentSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'agent')}>Assign</button>
-                                      </div>
+                                      (() => {
+                                        // Accountability roles (CDO,
+                                        // Governance Lead, Data Owner,
+                                        // Business Steward) keep the
+                                        // person picker fully usable
+                                        // but render the agent slot as
+                                        // disabled with the rationale
+                                        // in the tooltip — see
+                                        // PEOPLE_ONLY_ROLE_TYPES.
+                                        const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(role.roleType);
+                                        return (
+                                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+                                            <select style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12 }} value={roleSelections[role.roleType] || ''} onChange={(e) => { setRoleSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}><option value="">Person...</option>{people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}</select>
+                                            <button style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, opacity: !roleSelections[role.roleType] || assigningRole ? 0.6 : 1, cursor: !roleSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }} disabled={!roleSelections[role.roleType] || !!assigningRole} onClick={() => handleAssignRole(role.roleType, 'person')}>Assign</button>
+                                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
+                                            <select
+                                              disabled={isPeopleOnly}
+                                              aria-disabled={isPeopleOnly}
+                                              title={isPeopleOnly ? PEOPLE_ONLY_REASON : undefined}
+                                              style={{ ...selectStyle, width: 'auto', minWidth: 130, fontSize: 12, borderColor: isPeopleOnly ? 'var(--color-border)' : '#c4b5fd', background: isPeopleOnly ? 'var(--color-bg)' : undefined, color: isPeopleOnly ? 'var(--color-text-muted)' : undefined, cursor: isPeopleOnly ? 'not-allowed' : undefined }}
+                                              value={roleAgentSelections[role.roleType] || ''}
+                                              onChange={(e) => { setRoleAgentSelections((prev) => ({ ...prev, [role.roleType]: e.target.value })); if (e.target.value) setRoleSelections((prev) => ({ ...prev, [role.roleType]: '' })); }}
+                                            >
+                                              <option value="">Agent…</option>
+                                              {!isPeopleOnly && agentsList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                            </select>
+                                            <button
+                                              type="button"
+                                              disabled={isPeopleOnly || !roleAgentSelections[role.roleType] || !!assigningRole}
+                                              aria-disabled={isPeopleOnly}
+                                              title={isPeopleOnly ? PEOPLE_ONLY_REASON : undefined}
+                                              style={{ ...btnPrimary, padding: '4px 12px', fontSize: 12, background: isPeopleOnly ? 'var(--color-bg)' : '#7c3aed', color: isPeopleOnly ? 'var(--color-text-muted)' : undefined, border: isPeopleOnly ? '1px solid var(--color-border)' : undefined, opacity: isPeopleOnly ? 0.6 : (!roleAgentSelections[role.roleType] || assigningRole ? 0.6 : 1), cursor: isPeopleOnly || !roleAgentSelections[role.roleType] || assigningRole ? 'not-allowed' : 'pointer' }}
+                                              onClick={() => handleAssignRole(role.roleType, 'agent')}
+                                            >
+                                              Assign
+                                            </button>
+                                          </div>
+                                        );
+                                      })()
                                     ) : (
                                       <span style={{ fontSize: 11, color: '#16a34a', flexShrink: 0 }}>✓ Filled</span>
                                     )}
