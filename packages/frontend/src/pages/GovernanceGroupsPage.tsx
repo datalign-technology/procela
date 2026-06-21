@@ -994,8 +994,12 @@ export default function GovernanceGroupsPage() {
         </div>
       )}
 
-      {/* Master-Detail Layout: Tree (left) + Detail (right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 16 }}>
+      {/* Master-Detail Layout: Tree (left) + Detail (right). The left
+          panel grows on wider screens so long group names (e.g.
+          "Customer Data Stewardship Team") aren't truncated. It floors
+          at 460px so action icons stay reachable on smaller laptops
+          and caps at 640px so the detail pane keeps room to breathe. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(460px, 640px) 1fr', gap: 16 }}>
         {/* Left Panel — Tree View */}
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', alignSelf: 'start' }}>
           {/* Tree toolbar */}
