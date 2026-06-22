@@ -260,6 +260,10 @@ export default function DamaRolesPage() {
   // controls but lives separately — users can fold the sidebar
   // independently from the cards).
   const [collapsedSidebarCats, setCollapsedSidebarCats] = useState<Set<string>>(new Set());
+  // Per-category "show all" toggle for unfilled rows. Default state
+  // hides rows with zero holders so the sidebar stops feeling like a
+  // wall of zeros; click "+ N more" on a category to reveal them.
+  const [sidebarShowAll, setSidebarShowAll] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -733,6 +737,14 @@ export default function DamaRolesPage() {
             const filledCount = inCat.filter((rt) => (roleCounts[rt] || 0) > 0).length;
             const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
             const open = !collapsedSidebarCats.has(cat);
+            // Show unfilled rows only when the user opts in per
+            // category. The currently-active role stays visible
+            // either way so the active state isn't orphaned.
+            const showAll = sidebarShowAll.has(cat);
+            const visibleRoles = showAll
+              ? inCat
+              : inCat.filter((rt) => (roleCounts[rt] || 0) > 0 || filterRoleType === rt);
+            const hiddenCount = inCat.length - visibleRoles.length;
             return (
               <SidebarCategory
                 key={cat}
@@ -747,7 +759,7 @@ export default function DamaRolesPage() {
                   return next;
                 })}
               >
-                {inCat.map((rt) => {
+                {visibleRoles.map((rt) => {
                   const count = roleCounts[rt] || 0;
                   const isActive = filterRoleType === rt;
                   return (
@@ -762,6 +774,24 @@ export default function DamaRolesPage() {
                     />
                   );
                 })}
+                {(hiddenCount > 0 || showAll) && (
+                  <button
+                    type="button"
+                    onClick={() => setSidebarShowAll((prev) => {
+                      const next = new Set(prev);
+                      next.has(cat) ? next.delete(cat) : next.add(cat);
+                      return next;
+                    })}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '4px 8px 6px 21px', fontSize: 11,
+                      color: 'var(--color-text-muted)', fontFamily: 'inherit',
+                      textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    {showAll ? 'Show fewer' : `+ ${hiddenCount} unfilled`}
+                  </button>
+                )}
               </SidebarCategory>
             );
           })}
@@ -980,10 +1010,6 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
       return ids;
     })();
     const filled = list.length > 0 || entityHolderIds.size > 0;
-    const holderCount = entityInfoForCard?.storage === 'entity'
-      ? entityHolderIds.size
-      : list.length;
-    const holderLabel = `${holderCount} ${holderCount === 1 ? 'holder' : 'holders'}`;
     const required = REQUIRED_ROLE_TYPES.has(rt);
     // Critical-gap red is reserved for orgs whose program is actually
     // in use (at least one DAMA assignment exists somewhere). On a
@@ -1043,9 +1069,12 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
               Required
             </span>
           )}
-          {filled ? (
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{holderLabel}</span>
-          ) : criticalGap ? (
+          {/* No header chip needed for filled roles — the expanded
+              card body (or matrix) lists the holders directly, and
+              the sidebar carries the per-role count when the card
+              is collapsed. Repeating the count up here was pure
+              duplication. */}
+          {filled ? null : criticalGap ? (
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Unfilled
             </span>
