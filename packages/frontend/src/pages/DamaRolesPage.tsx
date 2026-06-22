@@ -264,6 +264,11 @@ export default function DamaRolesPage() {
   // hides rows with zero holders so the sidebar stops feeling like a
   // wall of zeros; click "+ N more" on a category to reveal them.
   const [sidebarShowAll, setSidebarShowAll] = useState<Set<string>>(new Set());
+  // Which role's detail pane is open on the right. Mirrors the People
+  // page's preview-on-click pattern — click any row in the table to
+  // open the role's holders/matrix in the right rail; click again to
+  // close.
+  const [previewRoleType, setPreviewRoleType] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -717,7 +722,7 @@ export default function DamaRolesPage() {
        *  category structure (Executive / Business / Technical /
        *  Entity-attached) and shows a fill summary per section so
        *  staffing coverage is visible at a glance. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: previewRoleType ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
@@ -798,30 +803,45 @@ export default function DamaRolesPage() {
         </div>
 
         <div>
-          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
             {loading ? (
               <SkeletonRows rows={6} columns={4} />
             ) : (
-              <ByRoleView
-                roles={filteredRoles}
+              <RolesTable
                 catalog={(roleTypes.length > 0 ? roleTypes : Object.keys(ROLE_TYPE_LABELS))}
+                damaRoles={filteredRoles}
                 filterRoleType={filterRoleType}
-                roleBadge={roleBadge}
-                resolveScope={resolveScope}
                 domains={domains}
                 systems={systems}
                 dataAssets={dataAssets}
                 personById={personById}
-                openRoleDrawer={openRoleDrawer}
+                previewRoleType={previewRoleType}
+                onSelectRole={(rt) => setPreviewRoleType(prev => prev === rt ? null : rt)}
                 onAssign={openAddForRole}
-                onAssignToEntity={openAddForEntity}
-                navigateToEntity={navigateToEntity}
-                setConfirmDelete={setConfirmDelete}
                 programInUse={roles.length > 0}
               />
             )}
           </div>
         </div>
+
+        {previewRoleType && (
+          <RolePreviewPane
+            roleType={previewRoleType}
+            dama={filteredRoles.filter((r) => r.roleType === previewRoleType)}
+            domains={domains}
+            systems={systems}
+            dataAssets={dataAssets}
+            personById={personById}
+            roleBadge={roleBadge}
+            resolveScope={resolveScope}
+            onClose={() => setPreviewRoleType(null)}
+            onAssign={() => openAddForRole(previewRoleType)}
+            onAssignToEntity={openAddForEntity}
+            navigateToEntity={navigateToEntity}
+            onOpenDrawer={openRoleDrawer}
+            setConfirmDelete={setConfirmDelete}
+          />
+        )}
       </div>
     </div>
   );
@@ -893,348 +913,6 @@ function SidebarCategory({ label, filled, total, color, open, onToggle, children
   );
 }
 
-// ── By-Role view ──────────────────────────────────────────────────────────
-// One section per role type, showing the people who hold that role. The
-// section header is clickable to open the Role Detail drawer.
-function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, systems, dataAssets, personById, openRoleDrawer, onAssign, onAssignToEntity, navigateToEntity, setConfirmDelete, programInUse }: {
-  roles: DamaRoleAssignment[];
-  /** Full governance-role catalog so every role is listed even with
-   *  zero holders (consistent with the Governance Groups expected-role
-   *  slate). */
-  catalog: string[];
-  filterRoleType: string | null;
-  roleBadge: (rt: string) => React.CSSProperties;
-  /** Resolve a scopeId to its kind + name. */
-  resolveScope: (id: string) => { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
-  /** Entities used by the per-entity matrix renderer. */
-  domains: DomainOption[];
-  systems: SystemOption[];
-  dataAssets: AssetOption[];
-  /** Quick lookup for resolving holder ids to display names in the
-   *  entity matrix. */
-  personById: Map<string, string>;
-  openRoleDrawer: (rt: string) => void;
-  onAssign: (rt: string) => void;
-  /** Inline assign-to-entity for DAMA-storage matrix rows — opens the
-   *  page's assign form pre-scoped to a specific domain so the user
-   *  just picks a person and saves. */
-  onAssignToEntity: (rt: string, scopeType: 'DOMAIN', scopeId: string) => void;
-  /** Drill-down for entity-storage matrix rows: send the user to the
-   *  host page with the entity highlighted so they can edit the
-   *  owner/steward/custodian field using the existing picker there. */
-  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
-  setConfirmDelete: (id: string) => void;
-  /** True once the program is in use — at least one DAMA role assignment
-   *  exists anywhere in the org. When false the org is in pre-launch
-   *  setup mode and unfilled-required roles surface amber instead of
-   *  red, since the user hasn't started staffing yet. */
-  programInUse: boolean;
-}) {
-  // Expand / collapse state. Defaults to all-expanded so first load
-  // matches what users see today; Expand all / Collapse all flips the
-  // whole tree, individual chevrons toggle one row. We store the
-  // *collapsed* set rather than expanded so new roles / categories
-  // added to the catalog later default open without a migration.
-  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
-  const [collapsedRoles, setCollapsedRoles] = useState<Set<string>>(new Set());
-
-  // When the org has no host entities defined yet, the twelve
-  // Entity-attached cards would all repeat "No data domains defined
-  // yet" and bury the rest of the page. Render a single CTA in their
-  // place instead. Computed per-render so it reacts to data arriving
-  // after the initial mount.
-  const noHostEntities = domains.length === 0 && systems.length === 0 && dataAssets.length === 0;
-
-  const byRole = new Map<string, DamaRoleAssignment[]>();
-  for (const r of roles) {
-    if (!byRole.has(r.roleType)) byRole.set(r.roleType, []);
-    byRole.get(r.roleType)!.push(r);
-  }
-  // Iterate the whole catalog in canonical ROLE_TYPE_LABELS order
-  // (executive first), not just roles that happen to have holders. When
-  // a specific role filter is active, show only that section. Entity-
-  // attached roles render from local entity state (not the backend
-  // catalog), so they're always included alongside the DAMA roles the
-  // backend reports.
-  const catalogSet = new Set([...catalog, ...Object.keys(ENTITY_SCOPED_ROLE_INFO)]);
-  const ordered = Object.keys(ROLE_TYPE_LABELS)
-    .filter((rt) => catalogSet.has(rt))
-    .filter((rt) => !filterRoleType || rt === filterRoleType);
-
-  const toggleCat = (cat: string) => setCollapsedCats((prev) => {
-    const next = new Set(prev);
-    next.has(cat) ? next.delete(cat) : next.add(cat);
-    return next;
-  });
-  const toggleRole = (rt: string) => setCollapsedRoles((prev) => {
-    const next = new Set(prev);
-    next.has(rt) ? next.delete(rt) : next.add(rt);
-    return next;
-  });
-  const expandAll = () => { setCollapsedCats(new Set()); setCollapsedRoles(new Set()); };
-  const collapseAll = () => {
-    setCollapsedCats(new Set(CATEGORY_ORDER as readonly string[]));
-    setCollapsedRoles(new Set(ordered));
-  };
-  // Render a single role as a card. Coloured left border keys it to
-  // the role's badge palette; required roles with no holders go red.
-  const renderRoleCard = (rt: string) => {
-    const list = (byRole.get(rt) || []).slice().sort((a, b) => {
-      const an = a.agentId ? (a.agentName || '') : (a.personName || '');
-      const bn = b.agentId ? (b.agentName || '') : (b.personName || '');
-      return an.localeCompare(bn);
-    });
-    // Entity-storage roles (SYSTEM_OWNER, DATA_DOMAIN_STEWARD, etc.)
-    // hold their assignments as foreign-key fields on the host record,
-    // not in the DAMA roles list — so `list.length` is always 0 even
-    // when every entity has an owner. Walk the host collection for
-    // those roles so the header doesn't read "Unfilled" right above a
-    // matrix that proudly announces "2 of 2 systems have this role
-    // assigned". Distinct holders are counted (one person owning two
-    // systems is one holder), matching what users expect "N holders"
-    // to mean.
-    const entityInfoForCard = entityRoleInfo(rt);
-    const entityHolderIds = (() => {
-      if (!entityInfoForCard || entityInfoForCard.storage !== 'entity') return new Set<string>();
-      const { entityType, field } = entityInfoForCard;
-      const sources =
-        entityType === 'domain' ? domains :
-        entityType === 'system' ? systems :
-                                  dataAssets;
-      const ids = new Set<string>();
-      for (const e of sources) {
-        const v = (e as any)[field];
-        if (Array.isArray(v)) for (const id of v) { if (id) ids.add(id); }
-        else if (v) ids.add(v);
-      }
-      return ids;
-    })();
-    const filled = list.length > 0 || entityHolderIds.size > 0;
-    const required = REQUIRED_ROLE_TYPES.has(rt);
-    // Critical-gap red is reserved for orgs whose program is actually
-    // in use (at least one DAMA assignment exists somewhere). On a
-    // fresh org with zero assignments anywhere, four required roles
-    // sitting empty would paint the page red on day one — that's
-    // alarming for what's really just an unstarted setup. Pre-launch
-    // orgs get the regular amber "Unfilled" treatment until they
-    // staff anyone at all.
-    const criticalGap = required && !filled && programInUse;
-    const c = roleColors(rt);
-    const roleOpen = !collapsedRoles.has(rt);
-    return (
-      <div
-        key={rt}
-        style={{
-          border: `1px solid ${criticalGap ? '#fca5a5' : 'var(--color-border)'}`,
-          borderLeft: `4px solid ${criticalGap ? '#dc2626' : c.color}`,
-          borderRadius: 'var(--radius-md)',
-          background: criticalGap ? '#fef2f2' : 'var(--color-surface)',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
-          <button
-            type="button"
-            onClick={() => toggleRole(rt)}
-            aria-expanded={roleOpen}
-            aria-label={`${roleOpen ? 'Collapse' : 'Expand'} ${ROLE_TYPE_LABELS[rt] || rt}`}
-            title={roleOpen ? 'Collapse role' : 'Expand role'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-secondary)' }}
-          >
-            <RolesChevron open={roleOpen} />
-          </button>
-          <button
-            type="button"
-            onClick={() => openRoleDrawer(rt)}
-            title="Learn about this role"
-            style={{ ...roleBadge(rt), border: 'none', cursor: 'pointer', font: 'inherit', padding: '3px 10px' }}
-          >
-            {ROLE_TYPE_LABELS[rt] || rt}
-          </button>
-          {/* Persistent Required tag — visible regardless of fill state
-              so users know which roles are mandatory without having to
-              wait for them to go red. The Unfilled badge below carries
-              the empty-state signal separately. */}
-          {required && (
-            <span
-              title="Required for a governance program — every org should have a holder for this role."
-              style={{
-                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
-                background: 'transparent',
-                color: criticalGap ? '#991b1b' : 'var(--color-text-muted)',
-                border: `1px solid ${criticalGap ? '#fca5a5' : 'var(--color-border)'}`,
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-              }}
-            >
-              Required
-            </span>
-          )}
-          {/* No header chip needed for filled roles — the expanded
-              card body (or matrix) lists the holders directly, and
-              the sidebar carries the per-role count when the card
-              is collapsed. Repeating the count up here was pure
-              duplication. */}
-          {filled ? null : criticalGap ? (
-            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Unfilled
-            </span>
-          ) : (
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unfilled</span>
-          )}
-          {/* Assign action emphasis tracks urgency: critical gap = loud
-              red button (drives the eye), other rows = quiet text link
-              so they don't compete for attention with the staffing
-              gaps that actually need fixing. */}
-          {criticalGap ? (
-            <button
-              type="button"
-              onClick={() => onAssign(rt)}
-              style={{
-                marginLeft: 'auto',
-                background: '#dc2626', border: 'none', borderRadius: 4,
-                padding: '3px 12px', fontSize: 11, fontWeight: 600,
-                cursor: 'pointer', color: '#fff',
-              }}
-            >
-              + Assign
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onAssign(rt)}
-              style={{
-                marginLeft: 'auto',
-                background: 'none', border: 'none', padding: '2px 4px',
-                fontSize: 11, cursor: 'pointer',
-                color: 'var(--color-primary)', fontFamily: 'inherit',
-              }}
-            >
-              + Assign
-            </button>
-          )}
-        </div>
-        {roleOpen && (() => {
-          const entInfo = entityRoleInfo(rt);
-          // Entity-attached roles get the per-entity matrix view —
-          // every domain / system / asset listed with its current
-          // holder(s) and the appropriate inline action. Org-only
-          // DAMA roles (CDO, Governance Lead, Data Quality Analyst,
-          // Engineer, DBA) keep the simple holder-list view because
-          // there's no per-entity dimension to lay out.
-          if (entInfo) {
-            return renderEntityMatrix({
-              rt,
-              info: entInfo,
-              dama: list,
-              domains,
-              systems,
-              dataAssets,
-              personById,
-              onAssignToEntity,
-              navigateToEntity,
-              setConfirmDelete,
-            });
-          }
-          // Org-scoped roles — original holder list.
-          if (filled) {
-            return (
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: '1px solid var(--color-border)' }}>
-                {list.map((r) => {
-                  const isAgent = !!r.agentId;
-                  const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
-                  return (
-                  <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr auto auto', alignItems: 'center', gap: 12, padding: '6px 14px', fontSize: 13 }}>
-                    <span title={isAgent ? 'AI Agent' : 'Person'} style={{
-                      width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                      background: isAgent ? '#ede9fe' : c.bg, color: isAgent ? '#5b21b6' : c.color,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 700,
-                    }}>
-                      {isAgent ? <Bot size={13} strokeWidth={2.4} /> : displayName.charAt(0).toUpperCase()}
-                    </span>
-                    <span style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {displayName}
-                    </span>
-                    <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
-                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>since {new Date(r.since).toLocaleDateString()}</span>
-                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
-                  </li>
-                  );
-                })}
-              </ul>
-            );
-          }
-          return (
-            <div style={{ padding: '4px 14px 10px', fontSize: 12, color: criticalGap ? '#7f1d1d' : 'var(--color-text-muted)' }}>
-              {criticalGap ? 'This role is required and has no holder — assign someone to close the gap.' : 'No one holds this role yet.'}
-            </div>
-          );
-        })()}
-      </div>
-    );
-  };
-
-  // Group the ordered role list under Executive / Business /
-  // Technical headers so the page reads as a staffing chart, not a
-  // flat list. When a single-role filter is active we drop the
-  // headers (one role, no need for a section title) and the
-  // expand/collapse controls (one card, no need).
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {!filterRoleType && (
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 6, alignItems: 'center' }}>
-          <button type="button" onClick={expandAll} style={expandCollapseBtn}>Expand All</button>
-          <button type="button" onClick={collapseAll} style={expandCollapseBtn}>Collapse All</button>
-        </div>
-      )}
-      {filterRoleType
-        ? ordered.map(renderRoleCard)
-        : CATEGORY_ORDER.map((cat) => {
-            const inCat = ordered.filter((rt) => ROLE_CATEGORIES[rt] === cat);
-            if (inCat.length === 0) return null;
-            const catOpen = !collapsedCats.has(cat);
-            // Entity-attached pre-launch placeholder. When the org has
-            // no host entities, the twelve cards underneath would each
-            // say "No data domains defined yet" — same message, dozen
-            // times. Collapse to one CTA line that gets the user to
-            // where they can fix it. Once a domain / system / asset
-            // exists, the normal card list shows.
-            const showEntitySetupCta = cat === 'Entity-attached' && noHostEntities;
-            return (
-              <div key={cat}>
-                <button
-                  type="button"
-                  onClick={() => toggleCat(cat)}
-                  aria-expanded={catOpen}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    background: 'none', border: 'none', padding: '2px 0',
-                    marginBottom: catOpen ? 8 : 0,
-                    cursor: 'pointer',
-                    fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  <RolesChevron open={catOpen} />
-                  {cat}
-                  <span style={{ fontWeight: 500, letterSpacing: 'normal', textTransform: 'none', color: 'var(--color-text-muted)' }}>
-                    ({inCat.length})
-                  </span>
-                </button>
-                {catOpen && showEntitySetupCta ? (
-                  <EntitySetupCta count={inCat.length} navigateToEntity={navigateToEntity} />
-                ) : catOpen && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {inCat.map(renderRoleCard)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-    </div>
-  );
-}
 
 // ── Small atoms used by the expand/collapse controls ─────────────────────
 
@@ -1284,48 +962,6 @@ function ScopeChip({ scope, rawId }: {
       </span>
       {isUnknown ? <em>unresolved</em> : scope.name}
     </span>
-  );
-}
-
-// Matches the house style for Expand All / Collapse All controls
-// used across Governance Groups, Process Catalog, RACI Matrix, Setup
-// Hub, etc. — bare button, no border, primary text colour, small.
-const expandCollapseBtn: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  padding: '2px 6px', fontSize: 11, borderRadius: 4,
-  color: 'var(--color-primary)', fontFamily: 'inherit',
-};
-
-// Replaces the entity-attached card list when the org has no host
-// entities to assign roles against. One sentence + three drill-in
-// links beats twelve cards each repeating the same "no data domains
-// defined yet" line.
-function EntitySetupCta({ count, navigateToEntity }: {
-  count: number;
-  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
-}) {
-  const linkStyle: React.CSSProperties = {
-    background: 'none', border: 'none', padding: 0,
-    color: 'var(--color-primary)', cursor: 'pointer',
-    fontSize: 12, fontFamily: 'inherit', textDecoration: 'underline',
-  };
-  return (
-    <div style={{
-      padding: '14px 16px',
-      background: 'var(--color-surface)',
-      border: '1px dashed var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      fontSize: 13, lineHeight: 1.5,
-      color: 'var(--color-text-secondary)',
-    }}>
-      Define a data domain, system, or data asset to enable the {count} entity-attached
-      roles. Owners and stewards are assigned directly on those records.
-      <div style={{ marginTop: 6, display: 'flex', gap: 14 }}>
-        <button type="button" style={linkStyle} onClick={() => navigateToEntity('domain', '')}>Data Domains →</button>
-        <button type="button" style={linkStyle} onClick={() => navigateToEntity('system', '')}>Systems →</button>
-        <button type="button" style={linkStyle} onClick={() => navigateToEntity('asset', '')}>Data Assets →</button>
-      </div>
-    </div>
   );
 }
 
@@ -1548,6 +1184,314 @@ function renderEntityMatrix({ rt, info, dama, domains, systems, dataAssets, pers
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+// ── Table styles (match the People page) ──────────────────────────────
+const tableThStyle: React.CSSProperties = {
+  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
+  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
+};
+const tableTdStyle: React.CSSProperties = {
+  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
+};
+
+// ── RolesTable ────────────────────────────────────────────────────────
+// Mirrors the People page's flat-list pattern: one row per role with
+// columns for Role, Holders, Status, Action. Clicking a row opens the
+// role's detail in the right preview pane (matrix / holders list /
+// purpose). Replaces the previous nested-cards layout.
+function RolesTable({ catalog, damaRoles, filterRoleType, domains, systems, dataAssets, personById, previewRoleType, onSelectRole, onAssign, programInUse }: {
+  catalog: string[];
+  damaRoles: DamaRoleAssignment[];
+  filterRoleType: string | null;
+  domains: DomainOption[];
+  systems: SystemOption[];
+  dataAssets: AssetOption[];
+  personById: Map<string, string>;
+  previewRoleType: string | null;
+  onSelectRole: (rt: string) => void;
+  onAssign: (rt: string) => void;
+  programInUse: boolean;
+}) {
+  // Same role-set as the old ByRoleView: backend catalogue plus
+  // entity-storage roles that render from local state.
+  const catalogSet = new Set([...catalog, ...Object.keys(ENTITY_SCOPED_ROLE_INFO)]);
+  const ordered = Object.keys(ROLE_TYPE_LABELS)
+    .filter((rt) => catalogSet.has(rt))
+    .filter((rt) => !filterRoleType || rt === filterRoleType);
+
+  const byRole = new Map<string, DamaRoleAssignment[]>();
+  for (const r of damaRoles) {
+    if (!byRole.has(r.roleType)) byRole.set(r.roleType, []);
+    byRole.get(r.roleType)!.push(r);
+  }
+
+  // Distinct holders for entity-storage roles — walks the host
+  // collection for the role's FK field and dedupes person ids.
+  const entityHolderIdsFor = (rt: string): Set<string> => {
+    const info = entityRoleInfo(rt);
+    if (!info || info.storage !== 'entity') return new Set();
+    const sources: any[] =
+      info.entityType === 'domain' ? domains :
+      info.entityType === 'system' ? systems :
+                                     dataAssets;
+    const ids = new Set<string>();
+    for (const e of sources) {
+      const v = e[info.field];
+      if (Array.isArray(v)) for (const id of v) { if (id) ids.add(id); }
+      else if (v) ids.add(v);
+    }
+    return ids;
+  };
+
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr style={{ background: 'var(--color-bg)' }}>
+          <th scope="col" style={tableThStyle}>Role</th>
+          <th scope="col" style={tableThStyle}>Holders</th>
+          <th scope="col" style={{ ...tableThStyle, width: 130 }}>Status</th>
+          <th scope="col" style={{ ...tableThStyle, width: 100, textAlign: 'center' }}>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {ordered.length === 0 && (
+          <tr><td colSpan={4} style={{ ...tableTdStyle, color: 'var(--color-text-muted)', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
+            No roles match the current filter.
+          </td></tr>
+        )}
+        {ordered.map((rt) => {
+          const list = byRole.get(rt) || [];
+          const entityIds = entityHolderIdsFor(rt);
+          const filled = list.length > 0 || entityIds.size > 0;
+          const required = REQUIRED_ROLE_TYPES.has(rt);
+          const criticalGap = required && !filled && programInUse;
+          const isSelected = previewRoleType === rt;
+          const c = roleColors(rt);
+
+          // Gather holder names. DAMA records carry agent/person name;
+          // entity-storage holders need a personById lookup.
+          const damaNames: string[] = list.map((r) => r.agentName || r.personName || 'Unknown');
+          const entityNames: string[] = [];
+          for (const id of entityIds) {
+            const name = personById.get(id);
+            if (name && !damaNames.includes(name) && !entityNames.includes(name)) entityNames.push(name);
+          }
+          const allNames = [...damaNames, ...entityNames];
+          const holderCount = allNames.length;
+
+          return (
+            <tr
+              key={rt}
+              onClick={() => onSelectRole(rt)}
+              style={{
+                cursor: 'pointer',
+                background: isSelected ? '#f0f9ff' : criticalGap ? '#fef2f2' : '',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={(e) => { if (!isSelected && !criticalGap) e.currentTarget.style.background = 'var(--color-bg)'; }}
+              onMouseLeave={(e) => { if (!isSelected && !criticalGap) e.currentTarget.style.background = ''; }}
+            >
+              <td style={{ ...tableTdStyle, fontWeight: 500 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span aria-hidden="true" style={{
+                    width: 8, height: 8, borderRadius: 999, background: c.color, flexShrink: 0,
+                  }} />
+                  <span style={{ color: isSelected ? 'var(--color-primary)' : undefined }}>
+                    {ROLE_TYPE_LABELS[rt] || rt}
+                  </span>
+                  {required && (
+                    <span
+                      title="Required for a governance program — every org should have a holder for this role."
+                      style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                        background: 'transparent',
+                        color: criticalGap ? '#991b1b' : 'var(--color-text-muted)',
+                        border: `1px solid ${criticalGap ? '#fca5a5' : 'var(--color-border)'}`,
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}
+                    >
+                      Required
+                    </span>
+                  )}
+                </span>
+              </td>
+              <td style={tableTdStyle}>
+                {holderCount === 0 ? (
+                  <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: 12 }}>—</span>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {allNames.slice(0, 3).join(', ')}
+                    {holderCount > 3 && (
+                      <span style={{ color: 'var(--color-text-muted)' }}> · +{holderCount - 3} more</span>
+                    )}
+                  </span>
+                )}
+              </td>
+              <td style={tableTdStyle}>
+                {criticalGap ? (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                    background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em',
+                  }}>Unfilled</span>
+                ) : filled ? (
+                  <span style={{
+                    fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                    background: '#d1fae5', color: '#065f46', textTransform: 'uppercase', letterSpacing: '0.04em',
+                  }}>Filled</span>
+                ) : (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unfilled</span>
+                )}
+              </td>
+              <td style={{ ...tableTdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => onAssign(rt)}
+                  style={criticalGap ? {
+                    background: '#dc2626', border: 'none', borderRadius: 4,
+                    padding: '3px 12px', fontSize: 11, fontWeight: 600,
+                    cursor: 'pointer', color: '#fff',
+                  } : {
+                    background: 'none', border: 'none', padding: '2px 4px',
+                    fontSize: 11, cursor: 'pointer',
+                    color: 'var(--color-primary)', fontFamily: 'inherit',
+                  }}
+                >
+                  + Assign
+                </button>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+// ── RolePreviewPane ──────────────────────────────────────────────────
+// Right rail (340px), mirrors the People page's 360° preview pane.
+// Opens when a table row is clicked. Shows role purpose, holders
+// (org-scoped) or per-entity matrix (entity-attached), and an Assign
+// action.
+function RolePreviewPane({
+  roleType, dama, domains, systems, dataAssets, personById,
+  roleBadge, resolveScope, onClose, onAssign, onAssignToEntity,
+  navigateToEntity, onOpenDrawer, setConfirmDelete,
+}: {
+  roleType: string;
+  dama: DamaRoleAssignment[];
+  domains: DomainOption[];
+  systems: SystemOption[];
+  dataAssets: AssetOption[];
+  personById: Map<string, string>;
+  roleBadge: (rt: string) => React.CSSProperties;
+  resolveScope: (id: string) => { kind: 'ORG' | 'DOMAIN' | 'SYSTEM' | 'ASSET' | 'UNKNOWN'; name: string };
+  onClose: () => void;
+  onAssign: () => void;
+  onAssignToEntity: (rt: string, scopeType: 'DOMAIN', scopeId: string) => void;
+  navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
+  onOpenDrawer: (rt: string) => void;
+  setConfirmDelete: (id: string) => void;
+}) {
+  const info = entityRoleInfo(roleType);
+  const def = GOVERNANCE_ROLES.find((r) => r.roleType === roleType);
+  const purpose = def?.purpose || '';
+  const required = REQUIRED_ROLE_TYPES.has(roleType);
+
+  return (
+    <div style={{
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      position: 'sticky', top: 12,
+      maxHeight: 'calc(100vh - 180px)',
+      overflowY: 'auto',
+    }}>
+      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => onOpenDrawer(roleType)}
+          title="Learn about this role"
+          style={{ ...roleBadge(roleType), border: 'none', cursor: 'pointer', padding: '3px 10px', font: 'inherit' }}
+        >
+          {ROLE_TYPE_LABELS[roleType] || roleType}
+        </button>
+        {required && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+            background: 'transparent', color: 'var(--color-text-muted)',
+            border: '1px solid var(--color-border)',
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>Required</span>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close preview"
+          style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: 0, lineHeight: 1 }}
+        >×</button>
+      </div>
+
+      {purpose && (
+        <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5, borderBottom: '1px solid var(--color-border)' }}>
+          {purpose}
+        </div>
+      )}
+
+      {info ? (
+        // Entity-attached: render the per-entity matrix.
+        renderEntityMatrix({
+          rt: roleType, info,
+          dama, domains, systems, dataAssets, personById,
+          onAssignToEntity, navigateToEntity, setConfirmDelete,
+        })
+      ) : (
+        // Org-scoped: render the simple holder list.
+        <div style={{ padding: 0 }}>
+          {dama.length === 0 ? (
+            <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+              No one holds this role yet.
+            </div>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {dama.map((r) => {
+                const isAgent = !!r.agentId;
+                const displayName = isAgent ? (r.agentName || 'Agent') : (r.personName || 'Unknown');
+                return (
+                  <li key={r.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto', gap: 8, alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: '50%',
+                      background: isAgent ? '#ede9fe' : '#e0e7ff',
+                      color: isAgent ? '#5b21b6' : '#3730a3',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 700, flexShrink: 0,
+                    }}>
+                      {isAgent ? <Bot size={13} strokeWidth={2.4} /> : displayName.charAt(0).toUpperCase()}
+                    </span>
+                    <span style={{ fontWeight: 500 }}>{displayName}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                      <ScopeChip scope={resolveScope(r.scopeId)} rawId={r.scopeId} />
+                    </span>
+                    <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(r.id)} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
+        <button
+          type="button"
+          onClick={onAssign}
+          style={{ ...btnPrimary, width: '100%', padding: '6px 12px', fontSize: 12 }}
+        >
+          + Assign
+        </button>
+      </div>
     </div>
   );
 }
