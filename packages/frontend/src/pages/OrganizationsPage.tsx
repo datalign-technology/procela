@@ -453,7 +453,7 @@ export default function OrganizationsPage() {
       {/* Header */}
       <PageHeader
         title="Organizations"
-        subtitle={<>The organization hierarchy. Manage people on the <a href="/people" style={{ color: 'var(--color-primary)' }}>People</a> page.</>}
+        subtitle="Build your company hierarchy — divisions, departments, and teams that scope people, systems, and processes across Procela."
         actions={
           <>
             {flatOrgs.length > 0 && (

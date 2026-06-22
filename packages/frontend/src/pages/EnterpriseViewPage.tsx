@@ -251,7 +251,7 @@ export default function EnterpriseViewPage() {
         {/* Header */}
         <PageHeader
           title="Enterprise View"
-          subtitle="Full visibility across processes, systems, data assets, domains, and people. Select a view to focus on specific relationships, then click any item to see its impact."
+          subtitle="See how processes, systems, data assets, domains, and people connect across the enterprise."
         >
           <HelpPopover id="enterprise-view-intro" title="Enterprise View" showInitially>
             See all processes, systems, assets, domains, and people in one place.
