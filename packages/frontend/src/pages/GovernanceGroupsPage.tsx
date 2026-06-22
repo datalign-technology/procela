@@ -118,18 +118,38 @@ const DAMA_ROLE_LABELS: Record<string, string> = {
   DATABASE_ADMINISTRATOR: 'Database Administrator',
 };
 
-const DAMA_ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-  CDO: { bg: '#fce7f3', color: '#9d174d' },
-  DATA_GOVERNANCE_LEAD: { bg: '#ede9fe', color: '#5b21b6' },
-  DATA_OWNER: { bg: '#dbeafe', color: '#1e40af' },
-  BUSINESS_DATA_STEWARD: { bg: '#d1fae5', color: '#065f46' },
-  DATA_QUALITY_ANALYST: { bg: '#fef3c7', color: '#92400e' },
-  TECHNICAL_DATA_STEWARD: { bg: '#e0e7ff', color: '#3730a3' },
-  DATA_CUSTODIAN: { bg: '#f1f5f9', color: '#64748b' },
-  DATA_ARCHITECT: { bg: '#fce7f3', color: '#831843' },
-  DATA_ENGINEER: { bg: '#cffafe', color: '#155e75' },
-  DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#475569' },
+// Role chip colours collapsed to three category palettes (Executive
+// / Business / Technical) instead of one hex pair per role. Ten
+// distinct colours encoded nothing the role name didn't already say
+// — the slate read as confetti. Three palettes carry actual signal
+// ("this is a business role") and let any future critical / status
+// colour budget land separately. Same approach the Governance Roles
+// page took for its role badges.
+const ROLE_CATEGORY: Record<string, 'Executive' | 'Business' | 'Technical'> = {
+  CDO: 'Executive',
+  DATA_GOVERNANCE_LEAD: 'Executive',
+  DATA_OWNER: 'Business',
+  BUSINESS_DATA_STEWARD: 'Business',
+  DATA_QUALITY_ANALYST: 'Business',
+  TECHNICAL_DATA_STEWARD: 'Technical',
+  DATA_CUSTODIAN: 'Technical',
+  DATA_ARCHITECT: 'Technical',
+  DATA_ENGINEER: 'Technical',
+  DATABASE_ADMINISTRATOR: 'Technical',
 };
+
+const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
+  Executive: { bg: '#ede9fe', color: '#5b21b6' },  // purple
+  Business:  { bg: '#dbeafe', color: '#1e40af' },  // blue
+  Technical: { bg: '#fef3c7', color: '#92400e' },  // amber
+};
+
+const NEUTRAL_PALETTE = { bg: '#f1f5f9', color: '#64748b' };
+
+function roleChipColors(roleType: string): { bg: string; color: string } {
+  const cat = ROLE_CATEGORY[roleType];
+  return (cat && CATEGORY_COLORS[cat]) || NEUTRAL_PALETTE;
+}
 
 const GROUP_TYPE_LABELS: Record<string, string> = {
   COUNCIL: 'Data Governance Council',
@@ -1377,7 +1397,7 @@ export default function GovernanceGroupsPage() {
                               {personRoles.length > 0 ? (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                                   {personRoles.map((r) => (
-                                    <span key={r.id} style={{ ...makeBadge(DAMA_ROLE_COLORS[r.roleType] || { bg: '#f1f5f9', color: '#64748b' }), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                    <span key={r.id} style={{ ...makeBadge(roleChipColors(r.roleType)), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                                       {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
                                       <button
                                         onClick={() => handleRemoveDamaRole(r.id)}

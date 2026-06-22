@@ -654,7 +654,7 @@ export default function OrganizationsPage() {
       />
 
       {/* ══ MAIN BODY — master-detail: tree (left) + detail panel (right) ══ */}
-      <div style={{ display: 'grid', gridTemplateColumns: tree.length > 0 ? '1fr 360px' : '1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: tree.length > 0 ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         {/* Left: Org Tree */}
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
         {/* Tree toolbar — select-all, expand/collapse */}
