@@ -1182,10 +1182,9 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {!filterRoleType && (
-        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 4, alignItems: 'center', fontSize: 12 }}>
-          <button type="button" onClick={expandAll} style={rolesTextBtn}>Expand all</button>
-          <span style={{ color: 'var(--color-border)' }}>·</span>
-          <button type="button" onClick={collapseAll} style={rolesTextBtn}>Collapse all</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 6, alignItems: 'center' }}>
+          <button type="button" onClick={expandAll} style={expandCollapseBtn}>Expand All</button>
+          <button type="button" onClick={collapseAll} style={expandCollapseBtn}>Collapse All</button>
         </div>
       )}
       {filterRoleType
@@ -1288,10 +1287,13 @@ function ScopeChip({ scope, rawId }: {
   );
 }
 
-const rolesTextBtn: React.CSSProperties = {
-  background: 'none', border: 'none', padding: '2px 4px',
-  color: 'var(--color-primary)', cursor: 'pointer',
-  fontSize: 12, fontFamily: 'inherit',
+// Matches the house style for Expand All / Collapse All controls
+// used across Governance Groups, Process Catalog, RACI Matrix, Setup
+// Hub, etc. — bare button, no border, primary text colour, small.
+const expandCollapseBtn: React.CSSProperties = {
+  background: 'none', border: 'none', cursor: 'pointer',
+  padding: '2px 6px', fontSize: 11, borderRadius: 4,
+  color: 'var(--color-primary)', fontFamily: 'inherit',
 };
 
 // Replaces the entity-attached card list when the org has no host
