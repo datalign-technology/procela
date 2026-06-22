@@ -256,6 +256,10 @@ export default function DamaRolesPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [filterRoleType, setFilterRoleType] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  // Sidebar category collapse state (mirrors the main panel's collapse
+  // controls but lives separately — users can fold the sidebar
+  // independently from the cards).
+  const [collapsedSidebarCats, setCollapsedSidebarCats] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -705,10 +709,11 @@ export default function DamaRolesPage() {
 
       {/* Two-column layout: role-type sidebar on the left, role catalog
        *  on the right. Same scan pattern as /data-assets, /systems, and
-       *  /decision-rights. The sidebar now lists every governance role —
-       *  filled or not — so the user can see the whole slate at a glance
-       *  and click into any role, including ones nobody currently holds. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+       *  /decision-rights. The sidebar mirrors the main panel's
+       *  category structure (Executive / Business / Technical /
+       *  Entity-attached) and shows a fill summary per section so
+       *  staffing coverage is visible at a glance. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
@@ -722,19 +727,42 @@ export default function DamaRolesPage() {
             Roles
           </div>
           <SidebarItem label="All Roles" count={roles.length} active={!filterRoleType} onClick={() => setFilterRoleType(null)} />
-          {Object.keys(ROLE_TYPE_LABELS).map((rt) => {
-            const count = roleCounts[rt] || 0;
-            const isActive = filterRoleType === rt;
-            const c = roleColors(rt);
+          {CATEGORY_ORDER.map((cat) => {
+            const inCat = Object.keys(ROLE_TYPE_LABELS).filter((rt) => ROLE_CATEGORIES[rt] === cat);
+            if (inCat.length === 0) return null;
+            const filledCount = inCat.filter((rt) => (roleCounts[rt] || 0) > 0).length;
+            const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
+            const open = !collapsedSidebarCats.has(cat);
             return (
-              <SidebarItem
-                key={rt}
-                label={ROLE_TYPE_LABELS[rt]}
-                count={count}
-                active={isActive}
-                onClick={() => setFilterRoleType(isActive ? null : rt)}
-                accent={c.color}
-              />
+              <SidebarCategory
+                key={cat}
+                label={cat}
+                filled={filledCount}
+                total={inCat.length}
+                color={c.color}
+                open={open}
+                onToggle={() => setCollapsedSidebarCats((prev) => {
+                  const next = new Set(prev);
+                  next.has(cat) ? next.delete(cat) : next.add(cat);
+                  return next;
+                })}
+              >
+                {inCat.map((rt) => {
+                  const count = roleCounts[rt] || 0;
+                  const isActive = filterRoleType === rt;
+                  return (
+                    <SidebarItem
+                      key={rt}
+                      label={ROLE_TYPE_LABELS[rt]}
+                      count={count}
+                      active={isActive}
+                      onClick={() => setFilterRoleType(isActive ? null : rt)}
+                      accent={c.color}
+                      indent
+                    />
+                  );
+                })}
+              </SidebarCategory>
             );
           })}
         </div>
@@ -759,6 +787,7 @@ export default function DamaRolesPage() {
                 onAssignToEntity={openAddForEntity}
                 navigateToEntity={navigateToEntity}
                 setConfirmDelete={setConfirmDelete}
+                programInUse={roles.length > 0}
               />
             )}
           </div>
@@ -771,14 +800,18 @@ export default function DamaRolesPage() {
 // ── Sidebar entry ─────────────────────────────────────────────────────────
 // Single role-type item in the left sidebar. Active state mirrors the
 // other sidebar-based pages so the pattern is identical visually.
-function SidebarItem({ label, count, active, onClick, accent }: {
+function SidebarItem({ label, count, active, onClick, accent, indent }: {
   label: string; count: number; active: boolean; onClick: () => void; accent?: string;
+  /** Nested under a category header. Adds left padding so the row
+   *  reads as a child of its category. */
+  indent?: boolean;
 }) {
   return (
     <div
       {...clickable(onClick, { label: `${label} (${count})`, pressed: active })}
       style={{
-        padding: '5px 8px', fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
+        padding: `5px 8px 5px ${indent ? 18 : 8}px`,
+        fontSize: 12, borderRadius: 4, cursor: 'pointer', marginBottom: 2,
         fontWeight: active ? 600 : 400,
         background: active ? 'var(--color-primary-light, #dbeafe)' : 'transparent',
         color: active ? 'var(--color-primary)' : 'var(--color-text)',
@@ -794,10 +827,46 @@ function SidebarItem({ label, count, active, onClick, accent }: {
   );
 }
 
+// Sidebar category header — collapses a group of roles and surfaces
+// the fill ratio ("0 of 2 filled") so coverage is readable without
+// scanning every card on the right.
+function SidebarCategory({ label, filled, total, color, open, onToggle, children }: {
+  label: string;
+  filled: number;
+  total: number;
+  color: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 6px', background: 'none', border: 'none',
+          borderLeft: `3px solid ${color}`,
+          cursor: 'pointer', fontFamily: 'inherit', color: 'var(--color-text)',
+        }}
+      >
+        <RolesChevron open={open} />
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 500 }}>
+          {filled}/{total}
+        </span>
+      </button>
+      {open && <div style={{ marginTop: 2 }}>{children}</div>}
+    </div>
+  );
+}
+
 // ── By-Role view ──────────────────────────────────────────────────────────
 // One section per role type, showing the people who hold that role. The
 // section header is clickable to open the Role Detail drawer.
-function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, systems, dataAssets, personById, openRoleDrawer, onAssign, onAssignToEntity, navigateToEntity, setConfirmDelete }: {
+function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, domains, systems, dataAssets, personById, openRoleDrawer, onAssign, onAssignToEntity, navigateToEntity, setConfirmDelete, programInUse }: {
   roles: DamaRoleAssignment[];
   /** Full governance-role catalog so every role is listed even with
    *  zero holders (consistent with the Governance Groups expected-role
@@ -825,6 +894,11 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
    *  owner/steward/custodian field using the existing picker there. */
   navigateToEntity: (entityType: 'domain' | 'system' | 'asset', entityId: string) => void;
   setConfirmDelete: (id: string) => void;
+  /** True once the program is in use — at least one DAMA role assignment
+   *  exists anywhere in the org. When false the org is in pre-launch
+   *  setup mode and unfilled-required roles surface amber instead of
+   *  red, since the user hasn't started staffing yet. */
+  programInUse: boolean;
 }) {
   // Expand / collapse state. Defaults to all-expanded so first load
   // matches what users see today; Expand all / Collapse all flips the
@@ -911,7 +985,14 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
       : list.length;
     const holderLabel = `${holderCount} ${holderCount === 1 ? 'holder' : 'holders'}`;
     const required = REQUIRED_ROLE_TYPES.has(rt);
-    const criticalGap = required && !filled;
+    // Critical-gap red is reserved for orgs whose program is actually
+    // in use (at least one DAMA assignment exists somewhere). On a
+    // fresh org with zero assignments anywhere, four required roles
+    // sitting empty would paint the page red on day one — that's
+    // alarming for what's really just an unstarted setup. Pre-launch
+    // orgs get the regular amber "Unfilled" treatment until they
+    // staff anyone at all.
+    const criticalGap = required && !filled && programInUse;
     const c = roleColors(rt);
     const roleOpen = !collapsedRoles.has(rt);
     return (
