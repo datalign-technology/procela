@@ -267,7 +267,7 @@ export default function RaciMatrixPage() {
       ]} />
       <PageHeader
         title="RACI Matrix"
-        subtitle="Auto-generated Responsible, Accountable, Consulted, Informed matrix based on process ownership and governance role assignments. Expand value streams and processes to see sub-processes and activities."
+        subtitle="Who's Responsible, Accountable, Consulted, and Informed for every activity — auto-generated from process ownership and governance role assignments."
       >
         <InfoTip term="RACI" />
       </PageHeader>

@@ -340,7 +340,7 @@ export default function GovernancePoliciesPage() {
       {/* Header */}
       <PageHeader
         title="Governance Documents"
-        subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle. Controls hang off Policies specifically (the rule-shaped subset)."
+        subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle, owner, and review cadence."
         actions={
           <>
             <ColumnPicker state={policyCols} />

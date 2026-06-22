@@ -658,7 +658,7 @@ export default function GovernanceProgramPage() {
       {/* Header */}
       <PageHeader
         title="Governance Program"
-        subtitle="A phased approach to building your data governance program"
+        subtitle="Launch and run your data governance program in phases — foundation, structure, ownership, and operations."
         meta={status ? (
           <div style={{ maxWidth: 600, width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>

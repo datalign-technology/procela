@@ -34,7 +34,7 @@ export default function GovernanceWorkPage() {
       {/* Header */}
       <PageHeader
         title="Governance Work"
-        subtitle="Manage governance tasks, issues, and approvals."
+        subtitle="Your inbox of open governance work — tasks waiting for a steward, issues to triage, and approvals you need to sign off."
       />
 
       <div
