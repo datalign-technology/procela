@@ -260,6 +260,10 @@ export default function DamaRolesPage() {
   // controls but lives separately — users can fold the sidebar
   // independently from the cards).
   const [collapsedSidebarCats, setCollapsedSidebarCats] = useState<Set<string>>(new Set());
+  // Per-category "show all" toggle for unfilled rows. Default state
+  // hides rows with zero holders so the sidebar stops feeling like a
+  // wall of zeros; click "+ N more" on a category to reveal them.
+  const [sidebarShowAll, setSidebarShowAll] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -733,6 +737,14 @@ export default function DamaRolesPage() {
             const filledCount = inCat.filter((rt) => (roleCounts[rt] || 0) > 0).length;
             const c = CATEGORY_COLORS[cat] || NEUTRAL_PALETTE;
             const open = !collapsedSidebarCats.has(cat);
+            // Show unfilled rows only when the user opts in per
+            // category. The currently-active role stays visible
+            // either way so the active state isn't orphaned.
+            const showAll = sidebarShowAll.has(cat);
+            const visibleRoles = showAll
+              ? inCat
+              : inCat.filter((rt) => (roleCounts[rt] || 0) > 0 || filterRoleType === rt);
+            const hiddenCount = inCat.length - visibleRoles.length;
             return (
               <SidebarCategory
                 key={cat}
@@ -747,7 +759,7 @@ export default function DamaRolesPage() {
                   return next;
                 })}
               >
-                {inCat.map((rt) => {
+                {visibleRoles.map((rt) => {
                   const count = roleCounts[rt] || 0;
                   const isActive = filterRoleType === rt;
                   return (
@@ -762,6 +774,24 @@ export default function DamaRolesPage() {
                     />
                   );
                 })}
+                {(hiddenCount > 0 || showAll) && (
+                  <button
+                    type="button"
+                    onClick={() => setSidebarShowAll((prev) => {
+                      const next = new Set(prev);
+                      next.has(cat) ? next.delete(cat) : next.add(cat);
+                      return next;
+                    })}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '4px 8px 6px 21px', fontSize: 11,
+                      color: 'var(--color-text-muted)', fontFamily: 'inherit',
+                      textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    {showAll ? 'Show fewer' : `+ ${hiddenCount} unfilled`}
+                  </button>
+                )}
               </SidebarCategory>
             );
           })}
@@ -980,10 +1010,6 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
       return ids;
     })();
     const filled = list.length > 0 || entityHolderIds.size > 0;
-    const holderCount = entityInfoForCard?.storage === 'entity'
-      ? entityHolderIds.size
-      : list.length;
-    const holderLabel = `${holderCount} ${holderCount === 1 ? 'holder' : 'holders'}`;
     const required = REQUIRED_ROLE_TYPES.has(rt);
     // Critical-gap red is reserved for orgs whose program is actually
     // in use (at least one DAMA assignment exists somewhere). On a
@@ -1025,24 +1051,67 @@ function ByRoleView({ roles, catalog, filterRoleType, roleBadge, resolveScope, d
           >
             {ROLE_TYPE_LABELS[rt] || rt}
           </button>
-          {filled ? (
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{holderLabel}</span>
-          ) : criticalGap ? (
+          {/* Persistent Required tag — visible regardless of fill state
+              so users know which roles are mandatory without having to
+              wait for them to go red. The Unfilled badge below carries
+              the empty-state signal separately. */}
+          {required && (
+            <span
+              title="Required for a governance program — every org should have a holder for this role."
+              style={{
+                fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                background: 'transparent',
+                color: criticalGap ? '#991b1b' : 'var(--color-text-muted)',
+                border: `1px solid ${criticalGap ? '#fca5a5' : 'var(--color-border)'}`,
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+              }}
+            >
+              Required
+            </span>
+          )}
+          {/* No header chip needed for filled roles — the expanded
+              card body (or matrix) lists the holders directly, and
+              the sidebar carries the per-role count when the card
+              is collapsed. Repeating the count up here was pure
+              duplication. */}
+          {filled ? null : criticalGap ? (
             <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: '#fee2e2', color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Unfilled — required
+              Unfilled
             </span>
           ) : (
             <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unfilled</span>
           )}
-          <button
-            type="button"
-            onClick={() => onAssign(rt)}
-            style={criticalGap
-              ? { marginLeft: 'auto', background: '#dc2626', border: 'none', borderRadius: 4, padding: '3px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: '#fff' }
-              : { marginLeft: 'auto', background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '2px 10px', fontSize: 11, cursor: 'pointer', color: 'var(--color-primary)' }}
-          >
-            + Assign
-          </button>
+          {/* Assign action emphasis tracks urgency: critical gap = loud
+              red button (drives the eye), other rows = quiet text link
+              so they don't compete for attention with the staffing
+              gaps that actually need fixing. */}
+          {criticalGap ? (
+            <button
+              type="button"
+              onClick={() => onAssign(rt)}
+              style={{
+                marginLeft: 'auto',
+                background: '#dc2626', border: 'none', borderRadius: 4,
+                padding: '3px 12px', fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', color: '#fff',
+              }}
+            >
+              + Assign
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onAssign(rt)}
+              style={{
+                marginLeft: 'auto',
+                background: 'none', border: 'none', padding: '2px 4px',
+                fontSize: 11, cursor: 'pointer',
+                color: 'var(--color-primary)', fontFamily: 'inherit',
+              }}
+            >
+              + Assign
+            </button>
+          )}
         </div>
         {roleOpen && (() => {
           const entInfo = entityRoleInfo(rt);
