@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -84,13 +85,6 @@ const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as 
 const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 /* ── Helpers ─────────────────────────────────────────────────────── */

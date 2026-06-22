@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
@@ -125,13 +126,6 @@ const btnSecondary: React.CSSProperties = {
 const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
   padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
-};
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 const typeBadge = (type: string): React.CSSProperties => {

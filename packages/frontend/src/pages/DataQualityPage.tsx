@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
 import React, { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -145,21 +146,7 @@ const btnSecondary: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
 
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 13,
-  borderTop: '1px solid var(--color-border)',
-};
 
 function Badge({ label, colors }: { label: string; colors: { bg: string; color: string } }) {
   return (

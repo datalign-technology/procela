@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
@@ -227,14 +228,7 @@ const btnIcon: React.CSSProperties = {
   padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
 };
 
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
 
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
-};
 
 const makeBadge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   display: 'inline-block', padding: '1px 6px', borderRadius: 3,

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle as sharedTdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -125,14 +126,11 @@ const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
-  verticalAlign: 'top',
-};
+// Decision-rights rows can be multi-line (comma-separated recommends
+// / approves / informed lists), so top-align cells so the row labels
+// don't float to the visual centre. Everything else mirrors the
+// shared table style.
+const tdStyle: React.CSSProperties = { ...sharedTdStyle, verticalAlign: 'top' };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
 function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties {

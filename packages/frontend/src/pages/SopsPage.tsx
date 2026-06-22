@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -73,13 +74,6 @@ const btnPrimary: React.CSSProperties = {
 const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 const CATEGORIES = ['ONBOARDING', 'QUALITY', 'INCIDENT', 'ACCESS', 'REQUEST', 'REVIEW', 'ESCALATION', 'OTHER'];

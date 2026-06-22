@@ -963,6 +963,10 @@ function MfaPanel() {
 
   // Disable flow state
   const [disablingOpen, setDisablingOpen] = useState(false);
+  // Confirmation state for "Remove security key" — replaces the stray
+  // window.confirm() so the rest of the app's ConfirmDialog patterns
+  // (focus trap, escape-to-cancel, themed buttons) apply here too.
+  const [confirmRemoveCred, setConfirmRemoveCred] = useState<{ id: string; label: string } | null>(null);
   const [disablePassword, setDisablePassword] = useState('');
   const [disableCode, setDisableCode] = useState('');
 
@@ -1072,8 +1076,7 @@ function MfaPanel() {
     } finally { setBusy(false); }
   };
 
-  const removeWebauthn = async (credId: string, label: string) => {
-    if (!window.confirm(`Remove "${label}"? You won't be able to use this security key to sign in.`)) return;
+  const removeWebauthn = async (credId: string) => {
     setBusy(true);
     try {
       await apiClient.delete(`/auth/mfa/webauthn/credentials/${credId}`);
@@ -1471,7 +1474,7 @@ function MfaPanel() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => removeWebauthn(c.id, c.label)}
+                  onClick={() => setConfirmRemoveCred({ id: c.id, label: c.label })}
                   style={{ background: 'transparent', border: 'none', color: 'var(--color-error, #dc2626)', fontSize: 12, cursor: 'pointer', padding: '2px 6px' }}
                 >
                   Remove
@@ -1494,6 +1497,19 @@ function MfaPanel() {
           + Register a security key
         </button>
       </div>
+      <ConfirmDialog
+        open={!!confirmRemoveCred}
+        title="Remove this security key?"
+        message={confirmRemoveCred ? `Remove "${confirmRemoveCred.label}"? You won't be able to use this security key to sign in.` : ''}
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={async () => {
+          const target = confirmRemoveCred;
+          setConfirmRemoveCred(null);
+          if (target) await removeWebauthn(target.id);
+        }}
+        onCancel={() => setConfirmRemoveCred(null)}
+      />
     </div>
   );
 }
