@@ -6,6 +6,7 @@ import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -130,22 +131,6 @@ const bulkBtnStyle: React.CSSProperties = {
   borderRadius: 4,
   cursor: 'pointer',
   color: '#1e40af',
-};
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 13,
-  borderTop: '1px solid var(--color-border)',
 };
 
 interface Asset360Data {
