@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { apiClient } from '../api/client';
 
 // ──────────────────────────────────────────────────────────────────────────
 // OrgDeleteCleanupDialog — replaces a generic ConfirmDialog for the
@@ -169,10 +170,6 @@ export default function OrgDeleteCleanupDialog({
     if (snapshotBusy) return;
     setSnapshotBusy(true);
     try {
-      // Built dynamically so the dialog doesn't have to know about
-      // the api-client import path at module load — keeps the
-      // component drop-in for stories / tests.
-      const { apiClient } = await import('../api/client');
       const res = await apiClient.get<{ success: boolean; snapshot: any }>(`/organizations/${orgId}/snapshot`);
       const blob = new Blob([JSON.stringify(res.snapshot, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
