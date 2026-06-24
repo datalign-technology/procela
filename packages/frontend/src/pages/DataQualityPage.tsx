@@ -1,5 +1,5 @@
 import { SkeletonRows } from '../components/Skeleton';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
@@ -15,7 +15,9 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
-import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
+import type { RulesModalAsset } from '../components/DataQualityRulesModal';
+// Lazy: only renders when the user clicks the rules icon on a row.
+const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 
@@ -493,11 +495,13 @@ export default function DataQualityPage() {
       )}
 
       {rulesModalAsset && (
-        <DataQualityRulesModal
-          asset={rulesModalAsset}
-          onClose={() => setRulesModalAsset(null)}
-          onAfterChange={fetchData}
-        />
+        <Suspense fallback={null}>
+          <DataQualityRulesModal
+            asset={rulesModalAsset}
+            onClose={() => setRulesModalAsset(null)}
+            onAfterChange={fetchData}
+          />
+        </Suspense>
       )}
 
       {tab === 'rules' && (<>

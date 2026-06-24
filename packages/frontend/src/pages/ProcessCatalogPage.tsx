@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Bot, Check, AlertTriangle, X } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -31,7 +31,8 @@ import ExportMenu from '../components/ExportMenu';
 import { ExportPayload } from '../lib/export';
 import { SkeletonRows } from '../components/Skeleton';
 import SkillPicker from '../components/SkillPicker';
-import VersionHistoryModal from '../components/VersionHistoryModal';
+// Lazy: only renders when the user clicks "History" on a node.
+const VersionHistoryModal = lazy(() => import('../components/VersionHistoryModal'));
 
 // ── Types ──
 
@@ -3563,7 +3564,9 @@ export default function ProcessCatalogPage() {
       })()}
 
       {historyNodeId && (
-        <VersionHistoryModal nodeId={historyNodeId} onClose={() => setHistoryNodeId(null)} />
+        <Suspense fallback={null}>
+          <VersionHistoryModal nodeId={historyNodeId} onClose={() => setHistoryNodeId(null)} />
+        </Suspense>
       )}
     </div>
   );

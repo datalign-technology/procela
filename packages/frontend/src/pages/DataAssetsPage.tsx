@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -29,7 +29,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import { errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
-import LinkConnectionModal from '../components/LinkConnectionModal';
+// Lazy: only renders when the user clicks "Link to connection" on a row.
+const LinkConnectionModal = lazy(() => import('../components/LinkConnectionModal'));
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SectionCard from '../components/SectionCard';
@@ -2096,16 +2097,18 @@ export default function DataAssetsPage() {
       </Modal>
 
       {linkModalAsset && (
-        <LinkConnectionModal
-          asset={{ id: linkModalAsset.id, name: linkModalAsset.name }}
-          activeOrgId={activeOrgId}
-          existingBinding={linkModalMode === 'change' ? (() => {
-            const b = primaryBindingOf(linkModalAsset.id);
-            return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn } : undefined;
-          })() : undefined}
-          onClose={() => setLinkModalAsset(null)}
-          onLinked={fetchData}
-        />
+        <Suspense fallback={null}>
+          <LinkConnectionModal
+            asset={{ id: linkModalAsset.id, name: linkModalAsset.name }}
+            activeOrgId={activeOrgId}
+            existingBinding={linkModalMode === 'change' ? (() => {
+              const b = primaryBindingOf(linkModalAsset.id);
+              return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn } : undefined;
+            })() : undefined}
+            onClose={() => setLinkModalAsset(null)}
+            onLinked={fetchData}
+          />
+        </Suspense>
       )}
 
       {suggestAsset && (
