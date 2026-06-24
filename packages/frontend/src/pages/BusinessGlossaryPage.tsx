@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -12,7 +12,8 @@ import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
+// Lazy: only renders when the user opens the connection picker.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -569,13 +570,17 @@ export default function BusinessGlossaryPage() {
         </div>
       )}
 
-      <SyncConnectionWizard
-        open={showSync}
-        onClose={() => setShowSync(false)}
-        targetEntity="business-glossary"
-        orgId={activeOrgId || ''}
-        onCreated={fetchData}
-      />
+      {showSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard
+            open={showSync}
+            onClose={() => setShowSync(false)}
+            targetEntity="business-glossary"
+            orgId={activeOrgId || ''}
+            onCreated={fetchData}
+          />
+        </Suspense>
+      )}
 
       {/* Two-column layout: Categories sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>

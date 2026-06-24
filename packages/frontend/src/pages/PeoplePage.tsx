@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -20,7 +20,8 @@ import OrgChipInput from '../components/OrgChipInput';
 import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
+// Lazy: only renders when the user opens the connection picker.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 
 // ── Types ──
 
@@ -1838,7 +1839,11 @@ export default function PeoplePage() {
               </>
             ) : null}
       </Modal>
-      <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
+      {showPeopleSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
+        </Suspense>
+      )}
     </div>
   );
 }

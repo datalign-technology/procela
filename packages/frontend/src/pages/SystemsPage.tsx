@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -27,8 +27,9 @@ import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/u
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
-import SystemDetailModal from '../components/SystemDetailModal';
+// Lazy: only renders when the user opens the corresponding modal.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
+const SystemDetailModal = lazy(() => import('../components/SystemDetailModal'));
 
 type Connectivity = 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
 
@@ -1542,12 +1543,18 @@ export default function SystemsPage() {
       </div>
         </div>
       </div>
-      <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
+      {showSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
+        </Suspense>
+      )}
       {viewingSystemId && (
-        <SystemDetailModal
-          systemId={viewingSystemId}
-          onClose={() => setViewingSystemId(null)}
-        />
+        <Suspense fallback={null}>
+          <SystemDetailModal
+            systemId={viewingSystemId}
+            onClose={() => setViewingSystemId(null)}
+          />
+        </Suspense>
       )}
       {connectingSystem && (
         <ConnectPickerModal

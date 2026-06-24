@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
@@ -6,12 +6,15 @@ import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
-import OrgDeleteCleanupDialog, { CleanupActions } from '../components/OrgDeleteCleanupDialog';
+import type { CleanupActions } from '../components/OrgDeleteCleanupDialog';
+// Lazy: only renders when the user confirms an org delete.
+const OrgDeleteCleanupDialog = lazy(() => import('../components/OrgDeleteCleanupDialog'));
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
+// Lazy: only renders when the user opens the connection picker.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { SkeletonRows } from '../components/Skeleton';
 import { activateOnKey } from '../lib/a11y';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
@@ -636,22 +639,26 @@ export default function OrganizationsPage() {
         onCancel={() => setConfirmBulkDelete(false)}
       />
 
-      <OrgDeleteCleanupDialog
-        open={confirmDeleteOrg !== null}
-        orgId={confirmDeleteOrg || ''}
-        orgName={(() => {
-          const o = flatOrgs.find((x) => x.id === confirmDeleteOrg);
-          return o?.name || 'this organization';
-        })()}
-        impact={deleteOrgImpact}
-        accessibleOrgs={accessibleOrgs.map((o) => ({ id: o.id, name: o.name, type: (o as any).type || 'org' }))}
-        excludedTargetIds={confirmDeleteOrg ? subtreeIdsFor(confirmDeleteOrg) : new Set()}
-        busy={deleteOrgBusy}
-        onConfirm={async (actions) => {
-          if (confirmDeleteOrg) await handleDeleteOrg(confirmDeleteOrg, actions);
-        }}
-        onCancel={() => { setConfirmDeleteOrg(null); setDeleteOrgImpact(null); }}
-      />
+      {confirmDeleteOrg !== null && (
+        <Suspense fallback={null}>
+          <OrgDeleteCleanupDialog
+            open={confirmDeleteOrg !== null}
+            orgId={confirmDeleteOrg || ''}
+            orgName={(() => {
+              const o = flatOrgs.find((x) => x.id === confirmDeleteOrg);
+              return o?.name || 'this organization';
+            })()}
+            impact={deleteOrgImpact}
+            accessibleOrgs={accessibleOrgs.map((o) => ({ id: o.id, name: o.name, type: (o as any).type || 'org' }))}
+            excludedTargetIds={confirmDeleteOrg ? subtreeIdsFor(confirmDeleteOrg) : new Set()}
+            busy={deleteOrgBusy}
+            onConfirm={async (actions) => {
+              if (confirmDeleteOrg) await handleDeleteOrg(confirmDeleteOrg, actions);
+            }}
+            onCancel={() => { setConfirmDeleteOrg(null); setDeleteOrgImpact(null); }}
+          />
+        </Suspense>
+      )}
 
       {/* ══ MAIN BODY — master-detail: tree (left) + detail panel (right) ══ */}
       <div style={{ display: 'grid', gridTemplateColumns: tree.length > 0 ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
@@ -798,7 +805,11 @@ export default function OrganizationsPage() {
         )}
       </div>
 
-      <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="organizations" orgId={activeOrgId || ''} onCreated={() => { fetchData(); triggerRefresh(); }} />
+      {showSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="organizations" orgId={activeOrgId || ''} onCreated={() => { fetchData(); triggerRefresh(); }} />
+        </Suspense>
+      )}
     </div>
   );
 }
