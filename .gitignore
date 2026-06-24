@@ -15,6 +15,10 @@ build/
 coverage/
 test-results/
 
+# Playwright e2e artefacts
+playwright-report/
+/playwright/.cache/
+
 # OS files
 .DS_Store
 Thumbs.db
