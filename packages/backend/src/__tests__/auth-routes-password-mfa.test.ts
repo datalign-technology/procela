@@ -93,8 +93,18 @@ async function seedPerson(personId: string, email: string, opts: { password?: st
 }
 
 let app: { url: string; close: () => Promise<void> };
+// Snapshots of the shared in-memory stores at suite start. Sibling
+// test files (account-lockout, oidc-flow, etc.) load from the same
+// disk fixtures into these arrays at import time, so wiping them
+// here would break those tests when the runner pulls them in
+// together. Restore in after() so the suite is a no-op from the
+// shared-state perspective.
+const peopleSnapshot: typeof people = [];
+const auditSnapshot: typeof auditLogs = [];
 
 before(async () => {
+  peopleSnapshot.push(...people);
+  auditSnapshot.push(...auditLogs);
   const expressApp = express();
   expressApp.use(express.json());
   expressApp.use('/auth', authRouter);
@@ -113,15 +123,16 @@ before(async () => {
 
 after(async () => {
   await app.close();
+  // Hand the original stores back to whichever test file runs next.
+  replaceArray(people, peopleSnapshot);
+  replaceArray(auditLogs, auditSnapshot);
 });
 
 beforeEach(() => {
-  // Reset shared in-memory stores so tests don't interfere via state
-  // leaked from previous cases. The persistence layer's disk files
-  // are left alone — the tests below operate purely on the in-memory
-  // arrays, which is what the route handlers also read from.
-  replaceArray(people, []);
-  replaceArray(auditLogs, []);
+  // Reset to the snapshot at the start of each test so tests don't
+  // see each other's people / audit entries.
+  replaceArray(people, peopleSnapshot);
+  replaceArray(auditLogs, auditSnapshot);
   // The /password/{forgot,reset} endpoints share a forgot-password
   // rate limiter (5/hr per email key, with empty-string key when the
   // body has no email — i.e. every /reset call). Without resetting
