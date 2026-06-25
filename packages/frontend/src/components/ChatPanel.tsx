@@ -1,21 +1,70 @@
-import { useState, useRef, useEffect } from 'react';
-import { apiClient } from '../api/client';
+import { useState, useRef, useEffect, Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { useOrgContext } from '../stores/orgContext';
+import { useAuthStore } from '../stores/authStore';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-interface ChatResponse {
-  success: boolean;
-  data: { reply: string };
+interface Entity {
+  name: string;
+  kind: 'activity' | 'process' | 'system' | 'asset' | 'person';
+  url: string;
+}
+
+// Escape regex special characters in entity names so a system called
+// "SAP Finance (EU)" doesn't try to compile its parentheses as a
+// capture group.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Render an assistant message with entity-name mentions replaced by
+// links to their catalog pages. Longest-first sort on the entity list
+// (done backend-side) means "Customer Billing Master" matches before
+// "Customer" — important because alternation is leftmost-first.
+function renderAssistantText(text: string, entities: Entity[]): React.ReactNode {
+  if (entities.length === 0 || !text) return text;
+  const byName = new Map(entities.map((e) => [e.name, e]));
+  const pattern = new RegExp(`\\b(${entities.map((e) => escapeRegex(e.name)).join('|')})\\b`, 'g');
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const entity = byName.get(m[1]);
+    if (entity) {
+      out.push(
+        <Link
+          key={`${m.index}-${entity.name}`}
+          to={entity.url}
+          style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontWeight: 500 }}
+          title={`${entity.kind}: ${entity.name}`}
+        >
+          {entity.name}
+        </Link>,
+      );
+    } else {
+      out.push(m[1]);
+    }
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out.map((node, i) => <Fragment key={i}>{node}</Fragment>);
 }
 
 export default function ChatPanel() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Entities for inline citations, scoped to the current conversation
+  // mount. The streaming /chat/stream endpoint sends one entities
+  // frame at the end of each reply; we keep them around so the
+  // rendered assistant turn (and any subsequent ones) can swap
+  // entity-name mentions for links back to the catalog.
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -54,24 +103,81 @@ export default function ChatPanel() {
     if (!text || loading) return;
     const userMsg: Message = { role: 'user', content: text };
     const updated = [...messages, userMsg];
-    setMessages(updated);
+    // Seed the assistant turn empty so chunks have somewhere to land
+    // as they arrive. The render loop reads `messages[i].content`
+    // directly, so each chunk-append re-renders the bubble incrementally.
+    const assistantIndex = updated.length;
+    setMessages([...updated, { role: 'assistant', content: '' }]);
     setInput('');
     setLoading(true);
 
+    let assistantText = '';
     try {
-      // Send the active org so the assistant answers from this
-      // organization's real catalog, assets and gaps — the backend
-      // builds the data snapshot from orgId.
-      const res = await apiClient.post<ChatResponse>('/chat', {
-        messages: updated,
-        orgContext: { orgId: activeOrgId, orgName: activeOrgName },
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch('/api/v1/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          messages: updated,
+          orgContext: { orgId: activeOrgId, orgName: activeOrgName },
+        }),
       });
-      setMessages([...updated, { role: 'assistant', content: res.data.reply }]);
+      if (!res.ok || !res.body) throw new Error(`stream failed (${res.status})`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      // SSE frames are separated by a blank line. Hold partial frames
+      // in `buf` across reads — a single chunk can split mid-event.
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let sep = buf.indexOf('\n\n');
+        while (sep !== -1) {
+          const block = buf.slice(0, sep);
+          buf = buf.slice(sep + 2);
+          let event = 'message';
+          let dataStr = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) event = line.slice(7);
+            else if (line.startsWith('data: ')) dataStr += line.slice(6);
+          }
+          if (dataStr) {
+            let parsed: any;
+            try { parsed = JSON.parse(dataStr); } catch { parsed = dataStr; }
+            if (event === 'chunk' && parsed?.text) {
+              assistantText += parsed.text;
+              // Functional setState so concurrent chunks don't race —
+              // each update reads the latest array.
+              setMessages((prev) => {
+                const next = [...prev];
+                next[assistantIndex] = { role: 'assistant', content: assistantText };
+                return next;
+              });
+            } else if (event === 'entities' && Array.isArray(parsed)) {
+              setEntities(parsed);
+            } else if (event === 'error') {
+              throw new Error(parsed?.error || 'stream error');
+            }
+          }
+          sep = buf.indexOf('\n\n');
+        }
+      }
     } catch {
-      setMessages([
-        ...updated,
-        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
-      ]);
+      // On any stream failure, replace the empty assistant placeholder
+      // with a friendly error so the user isn't left staring at a
+      // half-rendered bubble.
+      setMessages((prev) => {
+        const next = [...prev];
+        next[assistantIndex] = {
+          role: 'assistant',
+          content: assistantText || 'Sorry, something went wrong. Please try again.',
+        };
+        return next;
+      });
     } finally {
       setLoading(false);
     }
@@ -227,7 +333,9 @@ export default function ChatPanel() {
                   wordBreak: 'break-word',
                 }}
               >
-                {msg.content}
+                {msg.role === 'assistant'
+                  ? renderAssistantText(msg.content, entities)
+                  : msg.content}
               </div>
             ))}
             {loading && (
