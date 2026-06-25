@@ -66,7 +66,12 @@ function mintAccessToken(personId: string, email: string, role = 'ORG_ADMIN'): s
 
 async function seedPerson(personId: string, email: string, opts: { password?: string; mfaEnrolled?: boolean } = {}): Promise<StoredPerson> {
   const now = new Date().toISOString();
-  const person: StoredPerson = {
+  // The seed deliberately uses null for fields the runtime treats as
+  // "absent" (passwordHash, mfaSecret, ...) — the StoredPerson interface
+  // declares those as `string | undefined`. We cast through `unknown`
+  // so the runtime shape (null = absent) survives without TS rejecting
+  // the narrower interface.
+  const person = {
     id: personId,
     name: 'Test User',
     email,
@@ -74,7 +79,7 @@ async function seedPerson(personId: string, email: string, opts: { password?: st
     orgIds: ['org-test-1'],
     title: '',
     department: '',
-    jobRole: null,
+    jobRole: undefined,
     accessibleOrgIds: ['org-test-1'],
     passwordHash: opts.password ? await argon2.hash(opts.password) : null,
     passwordUpdatedAt: opts.password ? now : null,
@@ -87,7 +92,7 @@ async function seedPerson(personId: string, email: string, opts: { password?: st
     revokedTokens: [],
     createdAt: now,
     updatedAt: now,
-  } as StoredPerson;
+  } as unknown as StoredPerson;
   people.push(person);
   return person;
 }
