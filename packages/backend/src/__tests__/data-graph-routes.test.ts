@@ -76,6 +76,17 @@ describe('Phase 3 graph + orphan-asset routes', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     port = (server.address() as AddressInfo).port;
 
+    // Sweep leftovers from a previous failed run — the persisted JSON
+    // store rehydrates these into the in-memory arrays on load.
+    const seedPrefixes = ['test-sys-data-graph', 'test-asset-graph-', 'test-vs-data-graph', 'test-proc-data-graph', 'test-gov-proc-data-graph', 'test-act-op-', 'test-act-gov-', 'test-mapping-'];
+    const sweep = (arr: any[]) => {
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const id = arr[i].id;
+        if (typeof id === 'string' && seedPrefixes.some((p) => id.startsWith(p))) arr.splice(i, 1);
+      }
+    };
+    sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems);
+
     const now = new Date().toISOString();
     systems.push({
       id: sysId, orgId, name: 'Test ERP', description: 'erp', systemType: 'ERP',
