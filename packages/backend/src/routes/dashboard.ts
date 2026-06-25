@@ -90,6 +90,25 @@ router.get('/stats', (req: Request, res: Response) => {
     (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId
   ).length;
 
+  // Orphan assets — present in the catalog but no mapping row points
+  // at them. Pairs with the new /data-assets/orphans page.
+  const mappedAssetIdsAll = new Set(
+    filteredMappings.filter((m) => !!m.dataAssetId).map((m) => m.dataAssetId!),
+  );
+  const orphanAssets = filteredAssets.filter((a) => !mappedAssetIdsAll.has(a.id)).length;
+
+  // Dismissed suggestions — Phase 3 learning loop. Lazy require to
+  // avoid touching the process-catalog module twice in the import
+  // graph; the store is registered at boot so it's always available
+  // by the time stats is hit.
+  let dismissedSuggestions = 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { suggestionDismissals } = require('./process-catalog');
+    dismissedSuggestions = (suggestionDismissals as Array<{ orgId: string }>)
+      .filter((d) => !oid || d.orgId === oid).length;
+  } catch { /* store not loaded yet — leave at 0 */ }
+
   const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
   const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
 
@@ -120,6 +139,8 @@ router.get('/stats', (req: Request, res: Response) => {
         ungovernedAssets,
         ownerlessItems,
         ungovernedDomains,
+        orphanAssets,
+        dismissedSuggestions,
       },
     },
   });
