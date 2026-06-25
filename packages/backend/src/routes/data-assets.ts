@@ -382,6 +382,40 @@ router.delete('/all', (_req: Request, res: Response) => {
   res.json({ success: true, deleted: count });
 });
 
+/** GET /api/v1/data-assets/orphans — Phase 3 reverse view. Returns
+ *  data assets that have zero mapping rows pointing at them, so the
+ *  catalog can surface "you have data nobody's using" candidates for
+ *  cleanup or fresh process mapping. Scope by ?orgId like the main
+ *  list. Each row is enriched with system name + suggested tier so
+ *  the UI doesn't need a second round-trip. */
+router.get('/orphans', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const filtered = filterByOrgScope(dataAssets, orgId as string | undefined);
+  const filteredSystems = filterByOrgScope(systems, orgId as string | undefined);
+  const mappedAssetIds = new Set<string>();
+  for (const m of mappings) if (m.dataAssetId) mappedAssetIds.add(m.dataAssetId);
+  const orphans = filtered
+    .filter((a) => !mappedAssetIds.has(a.id))
+    .map((a) => {
+      const systemName = a.systemId ? filteredSystems.find((s) => s.id === a.systemId)?.name || null : null;
+      const ownerName = a.ownerPersonId
+        ? people.find((p) => p.id === a.ownerPersonId)?.name || null
+        : null;
+      return {
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        systemId: a.systemId,
+        systemName,
+        governanceTier: a.governanceTier,
+        ownerName,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      };
+    });
+  res.json({ success: true, data: orphans });
+});
+
 /** GET /api/v1/data-assets */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
