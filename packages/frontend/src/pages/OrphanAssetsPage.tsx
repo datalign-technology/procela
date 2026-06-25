@@ -69,11 +69,7 @@ export default function OrphanAssetsPage() {
         </div>
       )}
 
-      {rows === null && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody><SkeletonRows rows={5} columns={5} /></tbody>
-        </table>
-      )}
+      {rows === null && <SkeletonRows rows={5} columns={5} />}
 
       {rows !== null && rows.length === 0 && !error && (
         <EmptyState

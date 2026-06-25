@@ -31,6 +31,11 @@ import {
 const KNOWN_NOISE = [
   /Failed to load resource/i,
   /skills\/gap-report/,
+  // React duplicate-key warning that surfaces when the dev backend has
+  // accumulated multiple rows with the same id from prior backend test
+  // runs (the auth/mfa fixture id). Pre-existing data-hygiene issue,
+  // unrelated to any single change under smoke test.
+  /Encountered two children with the same key/i,
 ];
 
 function attachConsoleWatcher(page: Page): string[] {
@@ -83,6 +88,8 @@ test.describe('Procela smoke', () => {
       '/governance-groups',
       '/dama-roles',
       '/data-assets',
+      '/data-assets/orphans',
+      '/processes/data-map',
       '/systems',
       '/data-domains',
       '/data-lineage',
@@ -182,6 +189,85 @@ test.describe('Procela smoke', () => {
     await expect(search).toBeVisible({ timeout: 10_000 });
     await search.fill(personName);
     await expect(page.locator('body')).toContainText(personName, { timeout: 10_000 });
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('Process ↔ Data map renders the bipartite graph for a mapped activity', async ({ page }) => {
+    // Phase 3 visualization. Seeds a value stream → process → activity
+    // tree with one mapping via the API, then walks the user to the
+    // map and asserts the activity name + the asset name appear in
+    // the SVG. Catches regressions where /processes/data-map renders
+    // an empty canvas even when there are real mappings to draw.
+    const errors = attachConsoleWatcher(page);
+    const token = await loginAsEleanor(page);
+    const orgId = await createOrg(token, uniqueName('Data Map Smoke'));
+    await setActiveOrg(page, orgId, 'Data Map Smoke');
+
+    const api = async (path: string, body: unknown) => {
+      const res = await fetch(BACKEND + path, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json();
+      if (!j.success) throw new Error(`${path} failed: ${JSON.stringify(j)}`);
+      return j.data;
+    };
+    const sys = await api('/systems', { orgId, name: 'Map Smoke ERP', description: '', systemType: 'ERP' });
+    const asset = await api('/data-assets', {
+      orgId, name: 'Map Smoke Asset', description: 'mapped', systemId: sys.id,
+      governanceTier: 'SILVER',
+    });
+    const vs = await api('/process-catalog/nodes', { orgIds: [orgId], parentId: null, level: 'VALUE_STREAM', name: 'Map Smoke VS', description: '' });
+    const proc = await api('/process-catalog/nodes', { orgIds: [orgId], parentId: vs.id, level: 'PROCESS', name: 'Map Smoke Proc', description: '' });
+    const act = await api('/process-catalog/nodes', {
+      orgIds: [orgId], parentId: proc.id, level: 'ACTIVITY',
+      name: 'Map Smoke Activity', description: '', systemIds: [sys.id],
+    });
+    await api('/mappings', {
+      orgId, processStepId: act.id, dataAssetId: asset.id,
+      linkType: 'consumes', notes: '',
+    });
+
+    await gotoWithOrg(page, '/processes/data-map', orgId, 'Data Map Smoke');
+    // Target the data-map's SVG specifically — the page has many other
+    // icon SVGs in nav and chrome that would match a bare locator('svg').
+    const mapSvg = page.getByRole('img', { name: /Process to data asset map/i });
+    await expect(mapSvg).toContainText('Map Smoke Activity', { timeout: 10_000 });
+    await expect(mapSvg).toContainText('Map Smoke Asset', { timeout: 10_000 });
+    expect(errors, errors.join('\n')).toEqual([]);
+  });
+
+  test('Orphan Assets page lists an unmapped asset', async ({ page }) => {
+    // Phase 3 reverse view. Seed an asset with no mapping rows
+    // pointing at it and verify it shows up on the orphan-assets
+    // page. Regression catch for the /data-assets/orphans endpoint +
+    // its frontend table.
+    const errors = attachConsoleWatcher(page);
+    const token = await loginAsEleanor(page);
+    const orgId = await createOrg(token, uniqueName('Orphan Smoke'));
+    await setActiveOrg(page, orgId, 'Orphan Smoke');
+
+    const orphanName = uniqueName('Orphan Asset');
+    const sysRes = await fetch(BACKEND + '/systems', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, name: 'Orphan Smoke Sys', description: '', systemType: 'ERP' }),
+    });
+    const sys = (await sysRes.json()).data;
+    const assetRes = await fetch(BACKEND + '/data-assets', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orgId, name: orphanName, description: 'no mapping',
+        systemId: sys.id, governanceTier: 'BRONZE',
+      }),
+    });
+    expect(assetRes.status).toBeLessThan(300);
+
+    await gotoWithOrg(page, '/data-assets/orphans', orgId, 'Orphan Smoke');
+    await expect(page.getByRole('heading', { name: /Orphan data assets/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('body')).toContainText(orphanName, { timeout: 10_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });

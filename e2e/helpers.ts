@@ -13,24 +13,54 @@ import type { Page } from '@playwright/test';
 export const BACKEND = 'http://localhost:3001/api/v1';
 export const FRONTEND = 'http://localhost:5173';
 
+// Cache Eleanor's token across tests in the same worker. The auth
+// rate limiter caps logins at 5/min per (IP, email), and seven
+// sequential tests each calling /login would otherwise trip it. By
+// holding the token in module scope and injecting it into each test's
+// fresh browser context, we hit /login at most once per worker run.
+let cachedToken: { token: string; expiresAt: number } | null = null;
+const TOKEN_REFRESH_BUFFER_MS = 60_000;
+
 /** Sign in as Eleanor Briggs (seeded Super Admin), dismiss the welcome
  *  wizard, and return her access token for any direct API calls the
  *  test needs to make. After this resolves the page is at /. */
 export async function loginAsEleanor(page: Page): Promise<string> {
   await page.goto(FRONTEND + '/login', { waitUntil: 'networkidle' });
-  // Mark the onboarding wizard as already-dismissed so it doesn't
-  // overlay the page and intercept clicks. Has to land BEFORE the
-  // login click so the dashboard render after sign-in sees the flag.
   await page.evaluate(() => localStorage.setItem('procela:onboarding-complete', 'true'));
+
+  // Fast path: a previous test already grabbed Eleanor's token. Hydrate
+  // the new context's auth-storage directly so the page renders as
+  // authenticated without going through /login again.
+  if (cachedToken && cachedToken.expiresAt - Date.now() > TOKEN_REFRESH_BUFFER_MS) {
+    const t = cachedToken.token;
+    await page.evaluate((tok) => {
+      const state = {
+        accessToken: tok, refreshToken: tok, isAuthenticated: true,
+        sessionExpiresAt: Date.now() + 60 * 60 * 1000,
+        user: { id: 'eleanor', email: 'eleanor.briggs@tidewater-utilities.com', name: 'Eleanor Briggs', role: 'SUPER_ADMIN', orgId: '' },
+      };
+      localStorage.setItem('auth-storage', JSON.stringify({ state, version: 0 }));
+    }, t);
+    await page.goto(FRONTEND + '/', { waitUntil: 'networkidle' });
+    return t;
+  }
+
   await page.getByRole('button', { name: /Eleanor Briggs/i }).click();
-  // Wait for the auth-storage entry to land, which the Layout component
-  // polls for before rendering anything authenticated.
   await page.waitForFunction(() => !!localStorage.getItem('auth-storage'), null, { timeout: 10_000 });
   const token = await page.evaluate(() => {
     const raw = localStorage.getItem('auth-storage');
     return raw ? (JSON.parse(raw).state?.accessToken as string) : '';
   });
   if (!token) throw new Error('No access token after Eleanor login');
+  // JWT exp is in seconds; decode the middle segment to know when this
+  // token expires so we can refresh proactively instead of mid-test.
+  const expSec = (() => {
+    try {
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf-8'));
+      return typeof payload.exp === 'number' ? payload.exp : 0;
+    } catch { return 0; }
+  })();
+  cachedToken = { token, expiresAt: expSec ? expSec * 1000 : Date.now() + 30 * 60_000 };
   return token;
 }
 
