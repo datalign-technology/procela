@@ -101,6 +101,7 @@ export const navSections: NavSection[] = [
     label: 'Data',
     items: [
       { to: '/data-assets', label: 'Data Assets' },
+      { to: '/data-assets/orphans', label: 'Orphan Assets' },
       { to: '/business-glossary', label: 'Glossary' },
       { to: '/data-dictionary', label: 'Data Dictionary' },
       { to: '/data-lineage', label: 'Lineage' },

@@ -5,6 +5,8 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { getVisibleOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { rankSuggestions } from '../services/asset-suggestion.service';
+import { rankSystemSuggestions } from '../services/system-suggestion.service';
+import { rankPeopleSuggestions } from '../services/people-suggestion.service';
 // data-assets and mappings both import from this file, so adding the
 // matching imports here creates a circular dep. Resolve the
 // arrays lazily via require() at request time — by then the cycle
@@ -167,6 +169,32 @@ export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>
 registerStore('flowRelationships', flowRelationships);
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
 registerStore('processVersions', processVersions);
+
+// Phase 3 learning loop. Each row records "user dismissed
+// suggestion (kind, targetId) for node (nodeId)" so the scoring
+// services can filter it out on subsequent fetches instead of the
+// suggestion silently returning. Keyed by composite (nodeId, kind,
+// targetId); duplicate POSTs are idempotent.
+export interface SuggestionDismissal {
+  id: string;
+  orgId: string;
+  nodeId: string;
+  kind: 'asset' | 'system' | 'person';
+  targetId: string;
+  dismissedBy: string | null;
+  dismissedAt: string;
+}
+export const suggestionDismissals: SuggestionDismissal[] =
+  loadStore<SuggestionDismissal>('suggestionDismissals');
+registerStore('suggestionDismissals', suggestionDismissals);
+
+function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['kind']): Set<string> {
+  const out = new Set<string>();
+  for (const d of suggestionDismissals) {
+    if (d.nodeId === nodeId && d.kind === kind) out.add(d.targetId);
+  }
+  return out;
+}
 
 // ── One-time backfill of the `domain` classifier ──
 // Pre-existing nodes have no `domain`. Resolve it once from the
@@ -929,13 +957,146 @@ router.get('/nodes/:id/asset-suggestions', (req: Request, res: Response) => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { mappings } = require('./mappings');
   const orgAssets = dataAssets.filter((a: any) => a.orgId === node.orgId);
-  const data = rankSuggestions(
+  const dismissed = dismissedTargetsFor(node.id, 'asset');
+  const ranked = rankSuggestions(
     { id: node.id, name: node.name, description: node.description, systemIds: node.systemIds },
     orgAssets,
     mappings,
     { limit, minScore },
   );
+  const data = ranked.filter((r) => !dismissed.has(r.assetId));
   res.json({ success: true, data });
+});
+
+/** GET /nodes/:id/system-suggestions — Phase 3 expansion. Ranked
+ *  Systems the node looks like it should declare in its systemIds,
+ *  based on name/description overlap and "used by sibling steps".
+ *  Excludes systems already declared by the node and any dismissed by
+ *  the user. */
+router.get('/nodes/:id/system-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) {
+    res.status(404).json({ success: false, error: 'Node not found' });
+    return;
+  }
+  const limitRaw = parseInt(String(req.query.limit ?? ''), 10);
+  const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
+  const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems');
+  const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
+  const dismissed = dismissedTargetsFor(node.id, 'system');
+  const data = rankSystemSuggestions(
+    { id: node.id, parentId: node.parentId, name: node.name, description: node.description, systemIds: node.systemIds },
+    orgSystems,
+    processNodes,
+    dismissed,
+    { limit, minScore },
+  );
+  res.json({ success: true, data });
+});
+
+/** GET /nodes/:id/people-suggestions — Phase 3 expansion. Ranked
+ *  People that look like candidates for involvement on this step,
+ *  based on title/jobRole overlap, required-skill match, and ownership
+ *  of any system the step already declares. Excludes the existing
+ *  owner / responsible person and any dismissed by the user. */
+router.get('/nodes/:id/people-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) {
+    res.status(404).json({ success: false, error: 'Node not found' });
+    return;
+  }
+  const limitRaw = parseInt(String(req.query.limit ?? ''), 10);
+  const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
+  const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems');
+  const orgPeople = people.filter((p: any) => (p.orgIds || []).includes(node.orgId));
+  const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
+  const dismissed = dismissedTargetsFor(node.id, 'person');
+  const data = rankPeopleSuggestions(
+    {
+      id: node.id,
+      name: node.name,
+      description: node.description,
+      systemIds: node.systemIds,
+      requiredSkillIds: node.requiredSkillIds,
+      ownerId: node.ownerId,
+      responsiblePersonId: node.responsiblePersonId,
+    },
+    orgPeople,
+    orgSystems,
+    dismissed,
+    { limit, minScore },
+  );
+  res.json({ success: true, data });
+});
+
+/** POST /nodes/:id/suggestions/dismiss — Phase 3 learning loop. Body
+ *  { kind: 'asset'|'system'|'person', targetId } records a dismissal
+ *  that hides the suggestion from future ranks for this node.
+ *  Idempotent: a duplicate dismissal returns the existing row rather
+ *  than 409. */
+router.post('/nodes/:id/suggestions/dismiss', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+  const { kind, targetId } = req.body || {};
+  if (kind !== 'asset' && kind !== 'system' && kind !== 'person') {
+    res.status(400).json({ success: false, error: 'kind must be asset, system, or person' });
+    return;
+  }
+  if (typeof targetId !== 'string' || !targetId.trim()) {
+    res.status(400).json({ success: false, error: 'targetId is required' });
+    return;
+  }
+  const existing = suggestionDismissals.find(
+    (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
+  );
+  if (existing) { res.json({ success: true, data: existing }); return; }
+  const row: SuggestionDismissal = {
+    id: uuid(),
+    orgId: node.orgId,
+    nodeId,
+    kind,
+    targetId,
+    dismissedBy: (req as any).user?.id ?? null,
+    dismissedAt: new Date().toISOString(),
+  };
+  suggestionDismissals.push(row);
+  saveStore('suggestionDismissals', suggestionDismissals);
+  auditService.log(node.orgId, row.dismissedBy, 'SuggestionDismissal', row.id, 'CREATE', null, row);
+  res.status(201).json({ success: true, data: row });
+});
+
+/** DELETE /nodes/:id/suggestions/dismiss/:kind/:targetId — undo a
+ *  prior dismissal so the suggestion can come back. */
+router.delete('/nodes/:id/suggestions/dismiss/:kind/:targetId', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const kind = param(req.params.kind);
+  const targetId = param(req.params.targetId);
+  const idx = suggestionDismissals.findIndex(
+    (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
+  );
+  if (idx < 0) { res.status(404).json({ success: false, error: 'Dismissal not found' }); return; }
+  const [removed] = suggestionDismissals.splice(idx, 1);
+  saveStore('suggestionDismissals', suggestionDismissals);
+  auditService.log(removed.orgId, (req as any).user?.id ?? null, 'SuggestionDismissal', removed.id, 'DELETE', removed, null);
+  res.json({ success: true });
+});
+
+/** GET /nodes/:id/dismissed-suggestions — list dismissals for a node.
+ *  Useful for an admin UI that wants to surface "hidden by user" rows
+ *  so they can be restored. */
+router.get('/nodes/:id/dismissed-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const rows = suggestionDismissals.filter((d) => d.nodeId === nodeId);
+  res.json({ success: true, data: rows });
 });
 
 // ── VERSION HISTORY ──
