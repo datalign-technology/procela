@@ -95,6 +95,7 @@ export const navSections: NavSection[] = [
     label: null,
     items: [
       { to: '/processes', label: 'Processes' },
+      { to: '/processes/data-map', label: 'Process ↔ Data Map' },
     ],
   },
   {

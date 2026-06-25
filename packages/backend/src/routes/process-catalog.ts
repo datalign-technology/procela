@@ -1037,6 +1037,93 @@ router.get('/nodes/:id/people-suggestions', (req: Request, res: Response) => {
   res.json({ success: true, data });
 });
 
+/** GET /data-graph — Phase 3 visualization. Returns the bipartite
+ *  process↔data graph as three flat arrays so the frontend can draw
+ *  it without N round-trips: every activity in the (optionally
+ *  org-scoped) tree, every data asset in scope, and every mapping
+ *  edge between them. Each activity carries its parent-process name
+ *  for grouping; each asset carries its system + tier for grouping
+ *  and badge rendering. Edges carry the linkType so the visualization
+ *  can colour or weight them. Excludes governance-domain activities
+ *  by default since the data map is an operational view; pass
+ *  ?includeGovernance=1 to opt them in. */
+router.get('/data-graph', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const includeGov = req.query.includeGovernance === '1' || req.query.includeGovernance === 'true';
+  const scope = orgId ? getVisibleOrgScope(orgId as string) : null;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dataAssets } = require('./data-assets');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { mappings } = require('./mappings');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems');
+
+  const inScope = (n: { orgId: string; orgIds: string[] }) =>
+    !scope || scope.has(n.orgId) || (n.orgIds || []).some((id) => scope.has(id));
+
+  const parentNameById = new Map<string, string>();
+  for (const n of processNodes) parentNameById.set(n.id, n.name);
+
+  const activities = processNodes
+    .filter((n) => n.level === 'ACTIVITY' && inScope(n))
+    .filter((n) => includeGov || !isGovernanceNode(n))
+    .map((n) => ({
+      id: n.id,
+      name: n.name,
+      parentProcessId: n.parentId,
+      parentProcessName: n.parentId ? parentNameById.get(n.parentId) || null : null,
+      systemIds: n.systemIds || [],
+    }));
+  const activityIdSet = new Set(activities.map((a) => a.id));
+
+  const orgAssetIds = new Set<string>();
+  const assetsOut = dataAssets
+    .filter((a: any) => !scope || scope.has(a.orgId))
+    .map((a: any) => {
+      orgAssetIds.add(a.id);
+      const sysName = a.systemId
+        ? systems.find((s: any) => s.id === a.systemId)?.name || null
+        : null;
+      return {
+        id: a.id,
+        name: a.name,
+        systemId: a.systemId,
+        systemName: sysName,
+        governanceTier: a.governanceTier,
+      };
+    });
+
+  const edges = mappings
+    .filter((m: any) => m.dataAssetId && activityIdSet.has(m.processStepId) && orgAssetIds.has(m.dataAssetId))
+    .map((m: any) => ({
+      mappingId: m.id,
+      activityId: m.processStepId,
+      assetId: m.dataAssetId,
+      linkType: m.linkType,
+    }));
+
+  // Keep only assets that actually participate in an edge — the
+  // visualization showing every orphan asset on the right column
+  // crushes the layout and orphans have their own dedicated page.
+  const referencedAssetIds = new Set(edges.map((e: any) => e.assetId));
+  const visibleAssets = assetsOut.filter((a: any) => referencedAssetIds.has(a.id));
+
+  res.json({
+    success: true,
+    data: {
+      activities,
+      assets: visibleAssets,
+      edges,
+      stats: {
+        activityCount: activities.length,
+        assetCount: visibleAssets.length,
+        edgeCount: edges.length,
+        mappedActivityCount: new Set(edges.map((e: any) => e.activityId)).size,
+      },
+    },
+  });
+});
+
 /** POST /nodes/:id/suggestions/dismiss — Phase 3 learning loop. Body
  *  { kind: 'asset'|'system'|'person', targetId } records a dismissal
  *  that hides the suggestion from future ranks for this node.
