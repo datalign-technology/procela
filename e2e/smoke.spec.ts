@@ -56,6 +56,12 @@ test.describe('Procela smoke', () => {
   });
 
   test('every top-level page renders without errors', async ({ page }) => {
+    // Walking 23 routes serially can exceed the default 30s timeout
+    // on a dev backend with accumulated state — each page's data
+    // fetch takes longer when the persistence layer has more rows.
+    // Give this test the room it needs; the per-page work is still
+    // quick, just additive.
+    test.setTimeout(90_000);
     const errors = attachConsoleWatcher(page);
     const token = await loginAsEleanor(page);
 
@@ -94,11 +100,9 @@ test.describe('Procela smoke', () => {
 
     for (const r of routes) {
       await page.goto(r, { waitUntil: 'networkidle' });
-      // Give the page a beat to settle; lazy chunks may still be
-      // resolving on first paint.
-      await page.waitForTimeout(300);
       // Sanity check: the document title contains "Procela" so we
-      // know React mounted and the page rendered at all.
+      // know React mounted and the page rendered at all. networkidle
+      // already covers the lazy-chunk load + initial data fetch.
       const title = await page.title();
       expect(title, `route ${r}`).toContain('Procela');
     }
@@ -167,11 +171,17 @@ test.describe('Procela smoke', () => {
 
     await gotoWithOrg(page, '/dama-roles', orgId, 'Form Smoke');
     await page.getByRole('button', { name: /Assign role/i }).first().click();
-    // Click the PersonPicker trigger and verify the new person is
-    // findable. This catches a regression where the picker either
-    // doesn't load the org's people or doesn't open at all.
+    // Open the PersonPicker and type the freshly-created name into
+    // its search box. The picker caps results at 100 alphabetical
+    // names; on a dev backend with accumulated state from prior runs
+    // the test person can land outside that window. Typing the name
+    // narrows the list to a single match so the assertion is
+    // deterministic.
     await page.getByRole('button', { name: /Pick a person/i }).first().click();
-    await expect(page.locator('body')).toContainText(personName);
+    const search = page.getByPlaceholder(/Search name, title, or org/i);
+    await expect(search).toBeVisible({ timeout: 10_000 });
+    await search.fill(personName);
+    await expect(page.locator('body')).toContainText(personName, { timeout: 10_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
 });
