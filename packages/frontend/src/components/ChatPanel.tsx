@@ -81,14 +81,14 @@ export default function ChatPanel() {
     await send(input.trim());
   }
 
-  // Starter prompts shown when the chat is empty. They mirror the
-  // example questions from CLAUDE.md so newcomers immediately see the
-  // kind of thing the assistant can help with — much higher discoverability
-  // than a single "ask me anything" hint.
+  // Starter prompts shown when the chat is empty. Mix of CLAUDE.md
+  // examples and Phase 3 surfaces (orphan assets, system declarations)
+  // so newcomers immediately see what the grounded assistant can do.
   const SUGGESTED_PROMPTS = [
     'Where are our data gaps?',
-    'What data supports our regulatory reporting process?',
     'Which assets are below 80% health and linked to critical processes?',
+    'Which data assets do we have that no process uses?',
+    'Which systems run our customer-facing processes?',
   ];
 
   return (
