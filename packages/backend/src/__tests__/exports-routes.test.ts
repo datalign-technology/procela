@@ -190,14 +190,20 @@ describe('Exports + audit CSV routes', () => {
       assert.strictEqual(ours![4], 'DataAsset');
       assert.strictEqual(ours![7], 'CREATE');
     });
-    it('honours the entityType filter', async () => {
+    it('honours the entityType + entityId filter', async () => {
       const res = await request(port, 'GET', `/audit/export.csv?orgId=${orgId}&entityType=DataAsset&entityId=${assetMapped}`);
       assert.strictEqual(res.status, 200);
       const rows = parseCsv(res.body);
-      // Only header + the matching row remain (no other entityType
-      // entries for this scope).
-      assert.strictEqual(rows.length, 2);
-      assert.strictEqual(rows[1][5], assetMapped);
+      // Every body row must match the filter — that's what the filter
+      // promises. We don't assert a strict count because the audit log
+      // persists across the session (auto-save flushes to disk) so a
+      // prior run of this same test can leave matching entries behind.
+      const body = rows.slice(1);
+      assert.ok(body.length >= 1, 'at least one matching entry should be exported');
+      for (const r of body) {
+        assert.strictEqual(r[4], 'DataAsset', `row should have entityType=DataAsset, got ${r[4]}`);
+        assert.strictEqual(r[5], assetMapped, `row should have entityId=${assetMapped}, got ${r[5]}`);
+      }
     });
   });
 });
