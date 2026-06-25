@@ -33,6 +33,13 @@ interface DashboardStats {
     ungovernedAssets: number;
     ownerlessItems: number;
     ungovernedDomains: number;
+    /** Data assets in scope that no mapping row references — the
+     *  reverse-view signal landed with the orphan-assets page. */
+    orphanAssets?: number;
+    /** Total Phase 3 suggestion dismissals recorded for this scope.
+     *  Informational, not severity-bearing — a high number is
+     *  expected once the learning loop has been in use for a while. */
+    dismissedSuggestions?: number;
   };
 }
 
@@ -887,6 +894,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Ownerless processes', count: gaps.ownerlessItems || 0, severity: 'critical' as const, link: '/processes' },
     { label: 'Ungoverned assets (Uncertified)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
     { label: 'Unowned domains', count: gaps.ungovernedDomains || 0, severity: 'warning' as const, link: '/data-domains' },
+    { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets/orphans' },
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
   const sevColors = { critical: '#dc2626', warning: '#d97706', info: '#2563eb' };
