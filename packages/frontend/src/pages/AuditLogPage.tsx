@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 import { useOrgContext } from '../stores/orgContext';
 import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
@@ -107,6 +108,30 @@ export default function AuditLogPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Full server-side export. The in-page export above only covers what
+  // was loaded (capped at PAGE_LIMIT and post-filter); this one hits
+  // the backend endpoint that bypasses the page limit and includes
+  // the entryHash column so a compliance reviewer can verify chain
+  // integrity offline.
+  const exportFullCsv = async () => {
+    if (!activeOrgId) return;
+    const params = new URLSearchParams({ orgId: activeOrgId });
+    if (userFilter)   params.set('userId', userFilter);
+    if (entityFilter) params.set('entityType', entityFilter);
+    const token = useAuthStore.getState().accessToken;
+    const res = await fetch(`/api/v1/audit/export.csv?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log-full-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!activeOrgId) {
     return (
       <div>
@@ -132,6 +157,7 @@ export default function AuditLogPage() {
             <button
               onClick={exportCsv}
               disabled={filtered.length === 0}
+              title="Export the currently-loaded, filtered view (capped at the page limit)."
               style={{
                 padding: '6px 14px', fontSize: 12, fontWeight: 500,
                 background: 'var(--color-surface)', color: 'var(--color-text)',
@@ -140,7 +166,21 @@ export default function AuditLogPage() {
                 opacity: filtered.length === 0 ? 0.5 : 1,
               }}
             >
-              Export CSV
+              Export view (CSV)
+            </button>
+            <button
+              onClick={exportFullCsv}
+              disabled={!activeOrgId}
+              title="Download the full audit log for this org from the server — bypasses the page limit, includes the entryHash for chain-integrity verification. Use for compliance reviews."
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: !activeOrgId ? 'not-allowed' : 'pointer',
+                opacity: !activeOrgId ? 0.5 : 1,
+              }}
+            >
+              Full log (CSV)
             </button>
           </div>
         )}
