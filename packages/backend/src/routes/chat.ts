@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { aiService } from '../services/ai.service';
 import { ChatMessage } from '../types';
 import logger from '../lib/logger';
-import { processNodes } from './process-catalog';
+import { processNodes, suggestionDismissals } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { systems } from './systems';
 import { mappings } from './mappings';
@@ -88,6 +88,26 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   });
   if (assets.length > MAX_ASSET_LINES) lines.push(`  …(${assets.length - MAX_ASSET_LINES} more)`);
 
+  // Activity ↔ system declarations (Phase 3). These are independent
+  // of data-asset mappings — an activity can declare "this step runs
+  // on SAP" without yet having data assets mapped, and the user often
+  // asks the assistant "which systems does X use". Keep it tight: one
+  // line per activity that declares any system, truncated like the
+  // tree above.
+  const activitySystemLines: string[] = [];
+  let sysLines = 0;
+  for (const n of nodes) {
+    if (n.level !== 'ACTIVITY' || !n.systemIds || n.systemIds.length === 0) continue;
+    if (sysLines >= MAX_MAPPING_LINES) break;
+    const sysNames = n.systemIds
+      .map((sid) => systemById.get(sid)?.name)
+      .filter(Boolean)
+      .join(', ');
+    if (!sysNames) continue;
+    activitySystemLines.push(`  - "${n.name}" runs on: ${sysNames}`);
+    sysLines++;
+  }
+
   // Process ↔ data mappings.
   // Mapping rows can target a Data Asset, a Policy, or an
   // Attachment; the chat-context summary only describes the
@@ -104,6 +124,14 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   });
   if (assetMaps.length > MAX_MAPPING_LINES) lines.push(`  …(${assetMaps.length - MAX_MAPPING_LINES} more)`);
 
+  // Activity ↔ system declarations. Emit only if there are any so
+  // the snapshot stays compact for orgs not yet using systemIds.
+  if (activitySystemLines.length > 0) {
+    lines.push('', '## ACTIVITY → SYSTEM (declared)');
+    lines.push(...activitySystemLines);
+    if (sysLines >= MAX_MAPPING_LINES) lines.push('  …(more)');
+  }
+
   // Gaps — the things the user most often asks about.
   const mappedActivityIds = new Set(maps.map((m) => m.processStepId));
   const activities = nodes.filter((n) => n.level === 'ACTIVITY');
@@ -117,6 +145,15 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   );
   const lowHealthAssets = assets.filter((a) => (a.healthScore ?? 0) < 80);
   const ownerlessDomains = domains.filter((d) => !d.ownerId);
+  // Phase 3 reverse-view signal: assets that exist in the catalog
+  // but aren't referenced by any mapping. These are candidates to
+  // retire or to map to a step that uses them.
+  const orphanAssets = assets.filter((a) => !linkedAssetIds.has(a.id));
+  // Phase 3 learning-loop signal: how many suggestions the user has
+  // told Procela to stop suggesting. Informational — useful when the
+  // assistant is asked "why isn't X being suggested for Y" because
+  // the answer is often "you dismissed it".
+  const dismissalsInOrg = (suggestionDismissals || []).filter((d) => d.orgId === orgId).length;
   lines.push('', '## KNOWN GAPS');
   lines.push(`  - Activities with no data mapped (${unmappedActivities.length}): `
     + (unmappedActivities.slice(0, 25).map((n) => n.name).join('; ') || 'none'));
@@ -128,6 +165,11 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
     + (lowHealthAssets.slice(0, 25).map((a) => `${a.name} ${a.healthScore ?? 0}%`).join('; ') || 'none'));
   lines.push(`  - Data domains with no owner (${ownerlessDomains.length}): `
     + (ownerlessDomains.slice(0, 25).map((d) => d.name).join('; ') || 'none'));
+  lines.push(`  - Orphan data assets — exist in the catalog but no process step uses them (${orphanAssets.length}): `
+    + (orphanAssets.slice(0, 25).map((a) => a.name).join('; ') || 'none'));
+  if (dismissalsInOrg > 0) {
+    lines.push(`  - Suggestions the user has dismissed via the learning loop: ${dismissalsInOrg} (these won't be suggested again until the user restores them).`);
+  }
 
   lines.push('', `## PEOPLE\n  ${ppl.length} people in this organization.`);
 
