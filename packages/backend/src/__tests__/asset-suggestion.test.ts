@@ -30,7 +30,6 @@ function node(partial: Partial<SuggestionNode>): SuggestionNode {
 function asset(partial: Partial<SuggestionAsset> & { name: string }): SuggestionAsset {
   return {
     id: 'a-1',
-    name: partial.name,
     description: '',
     systemId: 'sys-default',
     ...partial,
