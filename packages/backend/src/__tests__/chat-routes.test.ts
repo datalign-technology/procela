@@ -33,7 +33,7 @@ import type { AddressInfo } from 'net';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const chatRouter = require('../routes/chat').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { buildOrgSnapshot } = require('../routes/chat');
+const { buildOrgSnapshot, buildEntityIndex } = require('../routes/chat');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { processNodes, suggestionDismissals } = require('../routes/process-catalog');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -85,12 +85,22 @@ describe('chat routes + buildOrgSnapshot', () => {
   const dismissalId = PREFIX + 'dismissal';
 
   const originalChat = aiService.chat.bind(aiService);
+  const originalChatStream = aiService.chatStream.bind(aiService);
   let chatCalls: Array<{ messages: any[]; context: any; snapshot: string | undefined }> = [];
+  let streamCalls: Array<{ messages: any[]; context: any; snapshot: string | undefined }> = [];
+  // The stream stub yields each space-split chunk of this reply so
+  // the test can verify the SSE frames carry the same text the
+  // non-streaming endpoint would have returned.
+  const STUB_STREAM_REPLY = 'You have one orphan asset: Unused billing ledger.';
 
   before(async () => {
     aiService.chat = async (messages: any[], context: any, snapshot?: string) => {
       chatCalls.push({ messages, context, snapshot });
       return 'stub-reply';
+    };
+    aiService.chatStream = async function* (messages: any[], context: any, snapshot?: string) {
+      streamCalls.push({ messages, context, snapshot });
+      for (const word of STUB_STREAM_REPLY.split(' ')) yield word + ' ';
     };
     const app = express();
     app.use(express.json());
@@ -133,6 +143,7 @@ describe('chat routes + buildOrgSnapshot', () => {
 
   after(async () => {
     aiService.chat = originalChat;
+    aiService.chatStream = originalChatStream;
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) {
         const id = arr[i].id;
@@ -218,6 +229,10 @@ describe('chat routes + buildOrgSnapshot', () => {
       });
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.body.data.reply, 'stub-reply');
+      // Returns the entity index alongside the reply so the client
+      // can render inline citations on the non-streaming path too.
+      assert.ok(Array.isArray(res.body.data.entities), 'entities should be an array');
+      assert.ok(res.body.data.entities.length > 0, 'entities should be populated');
       assert.strictEqual(chatCalls.length, 1);
       const call = chatCalls[0];
       assert.strictEqual(call.messages[0].content, 'What data do we have that nobody uses?');
@@ -225,6 +240,113 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.strictEqual(call.context.orgName, 'Chat Test Co');
       assert.strictEqual(call.context.industry, 'Healthcare');
       assert.match(call.snapshot!, /Unused billing ledger/);
+    });
+  });
+
+  describe('buildEntityIndex', () => {
+    it('emits entries for activities, processes, systems, assets and people', () => {
+      const idx = buildEntityIndex(orgId);
+      const names = idx.map((r: any) => r.name);
+      assert.ok(names.includes('Look up patient record'), 'activity should appear');
+      assert.ok(names.includes('Schedule appointment'), 'process should appear');
+      assert.ok(names.includes('Epic EHR'), 'system should appear');
+      assert.ok(names.includes('Patient encounter records'), 'asset should appear');
+      assert.ok(names.includes('Unused billing ledger'), 'orphan asset should appear');
+    });
+    it('sorts longest name first so the client matches "Customer Billing Master" before "Customer"', () => {
+      const idx = buildEntityIndex(orgId);
+      for (let i = 1; i < idx.length; i++) {
+        assert.ok(idx[i - 1].name.length >= idx[i].name.length,
+          `entries should be sorted longest-first; got ${idx[i - 1].name} before ${idx[i].name}`);
+      }
+    });
+    it('emits a url that points back to the entity\'s page', () => {
+      const idx = buildEntityIndex(orgId);
+      const sys = idx.find((r: any) => r.name === 'Epic EHR');
+      assert.ok(sys);
+      assert.match(sys!.url, /^\/systems\?id=/);
+      const asset = idx.find((r: any) => r.name === 'Unused billing ledger');
+      assert.match(asset!.url, /^\/data-assets\?id=/);
+      const act = idx.find((r: any) => r.name === 'Look up patient record');
+      assert.match(act!.url, /^\/processes\?node=/);
+    });
+    it('returns an empty list when orgId is empty', () => {
+      assert.deepStrictEqual(buildEntityIndex(''), []);
+    });
+  });
+
+  describe('POST /chat/stream', () => {
+    // The SSE response is a single text/event-stream body — read it
+    // raw and parse the event blocks manually so the test doesn't
+    // depend on an EventSource client.
+    function readStream(method: string, path: string, body: unknown): Promise<{ status: number; events: Array<{ event: string; data: any }> }> {
+      return new Promise((resolve, reject) => {
+        const data = JSON.stringify(body);
+        const req = http.request(
+          {
+            host: '127.0.0.1', port, method, path,
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+          },
+          (res) => {
+            let buf = '';
+            res.on('data', (c) => { buf += c; });
+            res.on('end', () => {
+              const events: Array<{ event: string; data: any }> = [];
+              for (const block of buf.split('\n\n')) {
+                if (!block.trim()) continue;
+                let event = 'message';
+                let dataStr = '';
+                for (const line of block.split('\n')) {
+                  if (line.startsWith('event: ')) event = line.slice(7);
+                  else if (line.startsWith('data: ')) dataStr += line.slice(6);
+                }
+                if (dataStr) {
+                  try { events.push({ event, data: JSON.parse(dataStr) }); }
+                  catch { events.push({ event, data: dataStr }); }
+                } else {
+                  events.push({ event, data: null });
+                }
+              }
+              resolve({ status: res.statusCode || 0, events });
+            });
+          },
+        );
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+      });
+    }
+
+    it('400s on missing/empty/unknown-role messages just like /chat', async () => {
+      const r1 = await request(port, 'POST', '/chat/stream', { orgContext: { orgId } });
+      assert.strictEqual(r1.status, 400);
+      const r2 = await request(port, 'POST', '/chat/stream', { messages: [], orgContext: { orgId } });
+      assert.strictEqual(r2.status, 400);
+      const r3 = await request(port, 'POST', '/chat/stream', {
+        messages: [{ role: 'admin', content: 'hi' }], orgContext: { orgId },
+      });
+      assert.strictEqual(r3.status, 400);
+    });
+
+    it('streams text chunks then an entities frame then done', async () => {
+      streamCalls = [];
+      const res = await readStream('POST', '/chat/stream', {
+        messages: [{ role: 'user', content: 'orphans?' }],
+        orgContext: { orgId },
+      });
+      assert.strictEqual(res.status, 200);
+      const chunks = res.events.filter((e) => e.event === 'chunk');
+      assert.ok(chunks.length > 1, 'should receive multiple chunks');
+      const text = chunks.map((e) => e.data.text).join('');
+      assert.match(text, /Unused billing ledger/);
+      const entitiesEvent = res.events.find((e) => e.event === 'entities');
+      assert.ok(entitiesEvent, 'should send an entities frame');
+      assert.ok(Array.isArray(entitiesEvent!.data));
+      assert.ok((entitiesEvent!.data as any[]).some((r) => r.name === 'Unused billing ledger'));
+      assert.ok(res.events.find((e) => e.event === 'done'));
+      // chatStream was called with the snapshot in scope.
+      assert.strictEqual(streamCalls.length, 1);
+      assert.match(streamCalls[0].snapshot!, /Unused billing ledger/);
     });
   });
 });

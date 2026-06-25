@@ -122,6 +122,12 @@ export interface AiService {
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
+  /** Streaming counterpart of chat(). Yields text fragments as they
+   *  arrive from the Anthropic stream so the UI can render the reply
+   *  progressively instead of staring at "Thinking…" for several
+   *  seconds. Same prompt and grounding as chat() — only the
+   *  delivery shape differs. */
+  chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string>;
   /** Run the agent against a single governance activity and return a
    *  Markdown draft deliverable for human review. */
   performGovernanceActivity(run: GovernanceActivityRun): Promise<string>;
@@ -309,6 +315,52 @@ Guidelines:
     });
 
     return response.content[0].type === 'text' ? response.content[0].text : '';
+  }
+
+  /** Streaming variant of chat(). Yields each text delta from the
+   *  Anthropic stream as it arrives. Same system prompt and grounding
+   *  as chat(); the model output is identical, only the delivery
+   *  shape differs (incremental chunks vs one final string). The
+   *  caller is responsible for translating chunks to whatever wire
+   *  format the client expects (SSE, WebSocket, plain HTTP chunked). */
+  async *chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string> {
+    const parts: string[] = [
+      'You are the AI assistant for Procela, a platform that connects an organization\'s '
+        + 'business processes to the data and systems that support them.',
+      `Organization: ${orgContext.orgName ?? 'Unknown'} — industry: ${orgContext.industry ?? 'General'}.`,
+    ];
+    if (catalogSummary && catalogSummary.trim()) {
+      parts.push(
+        'Below is a snapshot of THIS organization\'s current Procela data. Answer questions '
+          + 'using ONLY this snapshot — never invent value streams, processes, activities, data '
+          + 'assets, systems, or owners that do not appear here. If the answer is not in the '
+          + 'data, say so plainly and suggest where the user could define it.',
+        catalogSummary.trim(),
+      );
+    } else {
+      parts.push(
+        'This organization has no catalog data yet. If asked about specific processes, assets, '
+          + 'or gaps, explain that nothing has been defined and point the user to the relevant '
+          + 'page (Process Catalog, Data Assets, Systems).',
+      );
+    }
+    parts.push(
+      'Keep answers concise and actionable. Name specific processes, assets, and gaps rather '
+        + 'than speaking generally. Do not fabricate.',
+    );
+
+    const stream = getClient().messages.stream({
+      model: MODEL,
+      max_tokens: 2048,
+      system: parts.join('\n\n'),
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
   }
 
   async performGovernanceActivity(run: GovernanceActivityRun): Promise<string> {
