@@ -233,6 +233,26 @@ segmented picker has three tabs:
 
 Try adding a Data Asset (we'll create some in Module 4).
 
+### 3.5 Phase 3 suggestion panels
+
+Scroll past the I/O panel on an expanded activity. You'll see three
+"Suggested…" cards: **Suggested data assets**, **Suggested systems**,
+and **Suggested people**. Procela ranks candidates against the
+activity's name, description, declared systems, and required skills.
+Each row carries a High / Medium / Low confidence chip and a one-line
+rationale ("Same system as the step (SAP)", "Has 2 of 2 required
+skills").
+
+- **Accept** wires the candidate into the right slot in one click
+  (asset → adds a mapping; system → appended to the step's systems;
+  person → assigned as Responsible).
+- **Dismiss** tells Procela not to suggest this candidate again for
+  this step. The decision persists across sessions (learning loop).
+- Panels hide themselves when nothing scores above threshold — fully
+  mapped activities don't accumulate dead UI.
+
+We'll come back to this in Module 5 once we have assets to map.
+
 ---
 
 ## Module 4 — Register data + systems (10 min)
@@ -309,6 +329,34 @@ This is the moment most platforms fail silently. Try this:
 
 Cancel out. The default is **warn, not block** — confirming creates
 the link normally.
+
+### 5.4 The Process ↔ Data map (visualization)
+
+Now that you have a few mappings, navigate to **Processes → Process ↔
+Data Map**. You'll see a bipartite SVG: activities on the left grouped
+by parent process, mapped data assets on the right grouped by system,
+and a coloured curve for every mapping — green for produces, blue for
+consumes, purple for transforms.
+
+- The header reads `N activities · N mapped assets · N mappings ·
+  M/N activities have at least one mapping`. Watch that ratio as you
+  add mappings — that's your coverage in one number.
+- Click an activity. Connected rows stay bright; the rest fade. The
+  Clear focus button appears above the legend. Click an asset and
+  the reverse holds — you see every step that touches it.
+- Use the System filter to answer "what processes use SCADA" in two
+  clicks.
+
+This is the live view of what Module 5.2 audits in table form.
+
+### 5.5 Phase 3 suggestion accept (loop closure)
+
+Back on the Process Catalog, expand an activity that doesn't yet have
+all its mappings. The **Suggested data assets** panel (from Module
+3.5) should now offer the assets we created. Click **Accept** on a
+high-confidence row — Procela adds the mapping, the suggestion
+disappears, and the Process ↔ Data Map (Module 5.4) gains a new
+edge. Refresh the map page if you want to see it.
 
 ---
 
@@ -501,12 +549,25 @@ If you regenerated the process hierarchy in Module 3 (or deleted
 activities), the Data Mapping page may show an orphan banner: *"N
 orphan mappings found"*. Click **Delete all orphans** to clean them.
 
-### 9.3 Skill Gaps revisited
+### 9.3 Orphan Assets (reverse view)
+
+Different orphan, different page. **Data → Orphan Assets** lists data
+assets that exist in the catalog but no process step references them
+— "what data do we have that nobody's using?". Each row links to the
+asset detail so you can either retire it or map it to a step that
+should be using it. The Dashboard's Governance Gaps card surfaces the
+count too.
+
+This is the reverse of the forward Discover loop (Suggested data
+assets from Module 3.5): forward asks "what data supports this
+step?", reverse asks "what step should use this asset?".
+
+### 9.4 Skill Gaps revisited
 
 Dashboard → **Skill Gaps** should now show real values now that
 activities have required-skill data and people have skills.
 
-### 9.4 Cross-page coherence
+### 9.5 Cross-page coherence
 
 Test this end-to-end:
 
@@ -549,6 +610,49 @@ computed completion status. **Phase 1** is Foundation Definition;
 the program can't launch until it's complete (the platform pops a
 confirmation if you try to advance early, listing exactly what's
 missing).
+
+---
+
+## Module 11 — Ask AI for grounded answers (5 min)
+
+The platform has an AI assistant that's grounded in *your* catalog —
+not training data — so it answers about the org you just built.
+
+### 11.1 Open the panel
+
+Click **Ask AI** in the top bar (or the green ? bubble bottom-right).
+Four starter prompts appear:
+
+- Where are our data gaps?
+- Which assets are below 80% health and linked to critical processes?
+- Which data assets do we have that no process uses?
+- Which systems run our customer-facing processes?
+
+### 11.2 Try the orphan question
+
+Click **Which data assets do we have that no process uses?**.
+
+Watch the reply stream in token-by-token — there's no "Thinking…"
+pause. The assistant should name one or more of the orphan assets
+from Module 9.3. Each asset name is a **link** — click it and you
+land on the asset's page in the catalog. That's inline citation
+working: the assistant didn't just describe your data, it pointed at
+the rows you can act on.
+
+### 11.3 Try a coverage question
+
+Type *"What systems run our Outage triage process?"*. The assistant
+answers from the activity ↔ system declarations you made in the
+Process Catalog (Module 3), with the system names rendered as links
+to the Systems page. Switch the **Working in…** scope to Water and
+ask the same question — the answer re-grounds to the new org.
+
+### 11.4 What it won't do
+
+The assistant answers and points; it doesn't act. It won't delete an
+orphan, change ownership, or transition a process status — those
+stay manual. Use it as a navigation aid and a gap-detector, not as a
+mutation surface.
 
 ---
 
