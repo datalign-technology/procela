@@ -14,6 +14,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import HelpPopover from '../components/HelpPopover';
+import AssetSuggestionsPanel from '../components/AssetSuggestionsPanel';
 import AttachmentsPanel from '../components/AttachmentsPanel';
 import PersonPicker from '../components/PersonPicker';
 import DomainLensToggle from '../components/DomainLensToggle';
@@ -2027,6 +2028,29 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               onRemove={onRemoveMapping}
               onRestore={onRestoreMapping}
               nodeInputsOutputs={node.inputsOutputs}
+            />
+          )}
+          {/* Phase 3 Discover: suggest data assets that look like
+              candidates for this activity. Hidden when fully mapped
+              or no candidates score above the backend's default
+              threshold. Accept here hits the same mappings POST as
+              the picker in IOPanel above. */}
+          {isExpanded && node.level === 'ACTIVITY' && (
+            <AssetSuggestionsPanel
+              nodeId={node.id}
+              systemNames={systemsList.reduce<Record<string, string>>((acc, s) => {
+                acc[s.id] = s.name;
+                return acc;
+              }, {})}
+              disabled={isLocked}
+              refreshKey={(mappingsByStep[node.id] || []).length}
+              onAccept={async (assetId) => {
+                // Default linkType to 'consumes' (the step uses this
+                // data) — the most common case for a freshly-accepted
+                // suggestion. The user can promote to 'produces' /
+                // 'transforms' from the IOPanel after the row lands.
+                await onAddMapping(node.id, { kind: 'asset', id: assetId }, 'consumes');
+              }}
             />
           )}
           {isExpanded && node.level !== 'VALUE_STREAM' && node.level !== 'ACTIVITY' && (
