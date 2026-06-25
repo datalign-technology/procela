@@ -4,6 +4,12 @@ import logger from '../lib/logger';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { getVisibleOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
+import { rankSuggestions } from '../services/asset-suggestion.service';
+// data-assets and mappings both import from this file, so adding the
+// matching imports here creates a circular dep. Resolve the
+// arrays lazily via require() at request time — by then the cycle
+// has resolved and the exports are populated.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 import { organizations } from './organizations';
 import { people } from './people';
 import { createNotification } from './notifications';
@@ -896,6 +902,40 @@ router.post('/nodes/:id/clone', (req: Request, res: Response) => {
 router.get('/nodes/:id/validate', (req: Request, res: Response) => {
   const result = validateProcessIntegrity(param(req.params.id));
   res.json({ success: true, data: result });
+});
+
+/** GET /nodes/:id/asset-suggestions — Phase 3 Discover. Returns a
+ *  ranked list of DataAssets that look like good candidates to map to
+ *  this process node, based on name + description overlap and shared
+ *  system affinity. Always excludes assets already mapped to this
+ *  node. ?limit=N caps the response (default 5); ?minScore=X drops
+ *  candidates below the threshold (default 0.1). */
+router.get('/nodes/:id/asset-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) {
+    res.status(404).json({ success: false, error: 'Node not found' });
+    return;
+  }
+  const limitRaw = parseInt(String(req.query.limit ?? ''), 10);
+  const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
+  const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
+  // Resolve the foreign stores at request time. Static imports here
+  // would race against the data-assets / mappings → process-catalog
+  // import cycle.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dataAssets } = require('./data-assets');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { mappings } = require('./mappings');
+  const orgAssets = dataAssets.filter((a: any) => a.orgId === node.orgId);
+  const data = rankSuggestions(
+    { id: node.id, name: node.name, description: node.description, systemIds: node.systemIds },
+    orgAssets,
+    mappings,
+    { limit, minScore },
+  );
+  res.json({ success: true, data });
 });
 
 // ── VERSION HISTORY ──
