@@ -275,10 +275,13 @@ Guidelines:
   }
 
   /**
-   * Multi-turn conversational chat, grounded in the organization's
-   * actual Procela data when a catalog summary is supplied.
+   * Shared system-prompt builder for chat() and chatStream(). Keeps
+   * the two delivery shapes in lockstep — fixing wording in one place
+   * fixes it everywhere, and the navigation guidance below has to be
+   * identical or streaming and non-streaming would give different
+   * answers.
    */
-  async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
+  private buildChatSystemPrompt(orgContext: OrgContext, catalogSummary?: string): string {
     const parts: string[] = [
       'You are the AI assistant for Procela, a platform that connects an organization\'s '
         + 'business processes to the data and systems that support them.',
@@ -299,15 +302,51 @@ Guidelines:
           + 'page (Process Catalog, Data Assets, Systems).',
       );
     }
+    // Navigation guidance — when an answer is best resolved on a
+    // specific page, point the user at it with a markdown link. The
+    // frontend extracts these links from the streamed text and
+    // renders them as clickable navigation chips. Use ONLY paths
+    // from the list below — fabricated paths render as broken
+    // navigation buttons.
+    parts.push(
+      'When your answer would benefit from showing the user a specific Procela page, '
+      + 'include a markdown link to that page using the exact paths below. The frontend '
+      + 'turns these links into "Open" buttons that navigate the user there.\n'
+      + 'Valid pages:\n'
+      + '  - Dashboard: /\n'
+      + '  - Process Catalog: /processes\n'
+      + '  - Process ↔ Data Map: /processes/data-map\n'
+      + '  - Data Assets: /data-assets\n'
+      + '  - Orphan Assets: /data-assets/orphans\n'
+      + '  - Systems: /systems\n'
+      + '  - Data Domains: /data-domains\n'
+      + '  - Data Quality: /data-quality\n'
+      + '  - Mappings (audit view): /mappings\n'
+      + '  - Gap Detection: /gap-detection\n'
+      + '  - People: /people\n'
+      + '  - Governance Roles: /dama-roles\n'
+      + '  - Governance Groups: /governance-groups\n'
+      + '  - Reports: /reports\n'
+      + '  - Audit Log: /audit-log\n'
+      + 'Format: [Page name](/path). Use sparingly — at most one navigation link per answer, '
+      + 'placed at the end after the substantive content. Do not invent paths not on this list.',
+    );
     parts.push(
       'Keep answers concise and actionable. Name specific processes, assets, and gaps rather '
         + 'than speaking generally. Do not fabricate.',
     );
+    return parts.join('\n\n');
+  }
 
+  /**
+   * Multi-turn conversational chat, grounded in the organization's
+   * actual Procela data when a catalog summary is supplied.
+   */
+  async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
     const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: parts.join('\n\n'),
+      system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -324,35 +363,10 @@ Guidelines:
    *  caller is responsible for translating chunks to whatever wire
    *  format the client expects (SSE, WebSocket, plain HTTP chunked). */
   async *chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string> {
-    const parts: string[] = [
-      'You are the AI assistant for Procela, a platform that connects an organization\'s '
-        + 'business processes to the data and systems that support them.',
-      `Organization: ${orgContext.orgName ?? 'Unknown'} — industry: ${orgContext.industry ?? 'General'}.`,
-    ];
-    if (catalogSummary && catalogSummary.trim()) {
-      parts.push(
-        'Below is a snapshot of THIS organization\'s current Procela data. Answer questions '
-          + 'using ONLY this snapshot — never invent value streams, processes, activities, data '
-          + 'assets, systems, or owners that do not appear here. If the answer is not in the '
-          + 'data, say so plainly and suggest where the user could define it.',
-        catalogSummary.trim(),
-      );
-    } else {
-      parts.push(
-        'This organization has no catalog data yet. If asked about specific processes, assets, '
-          + 'or gaps, explain that nothing has been defined and point the user to the relevant '
-          + 'page (Process Catalog, Data Assets, Systems).',
-      );
-    }
-    parts.push(
-      'Keep answers concise and actionable. Name specific processes, assets, and gaps rather '
-        + 'than speaking generally. Do not fabricate.',
-    );
-
     const stream = getClient().messages.stream({
       model: MODEL,
       max_tokens: 2048,
-      system: parts.join('\n\n'),
+      system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
 

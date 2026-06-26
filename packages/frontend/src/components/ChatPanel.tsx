@@ -22,12 +22,45 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Render an assistant message with entity-name mentions replaced by
-// links to their catalog pages. Longest-first sort on the entity list
+// Allowlist of Procela page paths the assistant is permitted to link
+// to via markdown. Anything else in a `[name](/path)` block is left
+// as plain text — keeps a hallucinated route from rendering as a
+// broken navigation chip. Kept in sync with the list embedded in the
+// system prompt on the backend (see ai.service.ts → buildChatSystemPrompt).
+const NAVIGABLE_PATHS = new Set<string>([
+  '/', '/processes', '/processes/data-map', '/data-assets', '/data-assets/orphans',
+  '/systems', '/data-domains', '/data-quality', '/mappings', '/gap-detection',
+  '/people', '/dama-roles', '/governance-groups', '/reports', '/audit-log',
+]);
+
+// Pass A: extract markdown navigation links `[name](/path)` and
+// render each as a navigation chip. Surrounding text is returned as
+// segments so Pass B (entity-name linking) only runs on plain text.
+function splitOnMarkdownLinks(text: string): Array<string | { kind: 'nav'; name: string; url: string }> {
+  const out: Array<string | { kind: 'nav'; name: string; url: string }> = [];
+  const re = /\[([^\]]+)\]\((\/[^\s)]*)\)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (NAVIGABLE_PATHS.has(m[2])) {
+      out.push({ kind: 'nav', name: m[1], url: m[2] });
+    } else {
+      // Unknown path — render as plain text rather than a broken link.
+      out.push(m[0]);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// Pass B: within a plain-text segment, replace entity-name mentions
+// with React Router links. Longest-first sort on the entity list
 // (done backend-side) means "Customer Billing Master" matches before
-// "Customer" — important because alternation is leftmost-first.
-function renderAssistantText(text: string, entities: Entity[]): React.ReactNode {
-  if (entities.length === 0 || !text) return text;
+// "Customer" — important because regex alternation is leftmost-first.
+function linkEntitiesInSegment(text: string, entities: Entity[]): React.ReactNode[] {
+  if (entities.length === 0 || !text) return [text];
   const byName = new Map(entities.map((e) => [e.name, e]));
   const pattern = new RegExp(`\\b(${entities.map((e) => escapeRegex(e.name)).join('|')})\\b`, 'g');
   const out: React.ReactNode[] = [];
@@ -39,7 +72,7 @@ function renderAssistantText(text: string, entities: Entity[]): React.ReactNode 
     if (entity) {
       out.push(
         <Link
-          key={`${m.index}-${entity.name}`}
+          key={`e-${m.index}-${entity.name}`}
           to={entity.url}
           style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontWeight: 500 }}
           title={`${entity.kind}: ${entity.name}`}
@@ -53,7 +86,49 @@ function renderAssistantText(text: string, entities: Entity[]): React.ReactNode 
     last = m.index + m[1].length;
   }
   if (last < text.length) out.push(text.slice(last));
-  return out.map((node, i) => <Fragment key={i}>{node}</Fragment>);
+  return out;
+}
+
+// Render an assistant message with two kinds of inline links:
+//   - Markdown-style navigation links the model can emit to point the
+//     user at a specific Procela page ([Orphan Assets](/data-assets/orphans))
+//   - Entity-name mentions automatically linked to their catalog page
+//     based on the entity index the backend ships at the end of each stream.
+function renderAssistantText(text: string, entities: Entity[]): React.ReactNode {
+  if (!text) return text;
+  const segments = splitOnMarkdownLinks(text);
+  const out: React.ReactNode[] = [];
+  segments.forEach((seg, i) => {
+    if (typeof seg === 'string') {
+      const linked = linkEntitiesInSegment(seg, entities);
+      linked.forEach((node, j) => out.push(<Fragment key={`s${i}-${j}`}>{node}</Fragment>));
+    } else {
+      out.push(
+        <Link
+          key={`n${i}`}
+          to={seg.url}
+          title={`Open ${seg.name}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '1px 8px',
+            margin: '0 1px',
+            background: 'var(--color-primary)',
+            color: '#fff',
+            textDecoration: 'none',
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 600,
+            verticalAlign: 'baseline',
+          }}
+        >
+          {seg.name} <span aria-hidden="true">→</span>
+        </Link>,
+      );
+    }
+  });
+  return out;
 }
 
 export default function ChatPanel() {
