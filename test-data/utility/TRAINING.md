@@ -639,7 +639,18 @@ land on the asset's page in the catalog. That's inline citation
 working: the assistant didn't just describe your data, it pointed at
 the rows you can act on.
 
-### 11.3 Try a coverage question
+### 11.3 Notice the navigation chip
+
+At the end of the same answer you should see a green pill-shaped
+chip — *Orphan Assets →*. That's the page-navigation chip: the
+assistant decided the right next step was opening the Orphan Assets
+page, and gave you a one-click handoff. Click it and you land on
+/data-assets/orphans.
+
+The chip is constrained to a fixed allowlist of Procela pages so a
+hallucinated route can't render as a broken button.
+
+### 11.4 Try a coverage question
 
 Type *"What systems run our Outage triage process?"*. The assistant
 answers from the activity ↔ system declarations you made in the
@@ -647,12 +658,60 @@ Process Catalog (Module 3), with the system names rendered as links
 to the Systems page. Switch the **Working in…** scope to Water and
 ask the same question — the answer re-grounds to the new org.
 
-### 11.4 What it won't do
+### 11.5 What it won't do
 
 The assistant answers and points; it doesn't act. It won't delete an
 orphan, change ownership, or transition a process status — those
 stay manual. Use it as a navigation aid and a gap-detector, not as a
 mutation surface.
+
+---
+
+## Module 12 — Weekly digest of gap deltas (5 min)
+
+Procela closes the loop by surfacing week-over-week movement in the
+same gap signals from Module 9. Instead of you remembering to check
+the dashboard every Monday, the platform pings the notifications
+bell when something meaningful changes.
+
+### 12.1 Take the baseline
+
+The first digest run for an org records a baseline; subsequent runs
+diff against it. For the prototype the trigger is manual — hit:
+
+```
+POST /api/v1/digest/run?orgId=<your-active-org-id>
+```
+
+Use the API console or `curl` with your access token. The response
+includes `baseline: true` and `notificationsWritten: 0` — no bell
+ping yet, just a recorded starting point.
+
+### 12.2 Create a change worth noticing
+
+Add three more unmapped assets in **Data Assets** (or remove a few
+mappings to drop coverage by 5+ points), then run the digest endpoint
+again.
+
+### 12.3 Read the notification
+
+Open the bell in the top bar. New entries should land — for example:
+
+- *"3 new orphan data assets this week"* → links to **Data → Orphan Assets**
+- *"Mapping coverage dropped to 72%"* → links to **Processes → Process ↔ Data Map**
+- *"2 new ownerless processes"* → links to **Processes**
+
+Each entry is one click from the affected page; thresholds are
+conservative (3+ orphans, 5+ percentage points, 1+ ownerless
+process) so small day-to-day noise doesn't accumulate noise in the
+bell.
+
+### 12.4 Scheduling
+
+In production this endpoint would be called by a cron at, say,
+Sunday 23:59 UTC — the service is side-effect-only, so any
+scheduler can drive it without code changes. For the prototype the
+manual trigger above is the supported pattern.
 
 ---
 
