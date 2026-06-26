@@ -95,7 +95,6 @@ export const navSections: NavSection[] = [
     label: null,
     items: [
       { to: '/processes', label: 'Processes' },
-      { to: '/processes/data-map', label: 'Process ↔ Data Map' },
     ],
   },
   {
@@ -144,12 +143,13 @@ export const navSections: NavSection[] = [
       { to: '/enterprise-view',   label: 'Enterprise View' },
       { to: '/analysis',          label: 'Analysis' },
       { to: '/mappings',          label: 'Data Mapping' },
+      { to: '/processes/data-map', label: 'Process ↔ Data Map' },
       { to: '/reports',           label: 'Reports' },
       { to: '/gap-detection',     label: 'Gap Detection' },
       { to: '/audit-log',         label: 'Audit Log' },
     ],
     subGroups: [
-      { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/mappings'] },
+      { label: 'Explore', itemTos: ['/enterprise-view', '/analysis', '/mappings', '/processes/data-map'] },
       { label: 'Review',  itemTos: ['/reports', '/gap-detection', '/audit-log'] },
     ],
   },

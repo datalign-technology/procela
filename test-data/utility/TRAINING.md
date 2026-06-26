@@ -332,8 +332,10 @@ the link normally.
 
 ### 5.4 The Process ↔ Data map (visualization)
 
-Now that you have a few mappings, navigate to **Processes → Process ↔
-Data Map**. You'll see a bipartite SVG: activities on the left grouped
+Now that you have a few mappings, navigate to **Insights → Explore →
+Process ↔ Data Map** (it sits next to Data Mapping — same data,
+different read: Data Mapping is the table, this is the picture).
+You'll see a bipartite SVG: activities on the left grouped
 by parent process, mapped data assets on the right grouped by system,
 and a coloured curve for every mapping — green for produces, blue for
 consumes, purple for transforms.
@@ -698,7 +700,7 @@ again.
 Open the bell in the top bar. New entries should land — for example:
 
 - *"3 new orphan data assets this week"* → links to **Data → Orphan Assets**
-- *"Mapping coverage dropped to 72%"* → links to **Processes → Process ↔ Data Map**
+- *"Mapping coverage dropped to 72%"* → links to **Insights → Explore → Process ↔ Data Map**
 - *"2 new ownerless processes"* → links to **Processes**
 
 Each entry is one click from the affected page; thresholds are
