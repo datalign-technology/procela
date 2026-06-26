@@ -31,6 +31,23 @@ import { useIsMobile } from '@/hooks/useMediaQuery';
 // render code on top of the rest of the app chrome.
 // ──────────────────────────────────────────────────────────────────────────
 
+/** Decide whether a nav item is "active" given the current pathname.
+ *  Exact match always wins. Prefix / alias match (via ROUTE_GROUPS,
+ *  or the item's own path) is suppressed when a SIBLING nav item is
+ *  the exact match — otherwise visiting /data-assets/orphans would
+ *  highlight both Orphan Assets (its own row) AND Data Assets (the
+ *  parent prefix), which reads as "both have been clicked". */
+function isNavItemActive(item: NavItem, siblings: ReadonlyArray<NavItem>, pathname: string): boolean {
+  if (pathname === item.to) return true;
+  // If any sibling is an exact match for the current path, the
+  // sibling owns the active state. Parent rows should not light up
+  // for routes that have their own listed nav entry.
+  const siblingExact = siblings.some((s) => s.to !== item.to && pathname === s.to);
+  if (siblingExact) return false;
+  const candidates = ROUTE_GROUPS[item.to] || [item.to];
+  return candidates.some((r) => pathname === r || pathname.startsWith(r + '/'));
+}
+
 interface SidebarProps {
   /** Called when the user taps the "Menu" button on mobile so the host
    *  can open its own MobileNavDrawer. */
@@ -129,8 +146,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
              sideways-scrolling hunt. */
           <>
             {MOBILE_PRIMARY.map((item) => {
-              const isActive = location.pathname === item.to
-                || (item.to !== '/' && location.pathname.startsWith(item.to + '/'));
+              const isActive = isNavItemActive(item, MOBILE_PRIMARY, location.pathname);
               return (
                 <NavLink
                   key={item.to}
@@ -217,10 +233,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
                 {/* Expanded children (accordion — only when sidebar is open) */}
                 {!sidebarCollapsed && isExpanded && (() => {
                   const renderItem = (item: NavItem) => {
-                    const groupRoutes = ROUTE_GROUPS[item.to];
-                    const isGroupActive = groupRoutes
-                      ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                      : location.pathname === item.to;
+                    const isGroupActive = isNavItemActive(item, section.items, location.pathname);
                     return (
                       <NavLink
                         key={item.to}
@@ -257,10 +270,7 @@ export default function Sidebar({ onOpenMobileMenu, mobileDrawerOpen }: SidebarP
                     <div className={styles.navFlyoutLabel}>{section.label}</div>
                     {(() => {
                       const renderFlyoutItem = (item: NavItem) => {
-                        const groupRoutes = ROUTE_GROUPS[item.to];
-                        const isGroupActive = groupRoutes
-                          ? groupRoutes.some((r) => location.pathname === r || location.pathname.startsWith(r + '/'))
-                          : location.pathname === item.to;
+                        const isGroupActive = isNavItemActive(item, section.items, location.pathname);
                         return (
                           <NavLink
                             key={item.to}

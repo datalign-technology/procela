@@ -35,11 +35,20 @@ export default function MobileNavDrawer({ bottomItems, pathname, onClose }: {
     ? [{ label: null, items: [GET_STARTED_ITEM] } as NavSection, ...navSections]
     : navSections;
   const sections = baseSections.filter((s) => !s.adminOnly || isAdmin);
+  // Flat lookup of every nav item across every section — so the
+  // exact-match-on-a-sibling suppression below works across the
+  // whole drawer rather than just within one section.
+  const allItems = sections.flatMap((s) => s.items);
   const isActive = (to: string) => {
-    const group = ROUTE_GROUPS[to];
-    return group
-      ? group.some((r) => pathname === r || pathname.startsWith(r + '/'))
-      : (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/'));
+    if (pathname === to) return true;
+    // If any OTHER nav item exactly matches the current path, that
+    // sibling owns the active state. Without this, /data-assets/orphans
+    // lights up BOTH Data Assets (parent prefix) and Orphan Assets
+    // (its own row), reading as "both have been clicked".
+    const siblingExact = allItems.some((i) => i.to !== to && pathname === i.to);
+    if (siblingExact) return false;
+    const candidates = ROUTE_GROUPS[to] || [to];
+    return candidates.some((r) => pathname === r || pathname.startsWith(r + '/'));
   };
   const rowStyle = (active: boolean): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: 12,
