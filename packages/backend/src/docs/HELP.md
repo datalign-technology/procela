@@ -411,10 +411,11 @@ A handful of components show up on every detail page so the patterns stay the sa
 
 ### Notifications
 
-- The bell in the top bar surfaces in-app notifications: @mentions in comments, tasks assigned to you, issues you've been flagged on, and policy reviews coming due. A red badge on the bell shows your unread count (caps at 99+).
+- The bell in the top bar surfaces in-app notifications: @mentions in comments, tasks assigned to you, issues you've been flagged on, policy reviews coming due, and weekly digest deltas (see below).
 - Click the bell to open the dropdown. Each row links straight to the source entity — the click marks it read on the way through.
 - Mark all read clears the unread state without deleting; Clear all deletes every notification with no undo and is a two-click action (the first click arms it with a 3-second countdown, the second confirms). Per-row x dismisses a single notification.
 - Escape or clicking outside closes the dropdown. The unread count refreshes whenever you navigate, so a notification arriving while you're on another page surfaces when you come back.
+- Weekly digest. Procela snapshots the gap signals shown on the Dashboard (mapping coverage, orphan assets, ungoverned-in-use assets, ownerless processes) and diffs them week-over-week. When something meaningful changes, the bell gains a notification with a one-click link to the affected page — "3 new orphan data assets this week" links to Orphan Assets, "Mapping coverage dropped to 72%" links to the Process ↔ Data Map, "2 new ownerless processes" links to the Process Catalog. The thresholds are conservative — small noise (one orphan promoted, one mapping added) doesn't ping anyone. The first run for an org is a baseline and writes nothing; subsequent runs compare against the previous snapshot. Triggered manually for now via the digest endpoint; a scheduled Sunday-evening job is the obvious next step.
 
 ### Saved views
 
@@ -438,9 +439,10 @@ The Comments panel and Activity feed live together on every detail surface, with
 - The Ask AI button in the top bar opens a chat panel grounded in your organization's actual catalog — processes, systems, data assets, mappings, ownership, gaps, and the Phase 3 signals (orphan assets, declared activity ↔ system links, learning-loop dismissals). It answers from the snapshot, not from training data, so it won't fabricate processes or assets that don't exist in your org.
 - Streaming replies. The assistant types the answer as it generates — no "Thinking…" wait for the full response. Useful for long answers (full gap analyses, multi-step recommendations).
 - Inline citations. When the assistant names a real entity from your catalog ("Unused billing ledger", "Look up patient record", "SAP Finance"), the name becomes a clickable link that takes you straight to the entity's page. Longest-name match wins, so "Customer Billing Master" links to the asset rather than fragmenting into "Customer" + " Billing Master".
+- Page navigation chips. When the answer is best resolved on a specific page, the assistant ends the reply with a green pill-shaped "Open" chip — e.g. asking about orphans drops an *Orphan Assets →* chip; asking about coverage drops a *Process ↔ Data Map →* chip. Clicking it navigates straight there. The chip is constrained to a fixed allowlist of Procela pages, so a hallucinated path renders as plain text rather than a broken link.
 - Starter prompts. The empty chat offers four one-click examples — "Where are our data gaps?", "Which assets are below 80% health and linked to critical processes?", "Which data assets do we have that no process uses?", "Which systems run our customer-facing processes?" — chosen to exercise both the gap signals and the new Phase 3 surfaces (orphans, system declarations).
 - Scope. The active Working in… org is sent with each turn, so the assistant answers about *this* organization. Switch orgs in the header and the next question re-grounds to the new scope. Conversation history lives in the panel for the current page mount; closing and re-opening the panel resets it.
-- What it won't do. It doesn't take destructive actions (delete, change ownership, transition status); for now it answers and points, you act. "Show me" navigation actions are a planned follow-up.
+- What it won't do. It doesn't take destructive actions (delete, change ownership, transition status); for now it answers and points, you act. The page-navigation chip is a one-click handoff; deeper "do it for me" actions stay manual.
 
 ## 11. Key Concepts
 
