@@ -130,3 +130,42 @@ export function uniqueName(prefix: string): string {
   const rand = Math.random().toString(36).slice(2, 6);
   return `${prefix} ${stamp}-${rand}`;
 }
+
+// Every test name we ever pass to uniqueName() goes here. Used by
+// cleanSmokeOrgs() below to sweep accumulated pollution from prior
+// runs — the dev backend's auto-save persists every test org to
+// disk, so without this the user's interactive session eventually
+// shows dozens of "Smoke Org abc123-def" entries in the org picker.
+const SMOKE_NAME_PREFIXES = [
+  'Smoke Org', 'People Smoke', 'Roles Smoke', 'Form Smoke',
+  'Data Map Smoke', 'Orphan Smoke',
+];
+
+/** Sweep every org whose name starts with one of the smoke-test
+ *  prefixes via the API. Designed to run once at the start of the
+ *  suite — self-heals after past failures left rows behind, and
+ *  keeps the dev backend's org picker clean for interactive use.
+ *
+ *  Soft-fail: a delete that returns 4xx (e.g. missing dependent
+ *  cleanup permissions) is logged and skipped rather than aborting
+ *  the whole run. The next test will still succeed because each
+ *  test creates its own fresh org. */
+export async function cleanSmokeOrgs(token: string): Promise<{ scanned: number; deleted: number }> {
+  const res = await fetch(BACKEND + '/organizations', {
+    headers: { Authorization: 'Bearer ' + token },
+  });
+  if (!res.ok) return { scanned: 0, deleted: 0 };
+  const body = await res.json();
+  const orgs: Array<{ id: string; name: string }> = body.data || [];
+  let deleted = 0;
+  for (const org of orgs) {
+    if (!SMOKE_NAME_PREFIXES.some((p) => org.name.startsWith(p))) continue;
+    const r = await fetch(BACKEND + `/organizations/${org.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    if (r.ok || r.status === 204) deleted++;
+  }
+  return { scanned: orgs.length, deleted };
+}
