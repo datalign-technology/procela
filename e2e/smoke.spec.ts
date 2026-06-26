@@ -10,7 +10,7 @@
 //     regression.
 //   - Skip 404s on /skills/gap-report — pre-existing console noise
 //     that isn't worth chasing here.
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, chromium, type Page } from '@playwright/test';
 import {
   BACKEND,
   loginAsEleanor,
@@ -18,6 +18,7 @@ import {
   setActiveOrg,
   gotoWithOrg,
   uniqueName,
+  cleanSmokeOrgs,
 } from './helpers';
 
 // Console errors that fire even on a clean build — ignore them so the
@@ -51,6 +52,27 @@ function attachConsoleWatcher(page: Page): string[] {
 }
 
 test.describe('Procela smoke', () => {
+  // Self-heal before the suite: delete every org left behind by prior
+  // smoke runs (the dev backend's auto-save persists each created org
+  // to disk and the in-test login flow doesn't cascade-cleanup).
+  // Without this the dev environment accumulates "Smoke Org abc-def"
+  // rows that pollute the user's interactive org picker.
+  test.beforeAll(async () => {
+    const browser = await chromium.launch();
+    const page = await (await browser.newContext()).newPage();
+    try {
+      const token = await loginAsEleanor(page);
+      const { scanned, deleted } = await cleanSmokeOrgs(token);
+      // eslint-disable-next-line no-console
+      console.log(`[smoke setup] swept ${deleted} stale smoke orgs out of ${scanned}`);
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.warn(`[smoke setup] cleanup skipped: ${err?.message || err}`);
+    } finally {
+      await browser.close();
+    }
+  });
+
   test('Eleanor can sign in and lands on the dashboard', async ({ page }) => {
     const errors = attachConsoleWatcher(page);
     const token = await loginAsEleanor(page);
