@@ -55,6 +55,21 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <rect x="15" y="9" width="6.5" height="6" rx="1.2" />
     </NavSvg>
   ),
+  // Process ↔ Data Map: two short stacks of rows on either side
+  // with a curved connector between them — a stripped-down version
+  // of the bipartite visualization the page renders.
+  '/processes/data-map': (
+    <NavSvg>
+      <rect x="2.5" y="5.5"  width="5" height="2.5" rx="0.5" />
+      <rect x="2.5" y="10.5" width="5" height="2.5" rx="0.5" />
+      <rect x="2.5" y="15.5" width="5" height="2.5" rx="0.5" />
+      <rect x="16.5" y="5.5"  width="5" height="2.5" rx="0.5" />
+      <rect x="16.5" y="10.5" width="5" height="2.5" rx="0.5" />
+      <rect x="16.5" y="15.5" width="5" height="2.5" rx="0.5" />
+      <path d="M7.5 6.7 C11 6.7 13 16.7 16.5 16.7" />
+      <path d="M7.5 11.7 C11 11.7 13 6.7 16.5 6.7" />
+    </NavSvg>
+  ),
   '/organizations': (
     <NavSvg>
       <rect x="9" y="2.8" width="6" height="5" rx="1" />
@@ -98,6 +113,20 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
       <ellipse cx="12" cy="5.2" rx="7" ry="2.4" />
       <path d="M5 5.2 V12 C5 13.33 8.13 14.4 12 14.4 C15.87 14.4 19 13.33 19 12 V5.2" />
       <path d="M5 12 V18.8 C5 20.13 8.13 21.2 12 21.2 C15.87 21.2 19 20.13 19 18.8 V12" />
+    </NavSvg>
+  ),
+  // Orphan Assets: the same data-asset cylinder shape (so its
+  // membership in the Data family is unambiguous at a glance), with
+  // a small detached "?" floating above it — the orphan signal.
+  // Cylinder is shrunk slightly to make room for the question mark
+  // in the top-right quadrant so neither glyph crowds the other.
+  '/data-assets/orphans': (
+    <NavSvg>
+      <ellipse cx="10" cy="9" rx="5.5" ry="1.9" />
+      <path d="M4.5 9 V14.5 C4.5 15.55 6.96 16.4 10 16.4 C13.04 16.4 15.5 15.55 15.5 14.5 V9" />
+      <path d="M4.5 14.5 V20 C4.5 21.05 6.96 21.9 10 21.9 C13.04 21.9 15.5 21.05 15.5 20 V14.5" />
+      <path d="M18 4.2 C18 3 19 2.2 20 2.2 C21 2.2 22 3 22 4.1 C22 5.4 20 5.7 20 7.2" />
+      <circle cx="20" cy="9.4" r="0.7" fill="currentColor" stroke="none" />
     </NavSvg>
   ),
   '/business-glossary': (
