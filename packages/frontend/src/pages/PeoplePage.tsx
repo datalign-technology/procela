@@ -1281,13 +1281,35 @@ export default function PeoplePage() {
               <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
                 {filteredPeople.length === 0 && !selectedOrgId ? (
                   <EmptyState
-                    icon={'☻'}
+                    icon={(
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="1.7"
+                        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M7 4 L7 20" />
+                        <path d="M3 8 L7 8 M3 14 L7 14" />
+                        <circle cx="14" cy="8" r="2.2" />
+                        <circle cx="19" cy="14" r="2.2" />
+                      </svg>
+                    )}
                     title="Pick an organization"
                     description="Select an organization on the left to see who's in it and add new people."
                   />
                 ) : filteredPeople.length === 0 ? (
                   <EmptyState
-                    icon={'☻'}
+                    icon={(
+                      // Two-person silhouette, matches the stroke
+                      // language of the nav rail icons (1.9 stroke,
+                      // 24×24 viewBox) — scaled up to 36px to fill
+                      // the EmptyState's centred icon container.
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="1.7"
+                        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="9" cy="8" r="3.2" />
+                        <path d="M3.5 20a5.5 5.5 0 0 1 11 0" />
+                        <circle cx="17" cy="9" r="2.4" />
+                        <path d="M14.5 20a4 4 0 0 1 7.5-2" />
+                      </svg>
+                    )}
                     title="No people in this organization yet"
                     description="Add the first person — their email, role, and any DAMA accountabilities. They'll be available across Procela as an owner, steward, or custodian."
                     action={{ label: '+ Add Person', onClick: openAddPerson }}
