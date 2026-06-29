@@ -34,6 +34,7 @@ import governanceGroupsRouter from './routes/governance-groups';
 import damaRolesRouter from './routes/dama-roles';
 import dataDomainsRouter from './routes/data-domains';
 import docsRouter from './routes/docs';
+import connectorsRouter from './routes/connectors';
 import tagsRouter from './routes/tags';
 import commentsRouter from './routes/comments';
 import notificationsRouter from './routes/notifications';
@@ -110,6 +111,10 @@ app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
 app.use('/api/v1/ai', authenticateToken, aiRouter);
 app.use('/api/v1/chat', authenticateToken, chatRouter);
 app.use('/api/v1/audit', authenticateToken, auditRouter);
+// Connectors router handles its own auth — admin endpoints take a
+// user JWT, agent endpoints take a connector token (pct_…) — so it
+// mounts without the global authenticateToken middleware.
+app.use('/api/v1/connectors', connectorsRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/governance-groups', authenticateToken, governanceGroupsRouter);
 app.use('/api/v1/dama-roles', authenticateToken, damaRolesRouter);
@@ -187,6 +192,7 @@ import { glossaryTerms } from './routes/business-glossary';
 import { operationsManuals } from './routes/operations-manuals';
 import { skills } from './routes/skills';
 import { agentExecutions } from './routes/agent-executions';
+import { connectors, connectorEvents } from './routes/connectors';
 
 const stores = {
   processNodes: () => processNodes,
@@ -226,6 +232,8 @@ const stores = {
   operationsManuals: () => operationsManuals,
   skills: () => skills,
   agentExecutions: () => agentExecutions,
+  connectors: () => connectors,
+  connectorEvents: () => connectorEvents,
 };
 // One-time data migrations. Each one is responsible for its own
 // flag-file gating so they only run once per environment, and for

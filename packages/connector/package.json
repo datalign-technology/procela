@@ -1,0 +1,30 @@
+{
+  "name": "@procela/connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Procela on-prem connector — runs in customer infrastructure, ships metadata back to Procela over outbound HTTPS.",
+  "main": "dist/index.js",
+  "bin": {
+    "procela-connector": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

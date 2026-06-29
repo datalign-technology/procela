@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ConnectorsSection from '../components/ConnectorsSection';
 import { useOrgContext } from '../stores/orgContext';
 
 interface AuthConfigData {
@@ -641,6 +642,8 @@ export default function SettingsPage() {
         onConfirm={handleImportConfirm}
         onCancel={() => setImportConfirmOpen(false)}
       />
+
+      <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
     </div>
   );
 }

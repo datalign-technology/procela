@@ -65,6 +65,12 @@ interface StoredDataAsset {
    *  placeholders out of source-data views, and by gap detection so a
    *  GOVERNANCE_TEMPLATE asset isn't penalised for lacking a binding. */
   origin?: 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED';
+  /** Set by the on-prem connector when it last refreshed this asset's
+   *  freshness signal. Drives the "Synced N min ago" chip on the Data
+   *  Asset rows so users can tell a value reflects reality, not stale
+   *  manual entry. */
+  lastSyncedByConnectorId?: string | null;
+  lastSyncedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

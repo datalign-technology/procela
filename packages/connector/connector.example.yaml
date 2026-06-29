@@ -1,0 +1,37 @@
+# Procela on-prem connector — example configuration.
+#
+# Copy this file to /etc/procela/connector.yaml (or set
+# PROCELA_CONNECTOR_CONFIG to a different path) and edit to match
+# your environment. After the first successful pairing the
+# connector rewrites this file with the issued token and drops the
+# pairing code. If the file is mounted read-only, the token is
+# printed to stdout instead — paste it back in here under `token:`
+# and restart.
+
+# Base URL of your Procela API. No trailing slash needed.
+procelaUrl: https://procela.example.com/api/v1
+
+# One-time pairing code from Procela's Settings -> Connectors page.
+# Remove after first run; the connector will replace it with a
+# `token:` line.
+pairingCode: "12345678"
+
+# Cadences. Heartbeats are cheap; scans walk every configured
+# source so keep this generous (default: 60s heartbeat, 30m scan).
+heartbeatSeconds: 60
+scanSeconds: 1800
+
+# Data sources to scan. v1 supports Postgres only.
+sources:
+  - type: postgres
+    name: warehouse-prod
+    # Connection string stays on-prem. Procela never sees it.
+    connectionString: postgres://procela_ro:CHANGE_ME@db.internal:5432/warehouse
+    # Optional. Empty = scan only 'public'. Add the schemas you care
+    # about.
+    schemas:
+      - public
+      - analytics
+    # Optional. If omitted, assets attach to the first system Procela
+    # has registered for your org.
+    systemId: sys_warehouse_prod

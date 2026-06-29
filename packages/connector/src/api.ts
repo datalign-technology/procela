@@ -1,0 +1,49 @@
+// Thin HTTP client wrapping the four Procela endpoints the
+// connector cares about: pair/claim, heartbeat, report, plus the
+// pair/start an admin invokes from the UI (which the connector
+// itself never calls). We use native fetch (Node 20+) so the
+// container image stays light — no axios, no node-fetch.
+
+import type { ConnectorConfig, PairClaimResponse, ReportResponse, ReportedAsset } from './types';
+
+function url(cfg: ConnectorConfig, path: string): string {
+  const base = cfg.procelaUrl.replace(/\/$/, '');
+  return `${base}${path.startsWith('/') ? path : '/' + path}`;
+}
+
+/** Exchange a pairing code for a long-lived connector token.
+ *  On success, the caller should persist `data.token` to its config
+ *  so subsequent runs skip pairing. */
+export async function pairClaim(cfg: ConnectorConfig, code: string): Promise<PairClaimResponse> {
+  const res = await fetch(url(cfg, '/connectors/pair/claim'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, agentVersion: cfg.agentVersion || 'procela-connector/0.1.0' }),
+  });
+  return res.json();
+}
+
+/** Heartbeat ping — let Procela know we're alive. Returns true on
+ *  200, false on anything else so the caller can log + back off. */
+export async function heartbeat(cfg: ConnectorConfig): Promise<boolean> {
+  if (!cfg.token) return false;
+  const res = await fetch(url(cfg, '/connectors/heartbeat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+    body: JSON.stringify({ agentVersion: cfg.agentVersion || 'procela-connector/0.1.0' }),
+  });
+  return res.ok;
+}
+
+/** Ship a snapshot of reported assets. Returns the upsert counts
+ *  Procela computed (created vs updated) so the caller can log
+ *  meaningfully. */
+export async function report(cfg: ConnectorConfig, assets: ReportedAsset[]): Promise<ReportResponse> {
+  if (!cfg.token) return { success: false, error: 'no token' };
+  const res = await fetch(url(cfg, '/connectors/report'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+    body: JSON.stringify({ assets }),
+  });
+  return res.json();
+}
