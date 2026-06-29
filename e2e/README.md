@@ -18,6 +18,28 @@ config reuses the existing server when it sees one on
 `http://localhost:5173`, so the suite picks up your live process and
 doesn't fight it.
 
+## Cleaning up dev pollution
+
+The smoke suite creates a fresh org per test, and the dev backend
+auto-saves every one to `.procela-data/organizations.json`. The
+suite's own `beforeAll` sweeps stale rows before each run — so left
+to itself the picker stays clean — but if you want to scrub
+between runs without launching the test suite:
+
+```bash
+npm run e2e:clean        # requires `npm run dev` to be running
+```
+
+Deletes every org whose name starts with one of the smoke prefixes
+(`Smoke Org`, `People Smoke`, `Roles Smoke`, `Form Smoke`,
+`Data Map Smoke`, `Orphan Smoke`). Cascade-delete handles the
+people/assets/mappings each org owns. Fails fast with a clear hint
+if no dev server is reachable rather than hanging on a timeout.
+
+Same code path as the suite's `beforeAll` — adding a new smoke
+prefix means updating one place (`SMOKE_NAME_PREFIXES` in
+`helpers.ts`), and both commands pick up the change.
+
 ## What the suite covers
 
 | Test | Validates |
