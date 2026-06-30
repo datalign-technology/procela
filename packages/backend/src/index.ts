@@ -268,7 +268,7 @@ import { glossaryTerms } from './routes/business-glossary';
 import { operationsManuals } from './routes/operations-manuals';
 import { skills } from './routes/skills';
 import { agentExecutions } from './routes/agent-executions';
-import { connectors, connectorEvents } from './routes/connectors';
+import { connectors, connectorEvents, scanForOfflineConnectors } from './routes/connectors';
 
 const stores = {
   processNodes: () => processNodes,
@@ -321,6 +321,28 @@ runGovernanceDocsMigration();
 runResponsibleRoleCdoMigration();
 
 const autoSaveHandle = startAutoSave(stores);
+
+// Offline-connector scan. Walks the connector store every 5 min
+// and flips any row whose last heartbeat is older than the OFFLINE
+// threshold (4h) into status=OFFLINE, writing one notification per
+// transition. The scan itself is cheap (in-memory loop); 5 min
+// gives admins reasonably prompt notice without spamming on minute
+// boundaries. Disabled in tests by NODE_ENV=test so the suite
+// doesn't fight a background timer.
+const OFFLINE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+const offlineScanHandle = config.nodeEnv === 'test'
+  ? null
+  : setInterval(() => {
+      try {
+        const { transitioned } = scanForOfflineConnectors();
+        if (transitioned > 0) {
+          logger.info({ transitioned }, 'Offline-connector scan flipped silent rows');
+        }
+      } catch (err) {
+        logger.error({ err }, 'Offline-connector scan threw');
+      }
+    }, OFFLINE_SCAN_INTERVAL_MS);
+offlineScanHandle?.unref();
 
 // ---------------------------------------------------------------------------
 // Start server
@@ -396,6 +418,7 @@ function shutdown(signal: string): void {
   shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
   clearInterval(autoSaveHandle);
+  if (offlineScanHandle) clearInterval(offlineScanHandle);
   flushStores(stores);
   server.close((err) => {
     if (err) logger.error({ err }, 'Error closing HTTP server');
