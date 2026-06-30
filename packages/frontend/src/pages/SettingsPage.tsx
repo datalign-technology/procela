@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ConnectorsSection from '../components/ConnectorsSection';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import { useAuthStore } from '@/stores/authStore';
@@ -710,6 +711,8 @@ export default function SettingsPage() {
         onCancel={() => setImportConfirmOpen(false)}
       />
 
+      <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
+
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
@@ -719,6 +722,7 @@ export default function SettingsPage() {
           the Export button, and so the recommended Export-first
           workflow is one click away. */}
       <ResetAllDataPanel onExportFirst={handleExportBackup} />
+
     </div>
   );
 }

@@ -64,6 +64,11 @@ interface DataAssetEntity {
   retentionReason?: string;
   refreshFrequency?: string;
   origin?: 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED';
+  /** Set by the on-prem connector when it last refreshed this asset.
+   *  Drives the freshness chip on the row so users can tell at a
+   *  glance whether the metadata reflects reality. */
+  lastSyncedByConnectorId?: string | null;
+  lastSyncedAt?: string | null;
   /** @deprecated use bindings */
   sourceConnectionId?: string;
   /** @deprecated use bindings */
@@ -227,6 +232,35 @@ function OriginBadge({ origin }: { origin?: string }) {
       style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: m.bg, color: m.fg }}
     >
       {m.label}
+    </span>
+  );
+}
+
+// "Synced N min ago" pill — appears only when an on-prem connector
+// has reported on this asset. Same three buckets as the Settings
+// connector list (online / stale / offline) so admins can correlate
+// at a glance.
+function SyncFreshnessChip({ lastSyncedAt }: { lastSyncedAt?: string | null }) {
+  if (!lastSyncedAt) return null;
+  const ms = Date.now() - new Date(lastSyncedAt).getTime();
+  let bg = '#dcfce7', color = '#166534', label: string;
+  if (ms < 30 * 60_000) {
+    label = 'Live';
+  } else if (ms < 4 * 60 * 60_000) {
+    bg = '#fef3c7'; color = '#92400e';
+    const m = Math.floor(ms / 60_000);
+    label = m < 60 ? `Synced ${m}m ago` : `Synced ${Math.floor(m / 60)}h ago`;
+  } else {
+    bg = '#fee2e2'; color = '#991b1b';
+    const h = Math.floor(ms / 3_600_000);
+    label = h < 24 ? `Synced ${h}h ago` : `Synced ${Math.floor(h / 24)}d ago`;
+  }
+  return (
+    <span
+      title={`Last connector sync: ${new Date(lastSyncedAt).toLocaleString()}`}
+      style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 999, fontSize: 10, fontWeight: 500, background: bg, color }}
+    >
+      {label}
     </span>
   );
 }
@@ -1634,6 +1668,7 @@ export default function DataAssetsPage() {
                             {asset.name}
                           </button>
                           <OriginBadge origin={asset.origin} />
+                          <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
                           <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
                         </div>
                       </div>
