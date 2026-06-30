@@ -296,15 +296,18 @@ export default function LoginPage() {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        {/* Logo */}
+        {/* Logo + wordmark — single image so the brand reads at a
+            glance. Drop a horizontal-format file (icon + "Procela.ai"
+            wordmark) at public/procela-logo.png to swap it. */}
         <img
           src="/procela-logo.png"
           alt="Procela"
           style={styles.logo}
         />
 
-        {/* Heading */}
-        <h1 style={styles.heading}>Sign in to Procela</h1>
+        {/* Heading — wordmark above already carries the brand, so
+            this just states the action. */}
+        <h1 style={styles.heading}>Sign in</h1>
         <p style={styles.subheading}>
           Choose your authentication method to continue
         </p>
@@ -681,9 +684,11 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #e2e8f0',
   },
   logo: {
-    height: '48px',
+    height: '72px',
+    maxWidth: '100%',
     marginBottom: '1.5rem',
     display: 'inline-block',
+    objectFit: 'contain' as const,
   },
   heading: {
     fontSize: '1.5rem',
