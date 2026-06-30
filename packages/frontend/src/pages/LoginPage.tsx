@@ -684,8 +684,8 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #e2e8f0',
   },
   logo: {
-    height: '72px',
-    maxWidth: '100%',
+    height: '52px',
+    maxWidth: '70%',
     marginBottom: '1.5rem',
     display: 'inline-block',
     objectFit: 'contain' as const,
