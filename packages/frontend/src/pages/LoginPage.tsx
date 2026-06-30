@@ -298,7 +298,10 @@ export default function LoginPage() {
       <div style={styles.card}>
         {/* Logo + wordmark — single image so the brand reads at a
             glance. Drop a horizontal-format file (icon + "Procela.ai"
-            wordmark) at public/procela-logo.png to swap it. */}
+            wordmark) at public/procela-logo.png to swap it.
+            display:block + margin auto centers the image's bounding
+            box exactly; any visible drift comes from uneven padding
+            inside the PNG itself. */}
         <img
           src="/procela-logo.png"
           alt="Procela"
@@ -686,8 +689,8 @@ const styles: Record<string, React.CSSProperties> = {
   logo: {
     height: '52px',
     maxWidth: '70%',
-    marginBottom: '1.5rem',
-    display: 'inline-block',
+    margin: '0 auto 1.5rem',
+    display: 'block',
     objectFit: 'contain' as const,
   },
   heading: {
