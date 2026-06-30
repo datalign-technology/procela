@@ -296,17 +296,19 @@ export default function LoginPage() {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        {/* Logo + wordmark — single image so the brand reads at a
-            glance. Drop a horizontal-format file (icon + "Procela.ai"
-            wordmark) at public/procela-logo.png to swap it.
-            display:block + margin auto centers the image's bounding
-            box exactly; any visible drift comes from uneven padding
-            inside the PNG itself. */}
-        <img
-          src="/procela-logo.png"
-          alt="Procela"
-          style={styles.logo}
-        />
+        {/* Brand mark — icon image + wordmark text as separate
+            elements, so the composition centers cleanly regardless of
+            whatever padding lives inside the icon PNG. Swap the icon
+            by overwriting public/procela-icon.png. */}
+        <div style={styles.brandMark}>
+          <img
+            src="/procela-icon.png"
+            alt=""
+            aria-hidden="true"
+            style={styles.brandIcon}
+          />
+          <span style={styles.brandWordmark}>Procela.ai</span>
+        </div>
 
         {/* Heading — wordmark above already carries the brand, so
             this just states the action. */}
@@ -686,12 +688,25 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     border: '1px solid #e2e8f0',
   },
-  logo: {
-    height: '52px',
-    maxWidth: '70%',
-    margin: '0 auto 1.5rem',
-    display: 'block',
+  brandMark: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    marginBottom: '1.5rem',
+  },
+  brandIcon: {
+    height: '40px',
+    width: '40px',
     objectFit: 'contain' as const,
+    flexShrink: 0,
+  },
+  brandWordmark: {
+    fontSize: '32px',
+    fontWeight: 700,
+    color: '#0f172a',
+    letterSpacing: '-0.02em',
+    lineHeight: 1,
   },
   heading: {
     fontSize: '1.5rem',
