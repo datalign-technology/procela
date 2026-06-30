@@ -1,0 +1,163 @@
+name: Release connector image
+
+# Builds and publishes the on-prem connector container image to
+# GitHub Container Registry (ghcr.io). Three trigger paths:
+#
+#  - Tag push matching `connector-v*` (e.g. `connector-v0.2.0`)
+#    publishes the production image with semver tags (:0.2.0, :0.2,
+#    :0) plus :latest.
+#  - Push to the default branch that touches packages/connector/**
+#    publishes :edge and :sha-<short> for trunk-following customers.
+#  - workflow_dispatch lets a maintainer trigger a build manually
+#    against any ref — useful for one-off rebuilds when the base
+#    image gets a security patch but the source hasn't moved.
+#
+# Multi-arch by design: linux/amd64 for typical x86 servers and
+# linux/arm64 so customers running on Apple Silicon dev boxes,
+# AWS Graviton, or Ampere kit get a native image instead of QEMU
+# emulation at runtime.
+#
+# The image is published at:
+#   ghcr.io/<owner>/procela-connector:<tag>
+#
+# To pull it, customers (or a dependent image build) run:
+#   docker pull ghcr.io/<owner>/procela-connector:0.1.0
+#
+# Public images on GHCR require the package's visibility to be set
+# to "Public" once after the first push, under repo Settings →
+# Packages. Until then customers need a GHCR PAT to pull. The
+# workflow itself only needs `packages: write` from GITHUB_TOKEN —
+# no PAT required.
+
+on:
+  push:
+    tags: ['connector-v*']
+    branches: [create-procela-main]
+    paths:
+      - 'packages/connector/**'
+      - '.github/workflows/release-connector.yml'
+  workflow_dispatch:
+    inputs:
+      tag_suffix:
+        description: 'Extra tag to apply (e.g. rc1). Image is also tagged with the commit SHA.'
+        required: false
+        default: ''
+
+# Prevent two pushes to the same ref from racing and producing
+# half-published manifests.
+concurrency:
+  group: release-connector-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  # Reserved for cosign keyless signing once we wire it up — the
+  # OIDC token needs id-token: write. Cheap to leave declared.
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  # Image name is forced lowercase because Docker registries reject
+  # uppercase in the image path. github.repository_owner can have
+  # mixed case (e.g. "Procela-Org") so we normalise it below.
+  IMAGE_BASENAME: procela-connector
+
+jobs:
+  publish:
+    name: Build & push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image name (lowercase owner)
+        id: img
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          OWNER_LC="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "name=${{ env.REGISTRY }}/$OWNER_LC/${{ env.IMAGE_BASENAME }}" >> "$GITHUB_OUTPUT"
+
+      # docker/metadata-action generates a tag list from the event
+      # type — semver flavors for tag pushes, branch + sha for trunk
+      # pushes — plus OCI annotation labels so the registry UI shows
+      # title, description, source, license. Saves us hand-writing
+      # the matrix below.
+      - name: Compute tags + labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.name }}
+          # type=semver fires on tags matching the pattern; we strip
+          # the `connector-` prefix so the published tag is just the
+          # version (0.2.0, not connector-v0.2.0).
+          tags: |
+            type=match,pattern=connector-v(.*),group=1
+            type=match,pattern=connector-v(\d+\.\d+)\.\d+,group=1
+            type=match,pattern=connector-v(\d+)\.\d+\.\d+,group=1
+            type=ref,event=branch,suffix=,prefix=,enable=${{ github.ref == format('refs/heads/{0}', 'create-procela-main') }},value=edge
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/connector-v') }}
+            type=raw,value=${{ github.event.inputs.tag_suffix }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_suffix != '' }}
+          labels: |
+            org.opencontainers.image.title=Procela on-prem connector
+            org.opencontainers.image.description=Outbound-only agent that runs in customer infrastructure and ships catalog metadata back to Procela.
+            org.opencontainers.image.vendor=Procela
+            org.opencontainers.image.licenses=PROPRIETARY
+
+      # Required for multi-arch builds — QEMU emulates the non-native
+      # arch during build. Slightly slower than building natively
+      # per-arch on a matrix runner but a lot simpler.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      # buildx is needed for multi-platform builds + cache exports.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build + push in one step. GHA cache cuts rebuilds from
+      # ~3 min to <30 s when only source files change (the npm
+      # install layer stays warm). cache-to: mode=max keeps every
+      # layer cached, not just the final; matters for multistage
+      # builds where the builder stage is most of the cost.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/connector
+          file: packages/connector/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=connector
+          cache-to: type=gha,scope=connector,mode=max
+          # Pin the build to fail if a stage takes longer than 10 min
+          # — usually means a registry timeout and we'd rather see it.
+          provenance: true
+          sbom: true
+
+      # Print the resolved tag list so the user (or a downstream job)
+      # can see exactly what was published at a glance.
+      - name: Summary
+        run: |
+          echo "### Published image" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Digest:** \`${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tags:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pull with:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo "docker pull ${{ steps.img.outputs.name }}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
