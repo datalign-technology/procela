@@ -7,6 +7,7 @@ import { auditService } from '../services/audit.service';
 import { dataAssets } from './data-assets';
 import { createNotification } from './notifications';
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
+import { rateLimit } from '../middleware/rate-limit';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Connectors — the on-prem agent surface.
@@ -89,6 +90,23 @@ export const connectorEvents: StoredConnectorEvent[] = loadStore<StoredConnector
 registerStore('connectorEvents', connectorEvents);
 
 const router = Router();
+
+// Pairing-code brute force throttle. The codes are 8 digits with a
+// 10-min TTL so the search space is small enough that a tight
+// per-IP limit is worth the cost. 10 attempts per minute and 100
+// per hour keys on IP only — the body has no identity yet.
+const pairClaimLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyBy: (req) => `pair-claim:${req.ip || 'noip'}`,
+  label: 'connector_pair_claim',
+});
+const pairClaimHourLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 100,
+  keyBy: (req) => `pair-claim-hr:${req.ip || 'noip'}`,
+  label: 'connector_pair_claim_hour',
+});
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 const STALE_THRESHOLD_MS = 30 * 60 * 1000;   // amber after 30m silence
@@ -198,6 +216,34 @@ router.post('/pair/start', authenticateToken, (req: AuthenticatedRequest, res: R
   });
 });
 
+/** PATCH /connectors/:id — update mutable admin fields. v1 only
+ *  surfaces name + systemIds; everything else (token, freshness,
+ *  agentVersion) is set by the agent or by lifecycle events. */
+router.patch('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const row = connectors.find((c) => c.id === req.params.id);
+  if (!row) { res.status(404).json({ success: false, error: 'connector not found' }); return; }
+  const before = { name: row.name, systemIds: [...row.systemIds] };
+  if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+    row.name = req.body.name.trim();
+  }
+  if (Array.isArray(req.body?.systemIds)) {
+    // Coerce to strings and de-dupe so a sloppy frontend can't
+    // wedge the store with duplicate entries.
+    row.systemIds = Array.from(new Set(
+      req.body.systemIds.map((s: unknown) => String(s)).filter((s: string) => s.length > 0),
+    ));
+  }
+  row.updatedAt = nowIso();
+  saveStore('connectors', connectors);
+  auditService.log(row.orgId, req.user?.sub ?? null, 'Connector', row.id, 'UPDATE', before, {
+    name: row.name, systemIds: row.systemIds,
+  });
+  res.json({
+    success: true,
+    data: { id: row.id, name: row.name, systemIds: row.systemIds, status: freshnessFor(row) },
+  });
+});
+
 /** DELETE /connectors/:id — revoke a connector. Marks it REVOKED so
  *  the row sticks around for audit, but the token is dead and no
  *  further heartbeats are accepted. */
@@ -230,7 +276,7 @@ router.get('/:id/events', authenticateToken, (req: AuthenticatedRequest, res: Re
 /** POST /connectors/pair/claim — connector hands in its pairing code,
  *  gets back a long-lived token. The code is one-shot; subsequent
  *  claims with the same code 404. */
-router.post('/pair/claim', (req: Request, res: Response) => {
+router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, (req: Request, res: Response) => {
   const code = String(req.body?.code || '').trim();
   const agentVersion = String(req.body?.agentVersion || '').trim();
   if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
