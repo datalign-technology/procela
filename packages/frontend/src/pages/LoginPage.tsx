@@ -14,6 +14,10 @@ interface AuthProvider {
 interface ProvidersResponse {
   success: boolean;
   data: {
+    /** The provider type currently configured for the org — drives
+     *  which login methods are rendered. One of: 'dev' | 'local' |
+     *  'oidc' | 'saml'. */
+    current: string;
     providers: AuthProvider[];
   };
 }
@@ -58,6 +62,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<AuthProvider[]>([]);
+  const [currentProviderType, setCurrentProviderType] = useState<string>('dev');
   const [providersLoading, setProvidersLoading] = useState(true);
   // Forced-change state. When the login response carries
   // passwordMustChange=true, we hold off navigating and surface a
@@ -108,9 +113,11 @@ export default function LoginPage() {
       try {
         const res = await apiClient.get<ProvidersResponse>('/auth/providers');
         setProviders(res.data.providers);
+        setCurrentProviderType(res.data.current || 'dev');
       } catch {
         // If the endpoint is not available, default to dev mode only
         setProviders([{ id: 'dev', name: 'Dev Mode', type: 'dev', enabled: true }]);
+        setCurrentProviderType('dev');
       } finally {
         setProvidersLoading(false);
       }
@@ -118,10 +125,18 @@ export default function LoginPage() {
     fetchProviders();
   }, []);
 
-  const devProvider = providers.find((p) => p.type === 'dev' && p.enabled);
-  const localProvider = providers.find((p) => p.type === 'local' && p.enabled);
-  const microsoftProvider = providers.find((p) => p.type === 'oidc' && p.id === 'microsoft');
-  const oktaProvider = providers.find((p) => p.type === 'oidc' && p.id === 'okta');
+  // Show only the auth method the org has configured (set in
+  // Settings → Authentication). The backend still surfaces every
+  // configured OIDC provider so multi-IdP orgs render all their
+  // SSO buttons; everything else is gated on `currentProviderType`.
+  const showDev = currentProviderType === 'dev';
+  const showLocal = currentProviderType === 'local';
+  const showSso = currentProviderType === 'oidc' || currentProviderType === 'saml';
+  const devProvider = showDev ? providers.find((p) => p.type === 'dev') : undefined;
+  const localProvider = showLocal ? providers.find((p) => p.type === 'local') : undefined;
+  const ssoProviders = showSso
+    ? providers.filter((p) => (p.type === 'oidc' || p.type === 'saml') && p.enabled)
+    : [];
 
   const completeLogin = (
     data: LoginResponse['data'],
@@ -317,58 +332,52 @@ export default function LoginPage() {
           <div style={styles.loadingText}>Loading providers...</div>
         ) : (
           <>
-            {/* SSO Providers */}
-            <div style={styles.ssoSection}>
-              {/* Microsoft Entra ID */}
-              <button
-                style={{
-                  ...styles.ssoButton,
-                  ...styles.microsoftButton,
-                  ...(microsoftProvider?.enabled ? {} : styles.ssoButtonDisabled),
-                }}
-                onClick={() => handleSsoClick(microsoftProvider)}
-                disabled={!microsoftProvider?.enabled}
-                title={!microsoftProvider?.enabled ? 'Coming soon — configure in Settings' : 'Sign in with Microsoft Entra ID'}
-              >
-                <span style={styles.ssoIcon}>
-                  {/* Microsoft icon placeholder */}
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <rect x="1" y="1" width="8.5" height="8.5" fill="#F25022" />
-                    <rect x="10.5" y="1" width="8.5" height="8.5" fill="#7FBA00" />
-                    <rect x="1" y="10.5" width="8.5" height="8.5" fill="#00A4EF" />
-                    <rect x="10.5" y="10.5" width="8.5" height="8.5" fill="#FFB900" />
-                  </svg>
-                </span>
-                <span>Sign in with Microsoft Entra ID</span>
-                {!microsoftProvider?.enabled && (
-                  <span style={styles.comingSoonBadge}>Coming soon</span>
-                )}
-              </button>
-
-              {/* Okta */}
-              <button
-                style={{
-                  ...styles.ssoButton,
-                  ...styles.oktaButton,
-                  ...(oktaProvider?.enabled ? {} : styles.ssoButtonDisabled),
-                }}
-                onClick={() => handleSsoClick(oktaProvider)}
-                disabled={!oktaProvider?.enabled}
-                title={!oktaProvider?.enabled ? 'Coming soon — configure in Settings' : 'Sign in with Okta'}
-              >
-                <span style={styles.ssoIcon}>
-                  {/* Okta icon placeholder */}
-                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <circle cx="10" cy="10" r="9" stroke="#007DC1" strokeWidth="2" fill="none" />
-                    <circle cx="10" cy="10" r="4" fill="#007DC1" />
-                  </svg>
-                </span>
-                <span>Sign in with Okta</span>
-                {!oktaProvider?.enabled && (
-                  <span style={styles.comingSoonBadge}>Coming soon</span>
-                )}
-              </button>
-            </div>
+            {/* SSO Providers — rendered only when the configured
+                auth method is OIDC or SAML. Each configured IdP gets
+                its own button; well-known issuers (Microsoft, Okta)
+                get their branded icon, everything else gets a
+                neutral key glyph. */}
+            {ssoProviders.length > 0 && (
+              <div style={styles.ssoSection}>
+                {ssoProviders.map((p) => {
+                  const isMs = p.id === 'microsoft' || /microsoft|entra|azure/i.test(p.name);
+                  const isOkta = p.id === 'okta' || /okta/i.test(p.name);
+                  const brandStyle = isMs ? styles.microsoftButton : isOkta ? styles.oktaButton : {};
+                  return (
+                    <button
+                      key={p.id}
+                      style={{ ...styles.ssoButton, ...brandStyle }}
+                      onClick={() => handleSsoClick(p)}
+                      title={`Sign in with ${p.name}`}
+                    >
+                      <span style={styles.ssoIcon}>
+                        {isMs ? (
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <rect x="1" y="1" width="8.5" height="8.5" fill="#F25022" />
+                            <rect x="10.5" y="1" width="8.5" height="8.5" fill="#7FBA00" />
+                            <rect x="1" y="10.5" width="8.5" height="8.5" fill="#00A4EF" />
+                            <rect x="10.5" y="10.5" width="8.5" height="8.5" fill="#FFB900" />
+                          </svg>
+                        ) : isOkta ? (
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="9" stroke="#007DC1" strokeWidth="2" fill="none" />
+                            <circle cx="10" cy="10" r="4" fill="#007DC1" />
+                          </svg>
+                        ) : (
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="8" cy="15" r="4" />
+                            <path d="M10.85 12.15 19 4" />
+                            <path d="m18 5 2 2" />
+                            <path d="m15 8 2 2" />
+                          </svg>
+                        )}
+                      </span>
+                      <span>Sign in with {p.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Local credentials (email + password). Only shown when
                 the backend reports the Local provider as the active
@@ -377,11 +386,6 @@ export default function LoginPage() {
                 ignores them. */}
             {localProvider && (
               <>
-                <div style={styles.divider}>
-                  <div style={styles.dividerLine} />
-                  <span style={styles.dividerText}>or</span>
-                  <div style={styles.dividerLine} />
-                </div>
                 <form onSubmit={handleLocalLogin} style={styles.devForm} autoComplete="on">
                   <input
                     type="email"
@@ -435,15 +439,8 @@ export default function LoginPage() {
               </>
             )}
 
-            {/* Divider */}
             {devProvider && (
               <>
-                <div style={styles.divider}>
-                  <div style={styles.dividerLine} />
-                  <span style={styles.dividerText}>or</span>
-                  <div style={styles.dividerLine} />
-                </div>
-
                 {/* Dev Mode */}
                 <div style={styles.devSection}>
                   <div style={styles.devBadge}>
