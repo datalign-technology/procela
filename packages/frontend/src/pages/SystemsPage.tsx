@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
@@ -26,8 +27,9 @@ import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/u
 import HelpPopover from '../components/HelpPopover';
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
-import SystemDetailModal from '../components/SystemDetailModal';
+// Lazy: only renders when the user opens the corresponding modal.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
+const SystemDetailModal = lazy(() => import('../components/SystemDetailModal'));
 
 type Connectivity = 'INTEGRATED' | 'MANUAL' | 'EXTERNAL';
 
@@ -151,14 +153,7 @@ const btnSecondary: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
 
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
-};
 
 const typeBadge: React.CSSProperties = {
   display: 'inline-block', padding: '2px 8px', borderRadius: 4,
@@ -393,7 +388,7 @@ function ConnectPickerModal({
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>Connect to a source</h2>
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Pick a connection to serve <strong>{sys.name}</strong>, or create a new one. A connection can serve several systems at once.</span>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>&times;</button>
+          <button type="button" onClick={onClose} aria-label="Close system detail" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}><span aria-hidden="true">&times;</span></button>
         </div>
 
         {empty && (
@@ -1548,12 +1543,18 @@ export default function SystemsPage() {
       </div>
         </div>
       </div>
-      <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
+      {showSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard open={showSync} onClose={() => setShowSync(false)} targetEntity="systems" orgId={activeOrgId || ''} onCreated={fetchData} />
+        </Suspense>
+      )}
       {viewingSystemId && (
-        <SystemDetailModal
-          systemId={viewingSystemId}
-          onClose={() => setViewingSystemId(null)}
-        />
+        <Suspense fallback={null}>
+          <SystemDetailModal
+            systemId={viewingSystemId}
+            onClose={() => setViewingSystemId(null)}
+          />
+        </Suspense>
       )}
       {connectingSystem && (
         <ConnectPickerModal

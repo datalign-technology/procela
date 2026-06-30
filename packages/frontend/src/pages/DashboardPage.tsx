@@ -8,6 +8,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
+import SkillGapsWidget from '../components/SkillGapsWidget';
 import { useDomainLens } from '../stores/domainLensStore';
 import { useAuthStore } from '../stores/authStore';
 import { usePolling } from '../hooks/usePolling';
@@ -32,6 +33,13 @@ interface DashboardStats {
     ungovernedAssets: number;
     ownerlessItems: number;
     ungovernedDomains: number;
+    /** Data assets in scope that no mapping row references — the
+     *  reverse-view signal landed with the orphan-assets page. */
+    orphanAssets?: number;
+    /** Total Phase 3 suggestion dismissals recorded for this scope.
+     *  Informational, not severity-bearing — a high number is
+     *  expected once the learning loop has been in use for a while. */
+    dismissedSuggestions?: number;
   };
 }
 
@@ -227,26 +235,35 @@ function MyDashboard() {
         Welcome back, {data.person.name}. Here’s what needs your attention.
       </p>
 
-      {/* Summary KPIs */}
+      {/* Summary KPIs — each tile is a hyperlink to the surface where
+          that count lives. Same affordance as the org Overview strip
+          below (hover lift, muted-but-still-linked at zero, tooltip
+          announces the destination for keyboard / screen-reader). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)' }}>{s.openTasks || 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Open Tasks</div>
-          {s.overdueTasks > 0 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>{s.overdueTasks} overdue</div>}
-        </div>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)' }}>{s.openIssues || 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Open Issues</div>
-          {s.criticalIssues > 0 && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>{s.criticalIssues} critical</div>}
-        </div>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{(s.domainsOwned || 0) + (s.domainsSteward || 0)}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>My Domains</div>
-        </div>
-        <div style={{ ...cardStyle, padding: '12px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{s.upcomingEventsCount || 0}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Upcoming Events</div>
-        </div>
+        <MyDashboardTile
+          to="/governance-work?tab=tasks"
+          label="Open Tasks"
+          value={s.openTasks || 0}
+          valueColor={s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)'}
+          sub={s.overdueTasks > 0 ? { text: `${s.overdueTasks} overdue`, color: '#dc2626' } : null}
+        />
+        <MyDashboardTile
+          to="/governance-work?tab=issues"
+          label="Open Issues"
+          value={s.openIssues || 0}
+          valueColor={s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)'}
+          sub={s.criticalIssues > 0 ? { text: `${s.criticalIssues} critical`, color: '#dc2626' } : null}
+        />
+        <MyDashboardTile
+          to="/data-domains"
+          label="My Domains"
+          value={(s.domainsOwned || 0) + (s.domainsSteward || 0)}
+        />
+        <MyDashboardTile
+          to="/governance-calendar"
+          label="Upcoming Events"
+          value={s.upcomingEventsCount || 0}
+        />
       </div>
 
       {/* Two-column: Attention + Schedule */}
@@ -374,17 +391,73 @@ function MyDashboard() {
   );
 }
 
+/** Single tile in the My Dashboard summary strip. Mirrors the
+ *  affordance of StatsOverview's KPI tiles — a Link with hover-lift,
+ *  zero-count muted text, and a tooltip carrying the destination. */
+function MyDashboardTile({ to, label, value, valueColor, sub }: {
+  to: string;
+  label: string;
+  value: number;
+  valueColor?: string;
+  sub?: { text: string; color: string } | null;
+}) {
+  const zero = value === 0;
+  return (
+    <Link
+      to={to}
+      title={zero ? `No ${label.toLowerCase()} — open ${label}` : `Open ${label}`}
+      style={{
+        ...cardStyle, padding: '12px 16px', textAlign: 'center',
+        textDecoration: 'none', display: 'block',
+        transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--color-primary)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--color-border)';
+        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+        e.currentTarget.style.transform = '';
+      }}
+    >
+      <div style={{ fontSize: 22, fontWeight: 700, color: zero ? 'var(--color-text-muted)' : (valueColor || 'var(--color-text)') }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{label}</div>
+      {sub && <div style={{ fontSize: 10, color: sub.color, marginTop: 2 }}>{sub.text}</div>}
+    </Link>
+  );
+}
+
 
 // ── Stats Overview — compact KPI strip ──
 
 function StatsOverview({ stats }: { stats: DashboardStats }) {
-  const kpis = [
-    { label: 'Value Streams', value: stats.valueStreams, color: '#0f4f46' },
-    { label: 'Processes', value: stats.processes, color: '#92400e' },
-    { label: 'Data Assets', value: stats.dataAssets, color: '#1e40af' },
-    { label: 'Systems', value: stats.systems, color: '#5b21b6' },
-    { label: 'Coverage', value: `${stats.coverage.percentage}%`, color: stats.coverage.percentage >= 80 ? '#16a34a' : stats.coverage.percentage >= 50 ? '#ca8a04' : '#dc2626' },
-    { label: 'Avg Health', value: `${stats.averageHealth}%`, color: stats.averageHealth >= 80 ? '#16a34a' : stats.averageHealth >= 50 ? '#ca8a04' : '#dc2626' },
+  // Each KPI tile is a hyperlink to the surface where that count lives.
+  // Two derived metrics get more specific deep-links:
+  //   - Coverage → Data Mapping (the page that surfaces unmapped-activity
+  //     and unlinked-asset banners natively).
+  //   - Avg Health → Data Assets sorted by health ascending, so the
+  //     cohort dragging the average down is at the top of the table.
+  // Zero counts still link through, but render with a muted cursor so
+  // users land on the empty-state CTA on the destination page rather
+  // than dead-clicking from a 0 tile.
+  const kpis: Array<{ label: string; value: string | number; color: string; to: string; zero: boolean }> = [
+    { label: 'Value Streams', value: stats.valueStreams,                color: '#0f4f46',
+      to: '/processes', zero: stats.valueStreams === 0 },
+    { label: 'Processes',     value: stats.processes,                   color: '#92400e',
+      to: '/processes', zero: stats.processes === 0 },
+    { label: 'Data Assets',   value: stats.dataAssets,                  color: '#1e40af',
+      to: '/data-assets', zero: stats.dataAssets === 0 },
+    { label: 'Systems',       value: stats.systems,                     color: '#5b21b6',
+      to: '/systems', zero: stats.systems === 0 },
+    { label: 'Coverage',      value: `${stats.coverage.percentage}%`,
+      color: stats.coverage.percentage >= 80 ? '#16a34a' : stats.coverage.percentage >= 50 ? '#ca8a04' : '#dc2626',
+      to: '/mappings', zero: stats.coverage.percentage === 0 },
+    { label: 'Avg Health',    value: `${stats.averageHealth}%`,
+      color: stats.averageHealth >= 80 ? '#16a34a' : stats.averageHealth >= 50 ? '#ca8a04' : '#dc2626',
+      to: '/data-assets?sort=healthScore&dir=asc', zero: stats.averageHealth === 0 },
   ];
   return (
     <div style={{ marginBottom: 24 }}>
@@ -400,10 +473,30 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
       <DomainLensActiveBanner pageKey="dashboard" entityLabel="process counts" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
         {kpis.map((k) => (
-          <div key={k.label} style={{ ...cardStyle, padding: '14px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: k.color }}>{k.value}</div>
+          <Link
+            key={k.label}
+            to={k.to}
+            title={k.zero ? `No ${k.label.toLowerCase()} yet — open ${k.label} to add one` : `Open ${k.label}`}
+            style={{
+              ...cardStyle, padding: '14px 16px', textAlign: 'center',
+              textDecoration: 'none', display: 'block',
+              transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-primary)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border)';
+              e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+              e.currentTarget.style.transform = '';
+            }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 700, color: k.zero ? 'var(--color-text-muted)' : k.color }}>{k.value}</div>
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{k.label}</div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
@@ -412,7 +505,7 @@ function StatsOverview({ stats }: { stats: DashboardStats }) {
 
 // ── Dashboard section ordering (persisted to localStorage) ──
 
-type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'skillGaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity';
+type SectionKey = 'myDashboard' | 'overview' | 'programMaturity' | 'gaps' | 'whatsNext' | 'stewardOnboarding' | 'quickActions' | 'recentActivity' | 'skillGaps';
 
 const DEFAULT_SECTIONS: SectionKey[] = ['myDashboard', 'overview', 'programMaturity', 'gaps', 'skillGaps', 'whatsNext', 'stewardOnboarding', 'quickActions', 'recentActivity'];
 
@@ -679,74 +772,6 @@ function RecentActivity() {
   );
 }
 
-interface SkillGapRow {
-  skillId: string;
-  skillName: string;
-  category: string;
-  requiredByActivities: number;
-  heldByPeople: number;
-  gapScore: number;
-}
-
-function SkillGaps() {
-  const { activeOrgId } = useOrgContext();
-  const [rows, setRows] = useState<SkillGapRow[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!activeOrgId) { setRows([]); setLoaded(false); return; }
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: SkillGapRow[] }>(`/skills/gap-report?orgId=${activeOrgId}`);
-        setRows(res.data || []);
-      } catch { setRows([]); }
-      finally { setLoaded(true); }
-    })();
-  }, [activeOrgId]);
-
-  if (!loaded) return null;
-  const top = rows.filter((r) => r.requiredByActivities > 0).slice(0, 5);
-  if (top.length === 0) return null;
-
-  const maxRequired = Math.max(...top.map((r) => r.requiredByActivities), 1);
-
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Skill Gaps</h2>
-        <Link to="/people" style={{ fontSize: 12, color: 'var(--color-primary)' }}>Find people by skill →</Link>
-      </div>
-      <div style={{ ...cardStyle, padding: '12px 16px' }}>
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
-          Skills most under-staffed across this org — required by activities vs held by people.
-        </div>
-        {top.map((r) => {
-          const reqPct = (r.requiredByActivities / maxRequired) * 100;
-          const heldPct = (r.heldByPeople / maxRequired) * 100;
-          const critical = r.heldByPeople === 0;
-          const tight = r.heldByPeople > 0 && r.gapScore >= 2;
-          const color = critical ? '#dc2626' : tight ? '#d97706' : '#16a34a';
-          return (
-            <div key={r.skillId} style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>{r.skillName}</span>
-                <span style={{ fontSize: 11, color }}>
-                  {r.requiredByActivities} required · {r.heldByPeople} held
-                  {critical ? ' · no coverage' : ''}
-                </span>
-              </div>
-              <div style={{ position: 'relative', height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${reqPct}%`, background: '#e5e7eb' }} />
-                <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${heldPct}%`, background: color, borderRadius: 3 }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function ProgramMaturity() {
   const { activeOrgId } = useOrgContext();
   const [status, setStatus] = useState<any>(null);
@@ -869,6 +894,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
     { label: 'Ownerless processes', count: gaps.ownerlessItems || 0, severity: 'critical' as const, link: '/processes' },
     { label: 'Ungoverned assets (Uncertified)', count: gaps.ungovernedAssets || 0, severity: 'warning' as const, link: '/data-assets' },
     { label: 'Unowned domains', count: gaps.ungovernedDomains || 0, severity: 'warning' as const, link: '/data-domains' },
+    { label: 'Orphan data assets (no process uses them)', count: gaps.orphanAssets || 0, severity: 'warning' as const, link: '/data-assets/orphans' },
   ];
   const total = items.reduce((s, i) => s + i.count, 0);
   const sevColors = { critical: '#dc2626', warning: '#d97706', info: '#2563eb' };
@@ -962,7 +988,7 @@ export default function DashboardPage() {
     overview: <StatsOverview stats={stats} />,
     programMaturity: <ProgramMaturity />,
     gaps: <GapsOverview stats={stats} />,
-    skillGaps: <SkillGaps />,
+    skillGaps: <SkillGapsWidget />,
     whatsNext: <WhatsNext stats={stats} />,
     stewardOnboarding: <StewardOnboarding />,
     quickActions: <QuickActions />,

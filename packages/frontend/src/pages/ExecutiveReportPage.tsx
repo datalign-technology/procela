@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
+import { useAuthStore } from '../stores/authStore';
 import IconButton from '../components/IconButton';
 
 interface DashboardStats {
@@ -137,6 +138,27 @@ export default function ExecutiveReportPage() {
     fetchAll();
   }, [fetchAll]);
 
+  // Backend-rendered branded PDF. Beats window.print() for compliance
+  // attachments — same numbers as the screen, but in a stable artefact
+  // with the Procela header / footer rather than whatever the user's
+  // browser print dialog produced.
+  const downloadExecutivePdf = async () => {
+    const params = new URLSearchParams();
+    if (activeOrgId) params.set('orgId', activeOrgId);
+    const token = useAuthStore.getState().accessToken;
+    const res = await fetch(`/api/v1/exports/executive.pdf?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `procela-executive-${new Date().toISOString().slice(0, 10)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div>
@@ -188,9 +210,9 @@ export default function ExecutiveReportPage() {
                 border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
               }}>
-                Print / Export PDF
+                Print (browser)
               </button>
-              <IconButton icon="download" label="Export PDF" variant="primary" onClick={() => window.print()} />
+              <IconButton icon="download" label="Download branded PDF" variant="primary" onClick={downloadExecutivePdf} />
             </>
           }
         />

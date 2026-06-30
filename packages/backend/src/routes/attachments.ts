@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 // ── Attachment model ────────────────────────────────────────────────────
@@ -34,6 +34,7 @@ export interface StoredAttachment {
 }
 
 export const attachments: StoredAttachment[] = loadStore<StoredAttachment>('attachments');
+registerStore('attachments', attachments);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');

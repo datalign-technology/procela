@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -18,7 +20,8 @@ import OrgChipInput from '../components/OrgChipInput';
 import { OrgPickerModal } from '../components/OrgPicker';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
+// Lazy: only renders when the user opens the connection picker.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 
 // ── Types ──
 
@@ -54,10 +57,12 @@ function buildOrgPath(orgId: string, orgs: OrgFlat[]): string {
 interface Person {
   id: string; orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[];
   syncConnectionId?: string | null; syncStatus?: string | null;
+  /** Skill catalog ids attached to this person. Drives the
+   *  Skill filter dropdown's match logic; the column we render is
+   *  derived from the backend's /skills/coverage call, not this
+   *  field directly. */
   skillIds?: string[];
 }
-interface SkillRef { id: string; name: string; category: string; }
-interface PersonSkillGap { unqualifiedCount: number; sample: string[]; }
 interface Person360Data {
   person: Person;
   orgAssignments: { id: string; name: string; type: string }[];
@@ -122,13 +127,6 @@ const btnSecondary: React.CSSProperties = {
 const btnIcon: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
   padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
-};
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 const typeBadge = (type: string): React.CSSProperties => {
@@ -322,10 +320,12 @@ export default function PeoplePage() {
   const [personFormSave, setPersonFormSave] = useState<SaveState>('idle');
   const [filterAppRole, setFilterAppRole] = useState('');
   const [filterGovRole, setFilterGovRole] = useState('');
+  // Skill filter — picks a single skill id. Each person row must hold
+  // it to pass. Useful when staffing a new initiative ("who knows
+  // Data Cataloging?") — the value-loop counterpart to the Person
+  // detail page's SkillPicker, where the data goes IN.
   const [filterSkillId, setFilterSkillId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [allSkills, setAllSkills] = useState<SkillRef[]>([]);
-  const [skillGapByPerson, setSkillGapByPerson] = useState<Record<string, PersonSkillGap>>({});
 
   // Quick-add row state
   const [quickName, setQuickName] = useState('');
@@ -357,6 +357,12 @@ export default function PeoplePage() {
   const [allGovernanceGroups, setAllGovernanceGroups] = useState<GovernanceGroupFull[]>([]);
   const [allDamaRoles, setAllDamaRoles] = useState<DamaRoleFull[]>([]);
   const [allDataDomains, setAllDataDomains] = useState<DataDomainFull[]>([]);
+  // Skill catalog drives the "filter by skill" dropdown. Coverage
+  // drives the per-person "Skill gaps" column. Both are scoped to
+  // the selected org so the values are meaningful even when the
+  // person is in multiple orgs.
+  const [allSkills, setAllSkills] = useState<Array<{ id: string; name: string; category: string }>>([]);
+  const [skillCoverageByPerson, setSkillCoverageByPerson] = useState<Record<string, { unqualifiedCount: number; sample: string[] }>>({});
 
   // DAMA role add form state inside 360 modal
   const [showAddDamaRole, setShowAddDamaRole] = useState(false);
@@ -367,18 +373,17 @@ export default function PeoplePage() {
       // Scope the org tree to the active "Working In" context so siblings
       // and ancestors are hidden even when the user has broader permissions.
       const orgQuery = activeOrgId ? `?scopeOrgId=${encodeURIComponent(activeOrgId)}` : '';
-      const skillsUrl = activeOrgId ? `/skills?orgId=${encodeURIComponent(activeOrgId)}` : '/skills';
-      const coverageUrl = activeOrgId ? `/skills/coverage?orgId=${encodeURIComponent(activeOrgId)}` : null;
+      const skillQuery = activeOrgId ? `?orgId=${encodeURIComponent(activeOrgId)}` : '';
       const [orgRes, peopleRes, govRes, damaRes, domainRes, skillsRes, coverageRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: OrgFlat[]; tree: OrgNode[]; orgTypes: string[] }>(`/organizations${orgQuery}`),
         apiClient.get<{ success: boolean; data: Person[]; roles: string[] }>('/people'),
         apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
         apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
         apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
-        apiClient.get<{ success: boolean; data: SkillRef[] }>(skillsUrl),
-        coverageUrl
-          ? apiClient.get<{ success: boolean; data: { byPerson: Record<string, PersonSkillGap>; byNode: Record<string, unknown> } }>(coverageUrl)
-          : Promise.resolve({ success: true, data: { byPerson: {}, byNode: {} } } as any),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; category: string }> }>(`/skills${skillQuery}`).catch(() => ({ data: [] })),
+        activeOrgId
+          ? apiClient.get<{ success: boolean; data: { byPerson: Record<string, { unqualifiedCount: number; sample: string[] }> } }>(`/skills/coverage?orgId=${encodeURIComponent(activeOrgId)}`).catch(() => ({ data: { byPerson: {} } }))
+          : Promise.resolve({ data: { byPerson: {} } }),
       ]);
       const nextFlat = orgRes.data || [];
       setTree(orgRes.tree || []); setFlatOrgs(nextFlat);
@@ -390,7 +395,7 @@ export default function PeoplePage() {
       setAllDamaRoles(damaRes.data || []);
       setAllDataDomains(domainRes.data || []);
       setAllSkills(skillsRes.data || []);
-      setSkillGapByPerson(coverageRes.data?.byPerson || {});
+      setSkillCoverageByPerson(coverageRes.data?.byPerson || {});
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);
@@ -439,7 +444,8 @@ export default function PeoplePage() {
       if (!hasRole) return false;
     }
     if (filterSkillId) {
-      if (!(p.skillIds || []).includes(filterSkillId)) return false;
+      const has = (p.skillIds || []).includes(filterSkillId);
+      if (!has) return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -1017,7 +1023,10 @@ export default function PeoplePage() {
                     <option key={key} value={key}>{label}</option>
                   ))}
                 </select>
-                {allSkills.length > 0 && (
+                {/* Skill filter — only useful when an org is selected
+                    (skills are org-scoped). Hidden in cross-org views
+                    to avoid implying the value would aggregate. */}
+                {selectedOrgId && allSkills.length > 0 && (
                   <select
                     style={{ ...inputStyle, width: 'auto', minWidth: 160, appearance: 'auto' as any, fontSize: 12, padding: '5px 10px' }}
                     value={filterSkillId}
@@ -1025,12 +1034,9 @@ export default function PeoplePage() {
                     aria-label="Filter by skill"
                   >
                     <option value="">All Skills</option>
-                    {allSkills
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
+                    {allSkills.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
                   </select>
                 )}
                 {(filterAppRole || filterGovRole || filterSkillId || searchQuery || selectedOrgId) && (
@@ -1243,7 +1249,7 @@ export default function PeoplePage() {
                       <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People</h3>
                       <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Paste CSV or JSON, or browse a file. Format is auto-detected.</span>
                     </div>
-                    <button onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }} style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}>&times;</button>
+                    <button type="button" onClick={() => { setShowPeopleImport(false); setPeopleImportText(''); setPeopleImportOrgId(''); }} aria-label="Close import dialog" style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--color-text-muted)' }}><span aria-hidden="true">&times;</span></button>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                     <label style={{ fontSize: 11, fontWeight: 500 }}>Default org *</label>
@@ -1275,13 +1281,35 @@ export default function PeoplePage() {
               <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
                 {filteredPeople.length === 0 && !selectedOrgId ? (
                   <EmptyState
-                    icon={'☻'}
+                    icon={(
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="1.7"
+                        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M7 4 L7 20" />
+                        <path d="M3 8 L7 8 M3 14 L7 14" />
+                        <circle cx="14" cy="8" r="2.2" />
+                        <circle cx="19" cy="14" r="2.2" />
+                      </svg>
+                    )}
                     title="Pick an organization"
                     description="Select an organization on the left to see who's in it and add new people."
                   />
                 ) : filteredPeople.length === 0 ? (
                   <EmptyState
-                    icon={'☻'}
+                    icon={(
+                      // Two-person silhouette, matches the stroke
+                      // language of the nav rail icons (1.9 stroke,
+                      // 24×24 viewBox) — scaled up to 36px to fill
+                      // the EmptyState's centred icon container.
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="1.7"
+                        strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="9" cy="8" r="3.2" />
+                        <path d="M3.5 20a5.5 5.5 0 0 1 11 0" />
+                        <circle cx="17" cy="9" r="2.4" />
+                        <path d="M14.5 20a4 4 0 0 1 7.5-2" />
+                      </svg>
+                    )}
                     title="No people in this organization yet"
                     description="Add the first person — their email, role, and any DAMA accountabilities. They'll be available across Procela as an owner, steward, or custodian."
                     action={{ label: '+ Add Person', onClick: openAddPerson }}
@@ -1301,7 +1329,9 @@ export default function PeoplePage() {
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
                         <th scope="col" style={thStyle}>Governance</th>
                         <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
-                        {selectedOrgId && <th scope="col" style={{ ...thStyle, textAlign: 'center', minWidth: 90 }}>Skill gaps</th>}
+                        {selectedOrgId && (
+                          <th scope="col" style={{ ...thStyle, width: 110 }} title="Process activities this person is responsible for that require a skill they don't hold.">Skill gaps</th>
+                        )}
                         <th scope="col" style={{ ...thStyle, width: 70, textAlign: 'center' }}>Actions</th>
                       </tr>
                     </thead>
@@ -1339,7 +1369,6 @@ export default function PeoplePage() {
                               style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
                             />
                           </td>
-                          {selectedOrgId && <td style={tdStyle}></td>}
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <button
                               onClick={handleQuickAdd}
@@ -1389,30 +1418,11 @@ export default function PeoplePage() {
                             )}
                           </td>
                           <td style={tdStyle}>{person.title || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}</td>
-                          {selectedOrgId && (() => {
-                            const gap = skillGapByPerson[person.id];
-                            if (!gap || gap.unqualifiedCount === 0) {
-                              return (
-                                <td style={{ ...tdStyle, textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 11 }}>--</td>
-                              );
-                            }
-                            const more = gap.unqualifiedCount - gap.sample.length;
-                            const tip = `Unqualified for ${gap.unqualifiedCount} activit${gap.unqualifiedCount === 1 ? 'y' : 'ies'}: ${gap.sample.join(', ')}${more > 0 ? ` (+${more} more)` : ''}`;
-                            return (
-                              <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                <span
-                                  title={tip}
-                                  style={{
-                                    display: 'inline-block', padding: '2px 8px', borderRadius: 10,
-                                    fontSize: 11, fontWeight: 600,
-                                    background: '#fef3c7', color: '#92400e',
-                                  }}
-                                >
-                                  {gap.unqualifiedCount}
-                                </span>
-                              </td>
-                            );
-                          })()}
+                          {selectedOrgId && (
+                            <td style={tdStyle}>
+                              <SkillGapBadge gap={skillCoverageByPerson[person.id]} />
+                            </td>
+                          )}
                           <td style={{ ...tdStyle, textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                               <IconButton size="sm" icon="settings" label="Manage" variant="primary" onClick={() => navigate(`/people/${person.id}`)} />
@@ -1454,7 +1464,7 @@ export default function PeoplePage() {
                     {previewData.person.title && <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>{previewData.person.title}</div>}
                     {previewData.person.email && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{previewData.person.email}</div>}
                   </div>
-                  <button onClick={() => setPreviewPersonId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)', padding: '0 4px' }}>&times;</button>
+                  <button type="button" onClick={() => setPreviewPersonId(null)} aria-label="Close person preview" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--color-text-muted)', padding: '0 4px' }}><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div style={{ marginBottom: 12 }}>
                   <span style={roleBadge(previewData.person.role)}>{ROLE_LABELS[previewData.person.role] || previewData.person.role}</span>
@@ -1851,7 +1861,11 @@ export default function PeoplePage() {
               </>
             ) : null}
       </Modal>
-      <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
+      {showPeopleSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 import { useOrgContext } from '../stores/orgContext';
 import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
@@ -107,6 +108,30 @@ export default function AuditLogPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Full server-side export. The in-page export above only covers what
+  // was loaded (capped at PAGE_LIMIT and post-filter); this one hits
+  // the backend endpoint that bypasses the page limit and includes
+  // the entryHash column so a compliance reviewer can verify chain
+  // integrity offline.
+  const exportFullCsv = async () => {
+    if (!activeOrgId) return;
+    const params = new URLSearchParams({ orgId: activeOrgId });
+    if (userFilter)   params.set('userId', userFilter);
+    if (entityFilter) params.set('entityType', entityFilter);
+    const token = useAuthStore.getState().accessToken;
+    const res = await fetch(`/api/v1/audit/export.csv?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log-full-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!activeOrgId) {
     return (
       <div>
@@ -127,19 +152,37 @@ export default function AuditLogPage() {
         title="Audit Log"
         subtitle="Every create, update and delete recorded across the org — the answer to 'who changed this and when'."
         actions={(
-          <button
-            onClick={exportCsv}
-            disabled={filtered.length === 0}
-            style={{
-              padding: '6px 14px', fontSize: 12, fontWeight: 500,
-              background: 'var(--color-surface)', color: 'var(--color-text)',
-              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-              cursor: filtered.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: filtered.length === 0 ? 0.5 : 1,
-            }}
-          >
-            Export CSV
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <IntegrityCheckButton />
+            <button
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              title="Export the currently-loaded, filtered view (capped at the page limit)."
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: filtered.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: filtered.length === 0 ? 0.5 : 1,
+              }}
+            >
+              Export view (CSV)
+            </button>
+            <button
+              onClick={exportFullCsv}
+              disabled={!activeOrgId}
+              title="Download the full audit log for this org from the server — bypasses the page limit, includes the entryHash for chain-integrity verification. Use for compliance reviews."
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+                cursor: !activeOrgId ? 'not-allowed' : 'pointer',
+                opacity: !activeOrgId ? 0.5 : 1,
+              }}
+            >
+              Full log (CSV)
+            </button>
+          </div>
         )}
       >
       </PageHeader>
@@ -284,4 +327,56 @@ function relativeTime(iso: string): string {
 
 function absoluteTime(iso: string): string {
   return new Date(iso).toLocaleString();
+}
+
+// IntegrityCheckButton — runs the hash-chain verifier on demand and
+// shows the result inline. Green = the log hasn't been touched since
+// the entries were written. Red = something was inserted, deleted,
+// reordered, or modified. Surface the broken index so an admin can
+// open the row in the table and investigate.
+function IntegrityCheckButton() {
+  const [state, setState] = useState<'idle' | 'checking' | 'ok' | 'broken'>('idle');
+  const [info, setInfo] = useState<{ brokenAt: number; total: number; reason?: string } | null>(null);
+
+  const run = async () => {
+    setState('checking');
+    setInfo(null);
+    try {
+      const res = await apiClient.get<{ data: { valid: boolean; brokenAt: number; total: number; reason?: string } }>(
+        '/audit/verify');
+      setInfo({ brokenAt: res.data.brokenAt, total: res.data.total, reason: res.data.reason });
+      setState(res.data.valid ? 'ok' : 'broken');
+    } catch {
+      setState('broken');
+      setInfo({ brokenAt: -1, total: 0, reason: 'verifier endpoint failed' });
+    }
+  };
+
+  let label = 'Verify integrity';
+  let bg = 'var(--color-surface)';
+  let color = 'var(--color-text)';
+  let title = 'Walk the hash chain and confirm no entries have been altered.';
+  if (state === 'checking') { label = 'Verifying…'; }
+  else if (state === 'ok' && info) { label = `Verified · ${info.total} entries`; bg = '#d1fae5'; color = '#065f46'; title = 'Hash chain intact across the entire audit log.'; }
+  else if (state === 'broken' && info) {
+    label = info.brokenAt >= 0 ? `Broken at #${info.brokenAt + 1}` : 'Verify failed';
+    bg = '#fee2e2'; color = '#991b1b';
+    title = info.reason || 'The audit log appears to have been tampered with.';
+  }
+
+  return (
+    <button
+      onClick={run}
+      disabled={state === 'checking'}
+      title={title}
+      style={{
+        padding: '6px 14px', fontSize: 12, fontWeight: 500,
+        background: bg, color, border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+        cursor: state === 'checking' ? 'default' : 'pointer',
+      }}
+    >
+      {label}
+    </button>
+  );
 }

@@ -6,6 +6,7 @@ import config from '../config';
 import logger from '../lib/logger';
 import { people, isActive as isPersonActive } from '../routes/people';
 import { mintFlow, consumeFlow, pkceChallenge, type PendingFlow } from './pending-oidc-flows';
+import { resolveEnvSecretSync } from './crypto.service';
 
 // ---------------------------------------------------------------------------
 // Auth Provider Abstraction
@@ -545,7 +546,11 @@ const oidcProviders = new Map<string, OidcAuthProvider>();
 function loadInitialOidcProviders(): void {
   const issuer = process.env.OIDC_ISSUER || '';
   const clientId = process.env.OIDC_CLIENT_ID || '';
-  const clientSecret = process.env.OIDC_CLIENT_SECRET || '';
+  // OIDC_CLIENT_SECRET supports either plaintext or an enc:v1:…
+  // envelope encrypted with the local KMS key. resolveEnvSecretSync
+  // decrypts transparently when the envelope is present, otherwise
+  // returns the value unchanged.
+  const clientSecret = resolveEnvSecretSync(process.env.OIDC_CLIENT_SECRET);
   if (issuer || clientId) {
     // Default provider — id "default" since we can't reliably guess
     // whether the IdP is Microsoft / Okta / generic from env alone.
@@ -577,10 +582,17 @@ export function getAuthProvider(): AuthProvider {
       logger.warn('OIDC provider selected but none configured; falling back to dev provider');
       return devProvider;
     }
-    case 'saml':
-      // SAML not yet implemented — fall back to dev with a warning
-      logger.warn('SAML provider requested but not implemented; falling back to dev provider');
+    case 'saml': {
+      // Lazy import to avoid the circular-dep loader cost when SAML
+      // isn't in play. getSamlProvider returns null when the env
+      // isn't set; fall back to dev with a warning in that case.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getSamlProvider } = require('./saml.service') as typeof import('./saml.service');
+      const saml = getSamlProvider();
+      if (saml && saml.isConfigured) return saml;
+      logger.warn('SAML provider requested but not configured; falling back to dev provider');
       return devProvider;
+    }
     case 'dev':
     default:
       return devProvider;

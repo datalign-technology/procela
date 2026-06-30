@@ -35,6 +35,8 @@ import damaRolesRouter from './routes/dama-roles';
 import dataDomainsRouter from './routes/data-domains';
 import docsRouter from './routes/docs';
 import connectorsRouter from './routes/connectors';
+import exportsRouter from './routes/exports';
+import digestRouter from './routes/digest';
 import tagsRouter from './routes/tags';
 import commentsRouter from './routes/comments';
 import notificationsRouter from './routes/notifications';
@@ -65,6 +67,8 @@ import sopsRouter from './routes/sops';
 import businessGlossaryRouter from './routes/business-glossary';
 import operationsManualsRouter from './routes/operations-manuals';
 import skillsRouter from './routes/skills';
+import dataModelRouter from './routes/data-model';
+import reportsRouter from './routes/reports';
 import agentExecutionsRouter from './routes/agent-executions';
 import agentSchedulesRouter from './routes/agent-schedules';
 
@@ -73,13 +77,81 @@ const app = express();
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
-app.use(cors());
-app.use(helmet());
+// ── CORS ──
+// Production-safe allowlist driven by APP_URL + CORS_ALLOWED_ORIGINS
+// env. Defaults to permissive in dev (no APP_URL configured) so
+// localhost workflows aren't broken. Adds explicit credentials: true
+// because the frontend sends Authorization headers.
+const corsOrigins: string[] = [];
+if (config.appUrl) corsOrigins.push(config.appUrl.replace(/\/$/, ''));
+if (process.env.CORS_ALLOWED_ORIGINS) {
+  for (const o of process.env.CORS_ALLOWED_ORIGINS.split(',')) {
+    const t = o.trim().replace(/\/$/, '');
+    if (t) corsOrigins.push(t);
+  }
+}
+app.use(cors({
+  origin: corsOrigins.length === 0
+    ? true                       // dev fallback — echo the request origin
+    : (origin, cb) => {
+        // Server-to-server / curl requests have no Origin header — let
+        // them through; CORS is a browser-side guard, not an auth
+        // guard, and authenticateToken still runs.
+        if (!origin) return cb(null, true);
+        cb(null, corsOrigins.includes(origin.replace(/\/$/, '')));
+      },
+  credentials: true,
+}));
+
+// ── Helmet (security headers) ──
+// Default Helmet covers most of OWASP's recommended response headers;
+// the explicit config here pins the ones reviewers ask about so an
+// audit doesn't have to chase "what version was installed when?"
+// HSTS only meaningful behind HTTPS (production); turned off in dev
+// so a self-signed local server doesn't hand out a long-lived header
+// the browser will then enforce.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      // The frontend bundles itself; no third-party scripts. Style
+      // 'unsafe-inline' is needed because Vite/React inline some
+      // critical CSS on first paint — re-evaluate once we move to
+      // CSS modules / a strict-nonce setup. img-src 'self' data:
+      // covers the QR codes the MFA enrollment endpoint returns as
+      // data URLs.
+      'default-src': ["'self'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'img-src': ["'self'", 'data:'],
+      'connect-src': ["'self'"],
+      'frame-ancestors': ["'none'"], // matches frameguard below
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+    },
+  },
+  hsts: config.nodeEnv === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: false }
+    : false,
+  frameguard: { action: 'deny' },
+  noSniff: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  // Cross-origin policies — keep loose for now since the dev proxy
+  // serves the frontend from a different origin in development;
+  // production behind one origin should set these stricter via env.
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'same-site' },
+}));
 app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 app.use(compression());
 // Default JSON body limit is 100kb — too small for branding logos uploaded
 // as data: URLs. Raise to 2MB so customers can inline a reasonable PNG.
 app.use(express.json({ limit: '2mb' }));
+// SAML's ACS endpoint receives application/x-www-form-urlencoded
+// posts from IdPs — the SAMLResponse field is base64-encoded XML in
+// the body. Register the urlencoded parser globally; the limit
+// matches the JSON parser so neither is the bottleneck.
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ---------------------------------------------------------------------------
 // Routes — Public (no auth required)
@@ -115,6 +187,8 @@ app.use('/api/v1/audit', authenticateToken, auditRouter);
 // user JWT, agent endpoints take a connector token (pct_…) — so it
 // mounts without the global authenticateToken middleware.
 app.use('/api/v1/connectors', connectorsRouter);
+app.use('/api/v1/exports', authenticateToken, exportsRouter);
+app.use('/api/v1/digest', authenticateToken, digestRouter);
 app.use('/api/v1/search', authenticateToken, searchRouter);
 app.use('/api/v1/governance-groups', authenticateToken, governanceGroupsRouter);
 app.use('/api/v1/dama-roles', authenticateToken, damaRolesRouter);
@@ -148,6 +222,8 @@ app.use('/api/v1/sops', authenticateToken, sopsRouter);
 app.use('/api/v1/business-glossary', authenticateToken, businessGlossaryRouter);
 app.use('/api/v1/operations-manuals', authenticateToken, operationsManualsRouter);
 app.use('/api/v1/skills', authenticateToken, skillsRouter);
+app.use('/api/v1/data-model', authenticateToken, dataModelRouter);
+app.use('/api/v1/reports', authenticateToken, reportsRouter);
 app.use('/api/v1/agent-executions', authenticateToken, agentExecutionsRouter);
 app.use('/api/v1/agent-schedules', authenticateToken, agentSchedulesRouter);
 
@@ -277,6 +353,9 @@ function warnOnMissingProdConfig(): void {
   }
   if (!config.anthropicApiKey) {
     missing.push({ name: 'ANTHROPIC_API_KEY', impact: 'AI features (template generation, suggestions, assistant) will fail when invoked' });
+  }
+  if (!process.env.MFA_ENCRYPTION_KEY) {
+    missing.push({ name: 'MFA_ENCRYPTION_KEY', impact: 'TOTP secrets are stored in plaintext on the Person record — a database leak exposes every enrolled user\'s second factor' });
   }
   if (missing.length === 0) {
     logger.info('Production config: all expected env vars are set');

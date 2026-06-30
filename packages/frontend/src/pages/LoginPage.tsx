@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
+import CaptchaPrompt from '@/components/CaptchaPrompt';
 
 interface AuthProvider {
   id: string;
@@ -20,15 +21,28 @@ interface ProvidersResponse {
 interface LoginResponse {
   success: boolean;
   data: {
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
+    /** Set by the backend when the user has enrolled in MFA. Instead
+     *  of access + refresh tokens, the login response carries this
+     *  short-lived opaque token + a `mfaRequired: true` flag. The
+     *  frontend prompts for a TOTP / backup code and POSTs both to
+     *  /auth/mfa/login-verify, which returns the real session.
+     *  Mutually exclusive with the standard accessToken/refreshToken
+     *  shape — one or the other is present, never both. */
+    mfaRequired?: boolean;
+    mfaToken?: string;
+
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn?: number;
     /** Set by the backend when the Local provider issued a temporary
      *  password (admin reset or dev→local migration). The session is
      *  still issued so the change-password endpoint is reachable; the
      *  frontend should block normal navigation and force a change. */
     passwordMustChange?: boolean;
-    user: {
+    /** Surface from the MFA login-verify response so the UI can nudge
+     *  a regen when the user is running low on backup codes. */
+    backupCodesRemaining?: number;
+    user?: {
       sub: string;
       email: string;
       name: string;
@@ -52,6 +66,23 @@ export default function LoginPage() {
   // the change-password endpoint can re-verify it without asking the
   // user to type it again.
   const [forcedChange, setForcedChange] = useState<{ currentPassword: string } | null>(null);
+  // MFA gate: once the password check succeeds and the user has TOTP
+  // enrolled, /auth/login returns mfaRequired: true + an opaque
+  // mfaToken instead of issuing a session. We hold the token + the
+  // password (so forced-change still works if needed) and show the
+  // 6-digit prompt until login-verify clears the gate.
+  const [mfaPending, setMfaPending] = useState<{
+    token: string;
+    currentPassword?: string;
+    availableFactors?: { totp: boolean; webauthn: boolean };
+  } | null>(null);
+  // CAPTCHA gate: once the backend has seen enough failures from
+  // this IP it returns challengeRequired=true on every subsequent
+  // attempt. We render a tiny "confirm you're human" prompt and
+  // include the resulting token on the next login post.
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const [captchaSiteKey, setCaptchaSiteKey] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
   // Forgot-password modal state.
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -92,6 +123,36 @@ export default function LoginPage() {
   const microsoftProvider = providers.find((p) => p.type === 'oidc' && p.id === 'microsoft');
   const oktaProvider = providers.find((p) => p.type === 'oidc' && p.id === 'okta');
 
+  const completeLogin = (
+    data: LoginResponse['data'],
+    loginPassword?: string,
+  ) => {
+    const { accessToken, refreshToken, expiresIn, user, passwordMustChange } = data;
+    if (!accessToken || !refreshToken || !expiresIn || !user) {
+      setError('Login response was incomplete');
+      return;
+    }
+    login(
+      {
+        id: user.sub,
+        orgId: user.orgId,
+        name: user.name,
+        email: user.email,
+        role: user.role as any,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      accessToken,
+      refreshToken,
+      expiresIn,
+    );
+    if (passwordMustChange && loginPassword) {
+      setForcedChange({ currentPassword: loginPassword });
+    } else {
+      navigate('/');
+    }
+  };
+
   const loginWithEmail = async (loginEmail: string, loginName?: string, loginPassword?: string) => {
     setError('');
     setLoading(true);
@@ -100,31 +161,35 @@ export default function LoginPage() {
         email: loginEmail,
         name: loginName || undefined,
         password: loginPassword || undefined,
+        ...(captchaToken ? { captchaToken } : {}),
       });
-      const { accessToken, refreshToken, expiresIn, user, passwordMustChange } = res.data;
-      login(
-        {
-          id: user.sub,
-          orgId: user.orgId,
-          name: user.name,
-          email: user.email,
-          role: user.role as any,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        accessToken,
-        refreshToken,
-        expiresIn,
-      );
-      if (passwordMustChange && loginPassword) {
-        // Hold the temporary password in memory so the change-password
-        // endpoint can re-verify it. Stay on this page; the modal
-        // blocks until the user picks a new password.
-        setForcedChange({ currentPassword: loginPassword });
-      } else {
-        navigate('/');
+      // MFA gate: the user has TOTP enrolled, so the backend issued
+      // an opaque mfaToken instead of a session. Hold the password
+      // (for forced-change after MFA clears) and show the code prompt.
+      if (res.data.mfaRequired && res.data.mfaToken) {
+        setMfaPending({
+          token: res.data.mfaToken,
+          currentPassword: loginPassword,
+          availableFactors: (res.data as any).availableFactors,
+        });
+        return;
       }
+      // Successful login — clear any captcha state for the next session.
+      setCaptchaRequired(false);
+      setCaptchaToken('');
+      completeLogin(res.data, loginPassword);
     } catch (err: any) {
+      // 401 / 428 may include challengeRequired — the user needs to
+      // solve a CAPTCHA before the next attempt will be processed.
+      // captchaSiteKey lets us know whether the backend is wired to
+      // hCaptcha (non-empty) or running in dev mode (empty, accept
+      // any non-empty token).
+      const responseBody = err?.body || {};
+      if (responseBody.challengeRequired) {
+        setCaptchaRequired(true);
+        setCaptchaSiteKey(responseBody.captchaSiteKey || '');
+        setCaptchaToken('');
+      }
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -147,6 +212,32 @@ export default function LoginPage() {
       return;
     }
     await loginWithEmail(email.trim(), undefined, password);
+  };
+
+  // Passwordless WebAuthn login. Runs the discoverable-credential
+  // ceremony — the browser surfaces every registered key for this
+  // RP and lets the user pick. The assertion carries the userHandle
+  // (Procela personId) so the backend identifies the user without
+  // an email-first lookup.
+  const signInWithSecurityKey = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      const startRes = await apiClient.post<{ data: any }>('/auth/webauthn/discoverable/login-start', {});
+      const assertion = await startAuthentication({ optionsJSON: startRes.data });
+      const finishRes = await apiClient.post<LoginResponse>(
+        '/auth/webauthn/discoverable/login-finish', { response: assertion });
+      completeLogin(finishRes.data);
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') {
+        // User dismissed the browser prompt — silent.
+        return;
+      }
+      setError(err?.message || 'Could not sign in with a security key');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
@@ -208,6 +299,18 @@ export default function LoginPage() {
           <div style={styles.errorBanner}>
             {error}
           </div>
+        )}
+
+        {/* CAPTCHA prompt — visible after enough failures from this IP.
+            When HCAPTCHA_SITE_KEY is configured server-side, render
+            the hCaptcha widget; otherwise fall back to a single
+            "confirm you're human" button (dev / no-hCaptcha path). */}
+        {captchaRequired && (
+          <CaptchaPrompt
+            siteKey={captchaSiteKey}
+            token={captchaToken}
+            onToken={setCaptchaToken}
+          />
         )}
 
         {providersLoading ? (
@@ -311,7 +414,16 @@ export default function LoginPage() {
                     {loading ? 'Signing in...' : 'Sign in'}
                   </button>
                 </form>
-                <div style={{ marginTop: 10, textAlign: 'right' }}>
+                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={signInWithSecurityKey}
+                    disabled={loading}
+                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: loading ? 'default' : 'pointer', padding: 0, textDecoration: 'underline' }}
+                    title="Sign in with a registered security key — no email or password needed."
+                  >
+                    Sign in with a security key
+                  </button>
                   <button
                     type="button"
                     onClick={() => { setForgotEmail(email); setForgotOpen(true); setForgotSubmitted(false); }}
@@ -408,6 +520,24 @@ export default function LoginPage() {
         />
       )}
 
+      {/* MFA / TOTP prompt — shown when /auth/login returned
+          mfaRequired:true. Locks the page until the user supplies
+          a valid code (or backup code); on success the real session
+          is issued and we navigate (or hand off to the forced-change
+          modal if the password also needs rotation). */}
+      {mfaPending && (
+        <MfaPromptModal
+          mfaToken={mfaPending.token}
+          availableFactors={mfaPending.availableFactors || { totp: true, webauthn: false }}
+          onSuccess={(data) => {
+            const pwd = mfaPending.currentPassword;
+            setMfaPending(null);
+            completeLogin(data, pwd);
+          }}
+          onCancel={() => setMfaPending(null)}
+        />
+      )}
+
       {/* Forgot-password modal — fire-and-forget POST to /password/forgot.
           The backend always returns 204; we acknowledge the submission
           without confirming whether the email matched. */}
@@ -465,6 +595,7 @@ export default function LoginPage() {
 // the user is held here until they pick a real password — navigation
 // is gated behind a successful change.
 // ──────────────────────────────────────────────────────────────────────────
+
 function ForcedChangeModal({ currentPassword, onDone }: {
   currentPassword: string;
   onDone: () => void;
@@ -758,3 +889,179 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
 };
+
+// ──────────────────────────────────────────────────────────────────────────
+// MfaPromptModal — pops after a password login when the backend says
+// MFA is required. Takes a 6-digit TOTP from the user's authenticator
+// app or, when they've lost access, a single-use backup code. Calls
+// /auth/mfa/login-verify with whichever the user supplied; on success
+// the real session payload comes back and the caller hands it to
+// authStore.
+// ──────────────────────────────────────────────────────────────────────────
+
+function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
+  mfaToken: string;
+  availableFactors: { totp: boolean; webauthn: boolean };
+  onSuccess: (data: LoginResponse['data']) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState('');
+  const [useBackup, setUseBackup] = useState(false);
+  // Default factor: WebAuthn if available (faster + more secure),
+  // else TOTP. User can flip via the "Use … instead" link.
+  const [factor, setFactor] = useState<'webauthn' | 'totp'>(
+    availableFactors.webauthn ? 'webauthn' : 'totp',
+  );
+  // mfaToken can rotate when we call /webauthn/login-start (which
+  // consumes the original and mints a fresh one). Track the current
+  // valid token in state so a TOTP fallback after a WebAuthn attempt
+  // still works.
+  const [currentToken, setCurrentToken] = useState(mfaToken);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submitTotp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    if (!code.trim()) return;
+    setBusy(true);
+    try {
+      const body = useBackup
+        ? { mfaToken: currentToken, backupCode: code.trim() }
+        : { mfaToken: currentToken, code: code.replace(/\D/g, '') };
+      const res = await apiClient.post<LoginResponse>('/auth/mfa/login-verify', body);
+      onSuccess(res.data);
+    } catch (e: any) {
+      setErr(e?.message || 'Invalid code');
+    } finally { setBusy(false); }
+  };
+
+  const submitWebauthn = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      // Dynamic import keeps the WebAuthn helper out of the initial
+      // login bundle for users / browsers that never reach this
+      // branch.
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      const startRes = await apiClient.post<{ data: { options: any; mfaToken: string } }>(
+        '/auth/mfa/webauthn/login-start', { mfaToken: currentToken });
+      // Update the token immediately so a fall-through to TOTP after
+      // a user-cancel still has a valid handle.
+      setCurrentToken(startRes.data.mfaToken);
+      const assertion = await startAuthentication({ optionsJSON: startRes.data.options });
+      const finishRes = await apiClient.post<LoginResponse>(
+        '/auth/mfa/webauthn/login-finish',
+        { mfaToken: startRes.data.mfaToken, response: assertion });
+      onSuccess(finishRes.data);
+    } catch (e: any) {
+      // Browser cancel / user-dismissed-prompt — present a soft
+      // fallback rather than an error banner.
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        setErr('No response from the security key — try again, or use your authenticator code.');
+      } else {
+        setErr(e?.message || 'Could not verify security key');
+      }
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={styles.modalScrim}>
+      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>
+          {factor === 'webauthn'
+            ? 'Use your security key'
+            : useBackup
+              ? 'Enter a backup code'
+              : 'Two-step verification'}
+        </div>
+        <p style={styles.modalText}>
+          {factor === 'webauthn'
+            ? 'Tap the button to use your registered security key (YubiKey, Touch ID, Windows Hello).'
+            : useBackup
+              ? 'Backup codes are the strings you saved at enrollment. Each one works only once.'
+              : 'Open your authenticator app and enter the 6-digit code it shows.'}
+        </p>
+        {err && <div style={styles.errorBanner}>{err}</div>}
+
+        {factor === 'webauthn' ? (
+          <div>
+            <button
+              type="button"
+              onClick={submitWebauthn}
+              disabled={busy}
+              style={{ ...styles.modalPrimary, width: '100%' }}
+            >
+              {busy ? 'Waiting on key…' : 'Use security key'}
+            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+              {availableFactors.totp && (
+                <button
+                  type="button"
+                  onClick={() => { setFactor('totp'); setErr(''); }}
+                  style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  Use authenticator code instead
+                </button>
+              )}
+              <button type="button" onClick={onCancel} disabled={busy} style={styles.modalSecondary}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={submitTotp}>
+            <input
+              type="text"
+              inputMode={useBackup ? 'text' : 'numeric'}
+              autoComplete="one-time-code"
+              maxLength={useBackup ? 24 : 6}
+              value={code}
+              onChange={(e) => setCode(useBackup ? e.target.value : e.target.value.replace(/\D/g, ''))}
+              placeholder={useBackup ? 'Backup code' : '6-digit code'}
+              required
+              autoFocus
+              style={styles.input}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => { setUseBackup(!useBackup); setCode(''); setErr(''); }}
+                  style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', textAlign: 'left' }}
+                >
+                  {useBackup ? 'Use authenticator instead' : 'Lost your authenticator? Use a backup code'}
+                </button>
+                {availableFactors.webauthn && (
+                  <button
+                    type="button"
+                    onClick={() => { setFactor('webauthn'); setCode(''); setUseBackup(false); setErr(''); }}
+                    style={{ background: 'none', border: 'none', color: '#0f4f46', fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', textAlign: 'left' }}
+                  >
+                    Use a security key instead
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={onCancel} disabled={busy} style={styles.modalSecondary}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy || !code.trim()}
+                  style={{
+                    ...styles.modalPrimary,
+                    opacity: (busy || !code.trim()) ? 0.6 : 1,
+                    cursor: (busy || !code.trim()) ? 'default' : 'pointer',
+                  }}
+                >
+                  {busy ? 'Verifying…' : 'Verify'}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}

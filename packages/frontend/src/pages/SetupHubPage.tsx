@@ -5,6 +5,7 @@ import { apiClient } from '@/api/client';
 import { useOrgContext } from '@/stores/orgContext';
 import { useSetupStore } from '@/stores/setupStore';
 import ProgressRing from '@/components/ProgressRing';
+import Page from '@/components/Page';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SetupHubPage — "Get Started". A resumable, data-driven journey that walks
@@ -30,6 +31,7 @@ interface DashStats {
   activities: number;
   systems: number;
   dataAssets: number;
+  dataDomains: number;
   coverage: { mapped: number; unmapped: number; percentage: number };
   governance: { bronze: number; silver: number; gold: number };
   gaps: {
@@ -212,8 +214,16 @@ export default function SetupHubPage() {
             key: 'unowned-domains',
             title: 'Data domain ownership',
             why: 'Data domains group related assets under a single accountable owner.',
-            status: !s ? 'todo' : s.gaps.ungovernedDomains === 0 ? 'done' : 'attention',
-            detail: !s ? '—' : s.gaps.ungovernedDomains === 0 ? 'all assigned' : `${s.gaps.ungovernedDomains} unowned`,
+            // Match the "Process ownership" pattern above: the step
+            // is 'todo' until at least one domain exists. Without
+            // this guard, an empty org has zero unowned domains and
+            // the step misleadingly flips to 'done'.
+            status: !s || s.dataDomains === 0 ? 'todo'
+              : s.gaps.ungovernedDomains === 0 ? 'done' : 'attention',
+            detail: !s ? '—'
+              : s.dataDomains === 0 ? 'no domains defined yet'
+              : s.gaps.ungovernedDomains === 0 ? 'all assigned'
+              : `${s.gaps.ungovernedDomains} unowned`,
             ctaLabel: 'Review & assign',
             to: '/setup/owners',
             secondaryLabel: 'Manage domains',
@@ -305,11 +315,35 @@ export default function SetupHubPage() {
   // as an override that wins over the default for that one phase/task.
   const [phaseOverride, setPhaseOverride] = useState<Record<number, boolean>>({});
   const [taskOverride, setTaskOverride] = useState<Record<string, boolean>>({});
-  const phaseAllDone = (ph: Phase) => ph.tasks.every((t) => (t.weight ?? 1) === 0 || t.status === 'done');
-  const isPhaseOpen = (ph: Phase) => (ph.num in phaseOverride ? phaseOverride[ph.num] : !phaseAllDone(ph));
-  const isTaskOpen = (t: Task) => (t.key in taskOverride ? taskOverride[t.key] : t.status !== 'done');
+  // Default everything closed. The previous behaviour ("open every
+  // phase / task that has incomplete work") meant a brand-new org
+  // landed on a dense wall of expanded content with no overview;
+  // this anchors the page on a clean three-row summary and lets the
+  // operator open whatever they want. Expand-all / Collapse-all
+  // controls in the header give one-click access to the older
+  // see-everything behaviour.
+  const isPhaseOpen = (ph: Phase) => phaseOverride[ph.num] ?? false;
+  const isTaskOpen = (t: Task) => taskOverride[t.key] ?? false;
   const togglePhase = (ph: Phase) => setPhaseOverride((m) => ({ ...m, [ph.num]: !isPhaseOpen(ph) }));
   const toggleTask = (t: Task) => setTaskOverride((m) => ({ ...m, [t.key]: !isTaskOpen(t) }));
+
+  const expandAll = () => {
+    const ph: Record<number, boolean> = {};
+    const tk: Record<string, boolean> = {};
+    for (const p of phases) {
+      ph[p.num] = true;
+      for (const t of p.tasks) tk[t.key] = true;
+    }
+    setPhaseOverride(ph);
+    setTaskOverride(tk);
+  };
+  const collapseAll = () => {
+    // Clearing the overrides reverts to the closed defaults — same
+    // end state as setting every key to false, with less state to
+    // carry.
+    setPhaseOverride({});
+    setTaskOverride({});
+  };
 
   if (!activeOrgId) {
     return (
@@ -322,7 +356,7 @@ export default function SetupHubPage() {
   }
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '8px 0 64px' }}>
+    <Page padding="8px 0 64px">
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 18, padding: '20px 24px', marginBottom: 24,
@@ -338,6 +372,23 @@ export default function SetupHubPage() {
           </p>
         </div>
       </div>
+
+      {/* Expand-all / Collapse-all row. Matches the pattern used on
+          Decision Rights, RACI Matrix, and Governance Groups —
+          small text-style buttons aligned to the right above the
+          accordion list. The default state is collapsed; this gives
+          one-click access to the see-everything view when an
+          operator wants the dense layout. */}
+      {!loading && (
+        <div style={{
+          display: 'flex', justifyContent: 'flex-start', gap: 4,
+          alignItems: 'center', fontSize: 12, marginBottom: 12,
+        }}>
+          <button type="button" onClick={expandAll} style={textBtnStyle}>Expand all</button>
+          <span style={{ color: 'var(--color-border)' }}>·</span>
+          <button type="button" onClick={collapseAll} style={textBtnStyle}>Collapse all</button>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading your setup status…</div>
@@ -442,7 +493,7 @@ export default function SetupHubPage() {
           );
         })
       )}
-    </div>
+    </Page>
   );
 }
 
@@ -466,4 +517,13 @@ const primaryBtn: React.CSSProperties = {
 const secondaryBtn: React.CSSProperties = {
   padding: '6px 16px', background: 'var(--color-surface)', color: 'var(--color-text-secondary)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
+};
+// Small text-style button used by the Expand all / Collapse all
+// controls in the page header. Matches the same style on Decision
+// Rights and RACI Matrix so the affordance reads identically across
+// the app.
+const textBtnStyle: React.CSSProperties = {
+  background: 'none', border: 'none', padding: '2px 4px',
+  color: 'var(--color-primary)', cursor: 'pointer',
+  fontSize: 12, fontFamily: 'inherit',
 };

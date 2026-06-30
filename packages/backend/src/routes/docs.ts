@@ -1,4 +1,7 @@
 import { Router, Request, Response } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { renderMarkdownToPdf } from '../services/markdown-pdf';
 
 const router = Router();
 
@@ -695,6 +698,136 @@ router.get('/ui', (_req: Request, res: Response) => {
 </body>
 </html>`;
   res.type('html').send(html);
+});
+
+/**
+ * GET /api/v1/docs/training — Returns the Tidewater Utilities training
+ * guide as raw markdown. The frontend renders it inline at
+ * /help/training. Single source of truth: the same TRAINING.md that
+ * lives next to the test data in the repo.
+ *
+ * The file is resolved relative to the repo root since the docs folder
+ * isn't bundled into dist/. In production builds the same relative
+ * path holds because we cp the test-data/ tree alongside dist/.
+ */
+const TRAINING_GUIDE_CANDIDATES = [
+  // Dev: routes/docs.ts → src/routes → packages/backend → packages → repo root
+  path.resolve(__dirname, '..', '..', '..', '..', 'test-data', 'utility', 'TRAINING.md'),
+  // Built artefact: dist/routes/docs.js sits one level lower
+  path.resolve(__dirname, '..', '..', '..', '..', '..', 'test-data', 'utility', 'TRAINING.md'),
+  // Container deployment where test-data is copied next to dist/
+  path.resolve(__dirname, '..', '..', 'test-data', 'utility', 'TRAINING.md'),
+];
+
+let cachedTrainingMd: { contents: string; mtimeMs: number; path: string } | null = null;
+
+function readTrainingGuide(): { contents: string; path: string } {
+  // mtime check so an editor save reloads on the next request without
+  // having to bounce the server.
+  for (const candidate of TRAINING_GUIDE_CANDIDATES) {
+    try {
+      const stat = fs.statSync(candidate);
+      if (cachedTrainingMd && cachedTrainingMd.path === candidate && cachedTrainingMd.mtimeMs === stat.mtimeMs) {
+        return { contents: cachedTrainingMd.contents, path: cachedTrainingMd.path };
+      }
+      const contents = fs.readFileSync(candidate, 'utf-8');
+      cachedTrainingMd = { contents, mtimeMs: stat.mtimeMs, path: candidate };
+      return { contents, path: candidate };
+    } catch { /* try next candidate */ }
+  }
+  throw new Error('TRAINING.md not found in any known location.');
+}
+
+router.get('/training', (_req: Request, res: Response) => {
+  try {
+    const { contents, path: resolvedPath } = readTrainingGuide();
+    res.json({
+      success: true,
+      data: {
+        markdown: contents,
+        sourcePath: resolvedPath,
+        bytes: contents.length,
+      },
+    });
+  } catch (err: any) {
+    res.status(404).json({
+      success: false,
+      error: err?.message || 'Training guide not available.',
+    });
+  }
+});
+
+/**
+ * Help guide source. Hand-curated when written and refreshable via
+ *   node packages/backend/scripts/extract-help-markdown.js
+ * which auto-extracts the structural content out of HelpPage.tsx.
+ *
+ * Lives next to the compiled service so the same relative resolution
+ * works in dev (src/docs) and in prod (dist/docs after a build that
+ * mirrors the docs directory). The lookup falls back to the source
+ * tree if dist isn't available, then bails with a 404.
+ */
+const HELP_GUIDE_CANDIDATES = [
+  path.resolve(__dirname, '..', 'docs', 'HELP.md'),
+  path.resolve(__dirname, '..', '..', 'src', 'docs', 'HELP.md'),
+];
+
+let cachedHelpMd: { contents: string; mtimeMs: number; path: string } | null = null;
+
+function readHelpGuide(): { contents: string; path: string } {
+  for (const candidate of HELP_GUIDE_CANDIDATES) {
+    try {
+      const stat = fs.statSync(candidate);
+      if (cachedHelpMd && cachedHelpMd.path === candidate && cachedHelpMd.mtimeMs === stat.mtimeMs) {
+        return { contents: cachedHelpMd.contents, path: cachedHelpMd.path };
+      }
+      const contents = fs.readFileSync(candidate, 'utf-8');
+      cachedHelpMd = { contents, mtimeMs: stat.mtimeMs, path: candidate };
+      return { contents, path: candidate };
+    } catch { /* try next */ }
+  }
+  throw new Error('HELP.md not found in any known location.');
+}
+
+/**
+ * GET /api/v1/docs/training.pdf — generated PDF of the training guide.
+ * Streams a Buffer back with the right Content-Disposition so it
+ * renders inline in browsers' PDF viewer when opened, but also
+ * downloads cleanly when saved.
+ */
+router.get('/training.pdf', async (_req: Request, res: Response) => {
+  try {
+    const { contents } = readTrainingGuide();
+    const buffer = await renderMarkdownToPdf(contents, {
+      title: 'Procela Training Guide',
+      subtitle: 'A 90-minute click-by-click walkthrough using the Tidewater Utilities fixture data.',
+      footer: `Procela Training Guide  ·  ${new Date().toISOString().slice(0, 10)}`,
+    });
+    res.type('application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="procela-training-guide.pdf"');
+    res.send(buffer);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'PDF generation failed.' });
+  }
+});
+
+/**
+ * GET /api/v1/docs/help.pdf — generated PDF of the help guide.
+ */
+router.get('/help.pdf', async (_req: Request, res: Response) => {
+  try {
+    const { contents } = readHelpGuide();
+    const buffer = await renderMarkdownToPdf(contents, {
+      title: 'Procela Help Guide',
+      subtitle: 'Feature-by-feature reference for the platform.',
+      footer: `Procela Help Guide  ·  ${new Date().toISOString().slice(0, 10)}`,
+    });
+    res.type('application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="procela-help-guide.pdf"');
+    res.send(buffer);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'PDF generation failed.' });
+  }
 });
 
 export default router;

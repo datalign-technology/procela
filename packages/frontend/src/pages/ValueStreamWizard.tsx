@@ -8,6 +8,7 @@ import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import StatusBadge from '../components/StatusBadge';
+import Page from '../components/Page';
 
 // ── Types ──
 
@@ -186,7 +187,7 @@ export default function ValueStreamWizard() {
   const prettyType = (t: string) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <Page width="wizard">
       {/* Header */}
       <PageHeader
         title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
@@ -503,6 +504,6 @@ export default function ValueStreamWizard() {
         onConfirm={() => { const ind = confirmIndustry; setConfirmIndustry(''); handleGenerate(ind); }}
         onCancel={() => setConfirmIndustry('')}
       />
-    </div>
+    </Page>
   );
 }

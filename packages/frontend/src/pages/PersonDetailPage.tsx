@@ -11,6 +11,8 @@ import OrgPicker from '../components/OrgPicker';
 import SkillPicker from '../components/SkillPicker';
 import CommentsPanel from '../components/CommentsPanel';
 import ActivityFeed from '../components/ActivityFeed';
+import OrgRolePill from '../components/OrgRolePill';
+import SecurityCard from '../components/SecurityCard';
 
 // ──────────────────────────────────────────────────────────────────────────
 // PersonDetailPage — the "Person 360" view promoted from a modal to its
@@ -23,7 +25,27 @@ import ActivityFeed from '../components/ActivityFeed';
 // ──────────────────────────────────────────────────────────────────────────
 
 interface Person360Data {
-  person: { id: string; orgIds: string[]; accessibleOrgIds: string[]; name: string; email: string; role: string; title: string; skillIds?: string[] };
+  person: {
+    id: string;
+    orgIds: string[];
+    accessibleOrgIds: string[];
+    name: string;
+    email: string;
+    role: string;
+    title: string;
+    skillIds?: string[];
+    // Per-org role overrides. When absent for a given org the
+    // person.role fallback applies.
+    orgRoles?: Array<{ orgId: string; role: string }>;
+    // Security flags. Optional because legacy records predate them
+    // and the SecurityCard treats absence-of-active as "active".
+    active?: boolean;
+    mfaEnrolled?: boolean;
+    webauthnCredentials?: Array<{ id: string; label: string; createdAt: string }>;
+    webauthnEnrolled?: boolean;
+    locked?: boolean;
+    lockedUntil?: string;
+  };
   orgAssignments: { id: string; name: string; type: string }[];
   damaRoles: { id: string; roleType: string; scopeType: string; scopeId: string; scopeName: string; since: string }[];
   governanceGroups: { groupId: string; groupName: string; groupType: string; groupRole: string; since: string }[];
@@ -65,6 +87,8 @@ const sectionTitleStyle: React.CSSProperties = {
 };
 
 interface FlatOrg { id: string; parentId: string | null; name: string; type: string; }
+
+// OrgRolePill moved to components/OrgRolePill.tsx for unit testing.
 
 function InlineField({ label, value, field, personId, onSaved }: {
   label: string; value: string; field: string; personId: string; onSaved: () => void;
@@ -160,6 +184,21 @@ export default function PersonDetailPage() {
     } catch (err) {
       setData(snapshot);
       errorToast(err, 'Failed to update org assignment');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Set / clear a per-org role override for the person at one org.
+  // Pass role=null to clear (the person.role fallback then applies).
+  const setOrgRole = async (orgId: string, role: string | null) => {
+    if (!data) return;
+    setBusy(true);
+    try {
+      await apiClient.put(`/people/${data.person.id}/org-role`, { orgId, role });
+      await fetch360();
+    } catch (err) {
+      errorToast(err, 'Failed to update org role');
     } finally {
       setBusy(false);
     }
@@ -328,26 +367,37 @@ export default function PersonDetailPage() {
           <div style={sectionTitleStyle}>Assigned organizations ({(data.person.orgIds || []).length})</div>
           {busy && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Saving\u2026</span>}
         </div>
-        {/* Selected chips — compact summary above the picker. */}
+        {/* Selected chips — compact summary above the picker. Each
+            chip shows the effective role at that org. Click the role
+            pill to swap in a per-org override; click the × to
+            unassign. */}
         {(data.person.orgIds || []).length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
             {(data.person.orgIds || []).map((oid) => {
               const o = allOrgs.find((x) => x.id === oid);
               if (!o) return null;
               const isLast = (data.person.orgIds || []).length === 1;
+              const override = (data.person.orgRoles || []).find((r) => r.orgId === oid);
+              const effectiveRole = override?.role || data.person.role;
               return (
-                <span key={oid}
+                <div key={oid}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    display: 'flex', alignItems: 'center', gap: 8,
                     padding: '4px 4px 4px 10px',
-                    borderRadius: 999,
+                    borderRadius: 8,
                     background: 'var(--color-primary-light)',
                     color: 'var(--color-primary)',
                     fontSize: 12,
                   }}
                 >
-                  <strong>{o.name}</strong>
+                  <strong style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.name}</strong>
                   <span style={{ fontSize: 10, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{o.type}</span>
+                  <OrgRolePill
+                    role={effectiveRole}
+                    isOverride={!!override}
+                    disabled={busy}
+                    onChange={(role) => setOrgRole(oid, role)}
+                  />
                   <button
                     onClick={() => toggleOrgAssignment(oid)}
                     disabled={isLast || busy}
@@ -361,7 +411,7 @@ export default function PersonDetailPage() {
                       opacity: isLast ? 0.4 : 1,
                     }}
                   >&times;</button>
-                </span>
+                </div>
               );
             })}
           </div>
@@ -531,6 +581,13 @@ export default function PersonDetailPage() {
           entityLabel={`${p.name}'s profile`}
         />
       </div>
+
+      {/* Security — admin-only panel for credential lifecycle.
+        *  Surfaces deactivate / reactivate (soft-delete state) and
+        *  Reset MFA (forces the user back through enrollment on
+        *  next login). Hidden for non-admins so the usual people
+        *  page doesn't grow these controls for everyone. */}
+      <SecurityCard person={p} onChanged={fetch360} />
 
       {/* Activity by this person across the org. The userId variant of
         *  the feed answers "what is X working on lately?", complementing

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
@@ -86,6 +86,7 @@ interface StoredSystem {
 }
 
 export const systems: StoredSystem[] = loadStore<StoredSystem>('systems');
+registerStore('systems', systems);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_CONNECTIVITY = ['INTEGRATED', 'MANUAL', 'EXTERNAL'] as const;

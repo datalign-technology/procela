@@ -46,6 +46,17 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 // rate-limited route call triggers connection; subsequent ones reuse.
 // We don't fail boot if Redis is misconfigured — the per-key get()
 // helper catches and downgrades to in-memory so the app keeps running.
+//
+// Fail-fast configuration is critical: the connect() call sits inside
+// the /auth/login request path, so any hang here translates to a hung
+// login. We cap the initial connect attempt at REDIS_CONNECT_TIMEOUT_MS
+// and disable the client's built-in reconnect loop entirely. A
+// transient Redis blip means the next request falls through to the
+// in-memory backend; an admin who fixes the Redis config has to
+// restart Procela to bring the Redis backend back. That's the right
+// trade — we'd rather degrade fast than wedge a user-facing endpoint.
+const REDIS_CONNECT_TIMEOUT_MS = parseInt(process.env.REDIS_CONNECT_TIMEOUT_MS || '2000', 10);
+
 let redisClient: RedisClientType | null = null;
 let redisReady = false;
 let redisAttempted = false;
@@ -60,7 +71,21 @@ async function getRedisClient(): Promise<RedisClientType | null> {
     return null;
   }
   try {
-    redisClient = createClient({ url });
+    redisClient = createClient({
+      url,
+      socket: {
+        // Cap the initial connect attempt. Without this Windows in
+        // particular sits on the TCP SYN retry budget (~20–30s) when
+        // Redis isn't listening — the request hangs for that long
+        // before falling through.
+        connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+        // Disable the client's built-in reconnect loop. We only need
+        // a single yes/no on the first request; if Redis is down the
+        // limiter degrades to in-memory and stays there for the
+        // process's lifetime. An admin restart re-attempts.
+        reconnectStrategy: false,
+      },
+    });
     redisClient.on('error', (err) => {
       // Don't spam the log; one warning at first failure is enough.
       // Subsequent requests fall through to the in-memory backend
@@ -68,13 +93,32 @@ async function getRedisClient(): Promise<RedisClientType | null> {
       if (redisReady) logger.warn({ err }, 'Redis connection error — falling back to in-memory rate limiter');
       redisReady = false;
     });
-    await redisClient.connect();
+    // Race the connect against an explicit timeout. node-redis's
+    // socket.connectTimeout handles the TCP-level wait, but the
+    // promise it returns can still sit pending under odd network
+    // conditions; the race is belt-and-braces.
+    await Promise.race([
+      redisClient.connect(),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Redis connect timed out after ${REDIS_CONNECT_TIMEOUT_MS}ms`)),
+          REDIS_CONNECT_TIMEOUT_MS,
+        ),
+      ),
+    ]);
     redisReady = true;
     logger.info({ url: url.replace(/:[^:@/]+@/, ':***@') }, 'Connected to Redis for rate limiter');
     return redisClient;
   } catch (err) {
-    logger.warn({ err }, 'Failed to connect to Redis — using in-memory rate limiter');
+    logger.warn({ err: err instanceof Error ? err.message : err }, 'Failed to connect to Redis — using in-memory rate limiter for the rest of this process');
+    // Tear down whatever partial state the client left behind so a
+    // lingering reconnect attempt doesn't keep the process alive at
+    // shutdown.
+    try {
+      await redisClient?.disconnect();
+    } catch { /* ignore */ }
     redisClient = null;
+    redisReady = false;
     return null;
   }
 }
@@ -118,6 +162,14 @@ interface Counter {
   windowStart: number;
 }
 const memStore = new Map<string, Counter>();
+
+/** Reset the in-memory store. Test-only; production code should never
+ *  call this since the limiter is the only thing protecting login
+ *  routes from brute-force. Exported for the integration tests that
+ *  hammer the auth endpoints in a tight loop. */
+export function _resetRateLimitForTesting(): void {
+  memStore.clear();
+}
 const memSweep = setInterval(() => {
   const now = Date.now();
   for (const [k, c] of memStore) {

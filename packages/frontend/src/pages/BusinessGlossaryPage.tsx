@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -11,7 +12,8 @@ import EmptyState from '../components/EmptyState';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
-import SyncConnectionWizard from '../components/SyncConnectionWizard';
+// Lazy: only renders when the user opens the connection picker.
+const SyncConnectionWizard = lazy(() => import('../components/SyncConnectionWizard'));
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
 import { useColumnPicker } from '../hooks/useColumnPicker';
@@ -83,13 +85,6 @@ const btnSecondary: React.CSSProperties = {
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
-};
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   DRAFT:      { bg: '#f3f4f6', color: '#6b7280' },
@@ -575,13 +570,17 @@ export default function BusinessGlossaryPage() {
         </div>
       )}
 
-      <SyncConnectionWizard
-        open={showSync}
-        onClose={() => setShowSync(false)}
-        targetEntity="business-glossary"
-        orgId={activeOrgId || ''}
-        onCreated={fetchData}
-      />
+      {showSync && (
+        <Suspense fallback={null}>
+          <SyncConnectionWizard
+            open={showSync}
+            onClose={() => setShowSync(false)}
+            targetEntity="business-glossary"
+            orgId={activeOrgId || ''}
+            onCreated={fetchData}
+          />
+        </Suspense>
+      )}
 
       {/* Two-column layout: Categories sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>

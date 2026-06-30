@@ -11,16 +11,14 @@ import {
   rankPeopleByRoleSkills,
   orgSkillGapReport,
 } from '../services/skill-coverage';
+import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
 
 const ORG = 'test-org-skills';
 const OTHER_ORG = 'test-org-other';
 
-// Snapshot existing store contents so the test fixtures don't bleed
-// into / out of real data. Each test rebuilds people / skills /
-// processNodes from scratch.
-function snapshot<T>(arr: T[]): T[] { return arr.slice(); }
-function replace<T>(arr: T[], next: T[]): void { arr.length = 0; arr.push(...next); }
-
+// Helpers to keep fixtures readable. Each test re-builds people /
+// skills / processNodes from scratch so cases don't leak into each
+// other.
 function person(id: string, name: string, skillIds: string[], orgIds: string[] = [ORG]) {
   const now = new Date().toISOString();
   return {
@@ -42,27 +40,30 @@ function node(id: string, name: string, opts: { responsiblePersonId?: string; re
 }
 
 const snaps = {
-  people: snapshot(people),
-  skills: snapshot(skills),
-  nodes: snapshot(processNodes),
+  people: snapshotStore('people'),
+  skills: snapshotStore('skills'),
+  nodes: snapshotStore('processNodes'),
 };
 
 before(() => {
-  replace(people, []);
-  replace(skills, []);
-  replace(processNodes, []);
+  replaceArray(people, []);
+  replaceArray(skills, []);
+  replaceArray(processNodes, []);
 });
 
 after(() => {
-  replace(people, snaps.people);
-  replace(skills, snaps.skills);
-  replace(processNodes, snaps.nodes);
+  replaceArray(people, []);
+  replaceArray(skills, []);
+  replaceArray(processNodes, []);
+  restoreStore(snaps.people);
+  restoreStore(snaps.skills);
+  restoreStore(snaps.nodes);
 });
 
 beforeEach(() => {
-  replace(people, []);
-  replace(skills, []);
-  replace(processNodes, []);
+  replaceArray(people, []);
+  replaceArray(skills, []);
+  replaceArray(processNodes, []);
 });
 
 describe('personCoverage', () => {

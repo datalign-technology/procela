@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
@@ -97,13 +98,6 @@ const btnPrimary: React.CSSProperties = {
 const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-};
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -340,7 +334,7 @@ export default function GovernancePoliciesPage() {
       {/* Header */}
       <PageHeader
         title="Governance Documents"
-        subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle. Controls hang off Policies specifically (the rule-shaped subset)."
+        subtitle="Charters, frameworks, standards, and policies — every formal governance document with a lifecycle, owner, and review cadence."
         actions={
           <>
             <ColumnPicker state={policyCols} />

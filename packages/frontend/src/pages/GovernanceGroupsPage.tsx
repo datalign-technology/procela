@@ -2,11 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
-import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES } from '../types';
+import { GOVERNANCE_ROLES, GOVERNANCE_GROUP_ROLES, PEOPLE_ONLY_ROLE_TYPES, PEOPLE_ONLY_REASON } from '../types';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { activateOnKey, activateOnKeyStop } from '../lib/a11y';
@@ -74,6 +75,27 @@ interface DamaRoleAssignment {
   since: string;
 }
 
+interface DataDomain {
+  id: string;
+  name: string;
+  ownerId: string | null;
+  stewardIds: string[];
+}
+
+// Roles where "which data domain(s) does this person own / steward" is
+// a meaningful question. For these, the Expected Roles panel shows a
+// sub-line under each holder listing their domain assignments — or
+// "(no domains assigned)" so the gap is visible. Driven by reads from
+// the DataDomain entity, not by a separate per-role mapping.
+const DOMAIN_SCOPED_ROLE_TYPES = new Set<string>([
+  'DATA_OWNER',
+  'DATA_DOMAIN_OWNER',
+  'DATA_STEWARD',
+  'DATA_DOMAIN_STEWARD',
+  'BUSINESS_DATA_STEWARD',
+  'DATA_ARCHITECT',
+]);
+
 interface Agent {
   id: string;
   name: string;
@@ -97,18 +119,38 @@ const DAMA_ROLE_LABELS: Record<string, string> = {
   DATABASE_ADMINISTRATOR: 'Database Administrator',
 };
 
-const DAMA_ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-  CDO: { bg: '#fce7f3', color: '#9d174d' },
-  DATA_GOVERNANCE_LEAD: { bg: '#ede9fe', color: '#5b21b6' },
-  DATA_OWNER: { bg: '#dbeafe', color: '#1e40af' },
-  BUSINESS_DATA_STEWARD: { bg: '#d1fae5', color: '#065f46' },
-  DATA_QUALITY_ANALYST: { bg: '#fef3c7', color: '#92400e' },
-  TECHNICAL_DATA_STEWARD: { bg: '#e0e7ff', color: '#3730a3' },
-  DATA_CUSTODIAN: { bg: '#f1f5f9', color: '#64748b' },
-  DATA_ARCHITECT: { bg: '#fce7f3', color: '#831843' },
-  DATA_ENGINEER: { bg: '#cffafe', color: '#155e75' },
-  DATABASE_ADMINISTRATOR: { bg: '#f1f5f9', color: '#475569' },
+// Role chip colours collapsed to three category palettes (Executive
+// / Business / Technical) instead of one hex pair per role. Ten
+// distinct colours encoded nothing the role name didn't already say
+// — the slate read as confetti. Three palettes carry actual signal
+// ("this is a business role") and let any future critical / status
+// colour budget land separately. Same approach the Governance Roles
+// page took for its role badges.
+const ROLE_CATEGORY: Record<string, 'Executive' | 'Business' | 'Technical'> = {
+  CDO: 'Executive',
+  DATA_GOVERNANCE_LEAD: 'Executive',
+  DATA_OWNER: 'Business',
+  BUSINESS_DATA_STEWARD: 'Business',
+  DATA_QUALITY_ANALYST: 'Business',
+  TECHNICAL_DATA_STEWARD: 'Technical',
+  DATA_CUSTODIAN: 'Technical',
+  DATA_ARCHITECT: 'Technical',
+  DATA_ENGINEER: 'Technical',
+  DATABASE_ADMINISTRATOR: 'Technical',
 };
+
+const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
+  Executive: { bg: '#ede9fe', color: '#5b21b6' },  // purple
+  Business:  { bg: '#dbeafe', color: '#1e40af' },  // blue
+  Technical: { bg: '#fef3c7', color: '#92400e' },  // amber
+};
+
+const NEUTRAL_PALETTE = { bg: '#f1f5f9', color: '#64748b' };
+
+function roleChipColors(roleType: string): { bg: string; color: string } {
+  const cat = ROLE_CATEGORY[roleType];
+  return (cat && CATEGORY_COLORS[cat]) || NEUTRAL_PALETTE;
+}
 
 const GROUP_TYPE_LABELS: Record<string, string> = {
   COUNCIL: 'Data Governance Council',
@@ -186,14 +228,7 @@ const btnIcon: React.CSSProperties = {
   padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
 };
 
-const thStyle: React.CSSProperties = {
-  textAlign: 'left', padding: '10px 14px', fontSize: 11, fontWeight: 600,
-  color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em',
-};
 
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px', fontSize: 13, borderTop: '1px solid var(--color-border)',
-};
 
 const makeBadge = (colors: { bg: string; color: string }): React.CSSProperties => ({
   display: 'inline-block', padding: '1px 6px', borderRadius: 3,
@@ -362,6 +397,10 @@ export default function GovernanceGroupsPage() {
   // person isn't (yet) a member of this group — keeps the two pages
   // consistent.
   const [orgDamaRoles, setOrgDamaRoles] = useState<DamaRoleAssignment[]>([]);
+  // Data domains in the active org. Used to look up which domains each
+  // domain-scoped role holder owns or stewards, so the Expected Roles
+  // chips can show that gap inline.
+  const [dataDomains, setDataDomains] = useState<DataDomain[]>([]);
   const [agentsList, setAgentsList] = useState<Agent[]>([]);
   const [assignRolePersonId, setAssignRolePersonId] = useState('');
   const [assignRoleAgentId, setAssignRoleAgentId] = useState('');
@@ -437,13 +476,15 @@ export default function GovernanceGroupsPage() {
 
       // Fetch DAMA roles and agents
       const query = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [rolesRes, agentsRes] = await Promise.all([
+      const [rolesRes, agentsRes, domainsRes] = await Promise.all([
         apiClient.get<{ success: boolean; data: DamaRoleAssignment[]; roleTypes: string[] }>(`/dama-roles${query}`),
         apiClient.get<{ success: boolean; data: Agent[] }>(`/agents${query}`),
+        apiClient.get<{ success: boolean; data: DataDomain[] }>(`/data-domains${query}`),
       ]);
       const allRoles = rolesRes.data || [];
       setOrgDamaRoles(allRoles);
       setAgentsList(Array.isArray(agentsRes.data) ? agentsRes.data.filter((a) => a.status === 'ACTIVE') : []);
+      setDataDomains(Array.isArray(domainsRes.data) ? domainsRes.data : []);
 
       if (detail?.members?.length > 0) {
         const memberIds = new Set(detail.members.map((m: GroupMember) => m.personId));
@@ -967,8 +1008,12 @@ export default function GovernanceGroupsPage() {
         </div>
       )}
 
-      {/* Master-Detail Layout: Tree (left) + Detail (right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', gap: 16 }}>
+      {/* Master-Detail Layout: Tree (left) + Detail (right). The left
+          panel grows on wider screens so long group names (e.g.
+          "Customer Data Stewardship Team") aren't truncated. It floors
+          at 460px so action icons stay reachable on smaller laptops
+          and caps at 640px so the detail pane keeps room to breathe. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(460px, 640px) 1fr', gap: 16 }}>
         {/* Left Panel — Tree View */}
         <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', alignSelf: 'start' }}>
           {/* Tree toolbar */}
@@ -1068,7 +1113,16 @@ export default function GovernanceGroupsPage() {
                         const agentsAssigned = assigned.filter((a) => !!a.agentId).length;
                         const isFilled = peopleAssigned > 0;
                         const canAddPerson = expected.multiAssign || peopleAssigned === 0;
-                        const canAddAgent = expected.multiAssign || agentsAssigned === 0;
+                        // Accountability roles (CDO, Governance Lead,
+                        // Data Owner, Business Steward) keep the agent
+                        // path visible-but-disabled with a tooltip
+                        // *only while the role still has an empty seat
+                        // to fill*. Once a person has taken the seat,
+                        // the whole assign panel collapses — the rule
+                        // has nothing left to explain and a disabled
+                        // picker on every satisfied row is pure noise.
+                        const isPeopleOnly = PEOPLE_ONLY_ROLE_TYPES.has(expected.roleType);
+                        const canAddAgent = !isPeopleOnly && (expected.multiAssign || agentsAssigned === 0);
                         const canAddMore = canAddPerson || canAddAgent;
                         return (
                           <div key={expected.roleType} style={{
@@ -1139,8 +1193,49 @@ export default function GovernanceGroupsPage() {
                                               + add to group
                                             </button>
                                           )}
-                                          <button onClick={() => handleRemoveDamaRole(a.id)} title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}>&times;</button>
+                                          <button type="button" onClick={() => handleRemoveDamaRole(a.id)} aria-label="Remove role assignment" title="Remove role assignment" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, padding: 0, lineHeight: 1 }}><span aria-hidden="true">&times;</span></button>
                                         </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {/* Domain assignments — only for roles
+                                    where this question is meaningful
+                                    (Data Owner, Domain Owner, Steward,
+                                    Architect, etc.). Reads straight
+                                    from the DataDomain entity; nothing
+                                    domain-related is duplicated onto
+                                    the role assignment. Agents are
+                                    skipped — domain ownership /
+                                    stewardship is people-only today. */}
+                                {DOMAIN_SCOPED_ROLE_TYPES.has(expected.roleType) && assigned.length > 0 && (
+                                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {assigned.filter((a) => !a.agentId && a.personId).map((a) => {
+                                      const isOwnerRole = expected.roleType === 'DATA_OWNER' || expected.roleType === 'DATA_DOMAIN_OWNER';
+                                      const isStewardRole = expected.roleType === 'DATA_STEWARD'
+                                        || expected.roleType === 'DATA_DOMAIN_STEWARD'
+                                        || expected.roleType === 'BUSINESS_DATA_STEWARD';
+                                      // Architect / unspecified: surface anywhere they're attached.
+                                      const ownedDomains = dataDomains.filter((d) => d.ownerId === a.personId);
+                                      const stewardedDomains = dataDomains.filter((d) => (d.stewardIds || []).includes(a.personId!));
+                                      const showOwned = isOwnerRole || (!isOwnerRole && !isStewardRole);
+                                      const showStewarded = isStewardRole || (!isOwnerRole && !isStewardRole);
+                                      const ownedNames = showOwned ? ownedDomains.map((d) => d.name) : [];
+                                      const stewardedNames = showStewarded ? stewardedDomains.map((d) => d.name) : [];
+                                      const noAssignments = ownedNames.length === 0 && stewardedNames.length === 0;
+                                      const parts: string[] = [];
+                                      if (ownedNames.length) parts.push(`owns ${ownedNames.join(', ')}`);
+                                      if (stewardedNames.length) parts.push(`stewards ${stewardedNames.join(', ')}`);
+                                      return (
+                                        <div key={`dom-${a.id}`} style={{
+                                          fontSize: 11, color: noAssignments ? '#b91c1c' : 'var(--color-text-secondary)',
+                                          paddingLeft: 6,
+                                        }}>
+                                          <strong style={{ fontWeight: 600, color: 'var(--color-text)' }}>{a.personName || 'Unknown'}:</strong>{' '}
+                                          {noAssignments
+                                            ? <em>no data domains assigned</em>
+                                            : parts.join(' · ')}
+                                        </div>
                                       );
                                     })}
                                   </div>
@@ -1187,6 +1282,29 @@ export default function GovernanceGroupsPage() {
                                           style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: '#7c3aed', opacity: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 0.5 : 1, cursor: !(assignRoleType === expected.roleType && assignRoleAgentId) ? 'not-allowed' : 'pointer' }}
                                           disabled={!(assignRoleType === expected.roleType && assignRoleAgentId)}
                                           onClick={() => handleAssignDamaRole('agent')}
+                                        >
+                                          Assign
+                                        </button>
+                                      </>
+                                    )}
+                                    {isPeopleOnly && canAddPerson && (
+                                      <>
+                                        <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>or</span>
+                                        <select
+                                          aria-disabled="true"
+                                          disabled
+                                          title={PEOPLE_ONLY_REASON}
+                                          style={{ ...selectStyle, width: 'auto', minWidth: 120, fontSize: 11, padding: '4px 8px', borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'not-allowed' }}
+                                          value=""
+                                        >
+                                          <option value="">Agent…</option>
+                                        </select>
+                                        <button
+                                          type="button"
+                                          disabled
+                                          aria-disabled="true"
+                                          title={PEOPLE_ONLY_REASON}
+                                          style={{ ...btnPrimary, padding: '3px 10px', fontSize: 11, background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', opacity: 0.6, cursor: 'not-allowed' }}
                                         >
                                           Assign
                                         </button>
@@ -1273,7 +1391,7 @@ export default function GovernanceGroupsPage() {
                               {personRoles.length > 0 ? (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                                   {personRoles.map((r) => (
-                                    <span key={r.id} style={{ ...makeBadge(DAMA_ROLE_COLORS[r.roleType] || { bg: '#f1f5f9', color: '#64748b' }), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                    <span key={r.id} style={{ ...makeBadge(roleChipColors(r.roleType)), display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                                       {DAMA_ROLE_LABELS[r.roleType] || r.roleType}
                                       <button
                                         onClick={() => handleRemoveDamaRole(r.id)}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -6,6 +6,7 @@ import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useTierLabel, TIER_VALUES, compareTier } from '../lib/governanceTier';
 import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
@@ -28,7 +29,8 @@ import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
 import { errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
-import LinkConnectionModal from '../components/LinkConnectionModal';
+// Lazy: only renders when the user clicks "Link to connection" on a row.
+const LinkConnectionModal = lazy(() => import('../components/LinkConnectionModal'));
 import UnsavedBanner from '../components/UnsavedBanner';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import SectionCard from '../components/SectionCard';
@@ -135,22 +137,6 @@ const bulkBtnStyle: React.CSSProperties = {
   borderRadius: 4,
   cursor: 'pointer',
   color: '#1e40af',
-};
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 13,
-  borderTop: '1px solid var(--color-border)',
 };
 
 interface Asset360Data {
@@ -2146,16 +2132,18 @@ export default function DataAssetsPage() {
       </Modal>
 
       {linkModalAsset && (
-        <LinkConnectionModal
-          asset={{ id: linkModalAsset.id, name: linkModalAsset.name }}
-          activeOrgId={activeOrgId}
-          existingBinding={linkModalMode === 'change' ? (() => {
-            const b = primaryBindingOf(linkModalAsset.id);
-            return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn } : undefined;
-          })() : undefined}
-          onClose={() => setLinkModalAsset(null)}
-          onLinked={fetchData}
-        />
+        <Suspense fallback={null}>
+          <LinkConnectionModal
+            asset={{ id: linkModalAsset.id, name: linkModalAsset.name }}
+            activeOrgId={activeOrgId}
+            existingBinding={linkModalMode === 'change' ? (() => {
+              const b = primaryBindingOf(linkModalAsset.id);
+              return b ? { id: b.id, connectionId: b.connectionId, sourceAsset: b.sourceAsset, sourceColumn: b.sourceColumn } : undefined;
+            })() : undefined}
+            onClose={() => setLinkModalAsset(null)}
+            onLinked={fetchData}
+          />
+        </Suspense>
       )}
 
       {suggestAsset && (

@@ -1,0 +1,123 @@
+name: CI
+
+# Runs typecheck, unit tests, and the e2e smoke on every push and PR.
+# Four jobs fan out in parallel after their own fast `npm ci`; total
+# wall-clock is set by the slowest (e2e, ~90s). Failures upload the
+# Playwright report + traces so reviewers can replay the failing run
+# locally with `npx playwright show-trace` — no more "works on my
+# machine" arguments.
+#
+# Branch protection lives in repo Settings → Branches → require
+# these check names to pass before merging. Not configured here on
+# purpose — the API surface for protection rules is admin-token
+# heavy and easier to set once from the UI than to keep in code.
+
+on:
+  push:
+    branches: [create-procela-main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel any in-flight run for the same ref when a new commit arrives.
+# Trunk pushes are sequential so the old run's result is irrelevant,
+# and PRs commonly get follow-up pushes — saves Actions minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The lint script in each package is `tsc --noEmit`, so this
+      # also catches missing imports and bad type signatures.
+      - name: Typecheck both workspaces
+        run: npm run lint --workspaces --if-present
+
+  test-backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Backend tests run under node:test via tsx.
+      - run: npm test -w packages/backend
+
+  test-frontend:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Frontend tests run under vitest.
+      - run: npm test -w packages/frontend
+
+  e2e:
+    name: E2E smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Playwright pins its bundled Chromium revision per package
+      # version, so the cache key tracks the resolved @playwright/test
+      # version. When the version moves the cache key changes and we
+      # re-download the matching browser.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      # --with-deps installs the Linux system libraries Chromium
+      # links against (libnss3, libdbus-1-3, etc.). On a cache hit
+      # the browser binary is skipped but the system deps still need
+      # verifying — the command is idempotent.
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke suite
+        run: npm run e2e
+        env:
+          CI: 'true'
+
+      # On failure upload the HTML report and raw traces so a
+      # reviewer can debug locally with `npx playwright show-report`
+      # or `show-trace` without re-running the suite.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

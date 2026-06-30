@@ -1,5 +1,6 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import logger from '../lib/logger';
+import { resolveEnvSecretSync } from './crypto.service';
 
 // ──────────────────────────────────────────────────────────────────────────
 // mail.service — SMTP delivery of transactional email.
@@ -44,7 +45,10 @@ function readConfig(): MailConfig | null {
   const host = process.env.SMTP_HOST;
   const port = process.env.SMTP_PORT;
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  // SMTP_PASS may be plaintext or an enc:v1:… envelope (encrypted at
+  // rest with the same master key as the MFA secret). resolveEnvSecretSync
+  // decrypts transparently when the envelope is present.
+  const pass = resolveEnvSecretSync(process.env.SMTP_PASS);
   const from = process.env.MAIL_FROM;
   const appUrl = process.env.APP_URL;
   if (!host || !port || !user || !pass || !from || !appUrl) return null;

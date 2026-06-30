@@ -8,13 +8,32 @@ import { AuthenticatedRequest, authenticateToken, authorize } from '../middlewar
 import { rateLimit } from '../middleware/rate-limit';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
-import { people, computeAccessibleOrgs, isActive as isPersonActive } from './people';
+import { people, computeAccessibleOrgs, isActive as isPersonActive, getRoleForOrg } from './people';
 import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
 import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
 import { peekFlow } from '../services/pending-oidc-flows';
+import { checkLockout, recordFailedLogin, clearLockout, adminClearLockout } from '../services/account-lockout';
+import {
+  isCaptchaRequired, recordLoginFailure, clearLoginFailures,
+  verifyCaptchaToken, getCaptchaSiteKey,
+} from '../services/login-challenge';
 import { sendPasswordResetEmail, isConfigured as isMailConfigured } from '../services/mail.service';
+import {
+  generateEnrollment,
+  verifyToken as verifyTotpToken,
+  generateBackupCodes,
+  hashBackupCodes,
+  verifyBackupCode,
+} from '../services/mfa.service';
+import { mintPendingMfa, consumePendingMfa } from '../services/pending-mfa';
+import { encryptSecret, decryptSecret } from '../services/crypto.service';
+import {
+  buildRegistrationOptions, completeRegistration,
+  buildAuthenticationOptions, buildDiscoverableAuthenticationOptions, completeAuthentication,
+  stashChallenge, consumeChallenge,
+} from '../services/webauthn.service';
 import {
   getAuthProvider,
   getAuthConfig,
@@ -45,6 +64,28 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 interface RefreshTokenContext {
   oidcProviderId?: string;
   oidcIdToken?: string;
+  /** SAML NameID + SessionIndex captured at ACS time so
+   *  IdP-initiated SLO can match a LogoutRequest to the right local
+   *  refresh-token entries, and so /auth/logout can drive
+   *  SP-initiated SLO with the right session hint. */
+  samlNameID?: string;
+  samlSessionIndex?: string;
+  /** Procela person id — surfaced on /auth/sessions so users can see
+   *  whose sessions they're looking at without decoding the JWT. */
+  personId?: string;
+  /** ISO timestamp the session was minted. Drives the
+   *  /auth/sessions display ("Signed in 3h ago"). */
+  createdAt?: string;
+  /** ISO timestamp of the last /auth/refresh call. Drives "Last used"
+   *  and lets users spot a stale session that's still active. */
+  lastUsedAt?: string;
+  /** IP address + User-Agent fingerprint captured at mint time.
+   *  Subsequent /auth/refresh calls must match (UA exact, IP within
+   *  the same /24 for IPv4 or /64 for IPv6) or the token is revoked
+   *  and the caller is forced back through login. Mitigates stolen-
+   *  refresh-token replay from a different network. */
+  ip?: string;
+  userAgent?: string;
 }
 const validRefreshTokens = new Map<string, RefreshTokenContext>();
 
@@ -64,6 +105,11 @@ interface AccessTokenPayload {
   orgId: string;
   role: string;
   type: 'access';
+  /** Refresh-token jti this access token was minted alongside. Lets
+   *  /auth/sessions tag the row representing the caller's own device
+   *  with current=true so the UI can label it. Optional because
+   *  legacy tokens minted before the field existed still verify. */
+  sjti?: string;
 }
 
 interface RefreshTokenPayload {
@@ -78,6 +124,7 @@ function createAccessToken(user: {
   name: string;
   role: string;
   orgId?: string;
+  sessionJti?: string;
 }): string {
   const payload: AccessTokenPayload = {
     sub: user.sub,
@@ -86,16 +133,84 @@ function createAccessToken(user: {
     orgId: user.orgId || DEV_ORG_ID,
     role: user.role,
     type: 'access',
+    ...(user.sessionJti ? { sjti: user.sessionJti } : {}),
   };
   return jwt.sign(payload, config.jwtSecret, { expiresIn: ACCESS_TOKEN_EXPIRY });
+}
+
+/** Capture the IP + User-Agent fingerprint from a request — fed
+ *  into createRefreshToken so /auth/refresh can detect a
+ *  significantly different origin and revoke the token. */
+function fingerprintFromRequest(req: Request): { ip?: string; userAgent?: string } {
+  return {
+    ip: req.ip || undefined,
+    userAgent: (req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined),
+  };
 }
 
 function createRefreshToken(sub: string, context: RefreshTokenContext = {}): { token: string; jti: string } {
   const jti = uuid();
   const payload: RefreshTokenPayload = { sub, type: 'refresh', jti };
   const token = jwt.sign(payload, config.jwtSecret, { expiresIn: REFRESH_TOKEN_EXPIRY });
-  validRefreshTokens.set(jti, context);
+  const now = new Date().toISOString();
+  validRefreshTokens.set(jti, {
+    personId: sub,
+    createdAt: now,
+    lastUsedAt: now,
+    ...context,
+  });
   return { token, jti };
+}
+
+/** Best-effort session-binding check. Returns true if the request
+ *  origin (IP + UA) matches the values the refresh token was minted
+ *  with. UA must be exact; IP is matched within /24 for IPv4 and /64
+ *  for IPv6, so a user on a residential connection that gets a new
+ *  DHCP lease doesn't get bounced every time their address rotates
+ *  within the same subnet.
+ *
+ *  Unset context fields (legacy sessions minted before this change)
+ *  fail open — there's no fingerprint to compare against, so the
+ *  request is allowed and the next mint will pin one. */
+export function sessionFingerprintMatches(ctx: RefreshTokenContext, req: Request): boolean {
+  if (!ctx.ip && !ctx.userAgent) return true; // legacy session
+  const ua = String(req.headers['user-agent'] || '');
+  if (ctx.userAgent && ctx.userAgent !== ua) return false;
+  if (ctx.ip) {
+    const reqIp = req.ip || '';
+    if (!ipsInSameSubnet(ctx.ip, reqIp)) return false;
+  }
+  return true;
+}
+
+export function ipsInSameSubnet(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // IPv4 — match the first 3 octets (/24).
+  if (a.includes('.') && b.includes('.')) {
+    const ax = a.split('.');
+    const bx = b.split('.');
+    if (ax.length !== 4 || bx.length !== 4) return false;
+    return ax[0] === bx[0] && ax[1] === bx[1] && ax[2] === bx[2];
+  }
+  // IPv6 — match the first four 16-bit groups (/64). Express may
+  // give us either compressed or expanded form; normalise by
+  // expanding to a full 8-group representation first.
+  if (a.includes(':') && b.includes(':')) {
+    const expand = (s: string): string[] => {
+      const segs = s.split('::');
+      if (segs.length === 1) return s.split(':');
+      const left = segs[0] ? segs[0].split(':') : [];
+      const right = segs[1] ? segs[1].split(':') : [];
+      const fill = new Array(8 - left.length - right.length).fill('0');
+      return [...left, ...fill, ...right];
+    };
+    const ax = expand(a);
+    const bx = expand(b);
+    if (ax.length < 4 || bx.length < 4) return false;
+    return ax[0] === bx[0] && ax[1] === bx[1] && ax[2] === bx[2] && ax[3] === bx[3];
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,24 +308,170 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
       return;
     }
 
+    // ── SAML redirect flow ──
+    // Mirrors the OIDC branch: build the AuthnRequest, return the URL
+    // the browser should follow. The IdP POSTs the assertion to
+    // /auth/saml/acs which we handle separately below.
+    if (provider.type === 'saml') {
+      const samlProv = provider as unknown as import('../services/saml.service').SamlAuthProvider;
+      if (!samlProv.isConfigured) {
+        res.status(503).json({ success: false, error: 'SAML provider is not configured.' });
+        return;
+      }
+      const returnTo = req.body.returnTo || '/';
+      try {
+        const { loginUrl } = await samlProv.startLogin({ returnTo });
+        auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'SAML_LOGIN_REDIRECT', null, { returnTo });
+        res.json({ success: true, data: { loginUrl, provider: 'saml' } });
+      } catch (err: any) {
+        logger.warn({ err: err?.message }, 'SAML login start failed');
+        res.status(503).json({ success: false, error: err?.message || 'Failed to start SAML flow' });
+      }
+      return;
+    }
+
+    // ── Pre-flight CAPTCHA gate ──
+    // Once an IP has burned through the failure threshold, every
+    // subsequent attempt from that IP must include a verified
+    // captchaToken. Slows automated credential-stuffing without
+    // adding friction for a user who fumbles their password once or
+    // twice. The frontend learns to render the widget from the
+    // challengeRequired flag the route sets on every failure.
+    if (isCaptchaRequired(req.ip)) {
+      const ok = await verifyCaptchaToken(req.body.captchaToken, req.ip);
+      if (!ok) {
+        res.status(428).json({
+          success: false,
+          error: 'A CAPTCHA challenge is required before this sign-in attempt can be processed.',
+          challengeRequired: true,
+          captchaSiteKey: getCaptchaSiteKey(),
+        });
+        return;
+      }
+    }
+
+    // ── Pre-flight lockout check (Local provider) ──
+    // Cuts off brute-force / credential-stuffing attempts before we
+    // burn argon2 verify cycles. Only meaningful for the Local
+    // provider — Dev has no credential, OIDC defers auth to the IdP.
+    // Pre-flight peek doesn't reveal account existence: an unknown
+    // email passes this branch and lands in the standard "invalid
+    // credentials" error from the provider.
+    if (provider.type === 'local' && req.body.email) {
+      const preflight = people.find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase());
+      if (preflight) {
+        const state = checkLockout(preflight);
+        if (state.locked) {
+          auditService.log(preflight.orgIds[0] || DEV_ORG_ID, preflight.id, 'Auth', 'login', 'LOGIN_LOCKED_OUT', null, {
+            retryAfterSeconds: state.retryAfterSeconds,
+          });
+          res.setHeader('Retry-After', String(state.retryAfterSeconds));
+          res.status(429).json({
+            success: false,
+            error: `Account temporarily locked due to repeated failed sign-in attempts. Try again in ${Math.ceil(state.retryAfterSeconds / 60)} minute${state.retryAfterSeconds >= 120 ? 's' : ''}.`,
+          });
+          return;
+        }
+      }
+    }
+
     // ── Dev / direct credential flow ──
     const result = await provider.validateCredentials(req.body);
 
     if (!result.success || !result.user) {
+      // Record the failed attempt against the matched account (when
+      // there is one) — tips the lockout counter. We deliberately
+      // don't differentiate "unknown email" vs "bad password" in the
+      // response, but we do count differently behind the scenes.
+      const matched = req.body.email
+        ? people.find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase())
+        : null;
+      if (matched && provider.type === 'local') {
+        const after = recordFailedLogin(matched);
+        if (after.locked) {
+          auditService.log(matched.orgIds[0] || DEV_ORG_ID, matched.id, 'Auth', 'login', 'ACCOUNT_LOCKED', null, {
+            retryAfterSeconds: after.retryAfterSeconds,
+          });
+        }
+      }
+      // Per-IP failure counter — once over threshold every subsequent
+      // attempt from this IP needs a captcha. The frontend learns to
+      // render the widget from the challengeRequired flag we add to
+      // the failure response below.
+      recordLoginFailure(req.ip);
       auditService.log(DEV_ORG_ID, null, 'Auth', 'login', 'LOGIN_FAILED', null, {
         email: req.body.email,
         error: result.error || 'Unknown error',
       });
-      res.status(401).json({ success: false, error: result.error || 'Authentication failed' });
+      const needsCaptcha = isCaptchaRequired(req.ip);
+      res.status(401).json({
+        success: false,
+        error: result.error || 'Authentication failed',
+        ...(needsCaptcha ? { challengeRequired: true, captchaSiteKey: getCaptchaSiteKey() } : {}),
+      });
       return;
     }
 
     const user = result.user;
 
-    // Resolve user's org and role from people records (if they exist)
+    // Resolve user's org and role from people records (if they exist).
+    // The role at the resolved org wins over the person.role fallback —
+    // someone who is ORG_ADMIN in Operations but VIEWER in Finance gets
+    // the Operations role when their first-listed org is Operations.
     const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
     const resolvedOrgId = personRecord?.orgIds?.[0] || DEV_ORG_ID;
-    const resolvedRole = personRecord?.role || user.role;
+    const resolvedRole = personRecord
+      ? getRoleForOrg(personRecord, resolvedOrgId)
+      : user.role;
+
+    // Successful credential check resets the lockout counter +
+    // unlocks the account if it had been locked by an earlier burst.
+    if (personRecord && provider.type === 'local') clearLockout(personRecord);
+    // …and resets the per-IP CAPTCHA challenge counter — the
+    // legitimate user just produced valid credentials, so the IP
+    // gets a fresh budget.
+    clearLoginFailures(req.ip);
+
+    // ── MFA gate (Local provider only) ──
+    // Once a user enrolls in MFA, every subsequent password-flow
+    // login lands here: we issue a short-lived opaque mfaToken
+    // instead of access+refresh, and the frontend prompts for the
+    // TOTP / backup code. Dev provider skips the gate (test users
+    // shouldn't be forced through it); OIDC sessions don't reach
+    // this branch at all (the IdP is presumed to enforce MFA on
+    // its side). Re-evaluate if Procela ever exposes a "force MFA
+    // even for dev" toggle.
+    const hasWebauthn = provider.type === 'local'
+      && (personRecord?.webauthnCredentials?.length || 0) > 0;
+    if (provider.type === 'local' && (personRecord?.mfaEnrolled || hasWebauthn)) {
+      const mfaToken = mintPendingMfa(personRecord!.id);
+      auditService.log(resolvedOrgId, personRecord!.id, 'Auth', 'login', 'MFA_REQUIRED', null, {
+        email: user.email,
+        availableFactors: {
+          totp: !!personRecord!.mfaEnrolled,
+          webauthn: hasWebauthn,
+        },
+      });
+      res.json({
+        success: true,
+        data: {
+          mfaRequired: true,
+          mfaToken,
+          // Tell the frontend which second-factor methods the user
+          // has configured so it can offer the right prompt(s). Both
+          // can be true; the user picks at the prompt.
+          availableFactors: {
+            totp: !!personRecord!.mfaEnrolled,
+            webauthn: hasWebauthn,
+          },
+          // No access / refresh / user here — frontend uses the
+          // mfaToken to call /auth/mfa/login-verify (TOTP) or
+          // /auth/mfa/webauthn/login-start (WebAuthn), which return
+          // the real session payload.
+        },
+      });
+      return;
+    }
 
     // Defensive: if no person record and submitted name looks like a password
     // (contains digits + special chars, no spaces), fall back to email prefix.
@@ -219,13 +480,16 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     const fallbackName = user.email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     const resolvedName = personRecord?.name || (looksLikePassword ? fallbackName : user.name) || fallbackName;
 
+    // Mint refresh first so we can stamp its jti onto the access
+    // token — /auth/sessions uses that to tag the caller's own row.
+    const refresh = createRefreshToken(user.sub, fingerprintFromRequest(req));
     const accessToken = createAccessToken({
       ...user,
       name: resolvedName,
       orgId: resolvedOrgId,
       role: resolvedRole,
+      sessionJti: refresh.jti,
     });
-    const refresh = createRefreshToken(user.sub);
 
     auditService.log(resolvedOrgId, user.sub, 'Auth', 'login', 'LOGIN_SUCCESS', null, {
       email: user.email,
@@ -354,10 +618,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
-    const role = person.role || user.role;
-    const accessToken = createAccessToken({
-      sub: person.id, email: person.email, name: person.name, role, orgId,
-    });
+    const role = getRoleForOrg(person, orgId) || user.role;
     // Capture the OIDC providerId + id_token on the refresh-token
     // entry so /auth/logout can drive RP-initiated logout. The
     // id_token is verified, contains no Procela secret, and is only
@@ -366,6 +627,11 @@ router.get('/callback', async (req: Request, res: Response) => {
     const refresh = createRefreshToken(person.id, {
       oidcProviderId: flow.providerId,
       oidcIdToken: idToken,
+      ...fingerprintFromRequest(req),
+    });
+    const accessToken = createAccessToken({
+      sub: person.id, email: person.email, name: person.name, role, orgId,
+      sessionJti: refresh.jti,
     });
 
     auditService.log(orgId, person.id, 'Auth', 'oidc', 'OIDC_CALLBACK_SUCCESS', null, {
@@ -398,10 +664,216 @@ router.get('/callback', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/v1/auth/saml/acs
+ *
+ * The SAML Assertion Consumer Service endpoint. The IdP POSTs a
+ * signed SAMLResponse here at the end of an SP-initiated login. We
+ * validate the signature against the configured IdP cert, extract the
+ * subject + attributes, find-or-provision the Person record, mint
+ * Procela JWTs, and redirect the browser to the frontend's
+ * /oidc-complete route — the same handler the OIDC flow lands on,
+ * because the post-IdP plumbing is identical.
+ *
+ * Express needs `express.urlencoded({ extended: true })` registered
+ * for this to receive the SAMLResponse field; that's wired in
+ * index.ts at the top of the middleware chain.
+ */
+router.post('/saml/acs', async (req: Request, res: Response) => {
+  const frontendBase = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const errorRedirect = (msg: string) =>
+    res.redirect(`${frontendBase}/login?error=${encodeURIComponent(msg)}`);
+  try {
+    // Lazy import — the route only resolves the SAML service when the
+    // ACS is actually hit, so installs that don't use SAML don't pay
+    // the cost.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+    const samlProv = getSamlProvider();
+    if (!samlProv || !samlProv.isConfigured) {
+      return errorRedirect('SAML provider is not configured');
+    }
+    const { user, returnTo, nameID, sessionIndex } = await samlProv.completeAcs(req.body as Record<string, string>);
+
+    // Find-or-just-in-time-provision — same shape as OIDC.
+    let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    if (person && !isPersonActive(person)) {
+      auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'saml', 'SAML_DEACTIVATED_LOGIN_BLOCKED', null, {
+        email: person.email,
+      });
+      return errorRedirect('Your Procela account is not active. Contact an administrator.');
+    }
+    let provisioned = false;
+    if (!person) {
+      const now = new Date().toISOString();
+      person = {
+        id: uuid(),
+        orgIds: [DEV_ORG_ID],
+        accessibleOrgIds: [DEV_ORG_ID],
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        title: '',
+        skillIds: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      people.push(person);
+      saveStore('people', people);
+      provisioned = true;
+    }
+
+    const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const role = getRoleForOrg(person, orgId) || user.role;
+    const refresh = createRefreshToken(person.id, {
+      samlNameID: nameID,
+      ...(sessionIndex ? { samlSessionIndex: sessionIndex } : {}),
+      ...fingerprintFromRequest(req),
+    });
+    const accessToken = createAccessToken({
+      sub: person.id, email: person.email, name: person.name, role, orgId,
+      sessionJti: refresh.jti,
+    });
+
+    auditService.log(orgId, person.id, 'Auth', 'saml', 'SAML_LOGIN_SUCCESS', null, {
+      email: person.email, provisioned,
+    });
+
+    const params = new URLSearchParams({
+      accessToken,
+      refreshToken: refresh.token,
+      expiresIn: String(ACCESS_TOKEN_EXPIRY_SECONDS),
+      returnTo,
+    });
+    return res.redirect(`${frontendBase}/oidc-complete#${params.toString()}`);
+  } catch (err: any) {
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'saml', 'SAML_ACS_FAILED', null, {
+      error: err?.message || String(err),
+    });
+    logger.warn({ err: err?.message }, 'SAML ACS failed');
+    return errorRedirect(err?.message || 'SAML assertion failed');
+  }
+});
+
+/**
+ * GET /api/v1/auth/saml/sls
+ *
+ * Single Logout Service endpoint — handles IdP-initiated SLO. The
+ * IdP sends a signed LogoutRequest here when the user signs out at
+ * the IdP side and the IdP wants every connected SP to invalidate
+ * its own session. We verify the signature, look up the local
+ * refresh-token entries by SAML NameID, revoke them, and send a
+ * signed LogoutResponse back to the IdP.
+ *
+ * Both Redirect-binding (GET with SAMLRequest in the query) and
+ * POST-binding (POST with SAMLRequest in the body) are supported
+ * — node-saml's validateRedirectAsync handles both via its
+ * `originalQuery` parameter.
+ */
+const handleSamlSls = async (req: Request, res: Response): Promise<void> => {
+  const frontendBase = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+    const samlProv = getSamlProvider();
+    if (!samlProv || !samlProv.isConfigured) {
+      res.status(503).type('text/plain').send('SAML provider is not configured');
+      return;
+    }
+
+    // node-saml expects the raw query string for signature validation
+    // (the signature was computed over the URL-encoded parameters as
+    // they arrived). For POST-binding requests, hand it the body
+    // serialised the same way.
+    const rawQuery = req.method === 'GET'
+      ? (req.url.split('?')[1] || '')
+      : new URLSearchParams(req.body as Record<string, string>).toString();
+    const params = req.method === 'GET'
+      ? (req.query as Record<string, string>)
+      : (req.body as Record<string, string>);
+
+    const { nameID } = await samlProv.validateIdpLogoutRequest(params, rawQuery);
+
+    // Revoke every refresh token whose SAML NameID matches. A single
+    // browser session typically has one entry, but a user who logged
+    // in on multiple devices through the same IdP has one entry per
+    // device — all of them go.
+    let revoked = 0;
+    for (const [jti, ctx] of validRefreshTokens) {
+      if (ctx.samlNameID === nameID) {
+        validRefreshTokens.delete(jti);
+        revoked++;
+        auditService.log(DEV_ORG_ID, ctx.personId || null, 'Auth', 'saml', 'SAML_SLO_REVOKED', null, { jti, nameID });
+      }
+    }
+
+    // Build the LogoutResponse URL the IdP expects, redirect the
+    // browser there. Without SAML_LOGOUT_URL we can't build the URL
+    // so just redirect the user to the login page locally — the
+    // refresh-token revocation already did its job, the IdP just
+    // won't see a confirmation.
+    const relayState = String(params.RelayState || '');
+    const responseUrl = await samlProv.buildLogoutResponseUrl(nameID, relayState);
+    if (responseUrl) {
+      res.redirect(responseUrl);
+    } else {
+      res.redirect(`${frontendBase}/login`);
+    }
+    logger.info({ nameID, revoked }, 'SAML SLO processed');
+  } catch (err: any) {
+    auditService.log(DEV_ORG_ID, null, 'Auth', 'saml', 'SAML_SLO_FAILED', null, {
+      error: err?.message || String(err),
+    });
+    logger.warn({ err: err?.message }, 'SAML SLO failed');
+    res.redirect(`${frontendBase}/login?error=${encodeURIComponent('SAML logout failed')}`);
+  }
+};
+router.get('/saml/sls', handleSamlSls);
+router.post('/saml/sls', handleSamlSls);
+
+/**
+ * GET /api/v1/auth/saml/metadata
+ *
+ * Returns a thin SP metadata blob for IdP-side configuration. Most
+ * IdPs accept this XML pasted into their "SP metadata" form to wire
+ * up the entity ID, ACS URL, and certificate.
+ */
+router.get('/saml/metadata', (req: Request, res: Response) => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+  const samlProv = getSamlProvider();
+  if (!samlProv || !samlProv.isConfigured) {
+    res.status(503).type('text/plain').send('SAML provider is not configured');
+    return;
+  }
+  const pub = samlProv.getPublicConfig();
+  const base = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const acsUrl = `${base}/api/v1/auth/saml/acs`;
+  const slsUrl = `${base}/api/v1/auth/saml/sls`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${pub.issuer}">
+  <SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol" AuthnRequestsSigned="false" WantAssertionsSigned="true">
+    <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${slsUrl}"/>
+    <SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${slsUrl}"/>
+    <AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${acsUrl}" index="0" isDefault="true"/>
+  </SPSSODescriptor>
+</EntityDescriptor>`;
+  res.type('application/xml').send(xml);
+});
+
+/**
  * POST /api/v1/auth/refresh
  *
- * Accepts { refreshToken } and returns a new access token.
- * The refresh token itself is not rotated (single-use revocation via logout).
+ * Accepts { refreshToken } and returns BOTH a new access token AND a
+ * rotated refresh token. Rotation closes the window on a stolen
+ * refresh token — once the legitimate client uses one, the previous
+ * jti is revoked, so any concurrent use of the old token from an
+ * attacker fails closed. The frontend must replace its stored
+ * refreshToken on every successful refresh.
+ *
+ * Detection of token reuse: if the incoming jti isn't in
+ * validRefreshTokens, it's either expired (auto-cleaned) or already
+ * rotated. Either way we 401 — the second case is the suspicious one
+ * and the audit entry surfaces it so a SOC can investigate.
  */
 router.post('/refresh', (req: Request, res: Response) => {
   const { refreshToken } = req.body;
@@ -419,7 +891,8 @@ router.post('/refresh', (req: Request, res: Response) => {
       return;
     }
 
-    if (!validRefreshTokens.has(decoded.jti)) {
+    const ctx = validRefreshTokens.get(decoded.jti);
+    if (!ctx) {
       auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'REFRESH_REVOKED', null, {
         jti: decoded.jti,
       });
@@ -427,19 +900,69 @@ router.post('/refresh', (req: Request, res: Response) => {
       return;
     }
 
-    // Mint a new access token.  We need the user details — for dev mode we
-    // re-derive them from the sub claim.  In production the refresh token
-    // would be looked up in a session store that holds the full user record.
-    const accessToken = jwt.sign(
-      { sub: decoded.sub, type: 'access' } as any,
-      config.jwtSecret,
-      { expiresIn: ACCESS_TOKEN_EXPIRY },
-    );
+    // Session-binding check: the IP + UA from this request must match
+    // the values the token was minted with (UA exact, IP within the
+    // same /24 or /64). A mismatch suggests the token has been
+    // stolen and is being replayed from a different network. Revoke
+    // it, audit, force the user back through login.
+    if (!sessionFingerprintMatches(ctx, req)) {
+      validRefreshTokens.delete(decoded.jti);
+      auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'REFRESH_BINDING_MISMATCH', null, {
+        jti: decoded.jti,
+        ip: req.ip,
+        ua: req.headers['user-agent'],
+      });
+      res.status(401).json({ success: false, error: 'Session origin mismatch — please sign in again' });
+      return;
+    }
 
-    auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'TOKEN_REFRESHED', null, null);
-    logger.debug({ sub: decoded.sub }, 'Token refreshed');
+    // ── Rotation ──
+    // Revoke the incoming jti and mint a fresh refresh token bound to
+    // the same session context (provider id, original mint timestamp,
+    // fingerprint). Preserving createdAt lets the Active Sessions page
+    // keep showing "Signed in 3 days ago" rather than resetting on
+    // every refresh.
+    const newRefresh = createRefreshToken(decoded.sub, {
+      oidcProviderId: ctx.oidcProviderId,
+      oidcIdToken: ctx.oidcIdToken,
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+    // Overwrite the auto-set createdAt with the original so the
+    // session timeline doesn't reset on every refresh.
+    const rotatedCtx = validRefreshTokens.get(newRefresh.jti);
+    if (rotatedCtx && ctx.createdAt) rotatedCtx.createdAt = ctx.createdAt;
+    validRefreshTokens.delete(decoded.jti);
 
-    res.json({ success: true, data: { accessToken, expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS } });
+    // Re-derive the user details from the people store so the access
+    // token reflects current role + name. The old refresh path
+    // re-issued from the sub claim alone, which drifted whenever a
+    // role changed mid-session.
+    const person = people.find((p) => p.id === decoded.sub);
+    const orgId = person?.orgIds[0] || DEV_ORG_ID;
+    const role = person ? getRoleForOrg(person, orgId) : 'VIEWER';
+    const accessToken = createAccessToken({
+      sub: decoded.sub,
+      email: person?.email || '',
+      name: person?.name || '',
+      role,
+      orgId,
+      sessionJti: newRefresh.jti,
+    });
+
+    auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'TOKEN_REFRESHED', null, {
+      oldJti: decoded.jti, newJti: newRefresh.jti,
+    });
+    logger.debug({ sub: decoded.sub, oldJti: decoded.jti, newJti: newRefresh.jti }, 'Refresh token rotated');
+
+    res.json({
+      success: true,
+      data: {
+        accessToken,
+        refreshToken: newRefresh.token,
+        expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      },
+    });
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
   }
@@ -456,7 +979,7 @@ router.post('/refresh', (req: Request, res: Response) => {
  * round-trip, the IdP still considers the user signed in and a fresh
  * "Sign in" click silently logs them back in.
  */
-router.post('/logout', (req: Request, res: Response) => {
+router.post('/logout', async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
@@ -473,7 +996,7 @@ router.post('/logout', (req: Request, res: Response) => {
     }
 
     // Pull the session context BEFORE deleting so we can build the
-    // RP-initiated logout URL with the original id_token.
+    // RP / SP-initiated logout URL with the original id_token / nameID.
     const ctx = validRefreshTokens.get(decoded.jti) || {};
     const wasValid = validRefreshTokens.delete(decoded.jti);
 
@@ -487,6 +1010,21 @@ router.post('/logout', (req: Request, res: Response) => {
           postLogoutRedirectUri,
         });
       }
+    } else if (ctx.samlNameID) {
+      // SP-initiated SAML SLO: ship the user to the IdP's logout
+      // endpoint with our nameID hint so the IdP can correlate the
+      // logout with its own session record.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+      const samlProv = getSamlProvider();
+      if (samlProv) {
+        const postLogoutRedirectUri = (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '') + '/login';
+        logoutUrl = await samlProv.buildLogoutUrl({
+          sub: ctx.samlNameID,
+          sessionIndex: ctx.samlSessionIndex,
+          returnTo: postLogoutRedirectUri,
+        });
+      }
     }
 
     auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'logout', 'LOGOUT', null, {
@@ -494,6 +1032,7 @@ router.post('/logout', (req: Request, res: Response) => {
       wasValid,
       rpInitiated: !!logoutUrl,
       oidcProviderId: ctx.oidcProviderId || null,
+      samlNameID: ctx.samlNameID || null,
     });
     logger.info({ sub: decoded.sub, rpInitiated: !!logoutUrl }, 'User logged out');
 
@@ -518,11 +1057,54 @@ router.post('/logout', (req: Request, res: Response) => {
  * Requires authentication.
  */
 router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  // Enrich the JWT-decoded user with a few fields the frontend needs
+  // but that aren't (and shouldn't be) on the access token. mfaEnrolled
+  // + mfaBackupCodesRemaining drive the Settings panel and the
+  // "running low — regenerate?" nudge.
+  const person = req.user?.sub ? people.find((p) => p.id === req.user!.sub) : null;
   res.json({
     success: true,
-    data: req.user,
+    data: {
+      ...req.user,
+      ...(person ? {
+        mfaEnrolled: !!person.mfaEnrolled,
+        mfaBackupCodesRemaining: person.mfaBackupCodes?.length || 0,
+      } : {}),
+    },
   });
 });
+
+/**
+ * POST /api/v1/auth/mfa/regenerate-backup-codes
+ * Authenticated; re-auth via current TOTP code. Generates a fresh
+ * set of 10 codes (returned ONCE) and invalidates the old set. Used
+ * by the Settings "running low" nudge — admins should also be able
+ * to regenerate on behalf of users via the admin-reset flow, which
+ * already regenerates as a side effect of the next enrollment.
+ */
+router.post('/mfa/regenerate-backup-codes', authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+    if (!person.mfaEnrolled || !person.mfaSecret) {
+      res.status(409).json({ success: false, error: 'Not enrolled in two-step verification' });
+      return;
+    }
+    const { code } = req.body || {};
+    if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
+    if (!(await verifyTotpToken(await decryptSecret(person.mfaSecret), String(code)))) {
+      res.status(401).json({ success: false, error: 'Invalid code' });
+      return;
+    }
+    const fresh = generateBackupCodes();
+    person.mfaBackupCodes = await hashBackupCodes(fresh);
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_BACKUP_CODES_REGENERATED', null, null);
+    res.json({ success: true, data: { backupCodes: fresh } });
+  });
 
 /**
  * GET /api/v1/auth/providers
@@ -553,6 +1135,20 @@ router.get('/providers', (req: Request, res: Response) => {
     enabled: authCfg.provider === 'oidc' && p.isConfigured,
   }));
 
+  // Surface SAML when the env is configured. The frontend shows a
+  // single "Sign in with SAML" button — providerId selection is
+  // single-IdP per install (multi-IdP SAML is a future enhancement;
+  // the data model is ready for it once a real customer asks).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getSamlProvider } = require('../services/saml.service') as typeof import('../services/saml.service');
+  const samlProv = getSamlProvider();
+  const samlButtons = samlProv && samlProv.isConfigured ? [{
+    id: 'saml',
+    name: 'Single sign-on (SAML)',
+    type: 'saml',
+    enabled: authCfg.provider === 'saml',
+  }] : [];
+
   res.json({
     success: true,
     data: {
@@ -560,6 +1156,7 @@ router.get('/providers', (req: Request, res: Response) => {
       currentName: authCfg.providerName,
       providers: [
         ...oidcButtons,
+        ...samlButtons,
         {
           id: 'local',
           name: 'Local credentials',
@@ -578,7 +1175,7 @@ router.get('/providers', (req: Request, res: Response) => {
         { type: 'dev', name: 'Development', description: 'Email-based dev login (no IdP required)' },
         { type: 'local', name: 'Local credentials', description: 'Email + password, stored in Procela as Argon2 hashes', configured: true },
         { type: 'oidc', name: 'OIDC', description: 'OpenID Connect (Azure AD, Okta, etc.)', configured: authCfg.oidcConfigured },
-        { type: 'saml', name: 'SAML', description: 'SAML 2.0 (coming soon)', configured: false },
+        { type: 'saml', name: 'SAML', description: 'SAML 2.0 (Active Directory FS, Shibboleth, etc.)', configured: !!samlProv?.isConfigured },
       ],
     },
   });
@@ -687,6 +1284,40 @@ router.put('/config', (req: Request, res: Response) => {
     },
   });
 });
+
+/**
+ * POST /api/v1/auth/encrypt-secret
+ * Body: { plaintext }
+ *
+ * Admin-only helper that takes a plaintext value and returns the
+ * enc:v1:… envelope an operator can paste into an .env file for
+ * SMTP_PASS, OIDC_CLIENT_SECRET, or any other env-sourced secret that
+ * resolveEnvSecretSync handles. Avoids the operator having to drop
+ * into a Node REPL on the server to call encryptSecret directly.
+ *
+ * The plaintext never gets persisted — it's read off the request,
+ * encrypted with the active master key, and returned in the response.
+ * MFA_ENCRYPTION_KEY must be configured (otherwise no-op passthrough
+ * is the active backend and "encryption" produces unchanged output).
+ */
+router.post('/encrypt-secret', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { plaintext } = req.body || {};
+    if (typeof plaintext !== 'string' || plaintext.length === 0) {
+      res.status(400).json({ success: false, error: 'plaintext is required' });
+      return;
+    }
+    const ciphertext = await encryptSecret(plaintext);
+    if (ciphertext === plaintext) {
+      res.status(503).json({
+        success: false,
+        error: 'No encryption backend is configured. Set MFA_ENCRYPTION_KEY or KMS_PROVIDER and restart.',
+      });
+      return;
+    }
+    auditService.log(DEV_ORG_ID, req.user?.sub || null, 'Auth', 'crypto', 'SECRET_ENCRYPTED', null, null);
+    res.json({ success: true, data: { ciphertext } });
+  });
 
 // ---------------------------------------------------------------------------
 // Local-provider password management
@@ -1006,6 +1637,797 @@ function generateTempPassword(length: number): string {
   }
   return out.join('');
 }
+
+// ---------------------------------------------------------------------------
+// MFA / TOTP
+// ---------------------------------------------------------------------------
+// Five routes:
+//   /mfa/start              authenticated — start enrollment (return
+//                           QR + secret; doesn't persist yet)
+//   /mfa/verify             authenticated — verify enrollment code,
+//                           persist secret + backup codes, mark
+//                           enrolled. Backup codes returned ONCE.
+//   /mfa/login-verify       unauthenticated — completes a password
+//                           login that the gate held back. Takes the
+//                           mfaToken from /auth/login + a TOTP or
+//                           backup code. Returns the real session.
+//   /mfa/disable            authenticated — clears enrollment for
+//                           self. Requires the current password +
+//                           a fresh TOTP code as proof.
+//   /mfa/admin-reset        admin-only — clears another user's
+//                           enrollment. Forces them through start +
+//                           verify again on next login.
+// ---------------------------------------------------------------------------
+
+// Pending enrollments: holds the candidate secret between /mfa/start
+// and /mfa/verify so we don't write to the user record until the
+// user proves they can produce a code. Indexed by personId so a user
+// who restarts enrollment overwrites their own pending entry rather
+// than accumulating dead secrets.
+const pendingEnrollments = new Map<string, { secret: string; expiresAt: number }>();
+const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of pendingEnrollments) {
+    if (v.expiresAt < now) pendingEnrollments.delete(k);
+  }
+}, 60_000).unref?.();
+
+router.post('/mfa/start', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const person = people.find((p) => p.id === userId);
+  if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+  const enrollment = await generateEnrollment(person.email);
+  pendingEnrollments.set(person.id, {
+    secret: enrollment.secret,
+    expiresAt: Date.now() + ENROLLMENT_TTL_MS,
+  });
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_ENROLLMENT_STARTED', null, null);
+  res.json({
+    success: true,
+    data: {
+      secret: enrollment.secret,
+      uri: enrollment.uri,
+      qrDataUrl: enrollment.qrDataUrl,
+      // Tell the frontend whether the user is replacing an existing
+      // enrollment so it can show "Replace authenticator" copy.
+      replacing: !!person.mfaEnrolled,
+    },
+  });
+});
+
+router.post('/mfa/verify', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const person = people.find((p) => p.id === userId);
+  if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+  const { code } = req.body || {};
+  if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
+
+  const pending = pendingEnrollments.get(person.id);
+  if (!pending || pending.expiresAt < Date.now()) {
+    res.status(400).json({ success: false, error: 'No active enrollment — start over from /mfa/start' });
+    return;
+  }
+
+  if (!(await verifyTotpToken(pending.secret, String(code)))) {
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_ENROLLMENT_FAILED', null, { reason: 'bad_code' });
+    res.status(401).json({ success: false, error: 'Invalid code — check your authenticator app and try again' });
+    return;
+  }
+
+  // Generate a fresh set of backup codes, store hashed, return the
+  // plaintext ONCE. The user MUST copy them now — there's no path
+  // to retrieve them later (admin reset regenerates a new set).
+  const plainBackupCodes = generateBackupCodes();
+  const hashedBackupCodes = await hashBackupCodes(plainBackupCodes);
+
+  // Encrypt the secret at rest before writing it to the store. The
+  // crypto service falls back to plaintext in dev when MFA_ENCRYPTION_KEY
+  // isn't set; production refuses to start without a key (boot
+  // readiness check).
+  person.mfaSecret = await encryptSecret(pending.secret);
+  person.mfaBackupCodes = hashedBackupCodes;
+  person.mfaEnrolled = true;
+  person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
+  pendingEnrollments.delete(person.id);
+
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_ENROLLED', null, null);
+  logger.info({ personId: person.id }, 'MFA enrollment verified');
+
+  res.json({
+    success: true,
+    data: {
+      enrolled: true,
+      backupCodes: plainBackupCodes,
+      message: 'Two-factor authentication is now active. Save these backup codes — they let you sign in if you lose access to your authenticator app, and each works only once.',
+    },
+  });
+});
+
+router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Response) => {
+  const { mfaToken, code, backupCode } = req.body || {};
+  if (!mfaToken || (!code && !backupCode)) {
+    res.status(400).json({ success: false, error: 'mfaToken and either code or backupCode are required' });
+    return;
+  }
+
+  const personId = consumePendingMfa(String(mfaToken));
+  if (!personId) {
+    res.status(401).json({ success: false, error: 'MFA token is invalid or expired — please sign in again' });
+    return;
+  }
+  const person = people.find((p) => p.id === personId);
+  if (!person || !person.mfaEnrolled || !person.mfaSecret) {
+    res.status(401).json({ success: false, error: 'MFA state is invalid — please sign in again' });
+    return;
+  }
+
+  // Try TOTP first, then backup code. We don't tell the caller which
+  // path succeeded — both produce the same session payload.
+  let usedBackup = false;
+  if (code && await verifyTotpToken(await decryptSecret(person.mfaSecret), String(code))) {
+    // success via TOTP
+  } else if (backupCode && person.mfaBackupCodes) {
+    const idx = await verifyBackupCode(person.mfaBackupCodes, String(backupCode));
+    if (idx < 0) {
+      auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_LOGIN_FAILED', null, { reason: 'bad_backup' });
+      res.status(401).json({ success: false, error: 'Invalid code' });
+      return;
+    }
+    // Single-use: splice the used hash out so the same backup code
+    // can't be reused.
+    person.mfaBackupCodes.splice(idx, 1);
+    usedBackup = true;
+  } else {
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_LOGIN_FAILED', null, { reason: 'bad_totp' });
+    res.status(401).json({ success: false, error: 'Invalid code' });
+    return;
+  }
+
+  // Issue the real session now that MFA cleared.
+  const orgId = person.orgIds[0] || DEV_ORG_ID;
+  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+  const accessToken = createAccessToken({
+    sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+    sessionJti: refresh.jti,
+  });
+
+  if (usedBackup) {
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+  }
+  auditService.log(orgId, person.id, 'Auth', 'mfa', 'MFA_LOGIN_SUCCESS', null, {
+    method: usedBackup ? 'backup' : 'totp',
+    backupRemaining: person.mfaBackupCodes?.length || 0,
+  });
+  logger.info({ personId: person.id, method: usedBackup ? 'backup' : 'totp' }, 'MFA login successful');
+
+  res.json({
+    success: true,
+    data: {
+      accessToken,
+      refreshToken: refresh.token,
+      expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      passwordMustChange: !!person.passwordMustChange,
+      // Surface the remaining backup-code count so the frontend can
+      // nudge a regen when running low. Implicit floor of 0; treat
+      // anything ≤2 as "regenerate now" in the UI.
+      backupCodesRemaining: person.mfaBackupCodes?.length || 0,
+      user: {
+        sub: person.id,
+        email: person.email,
+        name: person.name,
+        orgId,
+        role: person.role,
+      },
+    },
+  });
+});
+
+router.post('/mfa/disable', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const person = people.find((p) => p.id === userId);
+  if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+  const { currentPassword, code } = req.body || {};
+  if (!currentPassword || !code) {
+    res.status(400).json({ success: false, error: 'currentPassword and code are required' });
+    return;
+  }
+
+  // Re-auth: current password + a fresh TOTP code. Both required so
+  // a stolen session can't disable MFA on its own. Mirrors the
+  // /password change-password flow.
+  if (!person.passwordHash) {
+    res.status(409).json({ success: false, error: 'No local password is set; cannot disable MFA from this session' });
+    return;
+  }
+  const argon2mod = await import('argon2');
+  let ok = false;
+  try { ok = await argon2mod.verify(person.passwordHash, String(currentPassword)); } catch { /* */ }
+  if (!ok) {
+    res.status(401).json({ success: false, error: 'Current password is incorrect' });
+    return;
+  }
+  if (!person.mfaSecret || !(await verifyTotpToken(await decryptSecret(person.mfaSecret), String(code)))) {
+    res.status(401).json({ success: false, error: 'Invalid code' });
+    return;
+  }
+
+  person.mfaSecret = undefined;
+  person.mfaBackupCodes = undefined;
+  person.mfaEnrolled = false;
+  person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
+  pendingEnrollments.delete(person.id);
+
+  auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_DISABLED', null, { self: true });
+  res.status(204).end();
+});
+
+router.post('/mfa/admin-reset', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { personId } = req.body || {};
+    if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
+    const target = people.find((p) => p.id === personId);
+    if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+
+    target.mfaSecret = undefined;
+    target.mfaBackupCodes = undefined;
+    target.mfaEnrolled = false;
+    target.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+    pendingEnrollments.delete(target.id);
+
+    auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'mfa', 'MFA_ADMIN_RESET', null, {
+      targetPersonId: target.id,
+      targetEmail: target.email,
+    });
+    logger.info({ adminId: req.user?.sub, targetId: target.id }, 'Admin reset MFA');
+    res.status(204).end();
+  });
+
+// ---------------------------------------------------------------------------
+// WebAuthn / FIDO2
+// ---------------------------------------------------------------------------
+// Hardware-key / platform-key second factor layered on top of TOTP.
+// A user can register many credentials; either WebAuthn OR TOTP
+// satisfies the gate at login.
+//
+//   /mfa/webauthn/register-start         authenticated — registration ceremony
+//   /mfa/webauthn/register-finish        authenticated — verify + persist
+//   /mfa/webauthn/login-start            unauthenticated — uses mfaToken
+//   /mfa/webauthn/login-finish           unauthenticated — verify + issue session
+//   /mfa/webauthn/credentials/:id        authenticated DELETE — remove one
+//   /mfa/webauthn/admin-reset            admin-only — clear another user's keys
+//
+// (The first set is defined immediately below; admin-reset is the
+// last route in this section.)
+//   /mfa/webauthn/register-finish   authenticated — verify + persist
+//   /mfa/webauthn/login-start       unauthenticated — uses mfaToken from
+//                                   the password flow to find the user's
+//                                   registered credentials
+//   /mfa/webauthn/login-finish      unauthenticated — verify + issue session
+//   /mfa/webauthn/credentials/:id   authenticated DELETE — remove one
+// ---------------------------------------------------------------------------
+
+function reqInfo(req: Request): { protocol: string; host: string } {
+  return { protocol: req.protocol, host: req.get('host') || 'localhost' };
+}
+
+router.post('/mfa/webauthn/register-start', authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+    const { options } = await buildRegistrationOptions({
+      personId: person.id,
+      personEmail: person.email,
+      personName: person.name,
+      existingCredentials: person.webauthnCredentials || [],
+      req: reqInfo(req),
+    });
+    stashChallenge(options.challenge, { kind: 'register', personId: person.id });
+    res.json({ success: true, data: options });
+  });
+
+router.post('/mfa/webauthn/register-finish', authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+    const { response, label } = req.body || {};
+    if (!response) { res.status(400).json({ success: false, error: 'response is required' }); return; }
+
+    // Browser response carries the original challenge inside
+    // clientDataJSON; we look it up by the challenge value the
+    // browser echoes back.
+    const expectedChallenge = response?.response?.clientDataJSON
+      ? JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8')).challenge
+      : null;
+    if (!expectedChallenge) {
+      res.status(400).json({ success: false, error: 'Could not extract challenge from response' });
+      return;
+    }
+    const pending = consumeChallenge(expectedChallenge);
+    if (!pending || pending.context.kind !== 'register' || pending.context.personId !== person.id) {
+      res.status(400).json({ success: false, error: 'Challenge expired or invalid' });
+      return;
+    }
+
+    const result = await completeRegistration({
+      response,
+      expectedChallenge,
+      req: reqInfo(req),
+    });
+    if (!result.verified || !result.credential) {
+      res.status(400).json({ success: false, error: 'Could not verify registration' });
+      return;
+    }
+
+    person.webauthnCredentials = person.webauthnCredentials || [];
+    person.webauthnCredentials.push({
+      id: uuid(),
+      label: String(label || 'Security key').slice(0, 60),
+      createdAt: new Date().toISOString(),
+      ...result.credential,
+    });
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_REGISTERED', null, {
+      label,
+      total: person.webauthnCredentials.length,
+    });
+    res.status(204).end();
+  });
+
+router.post('/mfa/webauthn/login-start', async (req: Request, res: Response) => {
+  const { mfaToken } = req.body || {};
+  if (!mfaToken) { res.status(400).json({ success: false, error: 'mfaToken is required' }); return; }
+
+  // We can't `consume` the mfa token yet — the user might not
+  // complete the assertion, and they need the same token for the
+  // login-finish call. So we look up via a peek by re-storing
+  // immediately. Simplest path: the mfa token's same value is fine
+  // for multiple options-start calls; only login-finish consumes.
+  // To honour that contract here, we treat this endpoint as
+  // read-only and fish the personId out by re-minting + matching.
+  // Cleaner: have pending-mfa expose a peek API. For now we accept
+  // a small race: consume + immediately re-mint with the same TTL.
+  // (This is fine — multiple parallel login-start calls from the
+  // same browser are vanishingly rare for the MFA window.)
+  const personId = consumePendingMfa(String(mfaToken));
+  if (!personId) {
+    res.status(401).json({ success: false, error: 'MFA token is invalid or expired' });
+    return;
+  }
+  const person = people.find((p) => p.id === personId);
+  if (!person || !(person.webauthnCredentials || []).length) {
+    res.status(404).json({ success: false, error: 'No WebAuthn credentials registered' });
+    return;
+  }
+
+  const options = await buildAuthenticationOptions({
+    allowCredentials: person.webauthnCredentials || [],
+    req: reqInfo(req),
+  });
+  stashChallenge(options.challenge, { kind: 'authenticate', personId: person.id });
+  // Re-mint a fresh mfaToken bound to the same person so login-finish
+  // can validate without a second password check.
+  const newToken = mintPendingMfa(person.id);
+  res.json({ success: true, data: { options, mfaToken: newToken } });
+});
+
+router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res: Response) => {
+  const { mfaToken, response } = req.body || {};
+  if (!mfaToken || !response) {
+    res.status(400).json({ success: false, error: 'mfaToken and response are required' });
+    return;
+  }
+  const personId = consumePendingMfa(String(mfaToken));
+  if (!personId) {
+    res.status(401).json({ success: false, error: 'MFA token is invalid or expired' });
+    return;
+  }
+  const person = people.find((p) => p.id === personId);
+  if (!person) {
+    res.status(401).json({ success: false, error: 'MFA state invalid' });
+    return;
+  }
+
+  const challenge = response?.response?.clientDataJSON
+    ? JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8')).challenge
+    : null;
+  if (!challenge) {
+    res.status(400).json({ success: false, error: 'Could not extract challenge from response' });
+    return;
+  }
+  const pending = consumeChallenge(challenge);
+  if (!pending || pending.context.kind !== 'authenticate' || pending.context.personId !== person.id) {
+    res.status(401).json({ success: false, error: 'Challenge expired or invalid' });
+    return;
+  }
+
+  // Match the asserted credential id to one we have on file.
+  const credentialID = response.id || response.rawId;
+  const credential = (person.webauthnCredentials || []).find((c) => c.credentialID === credentialID);
+  if (!credential) {
+    res.status(401).json({ success: false, error: 'Credential not recognised' });
+    return;
+  }
+
+  const result = await completeAuthentication({
+    response,
+    expectedChallenge: challenge,
+    credential,
+    req: reqInfo(req),
+  });
+  if (!result.verified) {
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_LOGIN_FAILED', null, null);
+    res.status(401).json({ success: false, error: 'Assertion failed' });
+    return;
+  }
+
+  // Update the counter — refuses replays where the authenticator's
+  // counter hasn't advanced past what we last saw.
+  if (typeof result.newCounter === 'number') credential.counter = result.newCounter;
+  person.updatedAt = new Date().toISOString();
+  saveStore('people', people);
+
+  // Issue the session, same as the TOTP path.
+  const orgId = person.orgIds[0] || DEV_ORG_ID;
+  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+  const accessToken = createAccessToken({
+    sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+    sessionJti: refresh.jti,
+  });
+
+  auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_LOGIN_SUCCESS', null, {
+    credentialLabel: credential.label,
+  });
+  logger.info({ personId: person.id, credentialLabel: credential.label }, 'WebAuthn login successful');
+
+  res.json({
+    success: true,
+    data: {
+      accessToken,
+      refreshToken: refresh.token,
+      expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      passwordMustChange: !!person.passwordMustChange,
+      user: {
+        sub: person.id,
+        email: person.email,
+        name: person.name,
+        orgId,
+        role: person.role,
+      },
+    },
+  });
+});
+
+router.delete('/mfa/webauthn/credentials/:id', authenticateToken,
+  (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.user?.sub;
+    if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+    const person = people.find((p) => p.id === userId);
+    if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+    const credentialId = String(req.params.id);
+    const before = person.webauthnCredentials?.length || 0;
+    person.webauthnCredentials = (person.webauthnCredentials || []).filter((c) => c.id !== credentialId);
+    if (person.webauthnCredentials.length === before) {
+      res.status(404).json({ success: false, error: 'Credential not found' });
+      return;
+    }
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+    auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_CREDENTIAL_REMOVED', null, {
+      remaining: person.webauthnCredentials.length,
+    });
+    res.status(204).end();
+  });
+
+/**
+ * POST /api/v1/auth/mfa/webauthn/admin-reset
+ * Body: { personId }
+ *
+ * Admin-only — clear every WebAuthn credential on a target user.
+ * The user will need to re-register their security keys on next
+ * login. Independent of /mfa/admin-reset (which clears TOTP). The
+ * SecurityCard on PersonDetailPage exposes both so an admin can
+ * blow away whichever factor is the actual problem.
+ */
+router.post('/mfa/webauthn/admin-reset', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { personId } = req.body || {};
+    if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
+    const target = people.find((p) => p.id === personId);
+    if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+
+    const cleared = target.webauthnCredentials?.length || 0;
+    target.webauthnCredentials = undefined;
+    target.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+
+    auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'mfa', 'WEBAUTHN_ADMIN_RESET', null, {
+      targetPersonId: target.id,
+      targetEmail: target.email,
+      cleared,
+    });
+    logger.info({ adminId: req.user?.sub, targetId: target.id, cleared }, 'Admin reset WebAuthn keys');
+    res.status(204).end();
+  });
+
+// ---------------------------------------------------------------------------
+// Passwordless / discoverable WebAuthn login
+// ---------------------------------------------------------------------------
+// Lets a user sign in by tapping their registered security key — no
+// email, no password. Works for credentials registered with
+// residentKey 'preferred' that the authenticator chose to store
+// discoverably (modern platform authenticators almost always do;
+// classic security keys with limited slots may not).
+//
+// userVerification is 'required' on the options so the
+// authenticator's local PIN / biometric is part of the ceremony —
+// that converts the credential from single-factor ("I have the key")
+// to multi-factor ("I have the key AND proved I'm me on it") in one
+// tap.
+// ---------------------------------------------------------------------------
+
+router.post('/webauthn/discoverable/login-start', loginLimiter,
+  async (req: Request, res: Response) => {
+    const options = await buildDiscoverableAuthenticationOptions({ req: reqInfo(req) });
+    stashChallenge(options.challenge, { kind: 'discoverable' });
+    res.json({ success: true, data: options });
+  });
+
+router.post('/webauthn/discoverable/login-finish', loginLimiter,
+  async (req: Request, res: Response) => {
+    const { response } = req.body || {};
+    if (!response) {
+      res.status(400).json({ success: false, error: 'response is required' });
+      return;
+    }
+
+    const challenge = response?.response?.clientDataJSON
+      ? JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8')).challenge
+      : null;
+    if (!challenge) {
+      res.status(400).json({ success: false, error: 'Could not extract challenge from response' });
+      return;
+    }
+    const pending = consumeChallenge(challenge);
+    if (!pending || pending.context.kind !== 'discoverable') {
+      res.status(401).json({ success: false, error: 'Challenge expired or invalid' });
+      return;
+    }
+
+    // userHandle is the user id we set on registration, encoded as a
+    // base64url string in the assertion. We stored it as the raw
+    // Procela personId, so this decodes straight back to a person.
+    const userHandle = response?.response?.userHandle;
+    if (!userHandle) {
+      res.status(400).json({ success: false, error: 'Assertion missing userHandle — credential was not registered as discoverable' });
+      return;
+    }
+    const personId = Buffer.from(userHandle, 'base64url').toString('utf-8');
+    const person = people.find((p) => p.id === personId);
+    if (!person) {
+      auditService.log(DEV_ORG_ID, null, 'Auth', 'mfa', 'WEBAUTHN_DISCOVERABLE_NO_PERSON', null, { userHandle: personId });
+      res.status(401).json({ success: false, error: 'Account not found' });
+      return;
+    }
+
+    // Inactive accounts can't sign in even with a valid key.
+    if (!isPersonActive(person)) {
+      auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_DEACTIVATED_LOGIN_BLOCKED', null, null);
+      res.status(401).json({ success: false, error: 'Account is not active' });
+      return;
+    }
+
+    const credentialID = response.id || response.rawId;
+    const credential = (person.webauthnCredentials || []).find((c) => c.credentialID === credentialID);
+    if (!credential) {
+      res.status(401).json({ success: false, error: 'Credential not recognised' });
+      return;
+    }
+
+    const result = await completeAuthentication({
+      response,
+      expectedChallenge: challenge,
+      credential,
+      req: reqInfo(req),
+    });
+    if (!result.verified) {
+      auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_DISCOVERABLE_FAILED', null, null);
+      res.status(401).json({ success: false, error: 'Assertion failed' });
+      return;
+    }
+
+    if (typeof result.newCounter === 'number') credential.counter = result.newCounter;
+    person.updatedAt = new Date().toISOString();
+    saveStore('people', people);
+
+    const orgId = person.orgIds[0] || DEV_ORG_ID;
+    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+    const accessToken = createAccessToken({
+      sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
+      sessionJti: refresh.jti,
+    });
+
+    auditService.log(orgId, person.id, 'Auth', 'mfa', 'WEBAUTHN_DISCOVERABLE_LOGIN_SUCCESS', null, {
+      credentialLabel: credential.label,
+    });
+    logger.info({ personId: person.id, credentialLabel: credential.label }, 'WebAuthn passwordless login successful');
+
+    res.json({
+      success: true,
+      data: {
+        accessToken,
+        refreshToken: refresh.token,
+        expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+        passwordMustChange: !!person.passwordMustChange,
+        user: {
+          sub: person.id,
+          email: person.email,
+          name: person.name,
+          orgId,
+          role: person.role,
+        },
+      },
+    });
+  });
+
+// ---------------------------------------------------------------------------
+// Active sessions
+// ---------------------------------------------------------------------------
+// Surface the live refresh tokens for the current user so they can
+// see "I'm signed in from these devices" and revoke individual
+// sessions (e.g. a forgotten public computer, a phone they lost).
+// Industry-standard control — GitHub, Google, Microsoft all expose
+// something equivalent.
+//
+//   GET    /auth/sessions          list current user's sessions
+//   DELETE /auth/sessions/:jti     revoke one
+//   DELETE /auth/sessions          revoke all (sign out everywhere)
+// ---------------------------------------------------------------------------
+
+router.get('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  // sjti is the refresh-token jti minted alongside the access token
+  // the caller is using right now. Match against each session row so
+  // the UI can label one as "This device".
+  const currentJti = (req.user as { sjti?: string } | undefined)?.sjti;
+  const sessions: Array<Record<string, unknown>> = [];
+  for (const [jti, ctx] of validRefreshTokens) {
+    if (ctx.personId !== userId) continue;
+    sessions.push({
+      jti,
+      createdAt: ctx.createdAt || null,
+      lastUsedAt: ctx.lastUsedAt || null,
+      ip: ctx.ip || null,
+      userAgent: ctx.userAgent || null,
+      provider: ctx.oidcProviderId ? 'oidc' : 'local',
+      current: jti === currentJti,
+    });
+  }
+  sessions.sort((a, b) => String(b.lastUsedAt).localeCompare(String(a.lastUsedAt)));
+  res.json({ success: true, data: sessions });
+});
+
+router.delete('/sessions/:jti', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const jti = String(req.params.jti);
+  const ctx = validRefreshTokens.get(jti);
+  if (!ctx || ctx.personId !== userId) {
+    res.status(404).json({ success: false, error: 'Session not found' });
+    return;
+  }
+  validRefreshTokens.delete(jti);
+  auditService.log(DEV_ORG_ID, userId, 'Auth', 'session', 'SESSION_REVOKED_SELF', null, { jti });
+  res.status(204).end();
+});
+
+router.delete('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  let revoked = 0;
+  for (const [jti, ctx] of validRefreshTokens) {
+    if (ctx.personId === userId) {
+      validRefreshTokens.delete(jti);
+      revoked++;
+    }
+  }
+  auditService.log(DEV_ORG_ID, userId, 'Auth', 'session', 'SESSION_REVOKED_ALL', null, { revoked });
+  res.json({ success: true, data: { revoked } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/switch-org
+// ---------------------------------------------------------------------------
+// Re-mints an access token bound to a different org, picking up that
+// org's per-org role from orgRoles. The original refresh token stays
+// valid — the access token is the only thing being rotated. The
+// frontend calls this when the user picks a new org from the
+// switcher and wants their role chip / authorisation gates to update
+// without a full re-login.
+//
+// The target org must be in the caller's accessibleOrgIds (or be one
+// of their assigned orgIds). SUPER_ADMINs can switch to any org.
+// ---------------------------------------------------------------------------
+router.post('/switch-org', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.sub;
+  if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
+  const { orgId } = req.body || {};
+  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  const person = people.find((p) => p.id === userId);
+  if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
+
+  // Membership check — SUPER_ADMIN bypasses, everyone else has to
+  // either be assigned to the org or have it in the computed
+  // accessible list.
+  let allowed = person.role === 'SUPER_ADMIN' || person.orgIds.includes(orgId);
+  if (!allowed) {
+    const accessible = computeAccessibleOrgs(person);
+    allowed = accessible.some((o) => o.id === orgId);
+  }
+  if (!allowed) {
+    res.status(403).json({ success: false, error: 'You do not have access to that org' });
+    return;
+  }
+
+  const role = getRoleForOrg(person, orgId);
+  // Preserve the existing session jti — switching orgs doesn't open
+  // a new session, it re-stamps the access token within the same
+  // refresh-token lifecycle. /auth/sessions will keep tagging the
+  // same row as current.
+  const accessToken = createAccessToken({
+    sub: person.id, email: person.email, name: person.name, role, orgId,
+    sessionJti: (req.user as { sjti?: string } | undefined)?.sjti,
+  });
+  auditService.log(orgId, person.id, 'Auth', 'switch-org', 'ORG_SWITCHED', null, {
+    from: req.user?.orgId, to: orgId, role,
+  });
+  res.json({
+    success: true,
+    data: {
+      accessToken,
+      expiresIn: ACCESS_TOKEN_EXPIRY_SECONDS,
+      user: { sub: person.id, email: person.email, name: person.name, orgId, role },
+    },
+  });
+});
+
+// Admin unlock — clear a target user's lockout state. Useful when an
+// admin has positively identified the user via another channel (phone
+// call, in-person) and doesn't want to wait out the auto-unlock.
+router.post('/lockout/admin-clear', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
+  (req: AuthenticatedRequest, res: Response) => {
+    const { personId } = req.body || {};
+    if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
+    const target = people.find((p) => p.id === personId);
+    if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+    adminClearLockout(target);
+    auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'lockout', 'LOCKOUT_ADMIN_CLEARED', null, {
+      targetPersonId: target.id,
+      targetEmail: target.email,
+    });
+    res.status(204).end();
+  });
 
 // ---------------------------------------------------------------------------
 // Accessible organizations for the current user

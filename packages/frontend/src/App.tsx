@@ -1,116 +1,152 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+
+// Eager: Layout is on every authenticated page so a lazy boundary
+// gains nothing. LoginPage is the unauthenticated entry — keep its
+// first paint as fast as possible. Everything else is route-level
+// code-split with React.lazy(); each page becomes its own chunk and
+// only downloads when the user navigates to it.
 import Layout from '@/components/Layout';
-import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
-import OidcCompletePage from '@/pages/OidcCompletePage';
-import ProcessCatalogPage from '@/pages/ProcessCatalogPage';
-import DataAssetsPage from '@/pages/DataAssetsPage';
-import SystemsPage from '@/pages/SystemsPage';
-import MappingsPage from '@/pages/MappingsPage';
-import SettingsPage from '@/pages/SettingsPage';
-import HelpPage from '@/pages/HelpPage';
-import ValueStreamWizard from '@/pages/ValueStreamWizard';
-import OrganizationsPage from '@/pages/OrganizationsPage';
-import OrgVisualizationPage from '@/pages/OrgVisualizationPage';
-import PeoplePage from '@/pages/PeoplePage';
-import PersonDetailPage from '@/pages/PersonDetailPage';
-import AgentsPage from '@/pages/AgentsPage';
-import GapDetectionPage from '@/pages/GapDetectionPage';
-import GovernanceGroupsPage from '@/pages/GovernanceGroupsPage';
-import GovernanceGroupDetailPage from '@/pages/GovernanceGroupDetailPage';
-import DataDomainsPage from '@/pages/DataDomainsPage';
-import ProcessVisualizationPage from '@/pages/ProcessVisualizationPage';
-import GovernanceVisualizationPage from '@/pages/GovernanceVisualizationPage';
-import ComparisonPage from '@/pages/ComparisonPage';
-import DataLineagePage from '@/pages/DataLineagePage';
-import DataQualityPage from '@/pages/DataQualityPage';
-import SystemsAndDataPage from '@/pages/SystemsAndDataPage';
-import AnalyzePage from '@/pages/AnalyzePage';
-import ConnectionsPage from '@/pages/ConnectionsPage';
-import ReportsPage from '@/pages/ReportsPage';
-import AuditLogPage from '@/pages/AuditLogPage';
-import BrandingPage from '@/pages/BrandingPage';
-import EnterpriseViewPage from '@/pages/EnterpriseViewPage';
-import GovernanceWorkPage from '@/pages/GovernanceWorkPage';
-import GovernancePoliciesPage from '@/pages/GovernancePoliciesPage';
-import GovernanceProgramPage from '@/pages/GovernanceProgramPage';
-import GovernanceCalendarPage from '@/pages/GovernanceCalendarPage';
-import DecisionRightsPage from '@/pages/DecisionRightsPage';
-import BusinessGlossaryPage from '@/pages/BusinessGlossaryPage';
-import DataDictionaryPage from '@/pages/DataDictionaryPage';
-import SkillsPage from '@/pages/SkillsPage';
-import DocumentationPage from '@/pages/DocumentationPage';
-import RolesPage from '@/pages/RolesPage';
-import AnalysisPage from '@/pages/AnalysisPage';
-import SetupHubPage from '@/pages/SetupHubPage';
-import AssignOwnersPage from '@/pages/AssignOwnersPage';
+
+const OidcCompletePage           = lazy(() => import('@/pages/OidcCompletePage'));
+const DashboardPage              = lazy(() => import('@/pages/DashboardPage'));
+const SetupHubPage               = lazy(() => import('@/pages/SetupHubPage'));
+const AssignOwnersPage           = lazy(() => import('@/pages/AssignOwnersPage'));
+const ProcessCatalogPage         = lazy(() => import('@/pages/ProcessCatalogPage'));
+const ValueStreamWizard          = lazy(() => import('@/pages/ValueStreamWizard'));
+const ProcessVisualizationPage   = lazy(() => import('@/pages/ProcessVisualizationPage'));
+const ProcessDataMapPage         = lazy(() => import('@/pages/ProcessDataMapPage'));
+const ComparisonPage             = lazy(() => import('@/pages/ComparisonPage'));
+const SystemsAndDataPage         = lazy(() => import('@/pages/SystemsAndDataPage'));
+const AnalyzePage                = lazy(() => import('@/pages/AnalyzePage'));
+const DataAssetsPage             = lazy(() => import('@/pages/DataAssetsPage'));
+const OrphanAssetsPage           = lazy(() => import('@/pages/OrphanAssetsPage'));
+const SystemsPage                = lazy(() => import('@/pages/SystemsPage'));
+const MappingsPage               = lazy(() => import('@/pages/MappingsPage'));
+const GapDetectionPage           = lazy(() => import('@/pages/GapDetectionPage'));
+const OrganizationsPage          = lazy(() => import('@/pages/OrganizationsPage'));
+const OrgVisualizationPage       = lazy(() => import('@/pages/OrgVisualizationPage'));
+const PeoplePage                 = lazy(() => import('@/pages/PeoplePage'));
+const PersonDetailPage           = lazy(() => import('@/pages/PersonDetailPage'));
+const AgentsPage                 = lazy(() => import('@/pages/AgentsPage'));
+const SkillsPage                 = lazy(() => import('@/pages/SkillsPage'));
+const GovernanceGroupsPage       = lazy(() => import('@/pages/GovernanceGroupsPage'));
+const GovernanceGroupDetailPage  = lazy(() => import('@/pages/GovernanceGroupDetailPage'));
+const GovernanceVisualizationPage= lazy(() => import('@/pages/GovernanceVisualizationPage'));
+const DataDomainsPage            = lazy(() => import('@/pages/DataDomainsPage'));
+const DocumentationPage          = lazy(() => import('@/pages/DocumentationPage'));
+const RolesPage                  = lazy(() => import('@/pages/RolesPage'));
+const DataLineagePage            = lazy(() => import('@/pages/DataLineagePage'));
+const DataQualityPage            = lazy(() => import('@/pages/DataQualityPage'));
+const ConnectionsPage            = lazy(() => import('@/pages/ConnectionsPage'));
+const GovernanceWorkPage         = lazy(() => import('@/pages/GovernanceWorkPage'));
+const GovernancePoliciesPage     = lazy(() => import('@/pages/GovernancePoliciesPage'));
+const GovernanceCalendarPage     = lazy(() => import('@/pages/GovernanceCalendarPage'));
+const DecisionRightsPage         = lazy(() => import('@/pages/DecisionRightsPage'));
+const BusinessGlossaryPage       = lazy(() => import('@/pages/BusinessGlossaryPage'));
+const DataDictionaryPage         = lazy(() => import('@/pages/DataDictionaryPage'));
+const GovernanceProgramPage      = lazy(() => import('@/pages/GovernanceProgramPage'));
+const EnterpriseViewPage         = lazy(() => import('@/pages/EnterpriseViewPage'));
+const AnalysisPage               = lazy(() => import('@/pages/AnalysisPage'));
+const ReportsPage                = lazy(() => import('@/pages/ReportsPage'));
+const ReportBuilderPage          = lazy(() => import('@/pages/ReportBuilderPage'));
+const AuditLogPage               = lazy(() => import('@/pages/AuditLogPage'));
+const SettingsPage               = lazy(() => import('@/pages/SettingsPage'));
+const BrandingPage               = lazy(() => import('@/pages/BrandingPage'));
+const HelpPage                   = lazy(() => import('@/pages/HelpPage'));
+const HelpTrainingPage           = lazy(() => import('@/pages/HelpTrainingPage'));
+
+// Quiet placeholder shown for the millisecond or two between route
+// click and the lazy chunk arriving. A SkeletonRows-style block
+// would be more polished but each page already renders its own
+// skeleton on data load — a tiny "Loading…" line here keeps the
+// inter-route gap from flashing the dashboard background.
+function PageFallback() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{ padding: '24px 16px', fontSize: 13, color: 'var(--color-text-muted)' }}
+    >
+      Loading…
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/oidc-complete" element={<OidcCompletePage />} />
-      <Route element={<Layout />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/setup" element={<SetupHubPage />} />
-        <Route path="/setup/owners" element={<AssignOwnersPage />} />
-        <Route path="/processes" element={<ProcessCatalogPage />} />
-        <Route path="/processes/wizard" element={<ValueStreamWizard />} />
-        <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
-        <Route path="/processes/compare" element={<ComparisonPage />} />
-        {/* Combined pages */}
-        <Route path="/systems-and-data" element={<SystemsAndDataPage />} />
-        <Route path="/governance" element={<Navigate to="/governance-groups" replace />} />
-        <Route path="/analyze" element={<AnalyzePage />} />
-        {/* Legacy routes — kept for backward compatibility and deep links */}
-        <Route path="/data-assets" element={<DataAssetsPage />} />
-        <Route path="/systems" element={<SystemsPage />} />
-        <Route path="/mappings" element={<MappingsPage />} />
-        <Route path="/gap-detection" element={<GapDetectionPage />} />
-        <Route path="/organizations" element={<OrganizationsPage />} />
-        <Route path="/organizations/visualization" element={<OrgVisualizationPage />} />
-        <Route path="/people" element={<PeoplePage />} />
-        <Route path="/people/:id" element={<PersonDetailPage />} />
-        <Route path="/agents" element={<AgentsPage />} />
-        <Route path="/skills" element={<SkillsPage />} />
-        <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
-        <Route path="/governance-groups/:id" element={<GovernanceGroupDetailPage />} />
-        <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
-        <Route path="/data-domains" element={<DataDomainsPage />} />
-        {/* Merged surfaces — option B of the governance IA cleanup */}
-        <Route path="/documentation" element={<DocumentationPage />} />
-        <Route path="/operations-manual" element={<Navigate to="/documentation?tab=manual" replace />} />
-        <Route path="/sops" element={<Navigate to="/documentation?tab=procedures" replace />} />
-        <Route path="/dama-roles" element={<RolesPage />} />
-        <Route path="/roles" element={<Navigate to="/dama-roles" replace />} />
-        <Route path="/raci" element={<Navigate to="/dama-roles?tab=raci" replace />} />
-        <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
-        <Route path="/scorecard" element={<Navigate to="/reports?tab=scorecard" replace />} />
-        <Route path="/report" element={<Navigate to="/reports?tab=executive" replace />} />
-        <Route path="/data-lineage" element={<DataLineagePage />} />
-        <Route path="/data-quality" element={<DataQualityPage />} />
-        <Route path="/connections" element={<ConnectionsPage />} />
-        <Route path="/governance-work" element={<GovernanceWorkPage />} />
-        <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
-        {/* Canonical alias — the page now covers Charter / Framework /
-            Standard / Policy, so the broader URL reads honestly. The
-            /governance-policies path is kept indefinitely as a
-            back-compat alias since existing deep links and the
-            sidebar still point at it. */}
-        <Route path="/governance-documents" element={<GovernancePoliciesPage />} />
-        <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
-        <Route path="/decision-rights" element={<DecisionRightsPage />} />
-        <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
-        <Route path="/data-dictionary" element={<DataDictionaryPage />} />
-        <Route path="/governance-program" element={<GovernanceProgramPage />} />
-        <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
-        <Route path="/analysis" element={<AnalysisPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/audit-log" element={<AuditLogPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/settings/branding" element={<BrandingPage />} />
-        <Route path="/help" element={<HelpPage />} />
-      </Route>
-    </Routes>
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/oidc-complete" element={<OidcCompletePage />} />
+        <Route element={<Layout />}>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/setup" element={<SetupHubPage />} />
+          <Route path="/setup/owners" element={<AssignOwnersPage />} />
+          <Route path="/processes" element={<ProcessCatalogPage />} />
+          <Route path="/processes/wizard" element={<ValueStreamWizard />} />
+          <Route path="/processes/visualization" element={<ProcessVisualizationPage />} />
+          <Route path="/processes/data-map" element={<ProcessDataMapPage />} />
+          <Route path="/processes/compare" element={<ComparisonPage />} />
+          {/* Combined pages */}
+          <Route path="/systems-and-data" element={<SystemsAndDataPage />} />
+          <Route path="/governance" element={<Navigate to="/governance-groups" replace />} />
+          <Route path="/analyze" element={<AnalyzePage />} />
+          {/* Legacy routes — kept for backward compatibility and deep links */}
+          <Route path="/data-assets" element={<DataAssetsPage />} />
+          <Route path="/data-assets/orphans" element={<OrphanAssetsPage />} />
+          <Route path="/systems" element={<SystemsPage />} />
+          <Route path="/mappings" element={<MappingsPage />} />
+          <Route path="/gap-detection" element={<GapDetectionPage />} />
+          <Route path="/organizations" element={<OrganizationsPage />} />
+          <Route path="/organizations/visualization" element={<OrgVisualizationPage />} />
+          <Route path="/people" element={<PeoplePage />} />
+          <Route path="/people/:id" element={<PersonDetailPage />} />
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/governance-groups" element={<GovernanceGroupsPage />} />
+          <Route path="/governance-groups/:id" element={<GovernanceGroupDetailPage />} />
+          <Route path="/governance/visualization" element={<GovernanceVisualizationPage />} />
+          <Route path="/data-domains" element={<DataDomainsPage />} />
+          {/* Merged surfaces — option B of the governance IA cleanup */}
+          <Route path="/documentation" element={<DocumentationPage />} />
+          <Route path="/operations-manual" element={<Navigate to="/documentation?tab=manual" replace />} />
+          <Route path="/sops" element={<Navigate to="/documentation?tab=procedures" replace />} />
+          <Route path="/dama-roles" element={<RolesPage />} />
+          <Route path="/roles" element={<Navigate to="/dama-roles" replace />} />
+          <Route path="/raci" element={<Navigate to="/dama-roles?tab=raci" replace />} />
+          <Route path="/control-tower" element={<Navigate to="/enterprise-view" replace />} />
+          <Route path="/scorecard" element={<Navigate to="/reports?tab=scorecard" replace />} />
+          <Route path="/report" element={<Navigate to="/reports?tab=executive" replace />} />
+          <Route path="/data-lineage" element={<DataLineagePage />} />
+          <Route path="/data-quality" element={<DataQualityPage />} />
+          <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/governance-work" element={<GovernanceWorkPage />} />
+          <Route path="/governance-policies" element={<GovernancePoliciesPage />} />
+          {/* Canonical alias — the page now covers Charter / Framework /
+              Standard / Policy, so the broader URL reads honestly. The
+              /governance-policies path is kept indefinitely as a
+              back-compat alias since existing deep links and the
+              sidebar still point at it. */}
+          <Route path="/governance-documents" element={<GovernancePoliciesPage />} />
+          <Route path="/governance-calendar" element={<GovernanceCalendarPage />} />
+          <Route path="/decision-rights" element={<DecisionRightsPage />} />
+          <Route path="/business-glossary" element={<BusinessGlossaryPage />} />
+          <Route path="/data-dictionary" element={<DataDictionaryPage />} />
+          <Route path="/governance-program" element={<GovernanceProgramPage />} />
+          <Route path="/enterprise-view" element={<EnterpriseViewPage />} />
+          <Route path="/analysis" element={<AnalysisPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/reports/builder" element={<ReportBuilderPage />} />
+          <Route path="/reports/builder/:id" element={<ReportBuilderPage />} />
+          <Route path="/audit-log" element={<AuditLogPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/branding" element={<BrandingPage />} />
+          <Route path="/help" element={<HelpPage />} />
+          <Route path="/help/training" element={<HelpTrainingPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }

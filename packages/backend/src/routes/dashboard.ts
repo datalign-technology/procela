@@ -90,6 +90,25 @@ router.get('/stats', (req: Request, res: Response) => {
     (n) => ['VALUE_STREAM', 'PROCESS'].includes(n.level) && !n.ownerId
   ).length;
 
+  // Orphan assets — present in the catalog but no mapping row points
+  // at them. Pairs with the new /data-assets/orphans page.
+  const mappedAssetIdsAll = new Set(
+    filteredMappings.filter((m) => !!m.dataAssetId).map((m) => m.dataAssetId!),
+  );
+  const orphanAssets = filteredAssets.filter((a) => !mappedAssetIdsAll.has(a.id)).length;
+
+  // Dismissed suggestions — Phase 3 learning loop. Lazy require to
+  // avoid touching the process-catalog module twice in the import
+  // graph; the store is registered at boot so it's always available
+  // by the time stats is hit.
+  let dismissedSuggestions = 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { suggestionDismissals } = require('./process-catalog');
+    dismissedSuggestions = (suggestionDismissals as Array<{ orgId: string }>)
+      .filter((d) => !oid || d.orgId === oid).length;
+  } catch { /* store not loaded yet — leave at 0 */ }
+
   const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
   const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
 
@@ -104,6 +123,7 @@ router.get('/stats', (req: Request, res: Response) => {
       flows: filteredFlows.length,
       systems: filteredSystems.length,
       dataAssets: filteredAssets.length,
+      dataDomains: filteredDomains.length,
       mappings: filteredMappings.length,
       organizations: organizations.length,
       people: filteredPeople.length,
@@ -119,6 +139,8 @@ router.get('/stats', (req: Request, res: Response) => {
         ungovernedAssets,
         ownerlessItems,
         ungovernedDomains,
+        orphanAssets,
+        dismissedSuggestions,
       },
     },
   });
@@ -285,11 +307,12 @@ router.get('/raci', (req: Request, res: Response) => {
     rolePersonMap[r.roleType].add(r.personId);
   }
 
-  // Governance group members -> person IDs (for Informed)
+  // Governance group members -> person IDs (for Informed). Agent
+  // advisors don't appear in person-keyed sets.
   const groupMemberIds = new Set<string>();
   for (const g of filteredGroups) {
     for (const m of g.members) {
-      groupMemberIds.add(m.personId);
+      if (m.personId) groupMemberIds.add(m.personId);
     }
   }
 
@@ -418,6 +441,11 @@ router.get('/raci', (req: Request, res: Response) => {
 
         if (matches) {
           for (const member of group.members) {
+            // The RACI matrix is keyed by personId. Agent advisors
+            // (member.personId === null) don't appear here — they're
+            // surfaced on the group's own page instead, not in the
+            // person-name matrix.
+            if (!member.personId) continue;
             const raciLetter = GROUP_ROLE_TO_RACI[member.groupRole] || GROUP_ROLE_TO_RACI[(member as any).role] || 'I';
             const personName = people.find((p) => p.id === member.personId)?.name || '';
             // Higher priority wins: A > R > C > I
@@ -514,7 +542,9 @@ router.get('/raci', (req: Request, res: Response) => {
       if (domain) {
         // Find governance groups that might govern this domain
         for (const g of filteredGroups) {
-          for (const m of g.members) informedForRow.add(m.personId);
+          for (const m of g.members) {
+            if (m.personId) informedForRow.add(m.personId);
+          }
         }
       }
     }

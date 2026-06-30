@@ -1,4 +1,6 @@
 import PageHeader from '../components/PageHeader';
+import Page from '../components/Page';
+import { openTrainingWindow } from '../components/navConfig';
 
 const sectionStyle: React.CSSProperties = {
   background: 'var(--color-surface)',
@@ -30,10 +32,11 @@ const HELP_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'help-systems', label: '6. Systems' },
   { id: 'help-organizations', label: '7. Organizations' },
   { id: 'help-governance', label: '8. Governance' },
-  { id: 'help-cross-cutting', label: '9. Cross-cutting Features' },
-  { id: 'help-key-concepts', label: '10. Key Concepts' },
-  { id: 'help-faq', label: '11. Frequently Asked Questions' },
-  { id: 'help-shortcuts', label: '12. Keyboard shortcuts' },
+  { id: 'help-security', label: '9. Security & Account' },
+  { id: 'help-cross-cutting', label: '10. Cross-cutting Features' },
+  { id: 'help-key-concepts', label: '11. Key Concepts' },
+  { id: 'help-faq', label: '12. Frequently Asked Questions' },
+  { id: 'help-shortcuts', label: '13. Keyboard shortcuts' },
 ];
 
 const h3Style: React.CSSProperties = {
@@ -72,22 +75,37 @@ const kbdStyle: React.CSSProperties = {
 
 export default function HelpPage() {
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto' }}>
+    <Page width="narrow">
       <PageHeader
         title="Help Guide"
         actions={
-          <button
-            onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
-            style={{
-              padding: '8px 16px', background: 'var(--color-surface)',
-              color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
-              borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              flexShrink: 0,
-            }}
-            title="Show the three-phase Define / Connect / Discover intro again"
-          >
-            Replay intro
-          </button>
+          <div style={{ display: 'inline-flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={openTrainingWindow}
+              style={{
+                padding: '8px 16px', background: 'var(--color-primary)',
+                color: '#fff', border: 'none',
+                borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', flexShrink: 0,
+              }}
+              title="Opens in a new window — 90-minute walkthrough using the Tidewater Utilities fixture data"
+            >
+              Open Training Guide ↗
+            </button>
+            <button
+              onClick={() => window.dispatchEvent(new Event('procela:start-tour'))}
+              style={{
+                padding: '8px 16px', background: 'var(--color-surface)',
+                color: 'var(--color-primary)', border: '1px solid var(--color-primary)',
+                borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                flexShrink: 0,
+              }}
+              title="Show the three-phase Define / Connect / Discover intro again"
+            >
+              Replay intro
+            </button>
+          </div>
         }
       />
       <p style={{ ...pStyle, marginBottom: 16 }}>
@@ -138,7 +156,7 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>Reading the hub</h3>
         <ul style={listStyle}>
-          <li>Each <strong>phase section</strong> and each <strong>task card</strong> is collapsible. A smart default keeps the page focused &mdash; completed items and fully-completed phases collapse on load; in-progress, needs-attention, and not-started items stay open. An explicit click overrides the default for that one item.</li>
+          <li>Each <strong>phase section</strong> and each <strong>task card</strong> is collapsible. Every section starts collapsed so the page opens on a clean three-row overview of the journey. Click any header to expand it; use the <em>Expand all</em> / <em>Collapse all</em> controls in the page header to flip the whole tree at once.</li>
           <li>Every task's CTA deep-links to the same destination the left nav exposes, so the hand-off from journey to workspace is seamless. The hub is for first-run setup and check-ins; the left nav is your persistent workspace once you know the app.</li>
         </ul>
 
@@ -168,8 +186,7 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li><strong>Search box (Cmd/Ctrl + K or /)</strong> &mdash; Universal command palette. Searches processes, data assets, systems, people, domains, and groups in your active org. Results are ranked and link directly to the matching item.</li>
           <li><strong>Working in &hellip;</strong> &mdash; Organization selector. Scopes every page to the selected org. Divisions are listed nested under their parent company (Tidewater Utilities ▸ Electric / Water), so you can drop into a division-scoped view without leaving the page. Single-tier companies render as a flat list.</li>
-          <li><strong>Plain / DAMA toggle</strong> &mdash; Flips jargon-heavy labels (Custodian &harr; Operator, Governance Tier &harr; Trust Level, Uncertified/Managed/Certified &harr; Untrusted/Managed/Trusted). Plain is the default; preference persists in your browser.</li>
-          <li><strong>Cozy / Compact toggle</strong> &mdash; Row density. Compact halves vertical padding for power-user table scanning. Persists in your browser.</li>
+          <li><strong>Display preferences</strong> &mdash; the Plain / DAMA terminology toggle and the Cozy / Compact density toggle live in the <strong>user menu</strong> (click your name / avatar in the top-right corner). Per-user, persisted per browser, applied immediately. The Settings page is admin-only and holds org-wide configuration instead.</li>
         </ul>
       </div>
 
@@ -178,10 +195,10 @@ export default function HelpPage() {
         <h2 id="help-dashboard" style={h2Style}>3. Dashboard</h2>
         <p style={pStyle}>The dashboard is personalized to your login. You must have a People record with your email to see personalized data.</p>
         <ul style={listStyle}>
-          <li><strong>My Dashboard</strong> &mdash; Open tasks, issues, domains you own/steward, upcoming events</li>
+          <li><strong>My Dashboard</strong> &mdash; Open tasks, issues, domains you own/steward, upcoming events. Each tile is a hyperlink &mdash; <em>Open Tasks</em> jumps to Governance Work (Tasks tab), <em>Open Issues</em> to the Issues tab, <em>My Domains</em> to the Data Domains page, and <em>Upcoming Events</em> to the Governance Calendar. Hover lifts the tile to signal it's interactive; zero-count tiles fade the number but still link through to the destination's empty state.</li>
           <li><strong>Needs My Attention</strong> &mdash; Overdue tasks, critical issues, pending policy reviews</li>
           <li><strong>My Schedule</strong> &mdash; Governance events in the next 14 days</li>
-          <li><strong>Overview</strong> &mdash; Organization-wide KPIs (value streams, assets, coverage, health)</li>
+          <li><strong>Overview</strong> &mdash; Organization-wide KPIs (value streams, assets, coverage, health). Each tile is a hyperlink — click <em>Value Streams</em> / <em>Processes</em> to jump into the Process Catalog, <em>Data Assets</em> / <em>Systems</em> to their catalogs, <em>Coverage</em> straight to Data Mapping (where the unmapped-activity and unlinked-asset banners surface), and <em>Avg Health</em> to Data Assets sorted by health ascending so the worst-scoring assets are at the top. Hover lifts the tile to signal it's interactive; zero-count tiles fade the number but still link through to the destination's empty state.</li>
           <li><strong>Program Maturity</strong> &mdash; Current governance phase with next steps to advance</li>
           <li><strong>What&apos;s Next</strong> &mdash; Contextual recommendations based on org maturity</li>
           <li><strong>Skill Gaps</strong> &mdash; Top under-staffed required skills across the org. Each row compares <em>required by activities</em> against <em>held by people</em> as a bar chart; rows where nobody on staff holds the skill are flagged in red ("no coverage"), tight-but-covered rows in amber, healthy in green. The <em>Find people by skill →</em> link jumps straight to the People page's skill filter for staffing backfills.</li>
@@ -217,9 +234,11 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Data Mapping</h3>
         <ul style={listStyle}>
-          <li>Flat audit / bulk-edit view of every activity ↔ data-asset link in the catalog. Sortable columns, CSV/Excel export, bulk delete, and the Batch Mapping Wizard (matrix interface) for creating many mappings at once.</li>
+          <li>Flat audit / bulk-edit view of every activity ↔ target link in the catalog. Sortable columns, CSV/Excel export, bulk delete, and the Batch Mapping Wizard (matrix interface) for creating many mappings at once.</li>
           <li>Day-to-day, you connect an activity to its data assets <strong>inline on the Process Catalog</strong> — each node panel has Owner, Responsible Role, Systems, and Inputs/Outputs (data assets) in one place. Data Mapping is the cross-process review surface for those same links; it doesn't introduce a separate model.</li>
           <li>Mappings can be AI-suggested or user-defined; the page tracks which is which so suggestion overrides are auditable.</li>
+          <li><strong>Target column.</strong> A mapping can point at one of three things — a <strong>Data Asset</strong>, a <strong>Governance Document</strong> (charter / policy / standard / framework), or an <strong>Attachment</strong>. Each row carries a typed tag (<em>ASSET</em>, <em>DOCUMENT</em>, <em>ATTACHMENT</em>) plus the target's name and a sub-detail (governance tier for assets, code · type for documents, filename for attachments) so the three link kinds are visually distinct at a glance.</li>
+          <li><strong>Orphan detection + cleanup.</strong> When the activity, asset, document, or attachment a mapping points at has been deleted (commonly: an agent draft was promoted, then the source activity got regenerated by the Process Wizard with new ids), the row renders the dangling side as an amber "Activity deleted" / "Data asset deleted" / "Governance document deleted" chip with the original id-prefix in the tooltip. A red banner above the table shows the total orphan count and a one-click <strong>Delete all orphans</strong> action — the surviving activities, assets, and documents are untouched. Orphans sort to the end of the table so the active rows stay together at the top.</li>
         </ul>
       </div>
 
@@ -324,6 +343,14 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Catalog of competencies attached to people. Seed standard DAMA-aligned skills with one click.</li>
           <li>The Role Detail drawer reads from this catalog to show "Skills typically needed" for each governance role &mdash; chips appear solid when the skill is in your org's catalog, dashed if not yet seeded.</li>
+          <li><strong>Skills drive four cross-page workflows:</strong>
+            <ul style={listStyle}>
+              <li><strong>Qualified-person check.</strong> On a Process activity, if the responsible person's <code>skillIds</code> don't cover the activity's <code>requiredSkillIds</code>, an amber warning chip appears next to the skill picker spelling out which skills are missing. The same gap shows up as a "Skill gaps" column on the People table.</li>
+              <li><strong>Find people by skill.</strong> A skill filter on the People page lets you narrow the roster to everyone who holds a given competency &mdash; useful when staffing a new initiative or backfilling an unqualified assignment.</li>
+              <li><strong>Recommended role assignees.</strong> The Role Detail drawer surfaces a "Best-matching people" list, ranked by how many of the role's required skills each person already holds (case-insensitive name match).</li>
+              <li><strong>Skill-gap report on the dashboard.</strong> The Skill Gaps section ranks the org's most under-staffed required skills (required-by-activities vs held-by-people), with critical "no coverage" calls flagged in red.</li>
+            </ul>
+          </li>
         </ul>
       </div>
 
@@ -343,6 +370,7 @@ export default function HelpPage() {
           <li>Generate the standard DAMA structure with one click. Explore Recommendations suggests additional groups based on your data domains.</li>
           <li>Per group: an Expected Roles panel lists the governance roles the group should have, the required vs optional split, and current fill status. Click any role label to open the Role Detail drawer.</li>
           <li><strong>Org-aware fill status.</strong> A role counts as filled when it's held anywhere in the org — the same scope the Governance Roles page assigns at — not only by a current member of this group. Each holder chip shows their relationship to this body: teal = on the group, amber = holds the role org-wide but isn't a member yet, with an inline <strong>+ add to group</strong> to bring them on. So a role assigned on the Roles page is recognised here, and assigning here writes the same org-scoped assignment — the two pages stay consistent in both directions.</li>
+          <li><strong>Domain assignments inline.</strong> For roles where the question is meaningful — <em>Data Owner</em>, <em>Domain Owner</em>, <em>Data Steward</em>, <em>Domain Steward</em>, <em>Business Data Steward</em>, <em>Data Architect</em> — each holder gets a sub-line under the chip strip listing the data domains they own and/or steward (e.g. "<em>Alice:</em> owns Customer, Billing · stewards Outage"). If a holder of a domain-scoped role has no domains attached at all, the line renders "<em>no data domains assigned</em>" in red so the gap is visible without leaving the page. Read straight from the DataDomain entity — assigning or removing a domain owner/steward elsewhere (Data Domains page) updates this line on the next fetch.</li>
           <li>Two remove actions are distinct: the <strong>x on a role chip</strong> removes that specific role assignment; <strong>Remove from group</strong> in the members table removes the person from the group entirely (their role assignments survive at the org level).</li>
           <li><strong>Open full composition →</strong> on any selected group jumps to the Group Composition page (<code>/governance-groups/:id</code>) &mdash; one cohesive surface that combines members, expected-role gaps, decision rights this body owns, policies tied to it via member roles, the calendar cadence, and a snapshot of RACI assignments. Each role chip shows the typical RACI letter(s) the role holds on common decisions, so you can see at a glance what each role is accountable / responsible / consulted / informed for without opening the drawer.</li>
           <li><strong>Group role vs governance role.</strong> These are two independent things and the members table calls it out: a person's <em>group role</em> (Chair, Member, Secretary…) is just their seat on this body and has no RACI effect; their <em>governance roles</em> (Data Owner, Steward, CDO…) are the org-wide DAMA roles that drive RACI and ownership. Someone can be a group Member with no governance role, or hold a governance role without sitting on any group.</li>
@@ -351,6 +379,9 @@ export default function HelpPage() {
         <ul style={listStyle}>
           <li>Single page with two tabs: <strong>Assignments</strong> and <strong>RACI Matrix</strong>. RACI is a view derived from role assignments, so editing and inspection live together.</li>
           <li><strong>Assignments tab.</strong> Role-first catalog of DAMA governance roles (CDO, Data Governance Lead, Data Owner, Stewards, etc.). The left sidebar lists <em>every</em> role with its live holder count &mdash; filled or not &mdash; and clicking one filters the page to that role. The main area always shows the full role slate: filled rows list the holders inline; unfilled rows are flagged with an <em>Unfilled</em> marker and an inline <em>+ Assign</em>. A search box matches role label, person, or organization. This page tells the same story as the Governance Groups expected-role slate &mdash; the roles always exist; assignment is what varies.</li>
+          <li><strong>Collapsible categories &amp; roles.</strong> Roles are grouped under <em>Executive</em>, <em>Business</em>, and <em>Technical</em>; each category header has a chevron that collapses the whole section. Individual role cards have their own chevron that hides the holder list while keeping the header visible so unfilled / required gaps still surface. <em>Expand all</em> / <em>Collapse all</em> controls at the top of the catalog flip everything at once. Defaults to fully expanded; when a single-role filter is active the controls hide since there's only one card to show.</li>
+          <li><strong>Typed scope on every holder row.</strong> Each holder shows a small kind tag next to their scope &mdash; <em>ORG</em> (indigo), <em>DOMAIN</em> (green), <em>SYSTEM</em> (red), <em>ASSET</em> (blue), or <em>UNKNOWN</em> (amber) &mdash; followed by the resolved name. So a Data Architect attached to the Customer Data domain reads as <code>DOMAIN: Customer Data</code> instead of a raw UUID, and a System Owner reads as <code>SYSTEM: SCADA</code>. An <em>UNKNOWN</em> tag with "unresolved" copy means the scoped entity has been deleted &mdash; the same dangling-reference signal we use on the Data Mapping page.</li>
+          <li><strong>Per-domain gap rows.</strong> For domain-scoped roles (<em>Data Owner</em>, <em>Domain Owner</em>, <em>Data Steward</em>, <em>Domain Steward</em>, <em>Business Data Steward</em>, <em>Data Architect</em>), each role card has a footer panel listing every data domain in the org that currently has no holder of this role scoped to it. So if Tidewater has <em>Customer Data</em>, <em>Operational Data</em>, and <em>Regulatory Data</em>, and only Customer Data has a Data Owner, the other two appear as amber chips under <em>Unfilled for 2 domains</em>. Mirrors the per-person "no data domains assigned" line we ship on the Governance Groups page, just from the role-side perspective.</li>
           <li>Click any role chip anywhere in the app to open the <strong>Role Detail drawer</strong> &mdash; plain-language summary, day-to-day responsibilities, typical RACI authority, groups that need the role, current assignees in your org, and required skills.</li>
           <li><strong>Best-matching people.</strong> The Role Detail drawer surfaces a ranked list of people who already hold the most of the role's required skills (case-insensitive name match against the org's Skills catalog). Each row shows a <em>matched / required</em> score chip — green ≥ 0.75, blue ≥ 0.5, amber below — and clicking a row jumps to that person's profile. Use this when a role's <em>Unfilled</em>: the drawer tells you who in the org is already closest to qualified rather than guessing.</li>
           <li>The drawer also covers <strong>entity-attached roles</strong> &mdash; System Owner, Deputy System Owner, System Custodian, Data Asset Owner / Steward, Data Domain Owner / Steward. The drawer shows a "Per system / asset / domain" scope badge so users understand two people can both hold the same entity-attached role for different entities without it being a RACI violation.</li>
@@ -406,13 +437,14 @@ export default function HelpPage() {
           <li><strong>Pivot.</strong> The pivot button between the Rows and Columns zones swaps everything in one click — useful when you want to flip a tall report into a wide one without re-dragging.</li>
           <li><strong>Drill down.</strong> Click any cell count to open a side panel listing the underlying records (asset facts, role assignments, mappings, ownership rows, etc.).</li>
           <li><strong>Filter.</strong> Click any row label or column header to add that value as a filter; chips appear above the grid and can be removed individually. Each filter narrows the cube to facts that match that dim/value.</li>
-          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active dims are also mirrored to the URL so direct links are shareable without saving. Saved pivots also appear under <strong>Reports &rarr; Analysis</strong>, so the two report homes stay connected.</li>
+          <li><strong>Saved reports.</strong> Save your (rows / columns / filters) configuration with a name and description. Reports are org-visible; only the owner can rename or delete their own. The active dims are also mirrored to the URL so direct links are shareable without saving. Saved pivots live on this page; for the new schema-driven Report Builder catalog, see <strong>Review &rarr; Reports &rarr; My Reports</strong>.</li>
           <li><strong>Export.</strong> The full grid exports to CSV, Excel, JSON, or PDF (browser-print) with row/column totals included. Sub-group labels are flattened with “ / ” separators in the export.</li>
         </ul>
         <h3 style={h3Style}>Reports</h3>
         <ul style={listStyle}>
-          <li>Tabbed: <strong>Executive Report</strong> (printable / PDF), <strong>Scorecard</strong> (governance health by dimension), and <strong>Analysis</strong> — a read-only list of saved cube pivots with a link straight into the Analysis builder, so saved pivots are discoverable from the Reports home too.</li>
-          <li>Gap Detection (unmapped activities, ungoverned assets) is surfaced across domains, assets, and processes.</li>
+          <li>Tabbed: <strong>My Reports</strong> (the report catalog + Builder, default tab), <strong>Executive Report</strong> (printable / PDF one-page overview), and <strong>Scorecard</strong> (governance health by dimension). The old Analysis tab was dropped — cube pivots live on their own page at <strong>Explore &rarr; Analysis</strong>; framing them as a sub-section of Reports was a dead-end nav.</li>
+          <li><strong>My Reports + Report Builder.</strong> Build a report against Procela's logical data model — pick a starting entity (Processes, Data Assets, Systems, People, Mappings, Domains, Roles, Skills, Organizations), choose columns directly on that entity <em>or</em> joined columns from a related entity (e.g. <em>Responsible Person → Name</em>, <em>Required Skills → Name</em>), add filters with op-aware value inputs (enum dropdowns, number coercion), set sort, and preview live as you type. Save with a name and visibility (Shared with org / Private to me); saved reports show up on the My Reports tab with metadata (primary entity, column count). Edit at <code>/reports/builder/:id</code>; new at <code>/reports/builder</code>.</li>
+          <li><strong>Gap Detection.</strong> Cross-cutting view of unmapped activities, ungoverned assets, ownership gaps, low-health assets, unowned domains, orphaned assets, unlinked assets, unassigned people, and duplicate asset names. Drill-down everywhere: the four summary cards at the top (Total Gaps / Critical / Warning / Informational) scroll to the first matching section when clicked; each row inside a section is a hyperlink that opens the affected item on its source page so you can fix the gap in one click — Unmapped Activity rows jump to the Process Catalog with the node highlighted, asset rows jump to Data Assets, person rows open the person's profile, and so on.</li>
         </ul>
         <h3 style={h3Style}>Dependency Enforcement</h3>
         <p style={pStyle}>
@@ -421,9 +453,108 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 9. Cross-cutting Features */}
+      {/* 9. Security & Account */}
       <div style={sectionStyle}>
-        <h2 id="help-cross-cutting" style={h2Style}>9. Cross-cutting Features</h2>
+        <h2 id="help-security" style={h2Style}>9. Security &amp; Account</h2>
+        <p style={pStyle}>
+          Procela ships with a layered sign-in stack — federated SSO, second-factor authentication, brute-force defences, and admin controls for credential lifecycle. Most of these are configurable per deployment; the defaults are sensible for a prototype but production deployments will want to set the env vars called out below. All settings below live under <strong>Settings</strong> unless noted; the credential-lifecycle admin actions live on the Person detail page.
+        </p>
+
+        <h3 style={h3Style}>Sign-in providers</h3>
+        <ul style={listStyle}>
+          <li><strong>Dev Mode</strong> (default) — email + optional name, no credential check. For local development only; production refuses to start with a warning if it's still active.</li>
+          <li><strong>Local credentials</strong> — email + password stored on the Person record as Argon2id hashes. Includes forgot-password by email, admin-set passwords, forced password change on first login, and a one-click <em>Migrate everyone to Local</em> action that generates temporary passwords for distribution.</li>
+          <li><strong>OIDC</strong> (Microsoft Entra ID, Okta, generic) — Authorization Code + PKCE flow, JWKS-verified id_tokens, multi-IdP per install. Admins add and rotate providers in <strong>Settings &rarr; Authentication</strong>. Each provider can be scoped to specific email domains so the login page only offers the right buttons for the user typing their address.</li>
+          <li><strong>SAML 2.0</strong> — SP-initiated single sign-on for ADFS, Shibboleth, PingFederate, and any IdP that speaks SAML. Configured via <code>SAML_ENTRY_POINT</code>, <code>SAML_ISSUER</code>, <code>SAML_IDP_CERT</code>, and <code>SAML_CALLBACK_URL</code>. The IdP can import Procela's SP metadata directly from <code>GET /api/v1/auth/saml/metadata</code> — entity ID, ACS, and both SLO bindings are declared there.</li>
+        </ul>
+
+        <h3 style={h3Style}>Two-step verification (TOTP)</h3>
+        <p style={pStyle}>
+          Open <strong>Settings &rarr; Two-step verification</strong> and click <em>Set up two-step verification</em>. Procela renders a QR code plus the underlying secret; scan it with Google Authenticator, 1Password, Authy, or any TOTP app, then enter the 6-digit code to confirm enrolment. On success you get a one-time display of <strong>10 backup codes</strong> — save these somewhere safe (the panel offers a download button); they're the only way to sign in if you lose your authenticator. A nudge appears when fewer than 3 codes remain so you can regenerate before you're locked out.
+        </p>
+        <p style={pStyle}>
+          Once enrolled, every password sign-in is held back until you produce a TOTP code (or a backup code) on the prompt that follows. Admins can reset another user's enrolment on the Person detail page <em>Security</em> panel; the user is then forced through enrolment again on their next sign-in.
+        </p>
+
+        <h3 style={h3Style}>Security keys (WebAuthn / FIDO2)</h3>
+        <p style={pStyle}>
+          Hardware keys (YubiKey, Titan, Feitian) and platform authenticators (Touch ID, Windows Hello, Android fingerprint) work as either a second factor alongside TOTP <em>or</em> a passwordless first factor. Register a key under <strong>Settings &rarr; Two-step verification &rarr; Security keys</strong> — Procela asks for a friendly label so you can tell devices apart later. You can register multiple keys.
+        </p>
+        <ul style={listStyle}>
+          <li>At sign-in, the password prompt offers <em>Sign in with a security key</em> — picking it runs the WebAuthn discoverable-credential ceremony and skips email + password entirely.</li>
+          <li>If you have both TOTP and a security key enrolled, either one satisfies the MFA gate; the prompt at sign-in lets you pick.</li>
+          <li>Admins can clear all registered keys for a user from the Person detail page <em>Security</em> panel.</li>
+        </ul>
+
+        <h3 style={h3Style}>Active sessions</h3>
+        <p style={pStyle}>
+          <strong>Settings &rarr; Active sessions</strong> lists every device or browser you're signed in from. Each row shows the device hint (parsed from the User-Agent), the IP at sign-in, the auth provider, and a relative "last used" timestamp. Your current session is tagged with a <em>This device</em> badge.
+        </p>
+        <ul style={listStyle}>
+          <li><em>Revoke</em> on a single row invalidates that session's refresh token — that device gets booted to the login screen on its next API call. Other devices keep working.</li>
+          <li><em>Sign out everywhere</em> kills every session including the one you're on. Use this if you've lost a device or want a clean slate.</li>
+          <li>Refresh tokens are bound to the IP subnet (<code>/24</code> for IPv4, <code>/64</code> for IPv6) and User-Agent they were minted with — a stolen refresh token replayed from a different network is rejected automatically.</li>
+          <li>Refresh tokens rotate on every use: when your access token expires and the client renews it, the old refresh token is revoked and a new one issued. A stolen token is only useful until the legitimate client next refreshes.</li>
+        </ul>
+
+        <h3 style={h3Style}>Account lockout &amp; CAPTCHA</h3>
+        <p style={pStyle}>
+          Three layers of brute-force defence sit in front of the credential verifier:
+        </p>
+        <ul style={listStyle}>
+          <li><strong>IP rate limiter</strong> — 5 sign-in attempts per minute per (IP, email) pair, 20 per hour. Blocks bursts from one source.</li>
+          <li><strong>Per-account lockout</strong> — 10 failed attempts inside a 30-minute window locks the account for 30 minutes. Catches distributed credential-stuffing where each attempt comes from a different IP. Defaults adjustable via <code>LOCKOUT_THRESHOLD</code> / <code>LOCKOUT_WINDOW_MS</code> / <code>LOCKOUT_DURATION_MS</code>. Admins can clear a lockout immediately from the Person detail page <em>Security</em> panel after positively identifying the user via another channel.</li>
+          <li><strong>CAPTCHA challenge</strong> — after 3 failures from one IP in 15 minutes, every subsequent sign-in from that IP must include a verified CAPTCHA token. Procela uses hCaptcha when <code>HCAPTCHA_SITE_KEY</code> + <code>HCAPTCHA_SECRET</code> are set; without them an "I'm not a robot" checkbox stands in for dev testing.</li>
+        </ul>
+
+        <h3 style={h3Style}>Idle-session timeout</h3>
+        <p style={pStyle}>
+          After <code>VITE_IDLE_TIMEOUT_MINUTES</code> of no mouse, keyboard, scroll, or touch activity (default 30; SOC 2 / HIPAA controls typically want 15) Procela signs you out automatically — even if your access token is still valid. A one-minute warning banner with a <em>Keep me signed in</em> button precedes the actual logout. The countdown is shared across browser tabs, so activity in any tab keeps every Procela tab alive.
+        </p>
+
+        <h3 style={h3Style}>Per-org role assignments (admins)</h3>
+        <p style={pStyle}>
+          A Person can hold a different role in different orgs — Process Owner in Operations, Viewer in Finance, ORG_ADMIN in their own department. On the Person detail page, every assigned-org chip carries an inline role pill. An asterisk on the pill indicates the role is inheriting from the person's default; clicking opens a dropdown where you can set a per-org override or revert. Switching the <em>Working in&hellip;</em> scope in the header re-mints your access token with the role for the new org so authorisation gates update immediately.
+        </p>
+
+        <h3 style={h3Style}>SCIM 2.0 provisioning (IdP admins)</h3>
+        <p style={pStyle}>
+          Procela exposes SCIM 2.0 endpoints under <code>/scim/v2/</code> so Microsoft Entra, Okta, and other identity providers can push user lifecycle events automatically — create on hire, deactivate on offboard, role updates as people move teams. The IdP authenticates with a long-lived bearer token configured via <code>SCIM_BEARER_TOKEN</code>; paste the same value into both Procela and the IdP's provisioning config. Supported resources are <code>/Users</code> and <code>/Groups</code> with full filter / PATCH / soft-delete semantics. When the token isn't set, every SCIM request returns 401.
+        </p>
+
+        <h3 style={h3Style}>Reset everything — start over (super admins)</h3>
+        <p style={pStyle}>
+          Below the Backup & Restore card on the Settings page, super admins
+          see a <em>Reset everything</em> control that performs a true factory
+          reset: every organization, person, process, data asset, system,
+          mapping, governance record, comment, and audit-log entry is deleted.
+          The next sign-in starts the onboarding wizard for a brand-new
+          organization. The confirmation phrase is the literal word{' '}
+          <code>RESET</code>; the panel also surfaces a one-click <em>Export now</em>{' '}
+          shortcut so you can save a recovery backup before nuking anything.
+          A single <code>ALL_DATA_RESET</code> audit entry is written
+          immediately after the wipe so the reset itself is traceable.
+        </p>
+
+        <h3 style={h3Style}>GDPR — right to be forgotten (admins)</h3>
+        <p style={pStyle}>
+          The Person detail page <em>Security</em> panel has a <em>Forget person&hellip;</em> action that runs the GDPR Article 17 cascade. The Person record is deleted and every reference across the catalog — ownership, stewardship, group membership, authored comments, role assignments — is scrubbed. Audit log entries authored by that user are <em>tombstoned</em>, not deleted, so the action history survives but the personal identifier is replaced with <code>[deleted]</code>. The confirmation modal requires you to type the literal phrase <code>FORGET &lt;email&gt;</code> to defend against muscle-memory triggers. The response summarises how many stores and rows were touched.
+        </p>
+
+        <h3 style={h3Style}>Audit log integrity</h3>
+        <p style={pStyle}>
+          Every entry on the Audit Log carries a SHA-256 hash chaining it to the previous entry's hash. The <em>Verify integrity</em> button at the top of <strong>Insights &rarr; Audit Log</strong> walks the chain on demand: green means no entry has been altered, reordered, inserted, or deleted since it was written; red points at the first broken row so you can investigate. The chain survives the GDPR redaction pass because hashes are re-computed from the first modified entry onward.
+        </p>
+
+        <h3 style={h3Style}>At-rest encryption for secrets</h3>
+        <p style={pStyle}>
+          TOTP secrets, OIDC client secrets, and SMTP passwords can all be stored encrypted at rest. Set <code>MFA_ENCRYPTION_KEY</code> (32+ chars random) for the local AES-256-GCM backend, or <code>KMS_PROVIDER=aws-kms|azure-kv|gcp-kms</code> with the matching cloud config for envelope encryption via AWS KMS, Azure Key Vault, or GCP KMS. To put an encrypted SMTP password or OIDC client secret in <code>.env</code>, POST the plaintext to <code>/api/v1/auth/encrypt-secret</code> (admin-only) and paste the <code>enc:v1:&hellip;</code> envelope it returns. Procela decrypts at boot.
+        </p>
+      </div>
+
+      {/* 10. Cross-cutting Features */}
+      <div style={sectionStyle}>
+        <h2 id="help-cross-cutting" style={h2Style}>10. Cross-cutting Features</h2>
         <p style={pStyle}>
           A handful of components show up on every detail page so the patterns stay the same as you move around the app.
         </p>
@@ -475,7 +606,7 @@ export default function HelpPage() {
 
       {/* 10. Key Concepts */}
       <div style={sectionStyle}>
-        <h2 id="help-key-concepts" style={h2Style}>10. Key Concepts</h2>
+        <h2 id="help-key-concepts" style={h2Style}>11. Key Concepts</h2>
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
@@ -493,7 +624,7 @@ export default function HelpPage() {
         </ul>
         <h3 style={h3Style}>Plain English vs. DAMA terminology</h3>
         <p style={pStyle}>
-          The header has a <strong>Plain / DAMA</strong> toggle that flips jargon-heavy labels between business-friendly and canonical DAMA wording. Plain is the default so business users aren't met with unfamiliar terms; data professionals can switch to DAMA mode for the formal vocabulary.
+          The <strong>user menu</strong> (click your name / avatar in the top-right corner) has a <strong>Plain / DAMA</strong> toggle under <em>Display preferences</em> that flips jargon-heavy labels between business-friendly and canonical DAMA wording. Plain is the default so business users aren't met with unfamiliar terms; data professionals can switch to DAMA mode for the formal vocabulary.
         </p>
         <ul style={listStyle}>
           <li><strong>Custodian</strong> (DAMA) &harr; <strong>Operator</strong> (Plain)</li>
@@ -530,7 +661,7 @@ export default function HelpPage() {
           here was a duplicate of the formatted table further down the
           page. Removed when the L-pass appendix added the better one. */}
       <div style={sectionStyle}>
-        <h2 id="help-faq" style={h2Style}>11. Frequently Asked Questions</h2>
+        <h2 id="help-faq" style={h2Style}>12. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
         <p style={pStyle}>
@@ -598,7 +729,7 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>How do I switch between plain English and DAMA terminology?</h3>
         <p style={pStyle}>
-          Use the Plain / DAMA toggle in the header next to the density toggle. Plain is the default; the choice persists in your browser. It flips labels like Custodian / Operator, Governance Tier / Trust Level, and Uncertified / Untrusted across the app.
+          Click your name / avatar in the top-right corner of any page to open the user menu, then flip the Plain / DAMA toggle (alongside the Cozy / Compact density toggle). Plain is the default; the choice persists in your browser. It flips labels like Custodian / Operator, Governance Tier / Trust Level, and Uncertified / Untrusted across the app.
         </p>
 
         <h3 style={h3Style}>Why are there two ways to remove someone from a governance group?</h3>
@@ -648,13 +779,33 @@ export default function HelpPage() {
           In the current prototype, data is stored in JSON files on the server. In production, Procela is designed
           to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
         </p>
+
+        <h3 style={h3Style}>I lost my authenticator app. How do I get back in?</h3>
+        <p style={pStyle}>
+          Use one of the backup codes you saved at enrolment — the sign-in MFA prompt has a <em>Use backup code instead</em> link. Each code is single-use. If you've burned through them, an admin can reset your two-step verification from the Person detail page <em>Security</em> panel; you'll be re-enrolled on your next sign-in. If you registered a security key, you can also use that to sign in passwordlessly and then re-enrol TOTP from Settings.
+        </p>
+
+        <h3 style={h3Style}>Why am I being asked to confirm I'm human?</h3>
+        <p style={pStyle}>
+          Three failed sign-in attempts from your network inside 15 minutes flips the CAPTCHA gate on for that IP. A successful sign-in clears the counter; the gate also lifts automatically after the window passes. If you're seeing it without having mistyped, someone else on the same network may be hammering the login — the gate is doing its job.
+        </p>
+
+        <h3 style={h3Style}>My account is locked. What now?</h3>
+        <p style={pStyle}>
+          10 failed sign-ins inside a 30-minute window lock the account for the next 30 minutes. Wait for the auto-unlock, use the password-reset link to set a new password (success there clears the lock), or ask an admin to clear it manually from the Person detail page after verifying you over another channel.
+        </p>
+
+        <h3 style={h3Style}>I see a session in <em>Active sessions</em> I don't recognise.</h3>
+        <p style={pStyle}>
+          Click <em>Revoke</em> on that row — the device gets booted to the login screen on its next API call. Then change your password from Settings (or use the forgot-password flow if you've forgotten it). If multiple unknown sessions show up, hit <em>Sign out everywhere</em> to invalidate everything in one shot and re-sign in from a known device.
+        </p>
       </div>
 
       {/* Keyboard shortcuts — list the chords plus a button that pops
           the same overlay the user gets from Shift+? globally. Keeps
           discoverability high without forcing users to know the chord. */}
       <div style={sectionStyle}>
-        <h2 id="help-shortcuts" style={h2Style}>12. Keyboard shortcuts</h2>
+        <h2 id="help-shortcuts" style={h2Style}>13. Keyboard shortcuts</h2>
         <p style={pStyle}>
           Procela has a small set of keyboard chords for the things you'll do most often.
           Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere
@@ -701,6 +852,6 @@ export default function HelpPage() {
           Open keyboard shortcuts overlay
         </button>
       </div>
-    </div>
+    </Page>
   );
 }

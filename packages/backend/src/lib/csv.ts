@@ -97,3 +97,25 @@ export function parseCsv(input: string): string[][] {
 
   return rows;
 }
+
+/** Emit an RFC-4180-ish CSV string. Every cell is double-quoted so
+ *  embedded commas / newlines / quotes don't escape the layout, and
+ *  every literal `"` inside a cell is doubled per the spec. Lines are
+ *  CRLF-terminated because Excel still defaults to CRLF parsing on
+ *  Windows — both LF and CRLF parsers handle CRLF fine.
+ *
+ *  Headers go on the first row, then each input row in order. Cells
+ *  are coerced via String(); null/undefined become ''. Numbers and
+ *  booleans render naturally. Dates should be ISO strings on the
+ *  caller side — we don't .toISOString() here because the caller
+ *  often wants a specific TZ or trimmed precision. */
+export function emitCsv(headers: readonly string[], rows: ReadonlyArray<ReadonlyArray<unknown>>): string {
+  const escape = (val: unknown): string => {
+    const s = val === null || val === undefined ? '' : String(val);
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const lines: string[] = [];
+  lines.push(headers.map(escape).join(','));
+  for (const row of rows) lines.push(row.map(escape).join(','));
+  return lines.join('\r\n') + '\r\n';
+}

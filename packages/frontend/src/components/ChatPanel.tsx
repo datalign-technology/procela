@@ -1,21 +1,145 @@
-import { useState, useRef, useEffect } from 'react';
-import { apiClient } from '../api/client';
+import { useState, useRef, useEffect, Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { useOrgContext } from '../stores/orgContext';
+import { useAuthStore } from '../stores/authStore';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-interface ChatResponse {
-  success: boolean;
-  data: { reply: string };
+interface Entity {
+  name: string;
+  kind: 'activity' | 'process' | 'system' | 'asset' | 'person';
+  url: string;
+}
+
+// Escape regex special characters in entity names so a system called
+// "SAP Finance (EU)" doesn't try to compile its parentheses as a
+// capture group.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Allowlist of Procela page paths the assistant is permitted to link
+// to via markdown. Anything else in a `[name](/path)` block is left
+// as plain text — keeps a hallucinated route from rendering as a
+// broken navigation chip. Kept in sync with the list embedded in the
+// system prompt on the backend (see ai.service.ts → buildChatSystemPrompt).
+const NAVIGABLE_PATHS = new Set<string>([
+  '/', '/processes', '/processes/data-map', '/data-assets', '/data-assets/orphans',
+  '/systems', '/data-domains', '/data-quality', '/mappings', '/gap-detection',
+  '/people', '/dama-roles', '/governance-groups', '/reports', '/audit-log',
+]);
+
+// Pass A: extract markdown navigation links `[name](/path)` and
+// render each as a navigation chip. Surrounding text is returned as
+// segments so Pass B (entity-name linking) only runs on plain text.
+function splitOnMarkdownLinks(text: string): Array<string | { kind: 'nav'; name: string; url: string }> {
+  const out: Array<string | { kind: 'nav'; name: string; url: string }> = [];
+  const re = /\[([^\]]+)\]\((\/[^\s)]*)\)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (NAVIGABLE_PATHS.has(m[2])) {
+      out.push({ kind: 'nav', name: m[1], url: m[2] });
+    } else {
+      // Unknown path — render as plain text rather than a broken link.
+      out.push(m[0]);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// Pass B: within a plain-text segment, replace entity-name mentions
+// with React Router links. Longest-first sort on the entity list
+// (done backend-side) means "Customer Billing Master" matches before
+// "Customer" — important because regex alternation is leftmost-first.
+function linkEntitiesInSegment(text: string, entities: Entity[]): React.ReactNode[] {
+  if (entities.length === 0 || !text) return [text];
+  const byName = new Map(entities.map((e) => [e.name, e]));
+  const pattern = new RegExp(`\\b(${entities.map((e) => escapeRegex(e.name)).join('|')})\\b`, 'g');
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const entity = byName.get(m[1]);
+    if (entity) {
+      out.push(
+        <Link
+          key={`e-${m.index}-${entity.name}`}
+          to={entity.url}
+          style={{ color: 'var(--color-primary)', textDecoration: 'underline', fontWeight: 500 }}
+          title={`${entity.kind}: ${entity.name}`}
+        >
+          {entity.name}
+        </Link>,
+      );
+    } else {
+      out.push(m[1]);
+    }
+    last = m.index + m[1].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// Render an assistant message with two kinds of inline links:
+//   - Markdown-style navigation links the model can emit to point the
+//     user at a specific Procela page ([Orphan Assets](/data-assets/orphans))
+//   - Entity-name mentions automatically linked to their catalog page
+//     based on the entity index the backend ships at the end of each stream.
+function renderAssistantText(text: string, entities: Entity[]): React.ReactNode {
+  if (!text) return text;
+  const segments = splitOnMarkdownLinks(text);
+  const out: React.ReactNode[] = [];
+  segments.forEach((seg, i) => {
+    if (typeof seg === 'string') {
+      const linked = linkEntitiesInSegment(seg, entities);
+      linked.forEach((node, j) => out.push(<Fragment key={`s${i}-${j}`}>{node}</Fragment>));
+    } else {
+      out.push(
+        <Link
+          key={`n${i}`}
+          to={seg.url}
+          title={`Open ${seg.name}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '1px 8px',
+            margin: '0 1px',
+            background: 'var(--color-primary)',
+            color: '#fff',
+            textDecoration: 'none',
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 600,
+            verticalAlign: 'baseline',
+          }}
+        >
+          {seg.name} <span aria-hidden="true">→</span>
+        </Link>,
+      );
+    }
+  });
+  return out;
 }
 
 export default function ChatPanel() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Entities for inline citations, scoped to the current conversation
+  // mount. The streaming /chat/stream endpoint sends one entities
+  // frame at the end of each reply; we keep them around so the
+  // rendered assistant turn (and any subsequent ones) can swap
+  // entity-name mentions for links back to the catalog.
+  const [entities, setEntities] = useState<Entity[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -54,24 +178,81 @@ export default function ChatPanel() {
     if (!text || loading) return;
     const userMsg: Message = { role: 'user', content: text };
     const updated = [...messages, userMsg];
-    setMessages(updated);
+    // Seed the assistant turn empty so chunks have somewhere to land
+    // as they arrive. The render loop reads `messages[i].content`
+    // directly, so each chunk-append re-renders the bubble incrementally.
+    const assistantIndex = updated.length;
+    setMessages([...updated, { role: 'assistant', content: '' }]);
     setInput('');
     setLoading(true);
 
+    let assistantText = '';
     try {
-      // Send the active org so the assistant answers from this
-      // organization's real catalog, assets and gaps — the backend
-      // builds the data snapshot from orgId.
-      const res = await apiClient.post<ChatResponse>('/chat', {
-        messages: updated,
-        orgContext: { orgId: activeOrgId, orgName: activeOrgName },
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch('/api/v1/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          messages: updated,
+          orgContext: { orgId: activeOrgId, orgName: activeOrgName },
+        }),
       });
-      setMessages([...updated, { role: 'assistant', content: res.data.reply }]);
+      if (!res.ok || !res.body) throw new Error(`stream failed (${res.status})`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      // SSE frames are separated by a blank line. Hold partial frames
+      // in `buf` across reads — a single chunk can split mid-event.
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let sep = buf.indexOf('\n\n');
+        while (sep !== -1) {
+          const block = buf.slice(0, sep);
+          buf = buf.slice(sep + 2);
+          let event = 'message';
+          let dataStr = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) event = line.slice(7);
+            else if (line.startsWith('data: ')) dataStr += line.slice(6);
+          }
+          if (dataStr) {
+            let parsed: any;
+            try { parsed = JSON.parse(dataStr); } catch { parsed = dataStr; }
+            if (event === 'chunk' && parsed?.text) {
+              assistantText += parsed.text;
+              // Functional setState so concurrent chunks don't race —
+              // each update reads the latest array.
+              setMessages((prev) => {
+                const next = [...prev];
+                next[assistantIndex] = { role: 'assistant', content: assistantText };
+                return next;
+              });
+            } else if (event === 'entities' && Array.isArray(parsed)) {
+              setEntities(parsed);
+            } else if (event === 'error') {
+              throw new Error(parsed?.error || 'stream error');
+            }
+          }
+          sep = buf.indexOf('\n\n');
+        }
+      }
     } catch {
-      setMessages([
-        ...updated,
-        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
-      ]);
+      // On any stream failure, replace the empty assistant placeholder
+      // with a friendly error so the user isn't left staring at a
+      // half-rendered bubble.
+      setMessages((prev) => {
+        const next = [...prev];
+        next[assistantIndex] = {
+          role: 'assistant',
+          content: assistantText || 'Sorry, something went wrong. Please try again.',
+        };
+        return next;
+      });
     } finally {
       setLoading(false);
     }
@@ -81,14 +262,14 @@ export default function ChatPanel() {
     await send(input.trim());
   }
 
-  // Starter prompts shown when the chat is empty. They mirror the
-  // example questions from CLAUDE.md so newcomers immediately see the
-  // kind of thing the assistant can help with — much higher discoverability
-  // than a single "ask me anything" hint.
+  // Starter prompts shown when the chat is empty. Mix of CLAUDE.md
+  // examples and Phase 3 surfaces (orphan assets, system declarations)
+  // so newcomers immediately see what the grounded assistant can do.
   const SUGGESTED_PROMPTS = [
     'Where are our data gaps?',
-    'What data supports our regulatory reporting process?',
     'Which assets are below 80% health and linked to critical processes?',
+    'Which data assets do we have that no process uses?',
+    'Which systems run our customer-facing processes?',
   ];
 
   return (
@@ -227,7 +408,9 @@ export default function ChatPanel() {
                   wordBreak: 'break-word',
                 }}
               >
-                {msg.content}
+                {msg.role === 'assistant'
+                  ? renderAssistantText(msg.content, entities)
+                  : msg.content}
               </div>
             ))}
             {loading && (

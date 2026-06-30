@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import { INDUSTRIES } from '../types';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
@@ -114,6 +115,11 @@ export default function DataDomainsPage() {
   const [generatedDomains, setGeneratedDomains] = useState<Array<{ name: string; description: string; selected: boolean }>>([]);
   const [showGeneratePreview, setShowGeneratePreview] = useState(false);
   const [generateStewardshipTeams, setGenerateStewardshipTeams] = useState(true);
+  // Industry picker — opens when the active org (and its visible
+  // ancestors) carries no `industry`, or when the user explicitly
+  // wants to override the auto-detected value.
+  const [industryPickerOpen, setIndustryPickerOpen] = useState(false);
+  const [pickedIndustry, setPickedIndustry] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -278,22 +284,61 @@ export default function DataDomainsPage() {
     } catch (e: any) { addToast('error', e?.response?.data?.error || 'Failed to update status'); }
   };
 
-  const handleGenerate = async () => {
-    if (!activeOrgId) { errorToast(null, 'Select an organization first.'); return; }
-    setGenerating(true);
+  // Walk the active org and its ancestors to find the first non-empty
+  // `industry`. Returns null when nothing is set — common when the
+  // user is scoped to a division/department and the parent that holds
+  // industry isn't in their visible org list. The picker handles the
+  // null case.
+  const detectIndustry = async (): Promise<string | null> => {
     try {
       const orgRes = await apiClient.get<{ success: boolean; data: Array<{ id: string; industry: string; parentId?: string }> }>('/organizations');
       const allOrgs = orgRes.data || [];
       let current = allOrgs.find((o) => o.id === activeOrgId);
       let industry = current?.industry || '';
-      while (current && !industry) { current = allOrgs.find((o: any) => o.id === (current as any).parentId); if (current) industry = current.industry || ''; }
-      if (!industry) { errorToast(null, 'No industry set on this organization or its parents.'); setGenerating(false); return; }
+      while (current && !industry) {
+        current = allOrgs.find((o: any) => o.id === (current as any).parentId);
+        if (current) industry = current.industry || '';
+      }
+      return industry || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!activeOrgId) { errorToast(null, 'Select an organization first.'); return; }
+    const detected = await detectIndustry();
+    if (!detected) {
+      // Nothing on the org or any visible ancestor — let the user pick
+      // one inline so they're not stuck. They can also use this to
+      // override the auto-detected industry (see the IconButton menu).
+      setPickedIndustry(INDUSTRIES[0]);
+      setIndustryPickerOpen(true);
+      return;
+    }
+    await generateForIndustry(detected);
+  };
+
+  // Actually fire the /generate call once we know which industry to
+  // ask Claude about. Surface the raw model response when extraction
+  // failed so the operator can see what came back.
+  const generateForIndustry = async (industry: string) => {
+    setGenerating(true);
+    try {
       const res = await apiClient.post<{ success: boolean; data: Array<{ name: string; description: string }> }>('/data-domains/generate', { industry });
       const suggestions = (res.data || []).map((d) => ({ ...d, selected: true }));
-      if (suggestions.length === 0) { errorToast(null, 'No suggestions returned.'); setGenerating(false); return; }
-      setGeneratedDomains(suggestions); setShowGeneratePreview(true);
-    } catch (err) { errorToast(err, 'Generation failed'); }
-    finally { setGenerating(false); }
+      if (suggestions.length === 0) {
+        errorToast(null, 'No suggestions returned. Retry — Claude occasionally returns prose; a retry usually fixes it.');
+        return;
+      }
+      setGeneratedDomains(suggestions);
+      setShowGeneratePreview(true);
+    } catch (err: any) {
+      const snippet = err?.body?.rawSnippet ? `\n\n— AI returned: ${err.body.rawSnippet}` : '';
+      errorToast(err, `Generation failed.${snippet}`);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleApplyGenerated = async () => {
@@ -441,7 +486,7 @@ export default function DataDomainsPage() {
           action={{ label: 'Add Domain', onClick: openAdd }}
           secondaryAction={canWrite ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Left: Domain index */}
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
@@ -683,6 +728,69 @@ export default function DataDomainsPage() {
       )}
 
       {/* AI Generate Preview Modal */}
+      {/* Industry picker — opens when the active org and its visible
+          ancestors carry no `industry`, so the user can still kick off
+          a generation. Common for division/department-scoped admins
+          whose parent company isn't in their visible org set. */}
+      {industryPickerOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setIndustryPickerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--color-surface)', borderRadius: 10,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24,
+              maxWidth: 480, width: '92vw',
+            }}
+          >
+            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Pick an industry</h3>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+              The active organization doesn't have an industry on file. Choose one for this generation and Procela will ask Claude for standard data domains in that industry. Your org isn't modified.
+            </p>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 6 }}>
+              Industry
+            </label>
+            <select
+              value={pickedIndustry}
+              onChange={(e) => setPickedIndustry(e.target.value)}
+              autoFocus
+              style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', marginBottom: 18 }}
+            >
+              {INDUSTRIES.map((i) => (
+                <option key={i} value={i}>{i}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setIndustryPickerOpen(false)}
+                style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const chosen = pickedIndustry;
+                  setIndustryPickerOpen(false);
+                  if (chosen) await generateForIndustry(chosen);
+                }}
+                disabled={!pickedIndustry || generating}
+                style={{
+                  padding: '8px 14px',
+                  background: pickedIndustry ? 'var(--color-primary)' : '#e5e7eb',
+                  color: pickedIndustry ? '#fff' : 'var(--color-text-muted)',
+                  border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600,
+                  cursor: pickedIndustry ? 'pointer' : 'default',
+                }}
+              >
+                {generating ? 'Generating…' : 'Generate domains'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showGeneratePreview && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1050, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowGeneratePreview(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--color-surface)', borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24, maxWidth: 600, width: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>

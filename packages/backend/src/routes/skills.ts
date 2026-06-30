@@ -1,44 +1,29 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import {
-  listUnqualifiedAssignments,
   unqualifiedSummaryByPerson,
+  listUnqualifiedAssignments,
   rankPeopleByRoleSkills,
   orgSkillGapReport,
 } from '../services/skill-coverage';
+import {
+  SKILL_CATEGORIES,
+  skills,
+  type SkillCategory,
+  type StoredSkill,
+} from '../stores/skills';
+
+// Re-export so existing imports keep working without a churn diff.
+export { skills, SKILL_CATEGORIES };
+export type { StoredSkill };
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills — DAMA-aligned capabilities that agents (and people) can possess.
 // Phase 1 of the AI agent automation feature. Each skill belongs to a
 // category and an org; the seed endpoint populates a standard taxonomy.
 // ──────────────────────────────────────────────────────────────────────────
-
-const SKILL_CATEGORIES = [
-  'DATA_QUALITY',
-  'METADATA',
-  'ARCHITECTURE',
-  'SECURITY',
-  'INTEGRATION',
-  'ANALYTICS',
-  'GOVERNANCE',
-  'COMMUNICATION',
-] as const;
-
-type SkillCategory = typeof SKILL_CATEGORIES[number];
-
-export interface StoredSkill {
-  id: string;
-  orgId: string;
-  name: string;
-  category: SkillCategory;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export const skills: StoredSkill[] = loadStore<StoredSkill>('skills');
 
 const router = Router();
 
@@ -101,56 +86,6 @@ const SEED_SKILLS: Array<{ name: string; category: SkillCategory; description: s
   { name: 'Business Translation', category: 'COMMUNICATION', description: 'Translate between technical data concepts and business language for stakeholders.' },
   { name: 'Executive Reporting', category: 'COMMUNICATION', description: 'Prepare executive-level summaries and presentations on data governance outcomes.' },
 ];
-
-// ── Skill-coverage value loops ───────────────────────────────────────────
-// These routes are mounted before the generic /:id handler so the literal
-// path segments don't get captured as ids.
-
-/** GET /api/v1/skills/coverage?orgId=… — qualified-person check across the
- *  catalog. Returns per-person summary plus per-node missing skills, so
- *  the People table can show a "Skill gaps" column and the Process
- *  Catalog can render an amber chip on each unqualified activity. */
-router.get('/coverage', (req: Request, res: Response) => {
-  const orgId = String(req.query.orgId || '');
-  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-
-  const summary = unqualifiedSummaryByPerson(orgId);
-  const detailed = listUnqualifiedAssignments(orgId);
-
-  const byPerson: Record<string, { unqualifiedCount: number; sample: string[] }> = {};
-  for (const [pid, entry] of summary.entries()) byPerson[pid] = entry;
-
-  const byNode: Record<string, { missingSkillIds: string[]; missingSkillNames: string[] }> = {};
-  for (const list of detailed.values()) {
-    for (const a of list) {
-      byNode[a.nodeId] = { missingSkillIds: a.missingSkillIds, missingSkillNames: a.missingSkillNames };
-    }
-  }
-
-  res.json({ success: true, data: { byPerson, byNode } });
-});
-
-/** GET /api/v1/skills/recommend-for-role?orgId=…&skills=A,B,C&limit=5 —
- *  Rank people for a role by overlap between their held skills and the
- *  role's required-skill names (case-insensitive). */
-router.get('/recommend-for-role', (req: Request, res: Response) => {
-  const orgId = String(req.query.orgId || '');
-  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  const skillsParam = String(req.query.skills || '');
-  const requiredSkillNames = skillsParam.split(',').map((s) => s.trim()).filter(Boolean);
-  const limitRaw = Number(req.query.limit);
-  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 5;
-  res.json({ success: true, data: rankPeopleByRoleSkills(orgId, requiredSkillNames, limit) });
-});
-
-/** GET /api/v1/skills/gap-report?orgId=… — org-wide gap report:
- *  required-by-activities vs held-by-people per skill, sorted
- *  highest-gap-first. Drives the dashboard widget. */
-router.get('/gap-report', (req: Request, res: Response) => {
-  const orgId = String(req.query.orgId || '');
-  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  res.json({ success: true, data: orgSkillGapReport(orgId) });
-});
 
 /** GET /api/v1/skills — list all skills, optionally filtered by ?orgId= */
 router.get('/', (req: Request, res: Response) => {
@@ -237,6 +172,74 @@ router.delete('/:id', (req: Request, res: Response) => {
   skills.splice(idx, 1);
   saveStore('skills', skills);
   res.status(204).send();
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Value-loop endpoints — closes the gap between "we collected skills"
+// and "the app does something with them." See services/skill-coverage.ts
+// for the math. All four endpoints are org-scoped via ?orgId=...
+// ──────────────────────────────────────────────────────────────────────────
+
+/** GET /api/v1/skills/coverage?orgId=…
+ *  Two slices in one response so the People page can render its
+ *  skill-coverage column AND the Process Catalog can lookup
+ *  warnings without a second round-trip:
+ *    byPerson: per-person summary (count + sample of unqualified
+ *              activities). Keyed by personId.
+ *    byNode:   per-node detail (missing skill names). Keyed by
+ *              nodeId. Populated only for nodes whose responsible
+ *              person is short on skills. */
+router.get('/coverage', (req: Request, res: Response) => {
+  const orgId = String(req.query.orgId || '');
+  if (!orgId) {
+    res.status(400).json({ success: false, error: 'orgId is required' });
+    return;
+  }
+  const byPersonMap = unqualifiedSummaryByPerson(orgId);
+  const byPerson: Record<string, { unqualifiedCount: number; sample: string[] }> = {};
+  for (const [pid, summary] of byPersonMap) byPerson[pid] = summary;
+
+  const unqualifiedMap = listUnqualifiedAssignments(orgId);
+  const byNode: Record<string, { personId: string; missingSkillNames: string[] }> = {};
+  for (const [pid, list] of unqualifiedMap) {
+    for (const entry of list) {
+      byNode[entry.nodeId] = { personId: pid, missingSkillNames: entry.missingSkillNames };
+    }
+  }
+
+  res.json({ success: true, data: { byPerson, byNode } });
+});
+
+/** GET /api/v1/skills/recommend-for-role?orgId=…&skills=Skill1,Skill2,…
+ *  Used by the RoleDetailDrawer's "Best-matching people" panel.
+ *  The skill list is passed by name because the role definitions
+ *  in roleDefinitions.ts carry names rather than catalog ids — a
+ *  role saying it needs "Data Cataloging" should match any person
+ *  whose catalog entry happens to be named "Data Cataloging"
+ *  regardless of id. */
+router.get('/recommend-for-role', (req: Request, res: Response) => {
+  const orgId = String(req.query.orgId || '');
+  if (!orgId) {
+    res.status(400).json({ success: false, error: 'orgId is required' });
+    return;
+  }
+  const raw = String(req.query.skills || '');
+  const requiredNames = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  const limit = parseInt(String(req.query.limit || '5'), 10) || 5;
+  res.json({ success: true, data: rankPeopleByRoleSkills(orgId, requiredNames, limit) });
+});
+
+/** GET /api/v1/skills/gap-report?orgId=…
+ *  Org-wide skill-gap report for the dashboard widget. Skills are
+ *  sorted by gap score descending so the worst-staffed required
+ *  skills bubble to the top. */
+router.get('/gap-report', (req: Request, res: Response) => {
+  const orgId = String(req.query.orgId || '');
+  if (!orgId) {
+    res.status(400).json({ success: false, error: 'orgId is required' });
+    return;
+  }
+  res.json({ success: true, data: orgSkillGapReport(orgId) });
 });
 
 export default router;

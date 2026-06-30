@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomBytes, randomInt, createHash } from 'crypto';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import { dataAssets } from './data-assets';
 import { createNotification } from './notifications';
@@ -71,6 +71,7 @@ export interface StoredConnector {
 }
 
 export const connectors: StoredConnector[] = loadStore<StoredConnector>('connectors');
+registerStore('connectors', connectors);
 
 // Audit / detail entries the agent posts. Lives in its own store so
 // the per-connector activity tab can scan a focused slice rather than
@@ -85,6 +86,7 @@ export interface StoredConnectorEvent {
   data: Record<string, any>;
 }
 export const connectorEvents: StoredConnectorEvent[] = loadStore<StoredConnectorEvent>('connectorEvents');
+registerStore('connectorEvents', connectorEvents);
 
 const router = Router();
 

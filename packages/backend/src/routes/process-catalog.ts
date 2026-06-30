@@ -1,9 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { getVisibleOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
+import { rankSuggestions } from '../services/asset-suggestion.service';
+import { rankSystemSuggestions } from '../services/system-suggestion.service';
+import { rankPeopleSuggestions } from '../services/people-suggestion.service';
+// data-assets and mappings both import from this file, so adding the
+// matching imports here creates a circular dep. Resolve the
+// arrays lazily via require() at request time — by then the cycle
+// has resolved and the exports are populated.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 import { organizations } from './organizations';
 import { people } from './people';
 import { createNotification } from './notifications';
@@ -156,8 +164,37 @@ export interface ProcessVersion {
 
 export { SIMPLE_TRANSITIONS, ADVANCED_TRANSITIONS, SIMPLE_LOCKED, ADVANCED_LOCKED };
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
+registerStore('processNodes', processNodes);
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
+registerStore('flowRelationships', flowRelationships);
 export const processVersions: ProcessVersion[] = loadStore<ProcessVersion>('processVersions');
+registerStore('processVersions', processVersions);
+
+// Phase 3 learning loop. Each row records "user dismissed
+// suggestion (kind, targetId) for node (nodeId)" so the scoring
+// services can filter it out on subsequent fetches instead of the
+// suggestion silently returning. Keyed by composite (nodeId, kind,
+// targetId); duplicate POSTs are idempotent.
+export interface SuggestionDismissal {
+  id: string;
+  orgId: string;
+  nodeId: string;
+  kind: 'asset' | 'system' | 'person';
+  targetId: string;
+  dismissedBy: string | null;
+  dismissedAt: string;
+}
+export const suggestionDismissals: SuggestionDismissal[] =
+  loadStore<SuggestionDismissal>('suggestionDismissals');
+registerStore('suggestionDismissals', suggestionDismissals);
+
+function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['kind']): Set<string> {
+  const out = new Set<string>();
+  for (const d of suggestionDismissals) {
+    if (d.nodeId === nodeId && d.kind === kind) out.add(d.targetId);
+  }
+  return out;
+}
 
 // ── One-time backfill of the `domain` classifier ──
 // Pre-existing nodes have no `domain`. Resolve it once from the
@@ -893,6 +930,260 @@ router.post('/nodes/:id/clone', (req: Request, res: Response) => {
 router.get('/nodes/:id/validate', (req: Request, res: Response) => {
   const result = validateProcessIntegrity(param(req.params.id));
   res.json({ success: true, data: result });
+});
+
+/** GET /nodes/:id/asset-suggestions — Phase 3 Discover. Returns a
+ *  ranked list of DataAssets that look like good candidates to map to
+ *  this process node, based on name + description overlap and shared
+ *  system affinity. Always excludes assets already mapped to this
+ *  node. ?limit=N caps the response (default 5); ?minScore=X drops
+ *  candidates below the threshold (default 0.1). */
+router.get('/nodes/:id/asset-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) {
+    res.status(404).json({ success: false, error: 'Node not found' });
+    return;
+  }
+  const limitRaw = parseInt(String(req.query.limit ?? ''), 10);
+  const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
+  const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
+  // Resolve the foreign stores at request time. Static imports here
+  // would race against the data-assets / mappings → process-catalog
+  // import cycle.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dataAssets } = require('./data-assets');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { mappings } = require('./mappings');
+  const orgAssets = dataAssets.filter((a: any) => a.orgId === node.orgId);
+  const dismissed = dismissedTargetsFor(node.id, 'asset');
+  const ranked = rankSuggestions(
+    { id: node.id, name: node.name, description: node.description, systemIds: node.systemIds },
+    orgAssets,
+    mappings,
+    { limit, minScore },
+  );
+  const data = ranked.filter((r) => !dismissed.has(r.assetId));
+  res.json({ success: true, data });
+});
+
+/** GET /nodes/:id/system-suggestions — Phase 3 expansion. Ranked
+ *  Systems the node looks like it should declare in its systemIds,
+ *  based on name/description overlap and "used by sibling steps".
+ *  Excludes systems already declared by the node and any dismissed by
+ *  the user. */
+router.get('/nodes/:id/system-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) {
+    res.status(404).json({ success: false, error: 'Node not found' });
+    return;
+  }
+  const limitRaw = parseInt(String(req.query.limit ?? ''), 10);
+  const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
+  const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems');
+  const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
+  const dismissed = dismissedTargetsFor(node.id, 'system');
+  const data = rankSystemSuggestions(
+    { id: node.id, parentId: node.parentId, name: node.name, description: node.description, systemIds: node.systemIds },
+    orgSystems,
+    processNodes,
+    dismissed,
+    { limit, minScore },
+  );
+  res.json({ success: true, data });
+});
+
+/** GET /nodes/:id/people-suggestions — Phase 3 expansion. Ranked
+ *  People that look like candidates for involvement on this step,
+ *  based on title/jobRole overlap, required-skill match, and ownership
+ *  of any system the step already declares. Excludes the existing
+ *  owner / responsible person and any dismissed by the user. */
+router.get('/nodes/:id/people-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) {
+    res.status(404).json({ success: false, error: 'Node not found' });
+    return;
+  }
+  const limitRaw = parseInt(String(req.query.limit ?? ''), 10);
+  const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
+  const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems');
+  const orgPeople = people.filter((p: any) => (p.orgIds || []).includes(node.orgId));
+  const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
+  const dismissed = dismissedTargetsFor(node.id, 'person');
+  const data = rankPeopleSuggestions(
+    {
+      id: node.id,
+      name: node.name,
+      description: node.description,
+      systemIds: node.systemIds,
+      requiredSkillIds: node.requiredSkillIds,
+      ownerId: node.ownerId,
+      responsiblePersonId: node.responsiblePersonId,
+    },
+    orgPeople,
+    orgSystems,
+    dismissed,
+    { limit, minScore },
+  );
+  res.json({ success: true, data });
+});
+
+/** GET /data-graph — Phase 3 visualization. Returns the bipartite
+ *  process↔data graph as three flat arrays so the frontend can draw
+ *  it without N round-trips: every activity in the (optionally
+ *  org-scoped) tree, every data asset in scope, and every mapping
+ *  edge between them. Each activity carries its parent-process name
+ *  for grouping; each asset carries its system + tier for grouping
+ *  and badge rendering. Edges carry the linkType so the visualization
+ *  can colour or weight them. Excludes governance-domain activities
+ *  by default since the data map is an operational view; pass
+ *  ?includeGovernance=1 to opt them in. */
+router.get('/data-graph', (req: Request, res: Response) => {
+  const { orgId } = req.query;
+  const includeGov = req.query.includeGovernance === '1' || req.query.includeGovernance === 'true';
+  const scope = orgId ? getVisibleOrgScope(orgId as string) : null;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dataAssets } = require('./data-assets');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { mappings } = require('./mappings');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('./systems');
+
+  const inScope = (n: { orgId: string; orgIds: string[] }) =>
+    !scope || scope.has(n.orgId) || (n.orgIds || []).some((id) => scope.has(id));
+
+  const parentNameById = new Map<string, string>();
+  for (const n of processNodes) parentNameById.set(n.id, n.name);
+
+  const activities = processNodes
+    .filter((n) => n.level === 'ACTIVITY' && inScope(n))
+    .filter((n) => includeGov || !isGovernanceNode(n))
+    .map((n) => ({
+      id: n.id,
+      name: n.name,
+      parentProcessId: n.parentId,
+      parentProcessName: n.parentId ? parentNameById.get(n.parentId) || null : null,
+      systemIds: n.systemIds || [],
+    }));
+  const activityIdSet = new Set(activities.map((a) => a.id));
+
+  const orgAssetIds = new Set<string>();
+  const assetsOut = dataAssets
+    .filter((a: any) => !scope || scope.has(a.orgId))
+    .map((a: any) => {
+      orgAssetIds.add(a.id);
+      const sysName = a.systemId
+        ? systems.find((s: any) => s.id === a.systemId)?.name || null
+        : null;
+      return {
+        id: a.id,
+        name: a.name,
+        systemId: a.systemId,
+        systemName: sysName,
+        governanceTier: a.governanceTier,
+      };
+    });
+
+  const edges = mappings
+    .filter((m: any) => m.dataAssetId && activityIdSet.has(m.processStepId) && orgAssetIds.has(m.dataAssetId))
+    .map((m: any) => ({
+      mappingId: m.id,
+      activityId: m.processStepId,
+      assetId: m.dataAssetId,
+      linkType: m.linkType,
+    }));
+
+  // Keep only assets that actually participate in an edge — the
+  // visualization showing every orphan asset on the right column
+  // crushes the layout and orphans have their own dedicated page.
+  const referencedAssetIds = new Set(edges.map((e: any) => e.assetId));
+  const visibleAssets = assetsOut.filter((a: any) => referencedAssetIds.has(a.id));
+
+  res.json({
+    success: true,
+    data: {
+      activities,
+      assets: visibleAssets,
+      edges,
+      stats: {
+        activityCount: activities.length,
+        assetCount: visibleAssets.length,
+        edgeCount: edges.length,
+        mappedActivityCount: new Set(edges.map((e: any) => e.activityId)).size,
+      },
+    },
+  });
+});
+
+/** POST /nodes/:id/suggestions/dismiss — Phase 3 learning loop. Body
+ *  { kind: 'asset'|'system'|'person', targetId } records a dismissal
+ *  that hides the suggestion from future ranks for this node.
+ *  Idempotent: a duplicate dismissal returns the existing row rather
+ *  than 409. */
+router.post('/nodes/:id/suggestions/dismiss', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const node = findNode(nodeId);
+  if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+  const { kind, targetId } = req.body || {};
+  if (kind !== 'asset' && kind !== 'system' && kind !== 'person') {
+    res.status(400).json({ success: false, error: 'kind must be asset, system, or person' });
+    return;
+  }
+  if (typeof targetId !== 'string' || !targetId.trim()) {
+    res.status(400).json({ success: false, error: 'targetId is required' });
+    return;
+  }
+  const existing = suggestionDismissals.find(
+    (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
+  );
+  if (existing) { res.json({ success: true, data: existing }); return; }
+  const row: SuggestionDismissal = {
+    id: uuid(),
+    orgId: node.orgId,
+    nodeId,
+    kind,
+    targetId,
+    dismissedBy: (req as any).user?.id ?? null,
+    dismissedAt: new Date().toISOString(),
+  };
+  suggestionDismissals.push(row);
+  saveStore('suggestionDismissals', suggestionDismissals);
+  auditService.log(node.orgId, row.dismissedBy, 'SuggestionDismissal', row.id, 'CREATE', null, row);
+  res.status(201).json({ success: true, data: row });
+});
+
+/** DELETE /nodes/:id/suggestions/dismiss/:kind/:targetId — undo a
+ *  prior dismissal so the suggestion can come back. */
+router.delete('/nodes/:id/suggestions/dismiss/:kind/:targetId', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const kind = param(req.params.kind);
+  const targetId = param(req.params.targetId);
+  const idx = suggestionDismissals.findIndex(
+    (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
+  );
+  if (idx < 0) { res.status(404).json({ success: false, error: 'Dismissal not found' }); return; }
+  const [removed] = suggestionDismissals.splice(idx, 1);
+  saveStore('suggestionDismissals', suggestionDismissals);
+  auditService.log(removed.orgId, (req as any).user?.id ?? null, 'SuggestionDismissal', removed.id, 'DELETE', removed, null);
+  res.json({ success: true });
+});
+
+/** GET /nodes/:id/dismissed-suggestions — list dismissals for a node.
+ *  Useful for an admin UI that wants to surface "hidden by user" rows
+ *  so they can be restored. */
+router.get('/nodes/:id/dismissed-suggestions', (req: Request, res: Response) => {
+  const nodeId = param(req.params.id);
+  const rows = suggestionDismissals.filter((d) => d.nodeId === nodeId);
+  res.json({ success: true, data: rows });
 });
 
 // ── VERSION HISTORY ──

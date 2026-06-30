@@ -5,6 +5,7 @@ import { useOrgContext } from '@/stores/orgContext';
 import { useToastStore } from '@/stores/toastStore';
 import PersonPicker from '@/components/PersonPicker';
 import EmptyState from '@/components/EmptyState';
+import Page from '@/components/Page';
 import { CheckCircle2 } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -157,14 +158,16 @@ export default function AssignOwnersPage() {
 
   if (!activeOrgId) {
     return (
-      <div style={{ maxWidth: 640, margin: '48px auto', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-        <p>Select an organization from the header to review ownership.</p>
-      </div>
+      <Page width="narrow">
+        <div style={{ marginTop: 48, textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+          <p>Select an organization from the header to review ownership.</p>
+        </div>
+      </Page>
     );
   }
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto', padding: '8px 0 64px' }}>
+    <Page width="wizard" padding="8px 0 64px">
       <button onClick={() => navigate('/setup')}
         style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: 0, marginBottom: 12 }}>
         ← Back to Get Started
@@ -250,7 +253,7 @@ export default function AssignOwnersPage() {
           </section>
         ))
       )}
-    </div>
+    </Page>
   );
 }
 

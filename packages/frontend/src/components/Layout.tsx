@@ -4,6 +4,7 @@ import styles from './Layout.module.css';
 import Breadcrumbs from './Breadcrumbs';
 import ChatPanel from './ChatPanel';
 import SessionTimeout from './SessionTimeout';
+import IdleTimeout from './IdleTimeout';
 import ToastContainer from './ToastContainer';
 import RoleDetailDrawer from './RoleDetailDrawer';
 import ShortcutsModal from './ShortcutsModal';
@@ -12,6 +13,7 @@ import OnboardingWizard from './OnboardingWizard';
 import CommandPalette from './CommandPalette';
 import MobileNavDrawer from './MobileNavDrawer';
 import NotificationsMenu from './NotificationsMenu';
+import UserMenu from './UserMenu';
 import Sidebar from './Sidebar';
 import {
   navSections,
@@ -21,24 +23,20 @@ import {
   type NavItem,
 } from './navConfig';
 
-import DensityToggle from './DensityToggle';
-import TerminologyToggle from './TerminologyToggle';
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { usePermissions } from '@/hooks/usePermissions';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 
 
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout } = useAuthStore();
   const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey, triggerRefresh } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
-  const { role } = usePermissions();
 
   // Apply the customer's theme (company name, logo, colors) as early as
   // possible. The store also fetches from /login via brandingStore bootstrap;
@@ -268,16 +266,17 @@ export default function Layout() {
     }
   };
 
-  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
-
-  // Focused reading mode for the Help guide: when the route is
-  // /help we strip the sidebar, header, chat panel and every other
-  // bit of app chrome so the user gets a clean, single-purpose
-  // reading view. Only a thin top bar remains, with the Procela
-  // logo and a Close button. Close prefers history.back() so the
-  // user returns to wherever they came from, but falls back to "/"
-  // when help was opened cold from a deep link.
-  if (location.pathname === '/help') {
+  // Focused reading mode for the Help guide *and* the Training Guide:
+  // when the route is /help or /help/training we strip the sidebar,
+  // header, chat panel and every other bit of app chrome so the user
+  // gets a clean, single-purpose reading view. Only a thin top bar
+  // remains, with the Procela logo, a context label, and a Close
+  // button. Close prefers window.close() (these pages are opened in
+  // their own popup), then history.back(), then falls back to "/"
+  // for deep links.
+  const isReadingMode = location.pathname === '/help' || location.pathname === '/help/training';
+  const readingModeLabel = location.pathname === '/help/training' ? 'Training Guide' : 'Help Guide';
+  if (isReadingMode) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' }}>
         <header style={{
@@ -292,7 +291,7 @@ export default function Layout() {
               alt={branding.companyName || 'Procela'}
               style={{ height: 32, width: 'auto' }}
             />
-            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Help Guide</span>
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{readingModeLabel}</span>
           </div>
           <button
             type="button"
@@ -320,7 +319,7 @@ export default function Layout() {
               border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
               cursor: 'pointer',
             }}
-            title="Close the help guide window"
+            title={`Close the ${readingModeLabel.toLowerCase()} window`}
           >
             × Close
           </button>
@@ -345,32 +344,9 @@ export default function Layout() {
       <div className={styles.main}>
         <header className={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
-            {/* Command palette trigger — full search lives in the Cmd-K modal. */}
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 10px', borderRadius: 'var(--radius-md)',
-                background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-                cursor: 'pointer', color: 'var(--color-text-muted)',
-                fontSize: 13, width: 'min(280px, 40vw)', textAlign: 'left',
-              }}
-              title="Search (press / or Ctrl+K)"
-            >
-              <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Search anything...
-              </span>
-              <span style={{
-                display: 'inline-block', padding: '1px 5px', fontSize: 10,
-                fontFamily: 'var(--font-mono, monospace)',
-                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                borderRadius: 3,
-              }}>
-                {navigator.platform.toUpperCase().includes('MAC') ? '⌘K' : 'Ctrl+K'}
-              </span>
-            </button>
+            {/* Organization picker — placed FIRST so the active-scope
+                control sits at the leading edge of the header, the
+                same position users instinctively check for context. */}
             {(() => {
               if (orgOptions.length === 0) return (
                 <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>No organization defined</span>
@@ -406,12 +382,18 @@ export default function Layout() {
                   <select
                     value={activeOrgId}
                     onChange={(e) => handleOrgChange(e.target.value)}
+                    aria-label="Active organization scope"
                     style={{
                       padding: '4px 10px', fontSize: 13, fontWeight: 500,
                       border: '1px solid var(--color-border)', borderRadius: 4,
                       background: 'var(--color-surface)',
                       color: 'var(--color-text)',
-                      minWidth: 220, cursor: 'pointer',
+                      // Cap at the available width so the picker doesn't push
+                      // the rest of the header off-screen on narrow viewports.
+                      // The min keeps it usable when there's room.
+                      width: 'min(220px, 100%)',
+                      maxWidth: '100%',
+                      cursor: 'pointer',
                     }}
                   >
                     {companies.map((co) => {
@@ -442,8 +424,34 @@ export default function Layout() {
                 </div>
               );
             })()}
+            {/* Command palette trigger — full search lives in the Cmd-K modal. */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 'var(--radius-md)',
+                background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+                cursor: 'pointer', color: 'var(--color-text-muted)',
+                fontSize: 13, width: 'min(280px, 40vw)', textAlign: 'left',
+              }}
+              title="Search (press / or Ctrl+K)"
+            >
+              <span className={styles.searchIcon}>{'\uD83D\uDD0D'}</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Search anything...
+              </span>
+              <span style={{
+                display: 'inline-block', padding: '1px 5px', fontSize: 10,
+                fontFamily: 'var(--font-mono, monospace)',
+                background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+                borderRadius: 3,
+              }}>
+                {navigator.platform.toUpperCase().includes('MAC') ? '⌘K' : 'Ctrl+K'}
+              </span>
+            </button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {/* Ask AI — surfaces the ChatPanel from the top bar. The
                 ChatPanel still owns its own open state and its floating
                 bottom-right bubble; this button is a second entry point
@@ -488,31 +496,7 @@ export default function Layout() {
             </button>
             {/* Notifications bell + dropdown */}
             <NotificationsMenu />
-            <TerminologyToggle />
-            <DensityToggle />
-            <div className={styles.userMenu}>
-              <div className={styles.userAvatar}>{userInitial}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-                <span>{user?.name || 'User'}</span>
-                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {role.replace('_', ' ')}
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={handleSignOut}
-              style={{
-                padding: '6px 14px',
-                fontSize: '13px',
-                background: 'transparent',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                color: '#64748b',
-                cursor: 'pointer',
-              }}
-            >
-              Sign out
-            </button>
+            <UserMenu onSignOut={handleSignOut} />
           </div>
         </header>
         <main id="main-content" className={styles.content}>
@@ -553,6 +537,7 @@ export default function Layout() {
           />
         )}
         <SessionTimeout />
+        <IdleTimeout />
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

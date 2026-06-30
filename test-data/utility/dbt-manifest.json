@@ -1,0 +1,478 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+    "dbt_version": "1.7.0",
+    "generated_at": "2026-06-15T18:00:00Z",
+    "project_name": "tidewater_analytics",
+    "adapter_type": "snowflake"
+  },
+
+  "sources": {
+    "source.tidewater_analytics.scada_electric.outage_events": {
+      "unique_id": "source.tidewater_analytics.scada_electric.outage_events",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "SCADA_ELECTRIC",
+      "name": "outage_events",
+      "identifier": "OUTAGE_EVENTS",
+      "source_name": "scada_electric",
+      "description": "Raw outage events streamed from the OMS-integrated electric SCADA. One row per device-level outage event including start, restore, affected meters."
+    },
+    "source.tidewater_analytics.scada_electric.transformer_loadings": {
+      "unique_id": "source.tidewater_analytics.scada_electric.transformer_loadings",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "SCADA_ELECTRIC",
+      "name": "transformer_loadings",
+      "identifier": "TRANSFORMER_LOADINGS",
+      "source_name": "scada_electric",
+      "description": "Five-minute transformer loading telemetry across all distribution substations."
+    },
+    "source.tidewater_analytics.cis.customer_master": {
+      "unique_id": "source.tidewater_analytics.cis.customer_master",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "CIS",
+      "name": "customer_master",
+      "identifier": "CUSTOMER_MASTER",
+      "source_name": "cis",
+      "description": "Customer Information System master — billing-of-record account, service class, current premise."
+    },
+    "source.tidewater_analytics.cis.service_addresses": {
+      "unique_id": "source.tidewater_analytics.cis.service_addresses",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "CIS",
+      "name": "service_addresses",
+      "identifier": "SERVICE_ADDRESSES",
+      "source_name": "cis",
+      "description": "Geocoded service addresses per premise; joined to customer_master via premise_id."
+    },
+    "source.tidewater_analytics.ami.meter_reads_15min": {
+      "unique_id": "source.tidewater_analytics.ami.meter_reads_15min",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "AMI",
+      "name": "meter_reads_15min",
+      "identifier": "METER_READS_15MIN",
+      "source_name": "ami",
+      "description": "Fifteen-minute interval consumption from AMI for electric and water meters. ~120M rows/day."
+    },
+    "source.tidewater_analytics.ami.meter_inventory": {
+      "unique_id": "source.tidewater_analytics.ami.meter_inventory",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "AMI",
+      "name": "meter_inventory",
+      "identifier": "METER_INVENTORY",
+      "source_name": "ami",
+      "description": "AMI meter inventory — serial, model, install date, premise mapping."
+    },
+    "source.tidewater_analytics.gis.distribution_assets": {
+      "unique_id": "source.tidewater_analytics.gis.distribution_assets",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "GIS",
+      "name": "distribution_assets",
+      "identifier": "DISTRIBUTION_ASSETS",
+      "source_name": "gis",
+      "description": "Electric distribution assets from GIS: poles, transformers, conductors, switches with as-built geometry."
+    },
+    "source.tidewater_analytics.gis.water_mains": {
+      "unique_id": "source.tidewater_analytics.gis.water_mains",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "GIS",
+      "name": "water_mains",
+      "identifier": "WATER_MAINS",
+      "source_name": "gis",
+      "description": "Water distribution mains — pipe diameter, material, install year, pressure zone."
+    },
+    "source.tidewater_analytics.scada_water.flow_meters": {
+      "unique_id": "source.tidewater_analytics.scada_water.flow_meters",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "SCADA_WATER",
+      "name": "flow_meters",
+      "identifier": "FLOW_METERS",
+      "source_name": "scada_water",
+      "description": "Per-minute water SCADA flow meter telemetry across treatment plants and distribution mains."
+    },
+    "source.tidewater_analytics.hydraulic.pressure_zones": {
+      "unique_id": "source.tidewater_analytics.hydraulic.pressure_zones",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "HYDRAULIC",
+      "name": "pressure_zones",
+      "identifier": "PRESSURE_ZONES",
+      "source_name": "hydraulic",
+      "description": "Pressure zone definitions and modelled pressures from the hydraulic model."
+    },
+    "source.tidewater_analytics.lims.water_quality_samples": {
+      "unique_id": "source.tidewater_analytics.lims.water_quality_samples",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "LIMS",
+      "name": "water_quality_samples",
+      "identifier": "WATER_QUALITY_SAMPLES",
+      "source_name": "lims",
+      "description": "Lab Information Management System water quality samples — chemistry, microbiology, regulatory analytes."
+    },
+    "source.tidewater_analytics.ehs.safety_incidents": {
+      "unique_id": "source.tidewater_analytics.ehs.safety_incidents",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "EHS",
+      "name": "safety_incidents",
+      "identifier": "SAFETY_INCIDENTS",
+      "source_name": "ehs",
+      "description": "EHS-reported safety incidents — near-miss, recordable, serious-injury classification per OSHA."
+    },
+    "source.tidewater_analytics.regulatory.nerc_cip_logs": {
+      "unique_id": "source.tidewater_analytics.regulatory.nerc_cip_logs",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "REGULATORY",
+      "name": "nerc_cip_logs",
+      "identifier": "NERC_CIP_LOGS",
+      "source_name": "regulatory",
+      "description": "Access and configuration logs for NERC CIP-classified Bulk Electric System assets."
+    },
+    "source.tidewater_analytics.finance.gl_entries": {
+      "unique_id": "source.tidewater_analytics.finance.gl_entries",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "FINANCE",
+      "name": "gl_entries",
+      "identifier": "GL_ENTRIES",
+      "source_name": "finance",
+      "description": "General ledger entries from the ERP — used for rate-case allocations and operational cost reporting."
+    },
+    "source.tidewater_analytics.workorders.electric_jobs": {
+      "unique_id": "source.tidewater_analytics.workorders.electric_jobs",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "WORKORDERS",
+      "name": "electric_jobs",
+      "identifier": "ELECTRIC_JOBS",
+      "source_name": "workorders",
+      "description": "Electric work orders — outage restoration, planned maintenance, capital projects."
+    },
+    "source.tidewater_analytics.workorders.water_jobs": {
+      "unique_id": "source.tidewater_analytics.workorders.water_jobs",
+      "resource_type": "source",
+      "database": "TIDEWATER_RAW",
+      "schema": "WORKORDERS",
+      "name": "water_jobs",
+      "identifier": "WATER_JOBS",
+      "source_name": "workorders",
+      "description": "Water work orders — main breaks, hydrant flushing, service installations."
+    }
+  },
+
+  "nodes": {
+    "model.tidewater_analytics.stg_outage_events": {
+      "unique_id": "model.tidewater_analytics.stg_outage_events",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_outage_events",
+      "description": "Cleansed and typed outage events. Casts timestamps, splits affected-meter array, normalizes cause codes to the SAIDI/SAIFI taxonomy.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.scada_electric.outage_events"] }
+    },
+    "model.tidewater_analytics.stg_transformer_loadings": {
+      "unique_id": "model.tidewater_analytics.stg_transformer_loadings",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_transformer_loadings",
+      "description": "Five-minute transformer loading downsampled to fifteen-minute intervals with kVA peak and rolling-hour averages.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.scada_electric.transformer_loadings"] }
+    },
+    "model.tidewater_analytics.stg_customer_master": {
+      "unique_id": "model.tidewater_analytics.stg_customer_master",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_customer_master",
+      "description": "Cleansed CIS customer master with consistent service-class codes, billing-status flags, premise FK.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.cis.customer_master"] }
+    },
+    "model.tidewater_analytics.stg_service_addresses": {
+      "unique_id": "model.tidewater_analytics.stg_service_addresses",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_service_addresses",
+      "description": "Cleansed service addresses with USPS-validated street normalization and lat/long geocoding.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.cis.service_addresses"] }
+    },
+    "model.tidewater_analytics.stg_meter_reads_15min": {
+      "unique_id": "model.tidewater_analytics.stg_meter_reads_15min",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_meter_reads_15min",
+      "description": "Validated AMI fifteen-minute reads. Drops zero-flow rows for inactive meters and back-fills micro-gaps via linear interpolation.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.ami.meter_reads_15min", "source.tidewater_analytics.ami.meter_inventory"] }
+    },
+    "model.tidewater_analytics.stg_distribution_assets": {
+      "unique_id": "model.tidewater_analytics.stg_distribution_assets",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_distribution_assets",
+      "description": "GIS distribution assets with type taxonomy normalized to the joint-pole / overhead / underground classification used in reliability reporting.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.gis.distribution_assets"] }
+    },
+    "model.tidewater_analytics.stg_water_mains": {
+      "unique_id": "model.tidewater_analytics.stg_water_mains",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_water_mains",
+      "description": "Cleansed water mains with derived age-bucket and Hazen-Williams roughness coefficient lookups.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.gis.water_mains"] }
+    },
+    "model.tidewater_analytics.stg_water_quality_samples": {
+      "unique_id": "model.tidewater_analytics.stg_water_quality_samples",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_water_quality_samples",
+      "description": "LIMS samples cast to a long-form measurements table with regulatory threshold flagging.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.lims.water_quality_samples", "seed.tidewater_analytics.sdwa_thresholds"] }
+    },
+    "model.tidewater_analytics.stg_pressure_zones": {
+      "unique_id": "model.tidewater_analytics.stg_pressure_zones",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_pressure_zones",
+      "description": "Pressure zones tagged with the parent service area and a normalized 'pressure_class' (low / nominal / high).",
+      "depends_on": { "nodes": ["source.tidewater_analytics.hydraulic.pressure_zones"] }
+    },
+    "model.tidewater_analytics.stg_safety_incidents": {
+      "unique_id": "model.tidewater_analytics.stg_safety_incidents",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "STAGING",
+      "name": "stg_safety_incidents",
+      "description": "Safety incidents standardized to OSHA recordable categories with severity score.",
+      "depends_on": { "nodes": ["source.tidewater_analytics.ehs.safety_incidents"] }
+    },
+
+    "model.tidewater_analytics.int_customer_with_address": {
+      "unique_id": "model.tidewater_analytics.int_customer_with_address",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "INTERMEDIATE",
+      "name": "int_customer_with_address",
+      "description": "Customer master joined to its geocoded service address. One row per active customer-premise pairing.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_customer_master", "model.tidewater_analytics.stg_service_addresses"] }
+    },
+    "model.tidewater_analytics.int_outage_events_with_customers": {
+      "unique_id": "model.tidewater_analytics.int_outage_events_with_customers",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "INTERMEDIATE",
+      "name": "int_outage_events_with_customers",
+      "description": "Outage events fanned out to one row per affected customer, with denormalized premise / service class. Feeds SAIDI/SAIFI calculations.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_outage_events", "model.tidewater_analytics.int_customer_with_address", "model.tidewater_analytics.stg_distribution_assets"] }
+    },
+    "model.tidewater_analytics.int_hourly_meter_consumption": {
+      "unique_id": "model.tidewater_analytics.int_hourly_meter_consumption",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "INTERMEDIATE",
+      "name": "int_hourly_meter_consumption",
+      "description": "AMI fifteen-minute reads rolled up to hourly per meter with a forecasted-baseline join.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_meter_reads_15min", "model.tidewater_analytics.int_customer_with_address"] }
+    },
+    "model.tidewater_analytics.int_water_quality_compliance": {
+      "unique_id": "model.tidewater_analytics.int_water_quality_compliance",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "INTERMEDIATE",
+      "name": "int_water_quality_compliance",
+      "description": "Joined water quality samples to pressure zones, regulatory thresholds, and the SDWA reporting calendar.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_water_quality_samples", "model.tidewater_analytics.stg_pressure_zones", "seed.tidewater_analytics.sdwa_thresholds"] }
+    },
+    "model.tidewater_analytics.int_transformer_overload_events": {
+      "unique_id": "model.tidewater_analytics.int_transformer_overload_events",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "INTERMEDIATE",
+      "name": "int_transformer_overload_events",
+      "description": "Transformer loading windows tagged with overload flags when sustained kVA exceeds nameplate by configurable thresholds.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_transformer_loadings", "model.tidewater_analytics.stg_distribution_assets"] }
+    },
+
+    "model.tidewater_analytics.mart_electric_outage_summary": {
+      "unique_id": "model.tidewater_analytics.mart_electric_outage_summary",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "MARTS",
+      "name": "mart_electric_outage_summary",
+      "description": "Daily electric outage summary: customer-minutes-interrupted, event counts by cause, restoration-time histograms. Source for the Outage Dashboard.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_outage_events_with_customers"] }
+    },
+    "model.tidewater_analytics.mart_distribution_reliability": {
+      "unique_id": "model.tidewater_analytics.mart_distribution_reliability",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "MARTS",
+      "name": "mart_distribution_reliability",
+      "description": "SAIDI / SAIFI / CAIDI per substation per month with IEEE 1366-compliant Major Event Day exclusion. Filed with state PUC.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_outage_events_with_customers", "model.tidewater_analytics.int_transformer_overload_events"] }
+    },
+    "model.tidewater_analytics.mart_customer_billing_anomalies": {
+      "unique_id": "model.tidewater_analytics.mart_customer_billing_anomalies",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "MARTS",
+      "name": "mart_customer_billing_anomalies",
+      "description": "Per-customer billing-cycle anomalies — usage vs. baseline, suspected meter-tamper flags, high-bill alerts.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_hourly_meter_consumption"] }
+    },
+    "model.tidewater_analytics.mart_water_quality_compliance": {
+      "unique_id": "model.tidewater_analytics.mart_water_quality_compliance",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "MARTS",
+      "name": "mart_water_quality_compliance",
+      "description": "SDWA-reporting view of water quality: MCL exceedances, compliance ratios per analyte per pressure zone per month.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_water_quality_compliance"] }
+    },
+    "model.tidewater_analytics.mart_water_distribution_health": {
+      "unique_id": "model.tidewater_analytics.mart_water_distribution_health",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "MARTS",
+      "name": "mart_water_distribution_health",
+      "description": "Per pressure-zone health score combining flow telemetry, main-age, break history, and recent compliance.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_water_mains", "model.tidewater_analytics.stg_pressure_zones", "model.tidewater_analytics.int_water_quality_compliance", "source.tidewater_analytics.scada_water.flow_meters", "source.tidewater_analytics.workorders.water_jobs"] }
+    },
+    "model.tidewater_analytics.mart_regulatory_kpis": {
+      "unique_id": "model.tidewater_analytics.mart_regulatory_kpis",
+      "resource_type": "model",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "MARTS",
+      "name": "mart_regulatory_kpis",
+      "description": "Cross-domain regulatory KPI mart — NERC CIP access metrics, SDWA compliance, SAIDI, OSHA recordable rate. One row per month.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.mart_distribution_reliability", "model.tidewater_analytics.mart_water_quality_compliance", "model.tidewater_analytics.stg_safety_incidents", "source.tidewater_analytics.regulatory.nerc_cip_logs", "seed.tidewater_analytics.nerc_cip_categories"] }
+    },
+
+    "seed.tidewater_analytics.sdwa_thresholds": {
+      "unique_id": "seed.tidewater_analytics.sdwa_thresholds",
+      "resource_type": "seed",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "REFERENCE",
+      "name": "sdwa_thresholds",
+      "description": "Reference seed: Safe Drinking Water Act maximum contaminant levels by analyte and reporting basis."
+    },
+    "seed.tidewater_analytics.nerc_cip_categories": {
+      "unique_id": "seed.tidewater_analytics.nerc_cip_categories",
+      "resource_type": "seed",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "REFERENCE",
+      "name": "nerc_cip_categories",
+      "description": "Reference seed: NERC CIP asset categorization buckets (High / Medium / Low Impact) and their reporting obligations."
+    },
+    "seed.tidewater_analytics.service_class_codes": {
+      "unique_id": "seed.tidewater_analytics.service_class_codes",
+      "resource_type": "seed",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "REFERENCE",
+      "name": "service_class_codes",
+      "description": "Customer service-class code → human label mapping (RES, COM, IND, MUNI, …)."
+    },
+
+    "snapshot.tidewater_analytics.customer_address_history": {
+      "unique_id": "snapshot.tidewater_analytics.customer_address_history",
+      "resource_type": "snapshot",
+      "database": "TIDEWATER_ANALYTICS",
+      "schema": "SNAPSHOTS",
+      "name": "customer_address_history",
+      "description": "Slowly-changing-dimension snapshot of customer service addresses. Drives historical attribution of billing anomalies and outages.",
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_customer_with_address"] }
+    },
+
+    "test.tidewater_analytics.not_null_stg_customer_master_customer_id": {
+      "unique_id": "test.tidewater_analytics.not_null_stg_customer_master_customer_id",
+      "resource_type": "test",
+      "name": "not_null_stg_customer_master_customer_id",
+      "column_name": "customer_id",
+      "test_metadata": { "name": "not_null", "kwargs": { "column_name": "customer_id" } },
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_customer_master"] }
+    },
+    "test.tidewater_analytics.unique_stg_customer_master_customer_id": {
+      "unique_id": "test.tidewater_analytics.unique_stg_customer_master_customer_id",
+      "resource_type": "test",
+      "name": "unique_stg_customer_master_customer_id",
+      "column_name": "customer_id",
+      "test_metadata": { "name": "unique", "kwargs": { "column_name": "customer_id" } },
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_customer_master"] }
+    },
+    "test.tidewater_analytics.accepted_values_stg_outage_events_status": {
+      "unique_id": "test.tidewater_analytics.accepted_values_stg_outage_events_status",
+      "resource_type": "test",
+      "name": "accepted_values_stg_outage_events_status",
+      "column_name": "status",
+      "test_metadata": {
+        "name": "accepted_values",
+        "kwargs": { "column_name": "status", "values": ["ACTIVE", "PARTIAL_RESTORE", "RESTORED", "CANCELLED"] }
+      },
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_outage_events"] }
+    },
+    "test.tidewater_analytics.relationships_outage_customer_fk": {
+      "unique_id": "test.tidewater_analytics.relationships_outage_customer_fk",
+      "resource_type": "test",
+      "name": "relationships_int_outage_events_with_customers_customer_id__customer_id__ref_stg_customer_master_",
+      "column_name": "customer_id",
+      "test_metadata": {
+        "name": "relationships",
+        "kwargs": { "column_name": "customer_id", "to": "ref('stg_customer_master')", "field": "customer_id" }
+      },
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_outage_events_with_customers", "model.tidewater_analytics.stg_customer_master"] }
+    },
+    "test.tidewater_analytics.not_null_stg_water_quality_samples_sample_id": {
+      "unique_id": "test.tidewater_analytics.not_null_stg_water_quality_samples_sample_id",
+      "resource_type": "test",
+      "name": "not_null_stg_water_quality_samples_sample_id",
+      "column_name": "sample_id",
+      "test_metadata": { "name": "not_null", "kwargs": { "column_name": "sample_id" } },
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_water_quality_samples"] }
+    },
+    "test.tidewater_analytics.accepted_values_stg_water_quality_samples_analyte_category": {
+      "unique_id": "test.tidewater_analytics.accepted_values_stg_water_quality_samples_analyte_category",
+      "resource_type": "test",
+      "name": "accepted_values_stg_water_quality_samples_analyte_category",
+      "column_name": "analyte_category",
+      "test_metadata": {
+        "name": "accepted_values",
+        "kwargs": {
+          "column_name": "analyte_category",
+          "values": ["BACTERIOLOGICAL", "DISINFECTION_BYPRODUCT", "INORGANIC", "ORGANIC", "RADIONUCLIDE", "PHYSICAL"]
+        }
+      },
+      "depends_on": { "nodes": ["model.tidewater_analytics.stg_water_quality_samples"] }
+    },
+    "test.tidewater_analytics.unique_int_customer_with_address_premise_id": {
+      "unique_id": "test.tidewater_analytics.unique_int_customer_with_address_premise_id",
+      "resource_type": "test",
+      "name": "unique_int_customer_with_address_premise_id",
+      "column_name": "premise_id",
+      "test_metadata": { "name": "unique", "kwargs": { "column_name": "premise_id" } },
+      "depends_on": { "nodes": ["model.tidewater_analytics.int_customer_with_address"] }
+    },
+    "test.tidewater_analytics.not_null_mart_distribution_reliability_substation_id": {
+      "unique_id": "test.tidewater_analytics.not_null_mart_distribution_reliability_substation_id",
+      "resource_type": "test",
+      "name": "not_null_mart_distribution_reliability_substation_id",
+      "column_name": "substation_id",
+      "test_metadata": { "name": "not_null", "kwargs": { "column_name": "substation_id" } },
+      "depends_on": { "nodes": ["model.tidewater_analytics.mart_distribution_reliability"] }
+    }
+  }
+}

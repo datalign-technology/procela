@@ -1,6 +1,7 @@
 import { SkeletonRows } from '../components/Skeleton';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
+import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -14,7 +15,9 @@ import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
-import DataQualityRulesModal, { RulesModalAsset } from '../components/DataQualityRulesModal';
+import type { RulesModalAsset } from '../components/DataQualityRulesModal';
+// Lazy: only renders when the user clicks the rules icon on a row.
+const DataQualityRulesModal = lazy(() => import('../components/DataQualityRulesModal'));
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 
@@ -145,21 +148,7 @@ const btnSecondary: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 14px',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
 
-const tdStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  fontSize: 13,
-  borderTop: '1px solid var(--color-border)',
-};
 
 function Badge({ label, colors }: { label: string; colors: { bg: string; color: string } }) {
   return (
@@ -506,11 +495,13 @@ export default function DataQualityPage() {
       )}
 
       {rulesModalAsset && (
-        <DataQualityRulesModal
-          asset={rulesModalAsset}
-          onClose={() => setRulesModalAsset(null)}
-          onAfterChange={fetchData}
-        />
+        <Suspense fallback={null}>
+          <DataQualityRulesModal
+            asset={rulesModalAsset}
+            onClose={() => setRulesModalAsset(null)}
+            onAfterChange={fetchData}
+          />
+        </Suspense>
       )}
 
       {tab === 'rules' && (<>

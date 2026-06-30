@@ -2,9 +2,83 @@ import Anthropic from '@anthropic-ai/sdk';
 import config from '../config';
 import { ProcessContext, OrgContext, ChatMessage } from '../types';
 
-const MODEL = 'claude-sonnet-4-20250514';
+// Resolved from config (ANTHROPIC_MODEL env, falling back to the
+// current Sonnet release). Kept as a getter so tests / dev workflows
+// can flip the env var without restarting Node — though in practice
+// config is read once at boot.
+const MODEL = config.anthropicModel;
 
 let _client: Anthropic | null = null;
+
+/**
+ * Pull the first top-level JSON value (array or object) out of a free-
+ * form Claude response. Tolerates:
+ *
+ *   - Markdown code fences in any common variant (```json, ```, ~~~).
+ *   - Narrative prefaces ("Here are the domains:") or trailing notes
+ *     after the JSON.
+ *   - Mixed-content responses where the JSON is embedded.
+ *
+ * Uses a small bracket-balance scanner that respects string literals
+ * and escape sequences so `]` inside a description doesn't fool it.
+ * Throws an Error carrying the raw text when nothing parseable is
+ * found — that surfaces upstream as a real error in the UI instead of
+ * a silent empty array.
+ */
+function extractJson(text: string): unknown {
+  if (!text) throw aiParseError('Empty response from AI', text);
+
+  // Strip the common code-fence variants up front. This handles the
+  // "everything inside one fence" case quickly without touching the
+  // bracket scanner.
+  const stripped = text
+    .replace(/```json\b/gi, '```')
+    .replace(/~~~/g, '```')
+    .replace(/```/g, '')
+    .trim();
+
+  // Fast path: the whole stripped body parses cleanly.
+  try { return JSON.parse(stripped); } catch { /* fall through */ }
+
+  // Scan for the first top-level [ ... ] or { ... } that balances and
+  // attempt to parse it.
+  for (const [open, close] of [['[', ']'], ['{', '}']] as const) {
+    const start = stripped.indexOf(open);
+    if (start < 0) continue;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < stripped.length; i++) {
+      const ch = stripped[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === open) depth++;
+      else if (ch === close) {
+        depth--;
+        if (depth === 0) {
+          const candidate = stripped.slice(start, i + 1);
+          try { return JSON.parse(candidate); } catch { break; }
+        }
+      }
+    }
+  }
+
+  throw aiParseError(
+    "Couldn't parse JSON from the AI response. The model returned text " +
+    'that isn\'t a recognised JSON array or object.',
+    text,
+  );
+}
+
+interface AiParseError extends Error { rawResponse?: string }
+
+function aiParseError(message: string, raw: string): AiParseError {
+  const err: AiParseError = new Error(message);
+  err.rawResponse = raw;
+  return err;
+}
 
 function getClient(): Anthropic {
   if (!_client) {
@@ -48,6 +122,12 @@ export interface AiService {
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
+  /** Streaming counterpart of chat(). Yields text fragments as they
+   *  arrive from the Anthropic stream so the UI can render the reply
+   *  progressively instead of staring at "Thinking…" for several
+   *  seconds. Same prompt and grounding as chat() — only the
+   *  delivery shape differs. */
+  chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string>;
   /** Run the agent against a single governance activity and return a
    *  Markdown draft deliverable for human review. */
   performGovernanceActivity(run: GovernanceActivityRun): Promise<string>;
@@ -129,13 +209,7 @@ Guidelines:
 
     const text =
       response.content[0].type === 'text' ? response.content[0].text : '';
-    try {
-      // Handle potential markdown code fences in response
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
-    } catch {
-      return { raw: text };
-    }
+    return extractJson(text) as object;
   }
 
   /**
@@ -175,12 +249,7 @@ Guidelines:
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    try {
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned);
-    } catch {
-      return { raw: text };
-    }
+    return extractJson(text) as object;
   }
 
   /**
@@ -202,18 +271,17 @@ Guidelines:
 
     const text =
       response.content[0].type === 'text' ? response.content[0].text : '';
-    try {
-      return JSON.parse(text);
-    } catch {
-      return { raw: text };
-    }
+    return extractJson(text) as object;
   }
 
   /**
-   * Multi-turn conversational chat, grounded in the organization's
-   * actual Procela data when a catalog summary is supplied.
+   * Shared system-prompt builder for chat() and chatStream(). Keeps
+   * the two delivery shapes in lockstep — fixing wording in one place
+   * fixes it everywhere, and the navigation guidance below has to be
+   * identical or streaming and non-streaming would give different
+   * answers.
    */
-  async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
+  private buildChatSystemPrompt(orgContext: OrgContext, catalogSummary?: string): string {
     const parts: string[] = [
       'You are the AI assistant for Procela, a platform that connects an organization\'s '
         + 'business processes to the data and systems that support them.',
@@ -234,15 +302,51 @@ Guidelines:
           + 'page (Process Catalog, Data Assets, Systems).',
       );
     }
+    // Navigation guidance — when an answer is best resolved on a
+    // specific page, point the user at it with a markdown link. The
+    // frontend extracts these links from the streamed text and
+    // renders them as clickable navigation chips. Use ONLY paths
+    // from the list below — fabricated paths render as broken
+    // navigation buttons.
+    parts.push(
+      'When your answer would benefit from showing the user a specific Procela page, '
+      + 'include a markdown link to that page using the exact paths below. The frontend '
+      + 'turns these links into "Open" buttons that navigate the user there.\n'
+      + 'Valid pages:\n'
+      + '  - Dashboard: /\n'
+      + '  - Process Catalog: /processes\n'
+      + '  - Process ↔ Data Map: /processes/data-map\n'
+      + '  - Data Assets: /data-assets\n'
+      + '  - Orphan Assets: /data-assets/orphans\n'
+      + '  - Systems: /systems\n'
+      + '  - Data Domains: /data-domains\n'
+      + '  - Data Quality: /data-quality\n'
+      + '  - Mappings (audit view): /mappings\n'
+      + '  - Gap Detection: /gap-detection\n'
+      + '  - People: /people\n'
+      + '  - Governance Roles: /dama-roles\n'
+      + '  - Governance Groups: /governance-groups\n'
+      + '  - Reports: /reports\n'
+      + '  - Audit Log: /audit-log\n'
+      + 'Format: [Page name](/path). Use sparingly — at most one navigation link per answer, '
+      + 'placed at the end after the substantive content. Do not invent paths not on this list.',
+    );
     parts.push(
       'Keep answers concise and actionable. Name specific processes, assets, and gaps rather '
         + 'than speaking generally. Do not fabricate.',
     );
+    return parts.join('\n\n');
+  }
 
+  /**
+   * Multi-turn conversational chat, grounded in the organization's
+   * actual Procela data when a catalog summary is supplied.
+   */
+  async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
     const response = await getClient().messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: parts.join('\n\n'),
+      system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -250,6 +354,27 @@ Guidelines:
     });
 
     return response.content[0].type === 'text' ? response.content[0].text : '';
+  }
+
+  /** Streaming variant of chat(). Yields each text delta from the
+   *  Anthropic stream as it arrives. Same system prompt and grounding
+   *  as chat(); the model output is identical, only the delivery
+   *  shape differs (incremental chunks vs one final string). The
+   *  caller is responsible for translating chunks to whatever wire
+   *  format the client expects (SSE, WebSocket, plain HTTP chunked). */
+  async *chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string> {
+    const stream = getClient().messages.stream({
+      model: MODEL,
+      max_tokens: 2048,
+      system: this.buildChatSystemPrompt(orgContext, catalogSummary),
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yield event.delta.text;
+      }
+    }
   }
 
   async performGovernanceActivity(run: GovernanceActivityRun): Promise<string> {
@@ -299,3 +424,6 @@ Guidelines:
 }
 
 export const aiService: AiService = new AnthropicAiService();
+
+// Internal helper exposed for unit tests. Not part of the public API.
+export const _extractJsonForTests = extractJson;

@@ -63,9 +63,13 @@ async function ensureValidToken(): Promise<void> {
       }
 
       const result = await response.json();
-      const { accessToken, expiresIn } = result.data ?? result;
+      const { accessToken, expiresIn, refreshToken: rotatedRefresh } = result.data ?? result;
 
-      useAuthStore.getState().refreshSession(accessToken, expiresIn);
+      // refreshToken on the response is the rotated value — store it
+      // so subsequent /auth/refresh calls don't reuse the now-revoked
+      // jti. Older backends that don't rotate omit the field; the
+      // store keeps the existing value in that case.
+      useAuthStore.getState().refreshSession(accessToken, expiresIn, rotatedRefresh);
     } catch {
       // Refresh failed, force logout
       useAuthStore.getState().logout();

@@ -78,13 +78,14 @@ export default function ShortcutsHint({ onOpenShortcuts }: ShortcutsHintProps) {
         Show all
       </button>
       <button
+        type="button"
         onClick={dismiss}
-        aria-label="Dismiss"
+        aria-label="Dismiss keyboard shortcuts hint"
         style={{
           background: 'transparent', border: 'none', color: '#94a3b8',
           cursor: 'pointer', fontSize: 14, padding: '0 4px', flexShrink: 0, lineHeight: 1,
         }}
-      >&times;</button>
+      ><span aria-hidden="true">&times;</span></button>
       <style>{`
         @keyframes scut-slide {
           from { opacity: 0; transform: translateY(10px); }

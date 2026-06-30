@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ShortcutsModal — opened with `?`. Documents the global keyboard
@@ -73,6 +75,10 @@ const kbdStyle: React.CSSProperties = {
 };
 
 export default function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -86,34 +92,37 @@ export default function ShortcutsModal({ open, onClose }: ShortcutsModalProps) {
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Keyboard shortcuts"
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 1100,
         background: 'rgba(0,0,0,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcuts-modal-title"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
           borderRadius: 'var(--radius-md)',
-          maxWidth: 560, width: '90vw', maxHeight: '85vh', overflowY: 'auto',
+          maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           padding: 24,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Keyboard shortcuts</h2>
+          <h2 id="shortcuts-modal-title" style={{ fontSize: 18, fontWeight: 700 }}>Keyboard shortcuts</h2>
           <button
+            type="button"
             onClick={onClose}
-            aria-label="Close"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)' }}
+            aria-label="Close keyboard shortcuts dialog"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--color-text-muted)', padding: 4 }}
           >
-            &times;
+            <span aria-hidden="true">&times;</span>
           </button>
         </div>
 
