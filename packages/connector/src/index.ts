@@ -23,7 +23,7 @@ import type { ConnectorConfig, ReportedAsset } from './types';
 import { pairClaim, heartbeat, report } from './api';
 import { scanPostgres } from './postgres';
 
-const AGENT_VERSION = '0.1.0';
+const AGENT_VERSION = '0.1.1';
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger

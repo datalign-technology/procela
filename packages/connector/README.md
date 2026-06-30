@@ -38,25 +38,46 @@ No row values. No connection strings. No credentials.
 The plaintext token is shown **once**, at claim time. Procela
 stores only a SHA-256 hash. Lose it and you must revoke + re-pair.
 
-## Build & run
+## Pull & run (recommended)
+
+Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are
+published to GitHub Container Registry on every release. Pull the
+pinned semver tag for production deployments:
 
 ```bash
-# Build the image
-docker build -t procela-connector packages/connector
+docker pull ghcr.io/crossleyc-bot/procela-connector:0.1.0
 
-# Run with a config file
 docker run --rm \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  procela-connector
+  ghcr.io/crossleyc-bot/procela-connector:0.1.0
 
 # Or pass the pairing code via env on first boot
 docker run --rm \
   -e PROCELA_PAIRING_CODE=12345678 \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  procela-connector
+  ghcr.io/crossleyc-bot/procela-connector:0.1.0
 ```
 
+Available tags:
+
+- `:0.1.0`, `:0.1`, `:0`, `:latest` — published on each
+  `connector-vX.Y.Z` git tag
+- `:edge` — auto-built from every push to the main branch
+- `:sha-<short>` — every build, for exact-provenance pinning
+
 See `connector.example.yaml` for the full config shape.
+
+## Build from source
+
+If you'd rather build the image yourself (no internet pull, or
+local source edits):
+
+```bash
+docker build -t procela-connector packages/connector
+docker run --rm \
+  -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
+  procela-connector
+```
 
 ## Local development
 

@@ -1,6 +1,6 @@
 {
   "name": "@procela/connector",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Procela on-prem connector — runs in customer infrastructure, ships metadata back to Procela over outbound HTTPS.",
   "main": "dist/index.js",
