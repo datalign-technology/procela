@@ -23,11 +23,15 @@ export interface ConnectorConfig {
    *  what I see". */
   scanSeconds: number;
   /** Sources to scan. Each entry is one logical data source. v1
-   *  supports only Postgres. */
-  sources: PostgresSource[];
+   *  supports Postgres and SQL Server; more to follow. */
+  sources: Source[];
   /** Agent self-reported version string. */
   agentVersion?: string;
 }
+
+/** Discriminated union of every source shape the connector knows
+ *  how to scan. Callers switch on `type`. */
+export type Source = PostgresSource | SqlServerSource;
 
 export interface PostgresSource {
   type: 'postgres';
@@ -38,6 +42,24 @@ export interface PostgresSource {
   connectionString: string;
   /** Optional schema allowlist. Empty = scan public + every non-
    *  system schema. */
+  schemas?: string[];
+  /** Optional explicit Procela systemId this source's assets get
+   *  attached to. If omitted the connector's first declared system
+   *  id is used. */
+  systemId?: string;
+}
+
+export interface SqlServerSource {
+  type: 'sqlserver';
+  /** Friendly name shown in logs. */
+  name: string;
+  /** Connection string in the mssql URL form:
+   *    Server=host,port;Database=db;User Id=user;Password=pw;Encrypt=true
+   *  or mssql://user:pass@host:1433/database?encrypt=true
+   *  Stays on-prem in the config file; never sent to Procela. */
+  connectionString: string;
+  /** Optional schema allowlist. Empty = scan every non-system schema
+   *  in the connected database. */
   schemas?: string[];
   /** Optional explicit Procela systemId this source's assets get
    *  attached to. If omitted the connector's first declared system
