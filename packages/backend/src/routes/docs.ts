@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderMarkdownToPdf } from '../services/markdown-pdf';
+import { renderMarkdownToHtml } from '../services/markdown-html';
 
 const router = Router();
 
@@ -812,21 +813,26 @@ router.get('/training.pdf', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/v1/docs/help.pdf — generated PDF of the help guide.
+ * GET /api/v1/docs/help.html — generated HTML of the help guide.
+ *
+ * Serves a self-contained, styled, searchable HTML page (no
+ * outbound asset requests). The old PDF path (/help.pdf) was
+ * retired in favour of this — copy/paste, Ctrl-F, and responsive
+ * resize all work now; the print stylesheet still produces a
+ * clean paper copy for users who want one.
  */
-router.get('/help.pdf', async (_req: Request, res: Response) => {
+router.get('/help.html', (_req: Request, res: Response) => {
   try {
     const { contents } = readHelpGuide();
-    const buffer = await renderMarkdownToPdf(contents, {
+    const html = renderMarkdownToHtml(contents, {
       title: 'Procela Help Guide',
       subtitle: 'Feature-by-feature reference for the platform.',
-      footer: `Procela Help Guide  ·  ${new Date().toISOString().slice(0, 10)}`,
     });
-    res.type('application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="procela-help-guide.pdf"');
-    res.send(buffer);
+    res.type('text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(html);
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err?.message || 'PDF generation failed.' });
+    res.status(500).json({ success: false, error: err?.message || 'HTML render failed.' });
   }
 });
 

@@ -37,13 +37,14 @@ export type NavSection = {
   adminOnly?: boolean;
 };
 
-// Opens the Help guide PDF in a separate window. The browser's native
-// PDF viewer renders the file directly, so users get a real document
-// (with bookmarks, scroll, search, save, print) rather than an HTML
-// reading view. The named target focuses an already-open window
-// instead of spawning duplicates.
+// Opens the Help guide in a separate window as styled HTML.
+// Native browser rendering means Ctrl-F search, copy/paste, and
+// responsive resize all work, and the print stylesheet still
+// produces a clean paper copy for users who want one. The named
+// target focuses an already-open window instead of spawning
+// duplicates.
 export function openHelpWindow() {
-  window.open('/api/v1/docs/help.pdf', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
+  window.open('/api/v1/docs/help.html', 'procela-help', 'popup,width=1100,height=900,noopener,noreferrer');
 }
 
 // Same pattern for the Training Guide — opens the generated PDF
