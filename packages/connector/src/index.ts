@@ -22,8 +22,9 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { ConnectorConfig, ReportedAsset } from './types';
 import { pairClaim, heartbeat, report } from './api';
 import { scanPostgres } from './postgres';
+import { scanSqlServer } from './sqlserver';
 
-const AGENT_VERSION = '0.1.1';
+const AGENT_VERSION = '0.2.0';
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger
@@ -90,13 +91,24 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
   let total = 0;
   const all: ReportedAsset[] = [];
   for (const source of cfg.sources) {
-    if (source.type !== 'postgres') {
-      log('skipping unsupported source type', { type: source.type, name: source.name });
-      continue;
-    }
-    log('scanning source', { name: source.name });
+    log('scanning source', { name: source.name, type: source.type });
     try {
-      const assets = await scanPostgres(source);
+      let assets: ReportedAsset[];
+      switch (source.type) {
+        case 'postgres':
+          assets = await scanPostgres(source);
+          break;
+        case 'sqlserver':
+          assets = await scanSqlServer(source);
+          break;
+        default:
+          // TypeScript's exhaustiveness check would flag a missing
+          // case here; the runtime log is the fallback for a config
+          // that references a type the current binary was built
+          // before it knew about.
+          log('skipping unsupported source type', { type: (source as { type: string }).type, name: (source as { name: string }).name });
+          continue;
+      }
       log('discovered assets', { source: source.name, count: assets.length });
       all.push(...assets);
       total += assets.length;

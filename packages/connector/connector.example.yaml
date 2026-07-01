@@ -21,7 +21,8 @@ pairingCode: "12345678"
 heartbeatSeconds: 60
 scanSeconds: 1800
 
-# Data sources to scan. v1 supports Postgres only.
+# Data sources to scan. v1 supports Postgres and SQL Server; a
+# single connector container can watch any mix of them.
 sources:
   - type: postgres
     name: warehouse-prod
@@ -35,3 +36,16 @@ sources:
     # Optional. If omitted, assets attach to the first system Procela
     # has registered for your org.
     systemId: sys_warehouse_prod
+
+  - type: sqlserver
+    name: crm-prod
+    # SQL Server connection string. Use TrustServerCertificate=true
+    # for self-signed certs on internal servers; drop it if the
+    # server presents a CA-signed cert.
+    connectionString: Server=sql.internal,1433;Database=CRM;User Id=procela_ro;Password=CHANGE_ME;Encrypt=true;TrustServerCertificate=true
+    # Optional schema allowlist. Empty = scan every non-system schema
+    # in the connected database (dbo, custom schemas, etc.).
+    schemas:
+      - dbo
+      - sales
+    systemId: sys_crm_prod

@@ -101,9 +101,16 @@ npm run lint -w packages/connector
 
 ## Supported sources
 
-| Type       | Status |
-| ---------- | ------ |
-| Postgres   | v1     |
-| MySQL      | planned |
-| Snowflake  | planned |
-| SQL Server | planned |
+| Type         | Config `type:` | Status |
+| ------------ | -------------- | ------ |
+| Postgres     | `postgres`     | v1 (0.1.x) |
+| SQL Server   | `sqlserver`    | v1 (0.2.x) |
+| MySQL        | `mysql`        | planned |
+| Oracle       | `oracle`       | planned |
+| dbt manifest | `dbt`          | planned |
+
+Cloud warehouses (Snowflake / BigQuery / Redshift / Databricks) are
+intentionally out of scope for the edge agent — they always have
+routable endpoints, so use a **Data Connection** in the Procela UI
+instead. The agent exists specifically to reach databases Procela
+cannot.

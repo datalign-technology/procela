@@ -1,6 +1,6 @@
 {
   "name": "@procela/connector",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Procela on-prem connector — runs in customer infrastructure, ships metadata back to Procela over outbound HTTPS.",
   "main": "dist/index.js",
@@ -15,10 +15,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "mssql": "^11.0.1",
     "pg": "^8.13.1",
     "yaml": "^2.6.1"
   },
   "devDependencies": {
+    "@types/mssql": "^9.1.7",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.0",
     "tsx": "^4.19.3",
