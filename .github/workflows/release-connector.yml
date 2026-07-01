@@ -30,12 +30,20 @@ name: Release connector image
 # no PAT required.
 
 on:
+  # Two independent push triggers — GH Actions collapses them under
+  # one `push:` key, but the intent is:
+  #   • Any `connector-v*` tag fires the workflow unconditionally,
+  #     regardless of which files the tagged commit touched. Tags
+  #     are release markers; missing one because the source hadn't
+  #     changed since the previous release is a real production
+  #     footgun.
+  #   • Trunk pushes still fire, but the workflow is fast enough
+  #     with the buildx cache (~30-60 s on a no-op) that gating on
+  #     `paths:` isn't worth the risk of a filter change silently
+  #     skipping a build. Drop the filter.
   push:
     tags: ['connector-v*']
     branches: [create-procela-main]
-    paths:
-      - 'packages/connector/**'
-      - '.github/workflows/release-connector.yml'
   workflow_dispatch:
     inputs:
       tag_suffix:
