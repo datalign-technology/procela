@@ -95,7 +95,12 @@ jobs:
             type=match,pattern=connector-v(.*),group=1
             type=match,pattern=connector-v(\d+\.\d+)\.\d+,group=1
             type=match,pattern=connector-v(\d+)\.\d+\.\d+,group=1
-            type=ref,event=branch,suffix=,prefix=,enable=${{ github.ref == format('refs/heads/{0}', 'create-procela-main') }},value=edge
+            # `type=raw` publishes a literal tag string. The previous
+            # `type=ref,event=branch` variant ignored `value=` and used
+            # the branch name (`create-procela-main`) instead — no
+            # `:edge` tag was ever produced. Enable only on default-
+            # branch pushes so PR runs don't clobber `:edge`.
+            type=raw,value=edge,enable=${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', 'create-procela-main') }}
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/connector-v') }}
             type=raw,value=${{ github.event.inputs.tag_suffix }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag_suffix != '' }}
