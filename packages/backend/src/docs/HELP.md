@@ -55,6 +55,8 @@ Settings and Help sit at the bottom of the sidebar.
 
 ## 3. Dashboard
 
+![Dashboard headline cards with the "Overview" KPI row visible at the top and the "Needs My Attention" section beneath. Anchor screenshot: the shape of the dashboard's primary tiles.](images/dashboard-hero.png)
+
 The dashboard is personalized to your login. You must have a People record with your email to see personalized data.
 
 - My Dashboard — Open tasks, issues, domains you own/steward, upcoming events. Each tile is a hyperlink — Open Tasks jumps to Governance Work (Tasks tab), Open Issues to the Issues tab, My Domains to the Data Domains page, and Upcoming Events to the Governance Calendar. Hover lifts the tile to signal it's interactive; zero-count tiles fade the number but still link through to the destination's empty state.
@@ -72,6 +74,8 @@ Click Customize to reorder or hide dashboard sections. Layout is saved automatic
 ## 4. Processes
 
 ### Process Catalog
+
+![Process Catalog page with a value stream expanded to show its child processes and one activity's Inputs / Outputs panel opened. The tree hierarchy Value Stream → Process → Activity is visible at a glance.](images/process-catalog-tree.png)
 
 - Hierarchical process catalog: Value Stream → Process → Activity (with optional Sub-Process and Task levels for detail).
 - AI-powered Value Stream Wizard generates process hierarchies tailored to the active org, not just the industry. Running the wizard scoped to Tidewater Electric produces electric-utility processes (SCADA, outage management, transmission & distribution); scoping to Tidewater Water produces water-utility processes (treatment, distribution mains, wastewater). The active org's name, type, and description ride along with the industry to the AI prompt so output reflects this specific division rather than generic Utilities content. The result is cached per (industry + org) on the server — first user pays the 10–30 second Claude call, every subsequent run for the same org returns the same template instantly, and each division caches independently. A Cached / Fresh from AI badge plus a Specialised: <Org> chip on the review screen tells you what's been tailored; the Regenerate from AI button next to the standard Regenerate bypasses the cache and replaces the stored copy with a brand-new Claude generation.
@@ -112,6 +116,8 @@ Where value streams can be created. Streams attach to the active org in the Work
 ## 5. Data
 
 ### Data Assets
+
+![Data Assets list showing several rows with governance-tier badges (Bronze / Silver / Gold), health scores, and at least one row carrying a green "Synced N min ago" chip next to its name so the connector-sourced freshness signal is visible.](images/data-assets-list.png)
 
 - Register data assets in business terms. Each asset has a Trust Level (Untrusted / Managed / Trusted — DAMA mode calls these Uncertified / Managed / Certified).
 - Sidebar filter by data type: Operational, Governance, Reference, Analytical, Master.
@@ -185,6 +191,8 @@ Where value streams can be created. Streams attach to the active org in the Work
 
 ### On-prem connectors
 
+![Settings → On-prem connectors panel showing at least one paired connector row with an "Online" status chip, a systems column populated with system names, and the "Add connector" button visible top-right. Empty-state or single-row is fine — the point is to show the admin's landing view.](images/connectors-panel.png)
+
 - Small container (`ghcr.io/crossleyc-bot/procela-connector`) that runs **inside your customer's network** and ships catalog metadata back to Procela over outbound HTTPS. Use it when Procela cannot reach the source database — the classic "our security team won't open inbound firewall rules" case.
 - Managed in **Settings → On-prem connectors**. Admin creates a connector record with a name and the systems it reports for, receives a one-time 8-digit pairing code, and the operator running the container claims the code on first boot. From then on the connector heartbeats every 60s and scans configured databases every 30 min (both cadences are configurable in the connector's YAML).
 - **Freshness states.** Each row shows a live status derived from `lastHeartbeatAt`:
@@ -193,6 +201,8 @@ Where value streams can be created. Streams attach to the active org in the Work
   - **Offline** — no heartbeat in over 4 hours (fires an in-app notification once per ONLINE→OFFLINE transition)
 - **Adapters bundled with the container today**: Postgres, SQL Server, MySQL/MariaDB. Cloud warehouses are intentionally out of scope — they go through Connections.
 - **Click a connector row** to open the detail drawer: rename, reassign which systems it reports for, and review the recent-activity timeline (paired, heartbeats, scans, ASSETS_REPORTED with created / updated counts).
+
+![The pairing-code modal after clicking "Add connector" and hitting Generate — an eight-digit code in monospaced type dominates the modal, with the docker run hint underneath. This is what the admin hands (securely) to the operator running the container.](images/connector-pairing.png)
 - **What crosses the wire.** Only catalog metadata — table names in `schema.table` form, approximate row counts, last-write timestamps, and any table-comment description. **Connection strings, credentials, and row values never leave the on-prem host.** Every payload the agent sends is auditable in the connector's activity drawer.
 - **What Procela does with it.** Each reported table either creates a new **Bronze**-tier Data Asset (which shows up as an Orphan Asset work item for stewards) or updates an existing asset's `lastSyncedAt` and health score. Everything downstream — dashboards, weekly digests, gap detection, orphan lists, AI answers — reads from the same asset table, so connector-sourced data blends in without any feature having to know it came from a connector.
 - **Rate-limits and safety rails.** `/pair/claim` throttles at 10/min and 100/hr per IP so the 8-digit code isn't brute-forceable. Tokens are `pct_`-prefixed and stored as SHA-256 hashes; the plaintext is shown once at claim time and never again. Revoke immediately disables a token but keeps the row for audit.
@@ -463,6 +473,8 @@ A handful of components show up on every detail page so the patterns stay the sa
 The Comments panel and Activity feed live together on every detail surface, with the Role Detail drawer accessible from any role chip. Together they answer "what is this record, what's changed, and who am I talking to about it" without leaving the page.
 
 ### Ask AI assistant
+
+![AI assistant chat panel opened on the right side of the app. A question like "Where are our data gaps?" is visible in the input, and an in-flight or completed answer shows below with at least one clickable entity citation (a coloured name link) and, ideally, a green pill-shaped "Open" navigation chip at the end of the reply.](images/chat-panel.png)
 
 - The Ask AI button in the top bar opens a chat panel grounded in your organization's actual catalog — processes, systems, data assets, mappings, ownership, gaps, and the Phase 3 signals (orphan assets, declared activity ↔ system links, learning-loop dismissals). It answers from the snapshot, not from training data, so it won't fabricate processes or assets that don't exist in your org.
 - Streaming replies. The assistant types the answer as it generates — no "Thinking…" wait for the full response. Useful for long answers (full gap analyses, multi-step recommendations).

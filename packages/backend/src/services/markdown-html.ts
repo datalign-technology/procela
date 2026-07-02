@@ -21,6 +21,65 @@ const WORDMARK_DATA_URL: string | null = (() => {
   }
 })();
 
+// Screenshot pipeline. Every PNG in docs/images/ is read once at
+// module load and cached as a base64 data URL keyed on filename
+// (no leading path). Markdown can then reference them as
+// `![alt](images/foo.png)` and the emitted <img> gets substituted
+// to the inline data URL — same "self-contained page, no outbound
+// asset requests" property as the wordmark, and the same "drop
+// a file in and it renders" DX we want for docs authors who
+// aren't editing this file.
+//
+// Missing images render as a placeholder card that names the
+// expected filename so an author can spot the gap by opening the
+// guide. Beats silently rendering broken-image icons.
+const IMAGES_DIR = path.resolve(__dirname, '..', 'docs', 'images');
+const IMAGE_DATA_URLS: Map<string, string> = (() => {
+  const map = new Map<string, string>();
+  try {
+    for (const filename of fs.readdirSync(IMAGES_DIR)) {
+      const ext = path.extname(filename).toLowerCase();
+      if (ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg' && ext !== '.gif' && ext !== '.webp') continue;
+      const mime = ext === '.png' ? 'image/png'
+        : ext === '.gif' ? 'image/gif'
+        : ext === '.webp' ? 'image/webp'
+        : 'image/jpeg';
+      const bytes = fs.readFileSync(path.join(IMAGES_DIR, filename));
+      map.set(filename, `data:${mime};base64,${bytes.toString('base64')}`);
+    }
+  } catch {
+    // Missing images dir isn't fatal — every reference in the
+    // doc just renders as a placeholder card.
+  }
+  return map;
+})();
+
+function screenshotPlaceholder(filename: string, alt: string): string {
+  return `<div class="screenshot-placeholder" role="img" aria-label="${escapeHtml(alt || filename)}">
+    <div class="ph-icon">📸</div>
+    <div class="ph-title">Screenshot placeholder</div>
+    <div class="ph-file"><code>${escapeHtml(filename)}</code></div>
+    <div class="ph-hint">Drop the PNG at <code>packages/backend/src/docs/images/${escapeHtml(filename)}</code> and this placeholder will replace itself with the image on next render.</div>
+  </div>`;
+}
+
+function substituteImages(html: string): string {
+  // Rewrite any <img src="images/foo.png" ...> emitted by marked.
+  // Match src that starts with `images/` — that's how the source
+  // markdown references screenshots. Anything else (absolute URL,
+  // data URL) passes through untouched.
+  return html.replace(
+    /<img([^>]*?)src="images\/([^"]+)"([^>]*)>/g,
+    (_match, before: string, filename: string, after: string) => {
+      const altMatch = /alt="([^"]*)"/.exec(before + after);
+      const alt = altMatch ? altMatch[1] : filename;
+      const dataUrl = IMAGE_DATA_URLS.get(filename);
+      if (!dataUrl) return screenshotPlaceholder(filename, alt);
+      return `<img${before}src="${dataUrl}"${after} loading="lazy">`;
+    },
+  );
+}
+
 /**
  * markdown-to-html — Renders the markdown subset used by our in-app
  * docs (HELP.md, TRAINING.md) into a self-contained, printable HTML
@@ -116,7 +175,7 @@ function escapeHtml(s: string): string {
 }
 
 export function renderMarkdownToHtml(markdown: string, opts: RenderHtmlOptions): string {
-  const body = md.parse(markdown, { async: false }) as string;
+  const body = substituteImages(md.parse(markdown, { async: false }) as string);
   const toc = extractToc(markdown);
   const generated = opts.generatedAt || new Date().toISOString().slice(0, 10);
 
@@ -289,6 +348,48 @@ export function renderMarkdownToHtml(markdown: string, opts: RenderHtmlOptions):
       border: none;
       border-top: 1px solid var(--border);
       margin: 32px 0;
+    }
+    /* Screenshots. Full-width, subtle border + shadow so they read
+       as UI captures rather than diagrams. Caption below (from alt
+       text) shows only when the author supplied one. */
+    main.doc-body img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 20px auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    }
+    /* Placeholder card shown when a referenced screenshot file is
+       missing from docs/images/. Not scary — informative, so the
+       author sees what's expected and where to drop it. */
+    .screenshot-placeholder {
+      margin: 20px 0;
+      padding: 24px 20px;
+      background: repeating-linear-gradient(
+        135deg,
+        var(--code-bg),
+        var(--code-bg) 10px,
+        var(--surface) 10px,
+        var(--surface) 20px
+      );
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .screenshot-placeholder .ph-icon { font-size: 28px; margin-bottom: 6px; }
+    .screenshot-placeholder .ph-title {
+      font-size: 12px; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .screenshot-placeholder .ph-file { font-size: 14px; color: var(--text); margin-bottom: 6px; }
+    .screenshot-placeholder .ph-file code { background: none; padding: 0; }
+    .screenshot-placeholder .ph-hint { font-size: 12px; }
+    .screenshot-placeholder .ph-hint code {
+      font-size: 11px; padding: 2px 6px;
     }
     @media (max-width: 860px) {
       .shell { grid-template-columns: 1fr; padding: 20px 16px 60px; }
