@@ -31,7 +31,7 @@ export interface ConnectorConfig {
 
 /** Discriminated union of every source shape the connector knows
  *  how to scan. Callers switch on `type`. */
-export type Source = PostgresSource | SqlServerSource;
+export type Source = PostgresSource | SqlServerSource | MysqlSource;
 
 export interface PostgresSource {
   type: 'postgres';
@@ -42,6 +42,26 @@ export interface PostgresSource {
   connectionString: string;
   /** Optional schema allowlist. Empty = scan public + every non-
    *  system schema. */
+  schemas?: string[];
+  /** Optional explicit Procela systemId this source's assets get
+   *  attached to. If omitted the connector's first declared system
+   *  id is used. */
+  systemId?: string;
+}
+
+export interface MysqlSource {
+  type: 'mysql';
+  /** Friendly name shown in logs. */
+  name: string;
+  /** Connection string in the mysql2 URL form:
+   *    mysql://procela_ro:pw@db.internal:3306/mydb?ssl=true
+   *  Also supported: any options mysql2 accepts on the query
+   *  string. Stays on-prem in the config file; never sent to
+   *  Procela. */
+  connectionString: string;
+  /** Optional schema (database) allowlist. Empty = scan every
+   *  non-system schema (skips mysql, sys, information_schema,
+   *  performance_schema). */
   schemas?: string[];
   /** Optional explicit Procela systemId this source's assets get
    *  attached to. If omitted the connector's first declared system

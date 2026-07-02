@@ -21,8 +21,9 @@ pairingCode: "12345678"
 heartbeatSeconds: 60
 scanSeconds: 1800
 
-# Data sources to scan. v1 supports Postgres and SQL Server; a
-# single connector container can watch any mix of them.
+# Data sources to scan. v1 supports Postgres, SQL Server, and
+# MySQL/MariaDB; a single connector container can watch any mix
+# of them.
 sources:
   - type: postgres
     name: warehouse-prod
@@ -49,3 +50,15 @@ sources:
       - dbo
       - sales
     systemId: sys_crm_prod
+
+  - type: mysql
+    name: billing-prod
+    # mysql2 URL form. Add ?ssl=true (or ssl-mode=REQUIRED as a
+    # query param) for TLS. Standard MySQL and MariaDB both work.
+    connectionString: mysql://procela_ro:CHANGE_ME@mysql.internal:3306/billing?ssl=true
+    # Optional. Empty = scan every non-system schema
+    # (skips mysql, sys, information_schema, performance_schema).
+    schemas:
+      - billing
+      - reporting
+    systemId: sys_billing_prod
