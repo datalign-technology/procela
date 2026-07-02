@@ -100,11 +100,35 @@ router.post('/generate-template', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: template, cached: false, generatedAt: now, specializedFor: specialization?.orgName });
   } catch (err) {
-    logger.error({ err }, 'Template generation failed');
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate industry template. Please try again.',
-    });
+    // Diagnose the common setup failures and surface a message the
+    // admin can actually act on. The generic "please try again"
+    // was hiding the two most likely causes (no key, bad key) so
+    // users had no idea where to look. Full error stays in the log.
+    const anyErr = err as { message?: string; status?: number; name?: string };
+    const msg = String(anyErr?.message || '');
+    const status = anyErr?.status;
+    logger.error({ err, status, name: anyErr?.name }, 'Template generation failed');
+    let userError: string;
+    let httpStatus = 500;
+    if (msg.includes('ANTHROPIC_API_KEY') || msg.includes('is not set')) {
+      userError = 'AI is not configured on this server. Add ANTHROPIC_API_KEY to your backend .env file and restart the backend.';
+      httpStatus = 503;
+    } else if (status === 401 || msg.toLowerCase().includes('authentication')) {
+      userError = 'The configured Anthropic API key was rejected. Verify ANTHROPIC_API_KEY is a valid key with template-generation access.';
+      httpStatus = 503;
+    } else if (status === 429 || msg.toLowerCase().includes('rate limit')) {
+      userError = 'Anthropic rate limit reached. Wait a minute and try again.';
+      httpStatus = 503;
+    } else if (status && status >= 500) {
+      userError = 'Anthropic API is temporarily unavailable. Try again in a moment.';
+      httpStatus = 502;
+    } else if (anyErr?.name === 'AiParseError' || msg.includes('parse') || msg.includes('JSON')) {
+      userError = 'The AI returned a response that could not be parsed. Try again; if it keeps failing, the configured model may need updating (ANTHROPIC_MODEL).';
+      httpStatus = 502;
+    } else {
+      userError = `Template generation failed: ${msg || 'unknown error'}. Check the backend log for details.`;
+    }
+    res.status(httpStatus).json({ success: false, error: userError });
   }
 });
 
