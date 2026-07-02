@@ -187,7 +187,7 @@ export default function ValueStreamWizard() {
   const prettyType = (t: string) => t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
 
   return (
-    <Page width="wizard">
+    <Page>
       {/* Header */}
       <PageHeader
         title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
