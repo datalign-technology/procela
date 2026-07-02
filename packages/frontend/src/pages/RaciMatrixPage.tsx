@@ -11,6 +11,7 @@ import IconButton from '../components/IconButton';
 import InfoTip from '../components/InfoTip';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { clickable, activateOnKey } from '../lib/a11y';
 
 interface RaciRow {
@@ -297,7 +298,7 @@ export default function RaciMatrixPage() {
       {error && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
       {!loading && !error && !hasData && (
         <EmptyState
-          icon={'\u{1F4CB}'}
+          icon={renderNavIcon('/dama-roles')}
           title="No RACI data available"
           description="Define processes and assign governance roles to generate the RACI matrix."
         />

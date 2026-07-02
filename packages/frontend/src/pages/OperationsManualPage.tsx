@@ -5,6 +5,7 @@ import { useToastStore } from '../stores/toastStore';
 import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
 import { SkeletonRows } from '../components/Skeleton';
@@ -163,7 +164,7 @@ export default function OperationsManualPage() {
   // ── Render ──
   if (loading) return <SkeletonRows rows={5} />;
   if (!activeOrgId) return (
-    <EmptyState title="No organization selected" description="Select an organization from the header to view operations manuals." />
+    <EmptyState icon={renderNavIcon('/organizations')} title="No organization selected" description="Select an organization from the header to view operations manuals." />
   );
 
   const seedLabel = seeding ? 'Generating...' : 'Generate Standard Manuals';
@@ -186,7 +187,7 @@ export default function OperationsManualPage() {
 
       {manuals.length === 0 ? (
         <>
-          <EmptyState title="No operations manuals yet" description="Generate the standard DAMA role manuals to get started, or create a custom manual."
+          <EmptyState icon={renderNavIcon('/documentation')} title="No operations manuals yet" description="Generate the standard DAMA role manuals to get started, or create a custom manual."
             action={{ label: seedLabel, onClick: handleSeed }}
             secondaryAction={canWrite ? { label: '+ Add Manual', onClick: () => setShowAddManual(true) } : undefined} />
           {showAddManual && renderAddManualDialog()}

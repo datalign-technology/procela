@@ -14,6 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 
 interface LineageLink {
   id: string;
@@ -654,7 +655,7 @@ export default function DataLineagePage() {
           {/* Table */}
           {links.length === 0 ? (
             <EmptyState
-              icon={'\u21C4'}
+              icon={renderNavIcon('/data-lineage')}
               title="No lineage flows defined yet"
               description="Lineage flows track how data moves between systems — which system feeds which. Define the first flow to start building the picture."
               action={{ label: '+ Add Flow', onClick: openAdd }}

@@ -13,6 +13,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import CommentsPanel from '../components/CommentsPanel';
+import { renderNavIcon } from '../components/navIcons';
 import ActivityFeed from '../components/ActivityFeed';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import { usePolling } from '../hooks/usePolling';
@@ -1595,7 +1596,7 @@ export default function DataAssetsPage() {
           <SkeletonRows rows={5} columnWidths={[40, null, null, null, 180]} />
         ) : assets.length === 0 && !showForm ? (
           <EmptyState
-            icon={'\u26C1'}
+            icon={renderNavIcon('/data-assets')}
             title="No data assets yet"
             description="Data assets are business-level concepts — Customer Accounts, Billing Records, Inventory Levels — not the underlying tables, files, or columns. Define them in plain business language, then link each one to its physical source via a Binding on the row."
             action={canOwnHere ? { label: '+ Add Data Asset', onClick: openAdd } : undefined}

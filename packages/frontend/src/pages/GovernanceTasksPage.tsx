@@ -10,6 +10,7 @@ import SortableTh from '../components/SortableTh';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
@@ -541,7 +542,7 @@ export default function GovernanceTasksPage() {
           <SkeletonRows rows={5} columns={8} />
         ) : tasks.length === 0 && !showForm ? (
           <EmptyState
-            icon={'☑'}
+            icon={renderNavIcon('/governance-work')}
             title="No governance tasks yet"
             description="Governance tasks track reviews, approvals, remediations, and other work items. Create your first task to get started."
             action={canWrite ? { label: '+ Add Task', onClick: openAdd } : undefined}

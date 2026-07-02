@@ -12,6 +12,7 @@ import { getStatusColor } from '../lib/statusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import { SkeletonRows } from '../components/Skeleton';
 import PersonPicker from '../components/PersonPicker';
@@ -481,7 +482,7 @@ export default function DataDomainsPage() {
           <style>{`@keyframes procelaDomainGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       ) : domains.length === 0 && !showForm ? (
-        <EmptyState icon={'☷'} title="No data domains defined yet"
+        <EmptyState icon={renderNavIcon('/data-domains')} title="No data domains defined yet"
           description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies."
           action={{ label: 'Add Domain', onClick: openAdd }}
           secondaryAction={canWrite ? { label: 'Generate from Industry', onClick: handleGenerate, variant: 'secondary' } : undefined} />
