@@ -16,6 +16,7 @@ import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 
 interface OrphanAsset {
@@ -73,6 +74,7 @@ export default function OrphanAssetsPage() {
 
       {rows !== null && rows.length === 0 && !error && (
         <EmptyState
+          icon={renderNavIcon('/data-assets/orphans')}
           title="No orphan assets"
           description="Every data asset in this org is mapped to at least one process step. Nothing to clean up here right now."
         />
