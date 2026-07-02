@@ -8,6 +8,7 @@ import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import { ExportPayload } from '../lib/export';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
@@ -452,7 +453,7 @@ export default function DataDictionaryPage() {
               <SkeletonRows rows={5} columns={7} />
             ) : assets.length === 0 ? (
               <EmptyState
-                icon={'📚'}
+                icon={renderNavIcon('/data-dictionary')}
                 title="No data assets yet"
                 description="The data dictionary mirrors what's in your Data Assets catalog. Add your first asset there and it'll show up here automatically."
                 action={{ label: 'Go to Data Assets', onClick: () => navigate('/data-assets') }}

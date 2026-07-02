@@ -17,6 +17,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import PersonPicker from '../components/PersonPicker';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import StatusBadge, { type StatusBadgeVariant } from '../components/StatusBadge';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
@@ -1414,7 +1415,7 @@ export default function SystemsPage() {
           <SkeletonRows rows={5} columnWidths={[40, null, null, 140, 80]} />
         ) : systems.length === 0 && !showForm ? (
           <EmptyState
-            icon={'\u2699'}
+            icon={renderNavIcon('/systems')}
             title="No systems defined yet"
             description="Systems are the applications and platforms where your data lives — ERP, CRM, GIS, and so on. Define them first so you can connect and map data assets to each one."
             action={canOwnHere ? { label: '+ Add System', onClick: openAdd } : undefined}

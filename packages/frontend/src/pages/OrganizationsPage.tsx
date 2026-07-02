@@ -11,6 +11,7 @@ import type { CleanupActions } from '../components/OrgDeleteCleanupDialog';
 const OrgDeleteCleanupDialog = lazy(() => import('../components/OrgDeleteCleanupDialog'));
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import { useToastStore } from '../stores/toastStore';
 // Lazy: only renders when the user opens the connection picker.
@@ -687,7 +688,7 @@ export default function OrganizationsPage() {
         <div>
           {tree.length === 0 ? (
             <EmptyState
-              icon={'\u2616'}
+              icon={renderNavIcon('/organizations')}
               title="No organizations yet"
               description="Define your company, its divisions, and sub-teams. Most of Procela is scoped to the org you select at the top of the page, so this is the first thing to set up."
               action={{ label: '+ Add Organization', onClick: () => openAddOrg(null) }}

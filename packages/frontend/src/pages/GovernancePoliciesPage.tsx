@@ -10,6 +10,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import DependencyBanner, { useDependencyChecks } from '../components/DependencyBanner';
 import { formatPersonLabel } from '../lib/personLabel';
@@ -492,7 +493,7 @@ export default function GovernancePoliciesPage() {
         {loading ? (
           <SkeletonRows rows={5} columns={8} />
         ) : policies.length === 0 && !showForm ? (
-          <EmptyState icon={'📋'} title="No governance documents yet"
+          <EmptyState icon={renderNavIcon('/governance-policies')} title="No governance documents yet"
             description="Charters set the program's scope, policies set the rules, standards set the conventions, and frameworks set the structure. Create your first document to get started."
             action={canWrite ? { label: '+ Add Document', onClick: openAdd } : undefined} />
         ) : (

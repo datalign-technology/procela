@@ -18,11 +18,25 @@ import type { NavItem } from './navConfig';
 // icon just from the route — no per-item glyph wiring needed.
 // ──────────────────────────────────────────────────────────────────────────
 
-function NavSvg({ children }: { children: React.ReactNode }) {
+// NavSvg — the single wrapper every rail icon shares. Defaults
+// match the sidebar (18px, stroke 1.9). Empty-state hero and other
+// larger surfaces override via `size` + `strokeWidth`; the icon
+// path data stays untouched so a page's empty state renders the
+// exact shape of its own rail entry, just bigger. See
+// `renderNavIcon()` below.
+function NavSvg({
+  children,
+  size = 18,
+  strokeWidth = 1.9,
+}: {
+  children: React.ReactNode;
+  size?: number;
+  strokeWidth?: number;
+}) {
   return (
     <svg
-      width="18" height="18" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.9"
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={strokeWidth}
       strokeLinecap="round" strokeLinejoin="round"
       aria-hidden="true" focusable="false"
       style={{ display: 'inline-block', verticalAlign: 'middle' }}
@@ -311,6 +325,33 @@ export const NAV_ICONS: Record<string, React.ReactNode> = {
 export function navIconNode(item: NavItem | undefined): React.ReactNode {
   if (!item) return null;
   return NAV_ICONS[item.to] ?? null;
+}
+
+/**
+ * renderNavIcon — render the same icon the sidebar uses for a
+ * given route, at a chosen size. Used by empty-state hero blocks,
+ * card headers, and anywhere else that wants "this page's icon"
+ * but bigger than 18 px.
+ *
+ * Since every NAV_ICONS entry is a `<NavSvg>…</NavSvg>` element,
+ * we can just clone-and-override the props. The path data stays
+ * identical to the rail entry — no risk of the empty-state icon
+ * drifting from the sidebar icon.
+ *
+ * Returns null when the route has no icon registered; callers
+ * can fall back to their own default.
+ */
+export function renderNavIcon(
+  route: string,
+  opts: { size?: number; strokeWidth?: number } = {},
+): React.ReactNode {
+  const base = NAV_ICONS[route];
+  if (!React.isValidElement(base)) return null;
+  const { size = 36, strokeWidth = 1.7 } = opts;
+  return React.cloneElement(base as React.ReactElement<{ size?: number; strokeWidth?: number }>, {
+    size,
+    strokeWidth,
+  });
 }
 
 // Section accordion chevron. Inline SVG (not a text glyph) so it

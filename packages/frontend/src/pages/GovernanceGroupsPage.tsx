@@ -15,6 +15,7 @@ import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/u
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import IconButton from '../components/IconButton';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
@@ -1027,7 +1028,7 @@ export default function GovernanceGroupsPage() {
           <div>
             {tree.length === 0 && !showForm ? (
               <EmptyState
-                icon={'☷'}
+                icon={renderNavIcon('/governance-groups')}
                 title="No governance groups defined yet"
                 description="Use the + Add Group button above to get started."
                 action={{ label: '+ Add Group', onClick: openAdd }}
