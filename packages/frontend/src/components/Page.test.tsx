@@ -29,11 +29,15 @@ describe('Page', () => {
     expect(outer.style.margin).toBe('0px auto');
   });
 
-  it('left-anchors at width="wizard" (max width but no auto margin)', () => {
+  it('centres horizontally at width="wizard"', () => {
+    // The `wizard` variant used to left-anchor (max width but no
+    // auto margin); that was a bug — on wide viewports the form
+    // jammed to the left with empty space to the right. Fixed in
+    // #19: `wizard` now centres like `narrow`.
     const { container } = render(<Page width="wizard"><span>x</span></Page>);
     const outer = container.firstChild as HTMLElement;
     expect(outer.style.maxWidth).toBe('820px');
-    expect(outer.style.margin).toBe('');
+    expect(outer.style.margin).toBe('0px auto');
   });
 
   it('honours an optional padding override', () => {
