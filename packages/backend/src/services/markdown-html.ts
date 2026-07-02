@@ -1,4 +1,25 @@
 import { Marked } from 'marked';
+import fs from 'node:fs';
+import path from 'node:path';
+
+// The horizontal Procela.ai wordmark lives next to HELP.md so both
+// the PDF renderer (services/markdown-pdf.ts) and this HTML
+// renderer read from the same file. Base64-encode once at module
+// load so every subsequent render is a string copy — the guide
+// then stays fully self-contained (no outbound asset requests,
+// which is a hard property of this render path — see the file
+// docstring).
+const WORDMARK_PATH = path.resolve(__dirname, '..', 'docs', 'procela-logo.png');
+const WORDMARK_DATA_URL: string | null = (() => {
+  try {
+    const bytes = fs.readFileSync(WORDMARK_PATH);
+    return `data:image/png;base64,${bytes.toString('base64')}`;
+  } catch {
+    // Missing wordmark isn't fatal — the header degrades to
+    // text-only. Better to render the guide than to 500.
+    return null;
+  }
+})();
 
 /**
  * markdown-to-html — Renders the markdown subset used by our in-app
@@ -149,13 +170,23 @@ export function renderMarkdownToHtml(markdown: string, opts: RenderHtmlOptions):
       position: sticky; top: 0;
       background: var(--bg);
       border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
+      padding: 12px 24px;
       grid-column: 1 / -1;
       margin: -32px -24px 24px;
       z-index: 10;
+      display: flex; align-items: center; gap: 16px;
     }
+    header.doc-header .brand {
+      height: 36px; width: auto; max-width: 180px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    header.doc-header .info { min-width: 0; }
     header.doc-header .title { font-size: 15px; font-weight: 600; color: var(--text); }
     header.doc-header .meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    @media print {
+      header.doc-header .brand { height: 44px; max-width: 220px; }
+    }
     nav.toc {
       position: sticky; top: 76px;
       align-self: start;
@@ -277,8 +308,11 @@ export function renderMarkdownToHtml(markdown: string, opts: RenderHtmlOptions):
 <body>
   <div class="shell">
     <header class="doc-header">
-      <div class="title">${escapeHtml(opts.title)}</div>
-      <div class="meta">${opts.subtitle ? escapeHtml(opts.subtitle) + '  ·  ' : ''}Generated ${escapeHtml(generated)}</div>
+      ${WORDMARK_DATA_URL ? `<img class="brand" src="${WORDMARK_DATA_URL}" alt="Procela" />` : ''}
+      <div class="info">
+        <div class="title">${escapeHtml(opts.title)}</div>
+        <div class="meta">${opts.subtitle ? escapeHtml(opts.subtitle) + '  ·  ' : ''}Generated ${escapeHtml(generated)}</div>
+      </div>
     </header>
     ${tocHtml}
     <main class="doc-body">
