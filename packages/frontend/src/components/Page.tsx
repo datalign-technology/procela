@@ -37,7 +37,7 @@ interface PageProps {
 const WIDTH_STYLES: Record<PageWidth, React.CSSProperties> = {
   default: {},
   narrow: { maxWidth: 820, margin: '0 auto' },
-  wizard: { maxWidth: 820 },
+  wizard: { maxWidth: 820, margin: '0 auto' },
 };
 
 /**
