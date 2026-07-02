@@ -8,6 +8,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
@@ -747,7 +748,7 @@ export default function MappingsPage() {
           />
         ) : mappings.length === 0 && !showForm ? (
           <EmptyState
-            icon={'\u2194'}
+            icon={renderNavIcon('/mappings')}
             title="No mappings yet"
             description="Mappings link your data assets to the process activities they support. They're how Procela knows which processes a piece of data flows through (and where the gaps are)."
             action={{ label: '+ Add Mapping', onClick: openForm }}

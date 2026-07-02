@@ -11,6 +11,7 @@ import IconButton from './../components/IconButton';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from './../components/EmptyState';
+import { renderNavIcon } from './../components/navIcons';
 import StatusBadge from '../components/StatusBadge';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
@@ -1061,7 +1062,7 @@ export default function ConnectionsPage() {
           <SkeletonRows rows={5} columnWidths={[32, null, null, null]} />
         ) : visibleConnections.length === 0 && !showForm ? (
           <EmptyState
-            icon={'\u26A1'}
+            icon={renderNavIcon('/connections')}
             title={filterSystem ? `No connections for ${filterSystem.name} yet` : 'No connections configured yet'}
             description="Connections are the bridge between a system and its actual data — a database, a file, a warehouse. Add one, test it, and then discover and link assets from it."
             action={{ label: '+ Add Connection', onClick: openAdd }}

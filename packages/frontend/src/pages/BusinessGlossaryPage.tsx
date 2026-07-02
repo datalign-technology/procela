@@ -9,6 +9,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import SortableTh from '../components/SortableTh';
 import { SkeletonRows } from '../components/Skeleton';
 import { useSortedList } from '../hooks/useSortedList';
@@ -880,7 +881,7 @@ export default function BusinessGlossaryPage() {
                 description={loadError}
                 action={{ label: 'Retry', onClick: () => { setLoading(true); fetchData(); } }} />
             ) : terms.length === 0 && !showForm ? (
-              <EmptyState icon={'📖'} title="No glossary terms yet"
+              <EmptyState icon={renderNavIcon('/business-glossary')} title="No glossary terms yet"
                 description="The business glossary is a shared dictionary of agreed-upon terms. Define terms so everyone speaks the same language."
                 action={canWrite ? { label: '+ Add Term', onClick: openAdd } : undefined}
                 secondaryAction={canWrite ? { label: 'Generate Industry Terms', onClick: handleGenerate, variant: 'secondary' } : undefined} />

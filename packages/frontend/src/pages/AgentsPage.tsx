@@ -11,6 +11,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
@@ -602,7 +603,7 @@ export default function AgentsPage() {
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {filtered.length === 0 ? (
           <EmptyState
-            icon={'\u2734'}
+            icon={renderNavIcon('/agents')}
             title={selectedOrgId ? 'No agents in this organization yet' : 'No agents defined yet'}
             description="Agents are non-human actors — AI models, service accounts, pipelines, bots — that participate in your org alongside people."
             action={{ label: '+ Add Agent', onClick: openAdd }}
