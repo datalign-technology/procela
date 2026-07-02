@@ -105,7 +105,7 @@ npm run lint -w packages/connector
 | ------------ | -------------- | ------ |
 | Postgres     | `postgres`     | v1 (0.1.x) |
 | SQL Server   | `sqlserver`    | v1 (0.2.x) |
-| MySQL        | `mysql`        | planned |
+| MySQL / MariaDB | `mysql`     | v1 (0.3.x) |
 | Oracle       | `oracle`       | planned |
 | dbt manifest | `dbt`          | planned |
 

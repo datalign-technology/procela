@@ -23,8 +23,9 @@ import type { ConnectorConfig, ReportedAsset } from './types';
 import { pairClaim, heartbeat, report } from './api';
 import { scanPostgres } from './postgres';
 import { scanSqlServer } from './sqlserver';
+import { scanMysql } from './mysql';
 
-const AGENT_VERSION = '0.2.0';
+const AGENT_VERSION = '0.3.0';
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger
@@ -100,6 +101,9 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
           break;
         case 'sqlserver':
           assets = await scanSqlServer(source);
+          break;
+        case 'mysql':
+          assets = await scanMysql(source);
           break;
         default:
           // TypeScript's exhaustiveness check would flag a missing
