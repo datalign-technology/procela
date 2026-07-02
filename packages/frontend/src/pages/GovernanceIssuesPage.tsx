@@ -10,6 +10,7 @@ import SortableTh from '../components/SortableTh';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import { SkeletonRows } from '../components/Skeleton';
 import { formatPersonLabel } from '../lib/personLabel';
 import { useRefreshOnFocus } from '../hooks/usePolling';
@@ -488,7 +489,7 @@ export default function GovernanceIssuesPage() {
           <SkeletonRows rows={5} columnWidths={[32, null, null, null, null, null, null, null, 100]} />
         ) : issues.length === 0 && !showForm ? (
           <EmptyState
-            icon={'!'}
+            icon={renderNavIcon('/governance-work')}
             title="No governance issues yet"
             description="Governance issues track data quality problems, policy violations, and other concerns. Create your first issue to get started."
             action={canWrite ? { label: '+ Add Issue', onClick: openAdd } : undefined}

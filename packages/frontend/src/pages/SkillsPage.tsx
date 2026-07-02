@@ -9,6 +9,7 @@ import { ExportPayload } from '../lib/export';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import SortableTh from '../components/SortableTh';
 import { useSortedList } from '../hooks/useSortedList';
 import { SkeletonRows } from '../components/Skeleton';
@@ -388,7 +389,7 @@ export default function SkillsPage() {
       <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
         {sorted.length === 0 ? (
           <EmptyState
-            icon={'✦'}
+            icon={renderNavIcon('/skills')}
             title={filterCategory ? 'No skills in this category yet' : 'No skills defined yet'}
             description="Skills represent DAMA-aligned capabilities that your agents and people can possess. Seed the standard taxonomy or add skills manually."
             action={{ label: '+ Add Skill', onClick: openAdd }}

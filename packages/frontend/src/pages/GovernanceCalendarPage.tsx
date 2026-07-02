@@ -7,6 +7,7 @@ import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
@@ -837,7 +838,7 @@ export default function GovernanceCalendarPage() {
               <SkeletonRows rows={5} columns={6} />
             ) : events.length === 0 && !showForm ? (
               <EmptyState
-                icon={'📅'}
+                icon={renderNavIcon('/governance-calendar')}
                 title="No governance events yet"
                 description="Set up recurring councils, committees, and reviews. Seed standard events or add your own."
                 action={canWrite ? { label: 'Seed Standard Events', onClick: handleSeed } : undefined}

@@ -22,6 +22,7 @@ import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
 import { useOrgContext } from '../stores/orgContext';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 
 interface Activity {
   id: string;
@@ -241,6 +242,7 @@ export default function ProcessDataMapPage() {
 
       {data && activities.length === 0 && assets.length === 0 && (
         <EmptyState
+          icon={renderNavIcon('/processes/data-map')}
           title="Nothing to map yet"
           description="Once activities are mapped to data assets via the Process Catalog, they'll show up here as a connected graph."
         />

@@ -13,6 +13,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useToastStore } from '../stores/toastStore';
 import IconButton from '../components/IconButton';
 import EmptyState from '../components/EmptyState';
+import { renderNavIcon } from '../components/navIcons';
 import HelpPopover from '../components/HelpPopover';
 import ActiveFiltersBar from '../components/ActiveFiltersBar';
 import type { RulesModalAsset } from '../components/DataQualityRulesModal';
@@ -812,7 +813,7 @@ export default function DataQualityPage() {
       {filteredRules.length === 0 ? (
         rules.length === 0 ? (
           <EmptyState
-            icon={'\u2713'}
+            icon={renderNavIcon('/data-quality')}
             title="No quality rules yet"
             description="Quality rules validate your data — uniqueness, non-null, regex match, value ranges. Pick an asset, attach a rule, and Procela will run it and score the asset's health."
             action={{ label: '+ Add Rule', onClick: openAdd }}
