@@ -310,7 +310,22 @@ export default function HelpPage() {
           <li>Database, File Storage, API, Data Warehouse, and Spreadsheet connections.</li>
           <li>Test connection (TCP / HTTP probe) and Discover (list assets reachable through the connection).</li>
           <li>Many-to-many: a connection can serve multiple systems.</li>
+          <li><strong>Use a Connection when Procela can reach the source.</strong> Credentials live server-side (encrypted), and Procela's backend makes live outbound calls for Test, Discover, data-quality rule execution, and lineage sampling. Cloud warehouses and internal databases exposed via VPN or PrivateLink belong here.</li>
         </ul>
+        <h3 style={h3Style}>On-prem connectors</h3>
+        <ul style={listStyle}>
+          <li>Small container (<code>ghcr.io/crossleyc-bot/procela-connector</code>) that runs <strong>inside your customer's network</strong> and ships catalog metadata back to Procela over outbound HTTPS. Use it when Procela cannot reach the source database — the classic "our security team won't open inbound firewall rules" case.</li>
+          <li>Managed in <strong>Settings &rarr; On-prem connectors</strong>. Admin creates a record with a name and the systems it reports for, receives a one-time 8-digit pairing code, and the operator running the container claims it on first boot. The connector heartbeats every 60 s and scans configured databases every 30 min by default.</li>
+          <li><strong>Freshness states.</strong> Each row shows a live status: <em>Online</em> (heartbeat &lt; 30 min), <em>Stale</em> (30 min &ndash; 4 h), <em>Offline</em> (&gt; 4 h). Offline transitions fire an in-app notification once.</li>
+          <li><strong>Adapters bundled today:</strong> Postgres, SQL Server, MySQL/MariaDB. Cloud warehouses are intentionally out of scope for the agent — they belong on the Connections path.</li>
+          <li><strong>Click a connector row</strong> to open the detail drawer: rename, reassign systems, review the recent-activity timeline (paired, heartbeats, scans, ASSETS_REPORTED).</li>
+          <li><strong>What crosses the wire.</strong> Only catalog metadata (table names, row counts, freshness timestamps, table comments). Connection strings, credentials, and row values never leave the on-prem host.</li>
+          <li><strong>What Procela does with it.</strong> Reported tables either create new <em>Bronze</em>-tier Data Assets (which show up as Orphan Asset work items for stewards) or update an existing asset's <em>Synced N min ago</em> chip. Everything downstream (dashboards, digests, gap detection) reads the same asset table, so connector-sourced data blends in.</li>
+          <li><strong>Safety rails.</strong> <code>/pair/claim</code> throttles at 10/min and 100/hr per IP. Tokens are <code>pct_</code>-prefixed and SHA-256 hashed at rest; the plaintext is shown once at claim time. Revoke immediately disables a token but keeps the row for audit.</li>
+        </ul>
+        <p style={pStyle}>
+          <strong>Connection vs on-prem connector?</strong> If Procela can reach the source over the internet with a credential &mdash; use a <em>Connection</em>. If it can't (on-prem database, air-gapped VPC, regulated environment) &mdash; use an <em>on-prem connector</em>. An org can mix and match; the resulting Data Assets look identical downstream. See the FAQ section for the install commands.
+        </p>
       </div>
 
       {/* 7. Organizations */}

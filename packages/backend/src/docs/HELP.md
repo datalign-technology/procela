@@ -120,6 +120,8 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Expandable columns show data types and quality rules per column.
 - Bulk set Trust Level / owner / steward.
 - Where Used in the detail modal shows every process, mapping, and policy referencing the asset.
+- **Synced N min ago** chip. When an on-prem connector last refreshed an asset's freshness signal, the row shows a small pill next to the name: green (**Live**, synced in the last 30 min), amber (synced 30 min – 4 h ago), red (synced > 4 h ago). The tooltip carries the exact ISO timestamp. Manually-added assets never show a chip. The chip is a "trust the number" cue — if it's green, the row count and last-write timestamp reflect the source database, not a human's last manual edit.
+- **Connector-discovered assets arrive as Bronze**. When an on-prem connector reports a new table, Procela creates the asset at Bronze tier with no owner, no steward, no linked processes. That's intentional — new arrivals should surface as work items for stewards on the Orphan Assets and Ungoverned dashboards, not silently melt into an approved catalog.
 - Data Assets is operational-only. Governance documents (charters, policies, standards, frameworks) live under Governance → Documents, not here. The earlier All · Operational · Governance lens was removed from this page when the governance template stopped seeding placeholder data assets and started seeding real Policies instead.
 - Org scope and inheritance. Each asset is owned by exactly one org, and only company or division levels can own — departments and teams can't. If the active Working in… scope isn't an owning level, the + Add data asset button is hidden and a banner explains why (the list still renders so users can read inherited rows from above). When you're scoped to a division, the list shows division-owned assets plus assets owned at the parent company — the parent-owned ones carry a small Owned by <Company> badge and their edit / delete / inline-cell affordances are disabled with a "Switch the Working in… scope to <Company> to edit" tooltip. Conversely, a company-scoped user sees everything below (a rollup view) with the same badge on division-owned rows. Sibling divisions don't see each other's assets. The level guard is enforced server-side too — a direct API call with a department-level orgId is rejected with a 400.
 
@@ -179,6 +181,31 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Database, File Storage, API, Data Warehouse, and Spreadsheet connections.
 - Test connection (TCP / HTTP probe) and Discover (list assets reachable through the connection).
 - Many-to-many: a connection can serve multiple systems.
+- **Use a Connection when Procela can reach the source.** Credentials live server-side (encrypted), and Procela's backend makes live outbound calls for Test, Discover, data-quality rule execution, and lineage sampling. Cloud warehouses (Snowflake, BigQuery, Redshift, Databricks), cloud databases with a public endpoint, and internal databases exposed via a VPN / PrivateLink tunnel all belong here.
+
+### On-prem connectors
+
+- Small container (`ghcr.io/crossleyc-bot/procela-connector`) that runs **inside your customer's network** and ships catalog metadata back to Procela over outbound HTTPS. Use it when Procela cannot reach the source database — the classic "our security team won't open inbound firewall rules" case.
+- Managed in **Settings → On-prem connectors**. Admin creates a connector record with a name and the systems it reports for, receives a one-time 8-digit pairing code, and the operator running the container claims the code on first boot. From then on the connector heartbeats every 60s and scans configured databases every 30 min (both cadences are configurable in the connector's YAML).
+- **Freshness states.** Each row shows a live status derived from `lastHeartbeatAt`:
+  - **Online** — heartbeat received in the last 30 minutes
+  - **Stale** — no heartbeat in 30 min – 4 hours
+  - **Offline** — no heartbeat in over 4 hours (fires an in-app notification once per ONLINE→OFFLINE transition)
+- **Adapters bundled with the container today**: Postgres, SQL Server, MySQL/MariaDB. Cloud warehouses are intentionally out of scope — they go through Connections.
+- **Click a connector row** to open the detail drawer: rename, reassign which systems it reports for, and review the recent-activity timeline (paired, heartbeats, scans, ASSETS_REPORTED with created / updated counts).
+- **What crosses the wire.** Only catalog metadata — table names in `schema.table` form, approximate row counts, last-write timestamps, and any table-comment description. **Connection strings, credentials, and row values never leave the on-prem host.** Every payload the agent sends is auditable in the connector's activity drawer.
+- **What Procela does with it.** Each reported table either creates a new **Bronze**-tier Data Asset (which shows up as an Orphan Asset work item for stewards) or updates an existing asset's `lastSyncedAt` and health score. Everything downstream — dashboards, weekly digests, gap detection, orphan lists, AI answers — reads from the same asset table, so connector-sourced data blends in without any feature having to know it came from a connector.
+- **Rate-limits and safety rails.** `/pair/claim` throttles at 10/min and 100/hr per IP so the 8-digit code isn't brute-forceable. Tokens are `pct_`-prefixed and stored as SHA-256 hashes; the plaintext is shown once at claim time and never again. Revoke immediately disables a token but keeps the row for audit.
+
+### Connections vs on-prem connectors — which one?
+
+| Question | If **yes** | If **no** |
+|---|---|---|
+| Can Procela reach the source over the internet (with credentials)? | **Connection** | **On-prem connector** |
+| Do you need Data Quality rule execution or live column-level discovery? | **Connection** (only supported there today) | Either works if you just need catalog + freshness |
+| Regulatory constraint that no cloud system holds your DB credentials? | **On-prem connector** — credentials stay on-prem | — |
+
+The two are not exclusive. An org can have some sources on Connections and some on connectors; the resulting Data Assets look identical downstream. See the **Frequently Asked Questions** section for the install commands.
 
 ## 7. Organizations
 
@@ -589,6 +616,49 @@ Procela follows the DAMA (Data Management Association) framework for data govern
 
 In the current prototype, data is stored in JSON files on the server. In production, Procela is designed
  to use PostgreSQL with full multi-tenancy, encryption, and backup capabilities.
+
+### What's the difference between a Connection and an on-prem connector?
+
+A **Connection** is Procela reaching **into** your source system — you give Procela a host, port, and credentials, and Procela's servers make live outbound calls to your database. It's the right choice when Procela can route to the source (cloud databases, VPN-tunnelled internal databases, warehouses like Snowflake). It supports the richest feature surface today: Test, Discover, data-quality rule execution, live column-level introspection.
+
+An **on-prem connector** is a small container that runs **inside your network** and reaches **out to** Procela over HTTPS. It's the right choice when Procela cannot route to your database — the classic "our security team won't open inbound firewall rules" case. It ships only catalog metadata (table names, row counts, freshness); connection strings and row data never leave the on-prem host. Today it supports Postgres, SQL Server, and MySQL/MariaDB; more adapters are added case-by-case.
+
+An org can use both — some sources on Connections, some on connectors — and the resulting Data Assets look identical downstream. See **6. Systems → On-prem connectors** for the freshness-state and pairing details.
+
+### How do I install the on-prem connector?
+
+1. In Procela, open **Settings → On-prem connectors → Add connector**. Give it a name (e.g. `warehouse-prod`), pick which Systems it should report assets for, and click **Generate pairing code**. You'll see an 8-digit code valid for 10 minutes.
+
+2. On the host that will run the connector (a VM inside your network with outbound HTTPS to Procela), create `/etc/procela/connector.yaml`:
+
+    ```yaml
+    procelaUrl: https://procela.example.com/api/v1
+    pairingCode: "12345678"          # remove after first successful pair
+    heartbeatSeconds: 60
+    scanSeconds: 1800
+
+    sources:
+      - type: postgres               # or: sqlserver, mysql
+        name: warehouse-prod
+        connectionString: postgres://procela_ro:PASSWORD@db.internal:5432/warehouse
+        schemas: [public, analytics]
+        systemId: sys_warehouse_prod
+    ```
+
+3. Pull the image and start the container. `:0.3.0` and `:latest` are both fine; pin to a specific semver for production.
+
+    ```bash
+    docker pull ghcr.io/crossleyc-bot/procela-connector:0.3.0
+    docker run --restart unless-stopped \
+      -v /etc/procela/connector.yaml:/etc/procela/connector.yaml \
+      ghcr.io/crossleyc-bot/procela-connector:0.3.0
+    ```
+
+4. Within ~60 seconds the row in **Settings → On-prem connectors** flips from "Awaiting first heartbeat" to **Online**. After the first scan (default 30 min) the affected Data Assets pick up **Synced N min ago** chips.
+
+The container rewrites the YAML with the issued token on first pair and drops the pairing code. If the mount is read-only (common in production), the token is printed to stdout instead — paste it into the config under `token:` and restart.
+
+For Kubernetes / systemd / ECS deployment shapes, see the connector README bundled in the source repo. `PROCELA_PAIRING_CODE=…` as an environment variable also works on first boot if you'd rather not put the code in the file.
 
 ### I lost my authenticator app. How do I get back in?
 
