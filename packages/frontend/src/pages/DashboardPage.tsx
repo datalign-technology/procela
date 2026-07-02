@@ -8,6 +8,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import PageHeader from '../components/PageHeader';
 import DomainLensToggle from '../components/DomainLensToggle';
 import DomainLensActiveBanner from '../components/DomainLensActiveBanner';
+import { renderNavIcon } from '../components/navIcons';
 import SkillGapsWidget from '../components/SkillGapsWidget';
 import { useDomainLens } from '../stores/domainLensStore';
 import { useAuthStore } from '../stores/authStore';
@@ -60,9 +61,12 @@ const cardStyle: React.CSSProperties = {
 // ──────────────────────────────────────────────────────────────────────────
 
 function GettingStartedCard({ stats }: { stats: DashboardStats }) {
+  // Steps use the same icon set as the sidebar so the numbered
+  // rows here read as "open the Processes / Systems / Data Assets /
+  // People page". Sized down to 16px to sit inline with the title.
   const steps = [
     {
-      icon: '⛁',
+      icon: renderNavIcon('/processes', { size: 16 }),
       title: 'Define your business processes',
       description: 'Map how your organization works — value streams, processes, sub-processes, and activities. Plain business language, no technical knowledge required.',
       done: stats.processes > 0,
@@ -73,7 +77,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
       doneLabel: `${stats.processes} ${stats.processes === 1 ? 'process' : 'processes'}`,
     },
     {
-      icon: '⌸',
+      icon: renderNavIcon('/systems', { size: 16 }),
       title: 'Register your systems',
       description: 'Tell Procela about the applications and platforms your data lives in — ERP, CRM, data warehouses, file stores.',
       done: stats.systems > 0,
@@ -82,7 +86,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
       doneLabel: `${stats.systems} ${stats.systems === 1 ? 'system' : 'systems'}`,
     },
     {
-      icon: '⬢',
+      icon: renderNavIcon('/data-assets', { size: 16 }),
       title: 'Add your data assets',
       description: 'Describe the data you care about in business terms — customer records, transactions, reports — so it can be tied back to processes.',
       done: stats.dataAssets > 0,
@@ -91,7 +95,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
       doneLabel: `${stats.dataAssets} ${stats.dataAssets === 1 ? 'asset' : 'assets'}`,
     },
     {
-      icon: '☺',
+      icon: renderNavIcon('/people', { size: 16 }),
       title: 'Invite your people',
       description: 'Set up owners and stewards so accountability is clear. Procela tracks who is responsible for each process, system, and asset.',
       done: stats.people > 0,
@@ -151,7 +155,7 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14 }}>{s.icon}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--color-text-secondary)', flexShrink: 0 }}>{s.icon}</span>
                 <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>{s.title}</h3>
                 {s.done && (
                   <span style={{ fontSize: 11, color: '#166534', marginLeft: 'auto', fontWeight: 500 }}>
