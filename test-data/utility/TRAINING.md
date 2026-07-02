@@ -288,6 +288,18 @@ Procela knows which system carries the canonical copy.
 
 The domain assignments feed the Governance Groups page in Module 8.
 
+### 4.4 How real Data Assets arrive in production
+
+In this training you're typing the assets in by hand — fine for a demo. In production most orgs seed the catalog one of two ways:
+
+1. **Data Connections** (see *6. Systems → Connections* in the Help Guide). Procela's backend makes outbound calls to your database using credentials you provide, and the **Discover assets** button walks the schema. Works for cloud warehouses (Snowflake, BigQuery, Redshift, Databricks) and any internal database Procela can route to.
+
+2. **On-prem connector.** A small container the customer runs *inside their network*. It scans configured Postgres, SQL Server, or MySQL databases every 30 minutes and reports catalog metadata to Procela over an outbound HTTPS connection. Connection strings never leave the on-prem host. Use this when Procela cannot reach the source directly.
+
+Either way, discovered assets arrive as **Bronze** tier, unowned, unmapped — deliberately, so they show up in the Orphan Assets and Ungoverned dashboards as work items for stewards. This training doesn't spin up a real database, but the *behaviour* is worth knowing: a real deployment doesn't manually type in 400 tables, and it *shouldn't* auto-promote them either.
+
+If you're rolling out to a customer now, keep going with the training as-is, then read the **6. Systems → On-prem connectors** section of the Help Guide for the install commands and the pairing flow.
+
 ---
 
 ## Module 5 — Connect processes to data (10 min)
@@ -745,6 +757,7 @@ via the **RACI Matrix**.
 | Reports + scorecards | Insights → Reports |
 | Pivot exploration | Insights → Analysis |
 | Where are the gaps? | Dashboard → Gaps section + Insights → Gap Detection |
+| Live source metadata / freshness | Systems → Connections (if Procela can reach the DB) or Settings → On-prem connectors (if it can't) |
 | Help / shortcuts | Bottom-left nav → Help; press `?` for keyboard shortcuts |
 
 ### Keyboard shortcuts to know
