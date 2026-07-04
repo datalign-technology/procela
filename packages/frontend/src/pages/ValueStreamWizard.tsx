@@ -82,15 +82,25 @@ export default function ValueStreamWizard() {
           setOrgIndustry(org.industry);
           setIndustry(org.industry);
           setIndustrySource('own');
-        } else if (org?.parentId) {
+          return;
+        }
+        // Walk up the entire parent chain, not just one hop. A
+        // Department scoped inside a Division inside a Company
+        // should still resolve the Company's industry — one-hop
+        // lookup missed that case. Guarded on a depth cap so a
+        // corrupt cycle in the parent chain can't spin forever.
+        let currentParent = org?.parentId || null;
+        for (let depth = 0; currentParent && depth < 10; depth++) {
           try {
-            const parentRes = await apiClient.get<{ success: boolean; data: { industry?: string } }>(`/organizations/${org.parentId}`);
-            if (parentRes.data?.industry) {
-              setOrgIndustry(parentRes.data.industry);
-              setIndustry(parentRes.data.industry);
+            const p = await apiClient.get<{ success: boolean; data: { industry?: string; parentId?: string | null } }>(`/organizations/${currentParent}`);
+            if (p.data?.industry) {
+              setOrgIndustry(p.data.industry);
+              setIndustry(p.data.industry);
               setIndustrySource('inherited');
+              return;
             }
-          } catch { /* */ }
+            currentParent = p.data?.parentId || null;
+          } catch { break; }
         }
       } catch { /* */ }
     }
