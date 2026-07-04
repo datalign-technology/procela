@@ -25,6 +25,7 @@ import {
 
 import { useAuthStore } from '@/stores/authStore';
 import { useOrgContext } from '@/stores/orgContext';
+import { signOutLocal } from '@/lib/signOut';
 import { useBrandingStore } from '@/stores/brandingStore';
 import { apiClient } from '@/api/client';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
@@ -34,7 +35,7 @@ import { useIsMobile } from '@/hooks/useMediaQuery';
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const { activeOrgId, setActiveOrg, setOrgs, clearActiveOrg, refreshKey, triggerRefresh } = useOrgContext();
   const { branding, fetch: fetchBranding } = useBrandingStore();
 
@@ -245,7 +246,7 @@ export default function Layout() {
         logoutUrl = res.data?.logoutUrl || null;
       }
     } catch { /* always clear local session even when the backend call fails */ }
-    logout();
+    signOutLocal();
     if (logoutUrl) {
       window.location.href = logoutUrl;
     } else {
