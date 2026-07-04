@@ -539,7 +539,7 @@ export default function OrganizationsPage() {
             </div>
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value, industry: (e.target.value === 'company' || e.target.value === 'division') ? orgForm.industry : '' })}>
+              <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
                 {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
               </select>
             </div>
@@ -550,15 +550,24 @@ export default function OrganizationsPage() {
                 {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </div>
-            {(orgForm.type === 'company' || orgForm.type === 'division') && (
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
-                <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.industry} onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}>
-                  <option value="">-- Select --</option>
-                  {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
-                </select>
-              </div>
-            )}
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
+              {/* Combobox: pick from the standard list OR type a custom
+                  value. Backend accepts any string, so long-tail
+                  industries (Biotech, Insurance Tech, …) work. Leave
+                  blank on a division/department/team to inherit from
+                  the parent chain at process-generation time. */}
+              <input
+                style={inputStyle}
+                list="orgIndustryOptions"
+                value={orgForm.industry}
+                onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}
+                placeholder={orgForm.parentId ? 'Leave blank to inherit from parent' : 'e.g. Utilities, Defense & Shipbuilding'}
+              />
+              <datalist id="orgIndustryOptions">
+                {INDUSTRIES.map((ind) => <option key={ind} value={ind} />)}
+              </datalist>
+            </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
@@ -726,7 +735,7 @@ export default function OrganizationsPage() {
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Type</label>
-                    <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value, industry: (e.target.value === 'company' || e.target.value === 'division') ? orgForm.industry : '' })}>
+                    <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.type} onChange={(e) => setOrgForm({ ...orgForm, type: e.target.value })}>
                       {orgTypes.map((t) => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                     </select>
                   </div>
@@ -737,15 +746,19 @@ export default function OrganizationsPage() {
                       {flatOrgs.filter((o) => o.id !== editingOrgId).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
                     </select>
                   </div>
-                  {(orgForm.type === 'company' || orgForm.type === 'division') && (
-                    <div>
-                      <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
-                      <select style={{ ...inputStyle, appearance: 'auto' as any }} value={orgForm.industry} onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}>
-                        <option value="">-- Select --</option>
-                        {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
-                      </select>
-                    </div>
-                  )}
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Industry</label>
+                    {/* Combobox — see the sibling form above for
+                        rationale. Blank on a child = inherit from
+                        parent chain. */}
+                    <input
+                      style={inputStyle}
+                      list="orgIndustryOptions"
+                      value={orgForm.industry}
+                      onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}
+                      placeholder={orgForm.parentId ? 'Leave blank to inherit from parent' : 'e.g. Utilities, Defense & Shipbuilding'}
+                    />
+                  </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
                     <input style={inputStyle} value={orgForm.description} onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })} placeholder="Brief description" />
