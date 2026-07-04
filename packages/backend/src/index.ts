@@ -1,9 +1,23 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Try multiple locations for .env: backend dir, then monorepo root
-dotenv.config({ path: path.resolve(__dirname, '../..', '.env') });
-dotenv.config({ path: path.resolve(__dirname, '../../../..', '.env') });
+// Load .env from two places, in precedence order (last one loaded
+// wins, per dotenv's override:true). Priority: backend workspace
+// override → monorepo root default. `__dirname` at runtime is
+// `packages/backend/src` under tsx watch, `packages/backend/dist`
+// after a production build — the resolved paths point at the same
+// file either way.
+//
+// Previous incarnation used `../..` and `../../../..` which
+// resolve to `packages/` and one level ABOVE the repo root
+// respectively — neither is where any `.env` file actually lives,
+// so environment variables silently fell through to whatever the
+// shell exported. That's exactly the ghost-key symptom we chased
+// while diagnosing the AI probe failing after key rotation.
+const REPO_ROOT_ENV = path.resolve(__dirname, '..', '..', '..', '.env');
+const BACKEND_ENV = path.resolve(__dirname, '..', '.env');
+dotenv.config({ path: REPO_ROOT_ENV, override: true });
+dotenv.config({ path: BACKEND_ENV, override: true });
 
 import express from 'express';
 import cors from 'cors';
