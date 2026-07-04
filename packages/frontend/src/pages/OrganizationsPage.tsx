@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
+import Combobox from '../components/Combobox';
 import ExportMenu from '../components/ExportMenu';
 import ConfirmDialog from '../components/ConfirmDialog';
 import type { CleanupActions } from '../components/OrgDeleteCleanupDialog';
@@ -555,18 +556,15 @@ export default function OrganizationsPage() {
               {/* Combobox: pick from the standard list OR type a custom
                   value. Backend accepts any string, so long-tail
                   industries (Biotech, Insurance Tech, …) work. Leave
-                  blank on a division/department/team to inherit from
-                  the parent chain at process-generation time. */}
-              <input
-                style={inputStyle}
-                list="orgIndustryOptions"
+                  blank on a child to inherit from the parent chain at
+                  process-generation time. */}
+              <Combobox
                 value={orgForm.industry}
-                onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}
-                placeholder={orgForm.parentId ? 'Leave blank to inherit from parent' : 'e.g. Utilities, Defense & Shipbuilding'}
+                onChange={(v) => setOrgForm({ ...orgForm, industry: v })}
+                options={INDUSTRIES}
+                placeholder={orgForm.parentId ? 'Leave blank to inherit from parent' : 'Pick from the list, or type a custom industry'}
+                ariaLabel="Industry"
               />
-              <datalist id="orgIndustryOptions">
-                {INDUSTRIES.map((ind) => <option key={ind} value={ind} />)}
-              </datalist>
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
@@ -751,12 +749,12 @@ export default function OrganizationsPage() {
                     {/* Combobox — see the sibling form above for
                         rationale. Blank on a child = inherit from
                         parent chain. */}
-                    <input
-                      style={inputStyle}
-                      list="orgIndustryOptions"
+                    <Combobox
                       value={orgForm.industry}
-                      onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}
-                      placeholder={orgForm.parentId ? 'Leave blank to inherit from parent' : 'e.g. Utilities, Defense & Shipbuilding'}
+                      onChange={(v) => setOrgForm({ ...orgForm, industry: v })}
+                      options={INDUSTRIES}
+                      placeholder={orgForm.parentId ? 'Leave blank to inherit from parent' : 'Pick from the list, or type a custom industry'}
+                      ariaLabel="Industry"
                     />
                   </div>
                   <div>
