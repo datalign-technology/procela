@@ -74,47 +74,86 @@ rehydrateAiOverride();
  * Returns: { success: true, data: <generated hierarchy>, cached: boolean, generatedAt: string, specializedFor?: string }
  */
 router.post('/generate-template', async (req: Request, res: Response) => {
+  const { industry, orgName, orgDescription, orgType } = req.body;
+  const refresh = req.query.refresh === 'true' || req.body.refresh === true;
+
+  // Free-form: any non-empty string is a valid industry. The
+  // frontend combobox surfaces the INDUSTRIES enum as an
+  // autocomplete list, but users can type long-tail values
+  // (Biotech, Insurance Tech, Utilities Electric, …) and expect
+  // them to flow through. The AI prompt handles arbitrary
+  // industry strings gracefully — no lookup on the enum needed
+  // downstream. Validation failures still return a plain JSON 400
+  // — SSE only kicks in once we know we're going to stream.
+  if (typeof industry !== 'string' || !industry.trim()) {
+    res.status(400).json({
+      success: false,
+      error: 'Industry is required. Pick from the list or type a custom value.',
+    });
+    return;
+  }
+
+  // Cache key includes the specialisation org name so each
+  // division caches independently. Old industry-only entries
+  // (key like "utilities") and new specialised entries (key like
+  // "utilities|tidewater electric") coexist without colliding.
+  const specialization = typeof orgName === 'string' && orgName.trim()
+    ? { orgName: orgName.trim(), orgDescription: typeof orgDescription === 'string' ? orgDescription : undefined, orgType: typeof orgType === 'string' ? orgType : undefined }
+    : undefined;
+  const industryKey = String(industry).trim().toLowerCase();
+  const key = specialization
+    ? `${industryKey}|${specialization.orgName.toLowerCase()}`
+    : industryKey;
+
+  // From here on we speak SSE. Set the headers up front so the
+  // client can start reading immediately — no waiting for the AI
+  // to respond before the socket becomes writable. flushHeaders()
+  // matters: without it Express buffers until the first res.write,
+  // so a cache hit fires an event immediately but a fresh call
+  // would stall for a second or two before the browser saw
+  // anything.
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // defeat nginx/CDN buffering
+  res.flushHeaders?.();
+
+  const emit = (payload: unknown) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
   try {
-    const { industry, orgName, orgDescription, orgType } = req.body;
-    const refresh = req.query.refresh === 'true' || req.body.refresh === true;
-
-    // Free-form: any non-empty string is a valid industry. The
-    // frontend combobox surfaces the INDUSTRIES enum as an
-    // autocomplete list, but users can type long-tail values
-    // (Biotech, Insurance Tech, Utilities Electric, …) and expect
-    // them to flow through. The AI prompt handles arbitrary
-    // industry strings gracefully — no lookup on the enum needed
-    // downstream.
-    if (typeof industry !== 'string' || !industry.trim()) {
-      res.status(400).json({
-        success: false,
-        error: 'Industry is required. Pick from the list or type a custom value.',
-      });
-      return;
-    }
-
-    // Cache key includes the specialisation org name so each
-    // division caches independently. Old industry-only entries
-    // (key like "utilities") and new specialised entries (key like
-    // "utilities|tidewater electric") coexist without colliding.
-    const specialization = typeof orgName === 'string' && orgName.trim()
-      ? { orgName: orgName.trim(), orgDescription: typeof orgDescription === 'string' ? orgDescription : undefined, orgType: typeof orgType === 'string' ? orgType : undefined }
-      : undefined;
-    const industryKey = String(industry).trim().toLowerCase();
-    const key = specialization
-      ? `${industryKey}|${specialization.orgName.toLowerCase()}`
-      : industryKey;
-
     if (!refresh) {
       const hit = aiTemplateCache.find((c) => c.industry === key);
       if (hit) {
         logger.info({ industry, specialization: specialization?.orgName, cachedAt: hit.generatedAt }, 'Returning cached industry template');
-        res.json({ success: true, data: hit.data, cached: true, generatedAt: hit.generatedAt, specializedFor: specialization?.orgName });
+        // Cache hits still go over SSE for symmetry — the frontend
+        // has one code path, and the "done" event carries the
+        // same shape whether the payload came from Claude or from
+        // disk. `cached: true` lets the UI skip the progress bar
+        // animation and jump straight to the review screen.
+        emit({ type: 'done', data: hit.data, cached: true, generatedAt: hit.generatedAt, specializedFor: specialization?.orgName });
+        res.end();
         return;
       }
     }
 
-    const template = await aiService.generateIndustryTemplate(industry, specialization);
+    // Stream from Anthropic. Each `progress` event carries the
+    // running char count — the frontend divides by an estimated
+    // total (~55K chars for a full 5×5×6 hierarchy) to drive a
+    // real progress bar. Anything unusually verbose overshoots
+    // gracefully — the bar caps at ~95% until the `done` event
+    // lands.
+    let template: object | null = null;
+    for await (const evt of aiService.generateIndustryTemplateStream(industry, specialization)) {
+      if (evt.type === 'progress') {
+        emit({ type: 'progress', chars: evt.chars });
+      } else if (evt.type === 'done') {
+        template = evt.data;
+      }
+    }
+    if (!template) throw new Error('AI stream ended without a done event');
+
     const now = new Date().toISOString();
     const labelSuffix = specialization ? ` — ${specialization.orgName}` : '';
     const entry: CachedTemplate = {
@@ -129,43 +168,37 @@ router.post('/generate-template', async (req: Request, res: Response) => {
     saveStore('aiTemplateCache', aiTemplateCache);
     logger.info({ industry, specialization: specialization?.orgName, refresh }, 'Cached fresh industry template');
 
-    res.json({ success: true, data: template, cached: false, generatedAt: now, specializedFor: specialization?.orgName });
+    emit({ type: 'done', data: template, cached: false, generatedAt: now, specializedFor: specialization?.orgName });
+    res.end();
   } catch (err) {
-    // Diagnose the common setup failures and surface a message the
-    // admin can actually act on. The generic "please try again"
-    // was hiding the two most likely causes (no key, bad key) so
-    // users had no idea where to look. Full error stays in the log.
+    // Same diagnosis ladder as the non-streaming version — we lose
+    // the ability to set a proper HTTP status here (headers are
+    // already flushed) so the user-facing error type rides on the
+    // SSE `error` event instead. The frontend surfaces it in the
+    // same red-banner slot the fetch failure would have.
     const anyErr = err as { message?: string; status?: number; name?: string; rawResponse?: string };
     const msg = String(anyErr?.message || '');
     const status = anyErr?.status;
-    // Log the raw-ish response on parse failures so a maintainer
-    // can see exactly what the model produced. Truncated to 500
-    // chars to keep the log line human-readable.
     const rawPreview = typeof anyErr?.rawResponse === 'string'
       ? anyErr.rawResponse.slice(0, 500)
       : undefined;
     logger.error({ err, status, name: anyErr?.name, rawPreview, model: config.anthropicModel }, 'Template generation failed');
     let userError: string;
-    let httpStatus = 500;
     if (msg.includes('ANTHROPIC_API_KEY') || msg.includes('is not set')) {
       userError = 'AI is not configured on this server. Add ANTHROPIC_API_KEY to your backend .env file and restart the backend.';
-      httpStatus = 503;
     } else if (status === 401 || msg.toLowerCase().includes('authentication')) {
       userError = 'The configured Anthropic API key was rejected. Verify ANTHROPIC_API_KEY is a valid key with template-generation access.';
-      httpStatus = 503;
     } else if (status === 429 || msg.toLowerCase().includes('rate limit')) {
       userError = 'Anthropic rate limit reached. Wait a minute and try again.';
-      httpStatus = 503;
     } else if (status && status >= 500) {
       userError = 'Anthropic API is temporarily unavailable. Try again in a moment.';
-      httpStatus = 502;
     } else if (anyErr?.name === 'AiParseError' || msg.includes('parse') || msg.includes('JSON') || msg.includes('Empty response')) {
       userError = `The AI returned no parseable content (model: ${config.anthropicModel}). Most likely the configured model ID is wrong or unavailable to this API key. Update ANTHROPIC_MODEL and restart, or check the backend log — the raw preview is included.`;
-      httpStatus = 502;
     } else {
       userError = `Template generation failed: ${msg || 'unknown error'}. Check the backend log for details.`;
     }
-    res.status(httpStatus).json({ success: false, error: userError });
+    emit({ type: 'error', error: userError });
+    res.end();
   }
 });
 

@@ -9,6 +9,35 @@ import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import StatusBadge from '../components/StatusBadge';
 import Page from '../components/Page';
+import WizardProgress from '../components/WizardProgress';
+import { useAuthStore } from '../stores/authStore';
+
+// Empirical guess for a full 5×5×6 hierarchy's serialised JSON
+// length. Used to convert the running char count that the backend
+// streams into a 0..1 progress bar. Real hierarchies over-run this
+// occasionally — the UI clamps at 95% until the `done` event lands
+// so an over-run doesn't stall at 100% for the remaining seconds.
+const ESTIMATED_TEMPLATE_CHARS = 50000;
+
+// Phased captions that tick along the elapsed time. Pure UI —
+// Anthropic's stream doesn't expose which section it's currently
+// emitting, so we lean on a rough time-based schedule that matches
+// the model's typical generation cadence. Good enough to make the
+// wait feel narrated instead of static.
+const GENERATION_PHASES: readonly { atFill: number; label: string }[] = [
+  { atFill: 0.0, label: 'Analysing industry context…' },
+  { atFill: 0.15, label: 'Drafting value streams…' },
+  { atFill: 0.4, label: 'Adding processes…' },
+  { atFill: 0.7, label: 'Adding activities…' },
+  { atFill: 0.9, label: 'Finalising hierarchy…' },
+];
+function captionForFill(fill: number): string {
+  let out = GENERATION_PHASES[0].label;
+  for (const p of GENERATION_PHASES) {
+    if (fill >= p.atFill) out = p.label;
+  }
+  return out;
+}
 
 // ── Types ──
 
@@ -58,6 +87,10 @@ export default function ValueStreamWizard() {
   const [expandedStreams, setExpandedStreams] = useState<Set<number>>(new Set());
   const [confirmIndustry, setConfirmIndustry] = useState('');
   const [existingCount, setExistingCount] = useState(0);
+  // Running char count from the AI stream. Drives the progress bar
+  // during Generate — divided by ESTIMATED_TEMPLATE_CHARS and
+  // clamped to 0..0.95 until the `done` event arrives.
+  const [progressChars, setProgressChars] = useState(0);
 
   // Check existing value stream count to warn about duplicates
   useEffect(() => {
@@ -118,38 +151,102 @@ export default function ValueStreamWizard() {
   // the "Regenerate from AI" button.
   const [templateSource, setTemplateSource] = useState<{ cached: boolean; generatedAt: string; specializedFor?: string } | null>(null);
 
-  // Auto-generate when industry is resolved from org.
-  // `refresh: true` bypasses the cache on the server, used by the
-  // "Regenerate from AI" button on the review screen. The active
-  // org's name, description and type ride along so the AI prompt
-  // can specialise (Tidewater Electric -> SCADA / outage management,
-  // not generic Utilities content). The backend keys the cache on
-  // industry + orgName so each org caches independently.
+  // Stream the hierarchy from Anthropic via our SSE endpoint. This
+  // replaced the fire-and-wait POST call so we can (a) drive a real
+  // progress bar off the running char count instead of a mystery
+  // spinner and (b) let the backend bump max_tokens above the
+  // non-streaming ceiling for wider hierarchies. `refresh: true`
+  // bypasses the cache on the server, used by "Regenerate from AI"
+  // on the review screen. Active-org name/description/type ride
+  // along so the prompt can specialise (Tidewater Electric ->
+  // SCADA / outage management, not generic Utilities content).
   const handleGenerate = useCallback(async (ind: string, refresh: boolean = false) => {
     if (!ind || loading) return;
     setLoading(true);
     setError('');
     setTemplate(null);
     setTemplateSource(null);
+    setProgressChars(0);
     try {
-      const body: any = { industry: ind, refresh };
+      const body: Record<string, unknown> = { industry: ind, refresh };
       if (activeOrgName) body.orgName = activeOrgName;
       if (orgDescription) body.orgDescription = orgDescription;
       if (activeOrgType) body.orgType = activeOrgType;
-      const res = await apiClient.post<{ success: boolean; data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] }; cached?: boolean; generatedAt?: string; specializedFor?: string }>(
-        '/ai/generate-template', body,
-      );
-      if (res.data) {
-        setTemplate({ valueStreams: res.data.valueStreams.map((vs) => ({ ...vs, selected: true })) });
-        setExpandedStreams(new Set([0]));
-        setTemplateSource({
-          cached: !!res.cached,
-          generatedAt: res.generatedAt || new Date().toISOString(),
-          specializedFor: res.specializedFor,
-        });
-      } else {
-        setError('Unexpected response format. Please try again.');
+
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch('/api/v1/ai/generate-template', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok || !res.body) {
+        // Errors that fire BEFORE the SSE handshake (auth, 400, 5xx
+        // from a middleware) still come back as JSON. Try to read a
+        // structured message; fall back to the status text.
+        let msg = `Request failed (${res.status})`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) msg = errBody.error;
+        } catch { /* not JSON — leave the status text */ }
+        throw new Error(msg);
       }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      // Same SSE-frame parser as ChatPanel. Frames are separated by
+      // a blank line; a single read can split mid-frame.
+      let done: {
+        data: { valueStreams: Omit<TemplateValueStream, 'selected'>[] };
+        cached?: boolean;
+        generatedAt?: string;
+        specializedFor?: string;
+      } | null = null;
+      let streamErr: string | null = null;
+      outer: while (true) {
+        const { value, done: eof } = await reader.read();
+        if (eof) break;
+        buf += decoder.decode(value, { stream: true });
+        let sep = buf.indexOf('\n\n');
+        while (sep !== -1) {
+          const block = buf.slice(0, sep);
+          buf = buf.slice(sep + 2);
+          let dataStr = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('data: ')) dataStr += line.slice(6);
+          }
+          if (dataStr) {
+            let parsed: {
+              type?: string; chars?: number; error?: string;
+              data?: { valueStreams: Omit<TemplateValueStream, 'selected'>[] };
+              cached?: boolean; generatedAt?: string; specializedFor?: string;
+            };
+            try { parsed = JSON.parse(dataStr); } catch { parsed = {}; }
+            if (parsed.type === 'progress' && typeof parsed.chars === 'number') {
+              setProgressChars(parsed.chars);
+            } else if (parsed.type === 'done' && parsed.data) {
+              done = { data: parsed.data, cached: parsed.cached, generatedAt: parsed.generatedAt, specializedFor: parsed.specializedFor };
+              break outer;
+            } else if (parsed.type === 'error') {
+              streamErr = parsed.error || 'stream error';
+              break outer;
+            }
+          }
+          sep = buf.indexOf('\n\n');
+        }
+      }
+      if (streamErr) throw new Error(streamErr);
+      if (!done) throw new Error('AI stream ended without a template.');
+
+      setTemplate({ valueStreams: done.data.valueStreams.map((vs) => ({ ...vs, selected: true })) });
+      setExpandedStreams(new Set([0]));
+      setTemplateSource({
+        cached: !!done.cached,
+        generatedAt: done.generatedAt || new Date().toISOString(),
+        specializedFor: done.specializedFor,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate. Is the API key configured?');
     } finally {
@@ -203,6 +300,15 @@ export default function ValueStreamWizard() {
         title={activeOrgName ? `Process Wizard — ${activeOrgName}` : 'Process Wizard'}
         subtitle="AI generates a complete process hierarchy (Value Streams → Processes → Activities) based on your industry."
         actions={<button style={btnSecondary} onClick={() => navigate('/processes')}>Back to Processes</button>}
+      />
+
+      {/* Step bar. The Generate step's active fill is driven by the
+          same char count that feeds the big progress bar below when
+          loading — that way the two indicators can't disagree. */}
+      <WizardProgress
+        steps={['Industry', 'Generate', 'Review', 'Apply']}
+        current={applying ? 3 : template ? 2 : loading ? 1 : 0}
+        activeFill={loading ? Math.min(0.95, progressChars / ESTIMATED_TEMPLATE_CHARS) : undefined}
       />
 
       {/* Warning banner when existing value streams exist */}
@@ -343,17 +449,45 @@ export default function ValueStreamWizard() {
         </div>
       )}
 
-      {/* Loading */}
-      {loading && (
-        <div style={{ ...card, textAlign: 'center', padding: '3rem', border: '1px solid var(--color-primary)' }}>
-          <div style={{ fontSize: 32, marginBottom: 12, animation: 'procelaGenSpin 2s linear infinite' }}>{'\u2699'}</div>
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>Generating process hierarchy...</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-            AI is creating value streams, processes, and activities for {industry || orgIndustry}. This usually takes 10{'\u2013'}30 seconds.
-          </p>
-          <style>{`@keyframes procelaGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-        </div>
-      )}
+      {/* Loading \u2014 real progress bar driven by chars streamed from
+          Anthropic. Divides the running char count by an empirical
+          "full hierarchy" estimate; clamps at 95% until the `done`
+          event lands so an overshoot doesn't stall at 100%. Cache
+          hits skip this state entirely (they land straight in the
+          review screen). */}
+      {loading && (() => {
+        const rawFill = progressChars / ESTIMATED_TEMPLATE_CHARS;
+        const displayFill = Math.min(0.95, rawFill);
+        const pct = Math.round(displayFill * 100);
+        return (
+          <div style={{ ...card, textAlign: 'center', padding: '2.5rem 2rem', border: '1px solid var(--color-primary)' }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: 'var(--color-primary)' }}>
+              Generating process hierarchy
+            </h2>
+            <div style={{ maxWidth: 480, margin: '0 auto' }}>
+              <div style={{
+                height: 8, borderRadius: 4, background: 'var(--color-border)',
+                overflow: 'hidden', marginBottom: 10,
+              }}>
+                <div
+                  style={{
+                    width: `${pct}%`, height: '100%',
+                    background: 'var(--color-primary)',
+                    transition: 'width 0.15s ease-out',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+                <span>{captionForFill(displayFill)}</span>
+                <span>{pct}%</span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
+                AI is creating value streams, processes, and activities for {industry || orgIndustry}.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Step 2: Review & Apply (combined preview + confirm) */}
       {template && !loading && (

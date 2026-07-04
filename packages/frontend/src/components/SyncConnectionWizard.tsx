@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
 import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
+import WizardProgress from './WizardProgress';
 
 interface SyncConnectionWizardProps {
   open: boolean;
@@ -308,19 +309,10 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
           <button type="button" onClick={onClose} aria-label="Close sync connection wizard" style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}><span aria-hidden="true">&times;</span></button>
         </div>
 
-        {/* Step Indicator */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
-          {STEPS.map((s, i) => (
-            <div key={s} style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{
-                height: 3, borderRadius: 2, marginBottom: 4,
-                background: i <= step ? 'var(--color-primary)' : 'var(--color-border)',
-                transition: 'background 0.2s',
-              }} />
-              <span style={{ fontSize: 10, color: i <= step ? 'var(--color-primary)' : 'var(--color-text-muted)', fontWeight: i === step ? 600 : 400 }}>{s}</span>
-            </div>
-          ))}
-        </div>
+        {/* Step Indicator — shared component so this wizard, the
+            Process Wizard, and any future stepped flow all render
+            the same bar. */}
+        <WizardProgress steps={STEPS} current={step} style={{ marginBottom: 24 }} />
 
         {/* Step 1: Source Type */}
         {step === 0 && (
