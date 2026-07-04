@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { aiService } from '../services/ai.service';
-import { INDUSTRIES, Industry } from '../types';
+// INDUSTRIES / Industry no longer imported — validation is
+// free-form; the enum lives only on the frontend combobox as
+// autocomplete hints.
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -55,10 +57,17 @@ router.post('/generate-template', async (req: Request, res: Response) => {
     const { industry, orgName, orgDescription, orgType } = req.body;
     const refresh = req.query.refresh === 'true' || req.body.refresh === true;
 
-    if (!industry || !INDUSTRIES.includes(industry as Industry)) {
+    // Free-form: any non-empty string is a valid industry. The
+    // frontend combobox surfaces the INDUSTRIES enum as an
+    // autocomplete list, but users can type long-tail values
+    // (Biotech, Insurance Tech, Utilities Electric, …) and expect
+    // them to flow through. The AI prompt handles arbitrary
+    // industry strings gracefully — no lookup on the enum needed
+    // downstream.
+    if (typeof industry !== 'string' || !industry.trim()) {
       res.status(400).json({
         success: false,
-        error: `Invalid industry. Must be one of: ${INDUSTRIES.join(', ')}`,
+        error: 'Industry is required. Pick from the list or type a custom value.',
       });
       return;
     }
