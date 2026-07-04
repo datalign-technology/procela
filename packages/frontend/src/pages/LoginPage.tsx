@@ -168,7 +168,7 @@ export default function LoginPage() {
     }
   };
 
-  const loginWithEmail = async (loginEmail: string, loginName?: string, loginPassword?: string) => {
+  const loginWithEmail = async (loginEmail: string, loginName?: string, loginPassword?: string, loginRole?: string) => {
     setError('');
     setLoading(true);
     try {
@@ -176,6 +176,14 @@ export default function LoginPage() {
         email: loginEmail,
         name: loginName || undefined,
         password: loginPassword || undefined,
+        // Dev-mode only. The backend's DevAuthProvider honours the
+        // role field when a People-store lookup doesn't override it,
+        // so test-account buttons that advertise "Super Admin"
+        // actually produce a SUPER_ADMIN session on a fresh install
+        // (before any People CSV import). Without this, the dev
+        // provider fell back to ORG_ADMIN and Eleanor lost half of
+        // the admin surface.
+        role: loginRole || undefined,
         ...(captchaToken ? { captchaToken } : {}),
       });
       // MFA gate: the user has TOTP enrolled, so the backend issued
@@ -483,14 +491,14 @@ export default function LoginPage() {
                     <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Test Accounts</div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {[
-                        { email: 'eleanor.briggs@tidewater-utilities.com', name: 'Eleanor Briggs', role: 'Super Admin' },
-                        { email: 'susan.chen@tidewater-utilities.com', name: 'Susan Chen', role: 'Editor' },
+                        { email: 'eleanor.briggs@tidewater-utilities.com', name: 'Eleanor Briggs', label: 'Super Admin', role: 'SUPER_ADMIN' },
+                        { email: 'susan.chen@tidewater-utilities.com',     name: 'Susan Chen',     label: 'Editor',      role: 'EDITOR' },
                       ].map((acct) => (
                         <button
                           key={acct.email}
                           type="button"
                           disabled={loading}
-                          onClick={() => loginWithEmail(acct.email, acct.name)}
+                          onClick={() => loginWithEmail(acct.email, acct.name, undefined, acct.role)}
                           style={{
                             flex: 1, minWidth: 140, padding: '8px 12px', borderRadius: 6,
                             border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer',
@@ -498,7 +506,7 @@ export default function LoginPage() {
                           }}
                         >
                           <div style={{ fontWeight: 600, marginBottom: 2 }}>{acct.name}</div>
-                          <div style={{ color: '#94a3b8', fontSize: 10 }}>{acct.role}</div>
+                          <div style={{ color: '#94a3b8', fontSize: 10 }}>{acct.label}</div>
                         </button>
                       ))}
                     </div>
