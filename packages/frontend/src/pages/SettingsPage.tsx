@@ -7,6 +7,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
+import AiSettingsPanel from '../components/AiSettingsPanel';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
 import { useAuthStore } from '@/stores/authStore';
@@ -710,6 +711,8 @@ export default function SettingsPage() {
         onConfirm={handleImportConfirm}
         onCancel={() => setImportConfirmOpen(false)}
       />
+
+      <AiSettingsPanel sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
 
       <ConnectorsSection sectionStyle={sectionStyle} sectionTitleStyle={sectionTitleStyle} />
 
