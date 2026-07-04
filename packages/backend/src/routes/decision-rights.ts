@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
@@ -32,6 +32,7 @@ export interface StoredDecisionRight {
 }
 
 export const decisionRights: StoredDecisionRight[] = loadStore<StoredDecisionRight>('decisionRights');
+registerStore('decisionRights', decisionRights);
 
 const VALID_CATEGORIES: DecisionCategory[] = [
   'POLICY', 'EXCEPTION', 'ISSUE', 'CLASSIFICATION', 'ACCESS', 'SCOPE', 'ROLE', 'OTHER',

@@ -8,7 +8,7 @@ import { people } from './people';
 import { dataDomains } from './data-domains';
 import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 // ── RACI Overrides ──
@@ -19,6 +19,7 @@ interface RaciOverride {
   reason?: string;
 }
 const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
+registerStore('raciOverrides', raciOverrides);
 
 const router = Router();
 

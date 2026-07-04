@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 
 const router = Router();
 
@@ -24,6 +24,7 @@ interface ScorecardSnapshot {
 // In-memory store with persistence
 // ---------------------------------------------------------------------------
 export const maturitySnapshots: ScorecardSnapshot[] = loadStore<ScorecardSnapshot>('maturitySnapshots');
+registerStore('maturitySnapshots', maturitySnapshots);
 
 function persist() {
   saveStore('maturitySnapshots', maturitySnapshots);

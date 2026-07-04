@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { systems } from './systems';
@@ -22,6 +22,7 @@ interface DataLineageLink {
 }
 
 export const dataLineageLinks: DataLineageLink[] = loadStore<DataLineageLink>('dataLineageLinks');
+registerStore('dataLineageLinks', dataLineageLinks);
 
 // ── Asset-level lineage edges ─────────────────────────────────────────────
 // The original DataLineageLink models system-to-system flows. For dbt
@@ -51,6 +52,7 @@ export interface AssetLineageEdge {
 
 export const assetLineageEdges: AssetLineageEdge[] =
   loadStore<AssetLineageEdge>('assetLineageEdges');
+registerStore('assetLineageEdges', assetLineageEdges);
 
 // ── dbt asset mapping ────────────────────────────────────────────────────
 // Maps a dbt unique_id (the manifest key) to the Procela DataAsset id it
@@ -66,6 +68,7 @@ interface DbtAssetMapping {
 
 export const dbtAssetMappings: DbtAssetMapping[] =
   loadStore<DbtAssetMapping>('dbtAssetMappings');
+registerStore('dbtAssetMappings', dbtAssetMappings);
 
 // ── dbt test mapping ────────────────────────────────────────────────────
 // Parallel to dbtAssetMappings but for test nodes. Each dbt test creates
@@ -80,6 +83,7 @@ interface DbtTestMapping {
 
 export const dbtTestMappings: DbtTestMapping[] =
   loadStore<DbtTestMapping>('dbtTestMappings');
+registerStore('dbtTestMappings', dbtTestMappings);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 

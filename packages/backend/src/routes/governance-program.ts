@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { hasPermission } from '../lib/permissions';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -93,6 +93,7 @@ interface Recommendation {
 
 export const governancePrograms: StoredGovernanceProgram[] =
   loadStore<StoredGovernanceProgram>('governancePrograms');
+registerStore('governancePrograms', governancePrograms);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 

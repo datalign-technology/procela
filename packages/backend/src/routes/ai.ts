@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { aiService } from '../services/ai.service';
 import { INDUSTRIES, Industry } from '../types';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 const router = Router();
@@ -29,6 +29,7 @@ interface CachedTemplate {
   generatedAt: string;
 }
 const aiTemplateCache: CachedTemplate[] = loadStore<CachedTemplate>('aiTemplateCache');
+registerStore('aiTemplateCache', aiTemplateCache);
 
 /**
  * POST /api/v1/ai/generate-template

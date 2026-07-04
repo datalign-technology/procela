@@ -193,6 +193,7 @@ export interface StoredDataAssetBinding {
 
 export const dataAssetBindings: StoredDataAssetBinding[] =
   loadStore<StoredDataAssetBinding>('dataAssetBindings');
+registerStore('dataAssetBindings', dataAssetBindings);
 
 /**
  * One-time migration: any existing Data Asset that still carries the legacy
@@ -319,6 +320,7 @@ function normalizeDataType(raw: string): string {
 
 export const dataAssetColumns: StoredDataAssetColumn[] =
   loadStore<StoredDataAssetColumn>('dataAssetColumns');
+registerStore('dataAssetColumns', dataAssetColumns);
 
 /**
  * Resolve the primary binding for an asset, or undefined if it isn't linked

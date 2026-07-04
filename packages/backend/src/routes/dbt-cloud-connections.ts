@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { reconcileDbtManifest, DbtImportSummary } from './data-lineage';
@@ -50,6 +50,7 @@ export interface DbtCloudConnection {
 
 export const dbtCloudConnections: DbtCloudConnection[] =
   loadStore<DbtCloudConnection>('dbtCloudConnections');
+registerStore('dbtCloudConnections', dbtCloudConnections);
 
 // Migrate v1 records that lack the polling fields. Defaults to NEVER so
 // existing connections aren't surprise-polled after the upgrade.

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { people } from './people';
@@ -48,6 +48,7 @@ export interface StoredCalendarEvent {
 }
 
 export const calendarEvents: StoredCalendarEvent[] = loadStore<StoredCalendarEvent>('calendarEvents');
+registerStore('calendarEvents', calendarEvents);
 
 // ── Helpers ──
 

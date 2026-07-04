@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { people } from './people';
@@ -80,6 +80,7 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 // ---------------------------------------------------------------------------
 
 export const syncConnections: SyncConnection[] = loadStore<SyncConnection>('syncConnections');
+registerStore('syncConnections', syncConnections);
 
 // Backfill connectionId on legacy rows so consumers can rely on the
 // field existing. null = inline (no saved-connection reference).

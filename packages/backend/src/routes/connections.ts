@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { testConnection, discoverAssets } from '../services/connector.service';
 import { analyzeLocalFile, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
@@ -90,6 +90,7 @@ const WAREHOUSE_TYPES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT', 'DATABRICKS'];
 // ---------------------------------------------------------------------------
 
 export const connections: ConnectionProfile[] = loadStore<ConnectionProfile>('connections');
+registerStore('connections', connections);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 // ── Connection ↔ System join table ────────────────────────────────────────
@@ -112,6 +113,7 @@ export interface ConnectionSystemLink {
 
 export const connectionSystemLinks: ConnectionSystemLink[] =
   loadStore<ConnectionSystemLink>('connectionSystemLinks');
+registerStore('connectionSystemLinks', connectionSystemLinks);
 
 // One-time migration: seed link rows from the legacy single systemId
 // per connection. Idempotent — only inserts a row if no link already
