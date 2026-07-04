@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { agents } from './agents';
 import { processNodes, isGovernanceNode } from './process-catalog';
@@ -44,6 +44,7 @@ export interface StoredAgentSchedule {
 }
 
 export const agentSchedules: StoredAgentSchedule[] = loadStore<StoredAgentSchedule>('agentSchedules');
+registerStore('agentSchedules', agentSchedules);
 
 /** Advance nextRunAt by one frequency unit. For ONCE, returns the same time
  *  (caller marks the schedule COMPLETED instead). */

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { parseCsv } from '../lib/csv';
 import { auditService } from '../services/audit.service';
@@ -29,6 +29,7 @@ export interface StoredGlossaryTerm {
 }
 
 export const glossaryTerms: StoredGlossaryTerm[] = loadStore<StoredGlossaryTerm>('glossaryTerms');
+registerStore('glossaryTerms', glossaryTerms);
 
 const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'APPROVED', 'DEPRECATED'] as const;
 const VALID_CATEGORIES = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'] as const;

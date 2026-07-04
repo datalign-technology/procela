@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATION CENTER
@@ -22,6 +22,7 @@ export interface StoredNotification {
 // ── Persistent store ──
 
 export const notifications: StoredNotification[] = loadStore<StoredNotification>('notifications');
+registerStore('notifications', notifications);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { executeReport, validateDefinition, type ReportDefinition } from '../services/report-engine';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ export interface StoredReport {
 }
 
 export const reports: StoredReport[] = loadStore<StoredReport>('reports');
+registerStore('reports', reports);
 
 const router = Router();
 

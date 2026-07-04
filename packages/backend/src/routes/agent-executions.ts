@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { aiService, GovernanceActivityRun } from '../services/ai.service';
 import { agents } from './agents';
@@ -75,6 +75,7 @@ function describeMapping(m: { dataAssetId?: string; policyId?: string; attachmen
 }
 
 export const agentExecutions: StoredAgentExecution[] = loadStore<StoredAgentExecution>('agentExecutions');
+registerStore('agentExecutions', agentExecutions);
 
 // One-time normalisation: existing records pre-date the promotedDocumentId
 // field. Treat undefined as null so the rest of the code can rely on the

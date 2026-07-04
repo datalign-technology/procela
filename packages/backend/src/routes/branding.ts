@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
 
@@ -46,6 +46,7 @@ const DEFAULT_BRANDING: BrandingConfig = {
 // Persisted as a single-element array to reuse the loadStore/saveStore
 // helpers. `brandingRef.current` is always the active config.
 const initial = loadStore<BrandingConfig>('branding');
+registerStore('branding', initial);
 let current: BrandingConfig = initial.length > 0 ? { ...DEFAULT_BRANDING, ...initial[0] } : { ...DEFAULT_BRANDING };
 
 function persist() {

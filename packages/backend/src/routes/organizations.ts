@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -41,6 +41,7 @@ const DEFAULT_ORG: StoredOrg = {
 };
 
 export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations');
+registerStore('organizations', organizations);
 
 // ── Helpers ──
 

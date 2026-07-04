@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import logger from '../lib/logger';
 
@@ -25,6 +25,7 @@ export interface StoredOperationsManual {
 }
 
 export const operationsManuals: StoredOperationsManual[] = loadStore<StoredOperationsManual>('operationsManuals');
+registerStore('operationsManuals', operationsManuals);
 
 // ── Standard DAMA role templates ──
 
