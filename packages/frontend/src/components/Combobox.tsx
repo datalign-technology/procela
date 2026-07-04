@@ -33,13 +33,17 @@ export default function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  // Only filter while the user is actively typing (mode = 'search').
+  // If the picker was opened by chevron / focus / arrow key with the
+  // current stored value still in the input, show every option
+  // (mode = 'browse'). Fixes: user has an old value in the field,
+  // opens the picker to change it, sees only the stale value's
+  // match, has to erase the input first to see anything else.
+  const [mode, setMode] = useState<'browse' | 'search'>('browse');
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Filter the visible options against the current typed value.
-  // Empty input → show everything (the user opened the picker to
-  // browse, not to search).
-  const filtered = value.trim()
+  const filtered = (mode === 'search' && value.trim())
     ? options.filter((o) => o.toLowerCase().includes(value.trim().toLowerCase()))
     : options;
 
@@ -96,8 +100,8 @@ export default function Combobox({
         aria-label={ariaLabel}
         value={value}
         placeholder={placeholder}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
+        onChange={(e) => { onChange(e.target.value); setMode('search'); setOpen(true); }}
+        onFocus={() => { setMode('browse'); setOpen(true); }}
         onKeyDown={onKeyDown}
         style={{
           border: '1px solid var(--color-border)',
@@ -113,6 +117,7 @@ export default function Combobox({
         type="button"
         aria-label={open ? 'Close options' : 'Open options'}
         onClick={() => {
+          setMode('browse');
           setOpen((v) => !v);
           inputRef.current?.focus();
         }}
