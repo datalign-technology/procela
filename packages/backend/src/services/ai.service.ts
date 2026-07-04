@@ -183,17 +183,19 @@ class AnthropicAiService implements AiService {
       : `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`;
     const response = await getClient().messages.create({
       model: getConfiguredModel(),
-      // 8192 was the max_tokens for older Sonnets; newer models
-      // (Sonnet 5+) accept much higher and, more importantly, use
-      // more tokens for the same "3-5 value streams × 3-5
-      // processes × 3-6 activities" hierarchy. When the response
-      // hits the cap mid-JSON, extractJson has nothing balanceable
-      // to parse and the wizard fails with a mid-sentence
-      // rawPreview. 32000 leaves plenty of headroom for the
-      // most detailed industry template without paying for
-      // capacity we won't use — max_tokens is a ceiling, not a
-      // target.
-      max_tokens: 32000,
+      // Old cap was 8192 (Sonnet 3.x era). Newer models use more
+      // tokens for the same hierarchy prompt, so 8192 truncates
+      // mid-JSON. We tried 32000 and hit Anthropic's non-streaming
+      // ceiling — for high max_tokens they enforce streaming to
+      // avoid the 10-minute request timeout. Land at 16000, which
+      // is comfortably above the largest hierarchy we've seen
+      // Claude actually emit (5 streams × 5 processes × 6
+      // activities with two-sentence descriptions ≈ 12-14K
+      // tokens output) but below the streaming-required threshold.
+      // Bumping further requires converting this call to the
+      // streaming API and buffering — a real refactor, not a
+      // one-liner.
+      max_tokens: 16000,
       system: `You are a business process expert for the Procela platform. Generate a comprehensive process hierarchy for the specified industry.
 
 Procela uses a universal process hierarchy with these levels:
