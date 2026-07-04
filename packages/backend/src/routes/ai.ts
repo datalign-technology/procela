@@ -139,8 +139,8 @@ router.post('/generate-template', async (req: Request, res: Response) => {
     } else if (status && status >= 500) {
       userError = 'Anthropic API is temporarily unavailable. Try again in a moment.';
       httpStatus = 502;
-    } else if (anyErr?.name === 'AiParseError' || msg.includes('parse') || msg.includes('JSON')) {
-      userError = 'The AI returned a response that could not be parsed. Try again; if it keeps failing, the configured model may need updating (ANTHROPIC_MODEL).';
+    } else if (anyErr?.name === 'AiParseError' || msg.includes('parse') || msg.includes('JSON') || msg.includes('Empty response')) {
+      userError = `The AI returned no parseable content (model: ${config.anthropicModel}). Most likely the configured model ID is wrong or unavailable to this API key. Update ANTHROPIC_MODEL and restart, or check the backend log — the raw preview is included.`;
       httpStatus = 502;
     } else {
       userError = `Template generation failed: ${msg || 'unknown error'}. Check the backend log for details.`;

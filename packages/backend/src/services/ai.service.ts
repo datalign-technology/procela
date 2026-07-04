@@ -76,8 +76,34 @@ interface AiParseError extends Error { rawResponse?: string }
 
 function aiParseError(message: string, raw: string): AiParseError {
   const err: AiParseError = new Error(message);
+  err.name = 'AiParseError';
   err.rawResponse = raw;
   return err;
+}
+
+/**
+ * Concatenate every text block in a Claude response.
+ *
+ * Older Claude models put a single text block at content[0] — every
+ * call site in this file used to just grab that. Claude 5-family
+ * models with extended thinking return the content array as
+ * `[{type: 'thinking', ...}, {type: 'text', text: ...}]`, so
+ * content[0] is the thinking block and the text was silently missed —
+ * downstream we saw "Empty response from AI" on every call.
+ *
+ * This walks the array, keeps every text block's `text` field, and
+ * joins them. Non-text blocks (thinking, tool_use, etc.) are ignored.
+ */
+function textFromResponse(response: { content?: unknown }): string {
+  const arr = Array.isArray(response.content) ? response.content : [];
+  const parts: string[] = [];
+  for (const block of arr) {
+    if (block && typeof block === 'object' && (block as { type?: string }).type === 'text') {
+      const t = (block as { text?: string }).text;
+      if (typeof t === 'string' && t) parts.push(t);
+    }
+  }
+  return parts.join('');
 }
 
 function getClient(): Anthropic {
@@ -207,8 +233,7 @@ Guidelines:
       ],
     });
 
-    const text =
-      response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -248,7 +273,7 @@ Guidelines:
       ],
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -269,8 +294,7 @@ Guidelines:
       ],
     });
 
-    const text =
-      response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = textFromResponse(response);
     return extractJson(text) as object;
   }
 
@@ -353,7 +377,7 @@ Guidelines:
       })),
     });
 
-    return response.content[0].type === 'text' ? response.content[0].text : '';
+    return textFromResponse(response);
   }
 
   /** Streaming variant of chat(). Yields each text delta from the
@@ -419,7 +443,7 @@ Guidelines:
       messages: [{ role: 'user', content: lines.join('\n') }],
     });
 
-    return response.content[0].type === 'text' ? response.content[0].text : '';
+    return textFromResponse(response);
   }
 }
 
