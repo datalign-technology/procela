@@ -84,11 +84,22 @@ describe('routes/ai industry templates', () => {
 
   beforeEach(() => { callCount = 0; lastCall = null; });
 
-  it('rejects an unknown industry with 400', async () => {
-    const res = await request(port, 'POST', '/ai/generate-template', { industry: 'Made Up' });
+  it('rejects a missing industry with 400', async () => {
+    // Previously this test locked in enum-only industries. The
+    // frontend combobox now accepts free text (Biotech,
+    // Utilities Electric, …), so the backend validates only that
+    // the field is a non-empty string.
+    const res = await request(port, 'POST', '/ai/generate-template', {});
     assert.strictEqual(res.status, 400);
-    assert.match(res.body.error, /Invalid industry/);
+    assert.match(res.body.error, /Industry is required/);
     assert.strictEqual(callCount, 0);
+  });
+
+  it('accepts a custom (non-enum) industry string', async () => {
+    const res = await request(port, 'POST', '/ai/generate-template', { industry: 'Insurance Tech' });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    assert.strictEqual(lastCall?.industry, 'Insurance Tech');
   });
 
   it('generates and caches a template on first request', async () => {
