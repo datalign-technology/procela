@@ -150,8 +150,25 @@ export interface GovernanceActivityRun {
   orgName?: string;
 }
 
+/** One event emitted while streaming a template. `progress` is
+ *  purely for the UI progress bar (chars received so far — token
+ *  estimates lie about JSON's char/token ratio, so we ship the raw
+ *  char count and let the client scale). `done` carries the parsed
+ *  hierarchy — the same object shape the non-streaming call returned. */
+export type TemplateStreamEvent =
+  | { type: 'progress'; chars: number }
+  | { type: 'done'; data: object };
+
 export interface AiService {
   generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object>;
+  /** Streaming counterpart of generateIndustryTemplate(). Uses
+   *  Anthropic's streaming API so we can (a) show real progress in
+   *  the wizard instead of a fake spinner and (b) bump max_tokens
+   *  above the non-streaming 16000-token ceiling for wider
+   *  hierarchies without hitting request-timeout enforcement. Same
+   *  prompt and grounding as the non-streaming variant — only the
+   *  delivery shape differs. */
+  generateIndustryTemplateStream(industry: string, specialization?: IndustryTemplateSpecialization): AsyncIterable<TemplateStreamEvent>;
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
   chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
@@ -177,26 +194,14 @@ class AnthropicAiService implements AiService {
    * specialization the prompt is industry-only, preserving the
    * original behaviour.
    */
-  async generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object> {
-    const userMessage = specialization
+  /** Shared prompt builder for both the streaming and non-streaming
+   *  hierarchy generators. Keeps the two delivery shapes byte-for-byte
+   *  identical — any wording tweak has to land in one place, not two. */
+  private buildTemplatePrompt(industry: string, specialization?: IndustryTemplateSpecialization): { system: string; user: string } {
+    const user = specialization
       ? `Generate a standard process hierarchy for the "${industry}" industry, specialised for the **${specialization.orgName}** ${specialization.orgType || 'division'}${specialization.orgDescription ? ` (${specialization.orgDescription})` : ''}. The hierarchy should reflect the specific operations, terminology and processes of this sub-organization rather than the generic industry. Include value streams, processes, and activities.`
       : `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`;
-    const response = await getClient().messages.create({
-      model: getConfiguredModel(),
-      // Old cap was 8192 (Sonnet 3.x era). Newer models use more
-      // tokens for the same hierarchy prompt, so 8192 truncates
-      // mid-JSON. We tried 32000 and hit Anthropic's non-streaming
-      // ceiling — for high max_tokens they enforce streaming to
-      // avoid the 10-minute request timeout. Land at 16000, which
-      // is comfortably above the largest hierarchy we've seen
-      // Claude actually emit (5 streams × 5 processes × 6
-      // activities with two-sentence descriptions ≈ 12-14K
-      // tokens output) but below the streaming-required threshold.
-      // Bumping further requires converting this call to the
-      // streaming API and buffering — a real refactor, not a
-      // one-liner.
-      max_tokens: 16000,
-      system: `You are a business process expert for the Procela platform. Generate a comprehensive process hierarchy for the specified industry.
+    const system = `You are a business process expert for the Procela platform. Generate a comprehensive process hierarchy for the specified industry.
 
 Procela uses a universal process hierarchy with these levels:
 - VALUE STREAM (required) — end-to-end flow delivering value
@@ -243,17 +248,59 @@ Guidelines:
 - Process PURPOSE should answer "what does this process exist to do?" — its specific operational mission
 - Use clear business language accessible to non-technical users
 - Descriptions and purpose statements should be concise (1-2 sentences)
-- Focus on the most common, standard processes for the industry`,
-      messages: [
-        {
-          role: 'user',
-          content: userMessage,
-        },
-      ],
+- Focus on the most common, standard processes for the industry`;
+    return { system, user };
+  }
+
+  async generateIndustryTemplate(industry: string, specialization?: IndustryTemplateSpecialization): Promise<object> {
+    const { system, user } = this.buildTemplatePrompt(industry, specialization);
+    const response = await getClient().messages.create({
+      model: getConfiguredModel(),
+      // See generateIndustryTemplateStream for the streaming path
+      // that lets us go higher. This non-streaming call is kept for
+      // callers that don't need progress events (tests, admin
+      // regeneration scripts) and stays below the streaming-required
+      // threshold — Anthropic rejects non-streaming above ~16K.
+      max_tokens: 16000,
+      system,
+      messages: [{ role: 'user', content: user }],
     });
 
     const text = textFromResponse(response);
     return extractJson(text) as object;
+  }
+
+  /**
+   * Streaming variant of generateIndustryTemplate. Yields progress
+   * events (running char count) as text streams from Anthropic, then
+   * a final `done` event with the parsed hierarchy. Because the call
+   * uses the streaming API, max_tokens can safely go above the
+   * ~16K non-streaming ceiling — we bump to 32K here for headroom on
+   * unusually verbose hierarchies (large industries × specialisation
+   * detail). If we ever see truncation at 32K we can push higher; the
+   * streaming API has no request-timeout cap the way the sync one does.
+   */
+  async *generateIndustryTemplateStream(industry: string, specialization?: IndustryTemplateSpecialization): AsyncIterable<TemplateStreamEvent> {
+    const { system, user } = this.buildTemplatePrompt(industry, specialization);
+    const stream = getClient().messages.stream({
+      model: getConfiguredModel(),
+      max_tokens: 32000,
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
+
+    let chars = 0;
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        chars += event.delta.text.length;
+        yield { type: 'progress', chars };
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+    const text = textFromResponse(finalMessage);
+    const data = extractJson(text) as object;
+    yield { type: 'done', data };
   }
 
   /**

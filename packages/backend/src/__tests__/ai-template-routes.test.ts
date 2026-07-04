@@ -5,9 +5,14 @@
 // Anthropic call is mocked out: the test focuses on the surrounding
 // contract (industry validation, cache hit/miss/refresh, list/delete).
 //
-// We replace aiService.generateIndustryTemplate with a controlled stub
-// for each test so the route's caching + validation behaviour can be
-// exercised end-to-end without real Claude calls.
+// The generate-template endpoint now streams over Server-Sent
+// Events so the wizard can render a real progress bar. We stub
+// aiService.generateIndustryTemplateStream (the streaming
+// counterpart) with a controlled async generator; the request
+// helper below parses the SSE frames and returns the terminal
+// `done`/`error` event as the effective response body — that way
+// every existing assertion (cache hit, cache miss, specialisation
+// bucketing) reads exactly the same as before.
 
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
@@ -20,7 +25,24 @@ const aiRouter = require('../routes/ai').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiService } = require('../services/ai.service');
 
-function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
+// Parse a raw SSE payload into its events. Frames are separated by
+// blank lines; each frame carries `data: <json>` lines whose payloads
+// concatenate. Non-SSE responses (400 validation, GET/DELETE JSON)
+// fall through unchanged.
+function parseSseFrames(raw: string): Array<Record<string, unknown>> {
+  const frames: Array<Record<string, unknown>> = [];
+  for (const block of raw.split('\n\n')) {
+    let dataStr = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('data: ')) dataStr += line.slice(6);
+    }
+    if (!dataStr) continue;
+    try { frames.push(JSON.parse(dataStr)); } catch { /* ignore malformed */ }
+  }
+  return frames;
+}
+
+function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any; frames?: Array<Record<string, unknown>> }> {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : undefined;
     const req = http.request(
@@ -32,6 +54,36 @@ function request(port: number, method: string, path: string, body?: unknown): Pr
         let chunks = '';
         res.on('data', (c) => { chunks += c; });
         res.on('end', () => {
+          const ct = res.headers['content-type'] || '';
+          if (typeof ct === 'string' && ct.includes('text/event-stream')) {
+            // SSE: collapse frames into a synthetic JSON body that
+            // mirrors the pre-streaming response shape — the terminal
+            // `done` event supplies data/cached/generatedAt, an
+            // `error` event supplies { success: false, error }.
+            const frames = parseSseFrames(chunks);
+            const done = frames.find((f) => f.type === 'done');
+            const err = frames.find((f) => f.type === 'error');
+            if (err) {
+              resolve({ status: res.statusCode || 0, body: { success: false, error: err.error }, frames });
+              return;
+            }
+            if (done) {
+              resolve({
+                status: res.statusCode || 0,
+                body: {
+                  success: true,
+                  data: done.data,
+                  cached: done.cached,
+                  generatedAt: done.generatedAt,
+                  specializedFor: done.specializedFor,
+                },
+                frames,
+              });
+              return;
+            }
+            resolve({ status: res.statusCode || 0, body: null, frames });
+            return;
+          }
           try { resolve({ status: res.statusCode || 0, body: chunks ? JSON.parse(chunks) : null }); }
           catch { resolve({ status: res.statusCode || 0, body: chunks }); }
         });
@@ -48,20 +100,27 @@ describe('routes/ai industry templates', () => {
   let port: number;
   let callCount = 0;
   let lastCall: { industry: string; specialization: any } | null = null;
-  const originalGenerate = aiService.generateIndustryTemplate.bind(aiService);
+  const originalGenerateStream = aiService.generateIndustryTemplateStream.bind(aiService);
 
   before(async () => {
-    // Mount the router under /ai. Replace the template generator with
-    // a deterministic stub so we never reach Anthropic from CI.
-    aiService.generateIndustryTemplate = async (industry: string, specialization?: any) => {
+    // Mount the router under /ai. Replace the streaming template
+    // generator with a deterministic async-iterable stub so we
+    // never reach Anthropic from CI. Yielding one progress event
+    // exercises the SSE-emit path; the terminal `done` event
+    // carries the same payload the old non-streaming stub returned.
+    aiService.generateIndustryTemplateStream = async function* (industry: string, specialization?: any) {
       callCount++;
       lastCall = { industry, specialization };
-      return {
-        valueStreams: [
-          { name: `${industry} VS`, description: 'stub', processes: [
-            { name: 'Stub process', description: '', activities: [{ name: 'Stub activity', description: '' }] },
-          ] },
-        ],
+      yield { type: 'progress', chars: 42 };
+      yield {
+        type: 'done',
+        data: {
+          valueStreams: [
+            { name: `${industry} VS`, description: 'stub', processes: [
+              { name: 'Stub process', description: '', activities: [{ name: 'Stub activity', description: '' }] },
+            ] },
+          ],
+        },
       };
     };
     const app = express();
@@ -77,7 +136,7 @@ describe('routes/ai industry templates', () => {
   });
 
   after(async () => {
-    aiService.generateIndustryTemplate = originalGenerate;
+    aiService.generateIndustryTemplateStream = originalGenerateStream;
     await request(port, 'DELETE', '/ai/template-cache');
     await new Promise<void>((r) => server.close(() => r()));
   });
