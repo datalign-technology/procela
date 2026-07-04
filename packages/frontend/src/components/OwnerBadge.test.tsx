@@ -25,9 +25,12 @@ describe('OwnerBadge', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders "Owned by <name>" when inherited from another org', () => {
+  it('renders a lock icon labelled with the owning org when inherited', () => {
+    // Badge is icon-only now — screen readers still get the full
+    // "Owned by <name>" sentence via aria-label, so the test asserts
+    // on the accessible name rather than visible text.
     render(<OwnerBadge assetOrgId="org-2" activeOrgId="org-1" getOrgName={getName} />);
-    expect(screen.getByText('Owned by Org org-2')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Owned by Org org-2/)).toBeInTheDocument();
   });
 
   it('renders nothing when the owner name cannot be resolved', () => {
