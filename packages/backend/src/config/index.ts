@@ -23,7 +23,13 @@ export const config = {
   // template generation, data-domain suggestions, asset suggestions,
   // governance activity runs, chat). Override with ANTHROPIC_MODEL
   // when bumping to a new model release without a code change.
-  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+  // Default is the currently-shipping Claude 5-family Sonnet. Bump
+  // in step with new releases (or override via env without touching
+  // code). The value ships to the Anthropic SDK verbatim, so a
+  // typo here shows up as the "AI response could not be parsed"
+  // error at generate time — that's how we found `claude-sonnet-4-6`,
+  // which was never a real model.
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
 
   // Storage
   storageProvider: process.env.STORAGE_PROVIDER || 'local',

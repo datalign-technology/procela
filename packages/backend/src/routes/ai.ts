@@ -5,6 +5,7 @@ import { aiService } from '../services/ai.service';
 // autocomplete hints.
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import config from '../config';
 
 const router = Router();
 
@@ -114,10 +115,16 @@ router.post('/generate-template', async (req: Request, res: Response) => {
     // admin can actually act on. The generic "please try again"
     // was hiding the two most likely causes (no key, bad key) so
     // users had no idea where to look. Full error stays in the log.
-    const anyErr = err as { message?: string; status?: number; name?: string };
+    const anyErr = err as { message?: string; status?: number; name?: string; rawResponse?: string };
     const msg = String(anyErr?.message || '');
     const status = anyErr?.status;
-    logger.error({ err, status, name: anyErr?.name }, 'Template generation failed');
+    // Log the raw-ish response on parse failures so a maintainer
+    // can see exactly what the model produced. Truncated to 500
+    // chars to keep the log line human-readable.
+    const rawPreview = typeof anyErr?.rawResponse === 'string'
+      ? anyErr.rawResponse.slice(0, 500)
+      : undefined;
+    logger.error({ err, status, name: anyErr?.name, rawPreview, model: config.anthropicModel }, 'Template generation failed');
     let userError: string;
     let httpStatus = 500;
     if (msg.includes('ANTHROPIC_API_KEY') || msg.includes('is not set')) {
