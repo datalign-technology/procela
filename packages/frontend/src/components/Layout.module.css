@@ -386,6 +386,11 @@
   flex: 1;
   padding: 18px 20px;
   overflow-y: auto;
+  /* Reserve gutter so the scrollbar appearing/disappearing between
+     short pages (loading spinner, empty states) and tall pages
+     (wizard review, long catalog) doesn't reflow the layout and
+     make the bar flicker on and off during content transitions. */
+  scrollbar-gutter: stable;
 }
 
 /* ── Responsive ── */

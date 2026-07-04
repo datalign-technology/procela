@@ -325,7 +325,7 @@ export default function Layout() {
             × Close
           </button>
         </header>
-        <main id="main-content" style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+        <main id="main-content" style={{ flex: 1, padding: 24, overflowY: 'auto', scrollbarGutter: 'stable' }}>
           <Outlet />
         </main>
       </div>
