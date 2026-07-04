@@ -2,11 +2,18 @@ import Anthropic from '@anthropic-ai/sdk';
 import config from '../config';
 import { ProcessContext, OrgContext, ChatMessage } from '../types';
 
-// Resolved from config (ANTHROPIC_MODEL env, falling back to the
-// current Sonnet release). Kept as a getter so tests / dev workflows
-// can flip the env var without restarting Node — though in practice
-// config is read once at boot.
-const MODEL = config.anthropicModel;
+// Model resolution: admin override (set via Settings → AI, wins)
+// → ANTHROPIC_MODEL env → config default. Kept as a getter so
+// changing the override at runtime affects the next call without a
+// restart. See routes/ai.ts (settings + models endpoints) and the
+// startup ping in index.ts.
+let _modelOverride: string | null = null;
+export function getConfiguredModel(): string {
+  return _modelOverride || config.anthropicModel;
+}
+export function setModelOverride(model: string | null): void {
+  _modelOverride = model && model.trim() ? model.trim() : null;
+}
 
 let _client: Anthropic | null = null;
 
@@ -175,7 +182,7 @@ class AnthropicAiService implements AiService {
       ? `Generate a standard process hierarchy for the "${industry}" industry, specialised for the **${specialization.orgName}** ${specialization.orgType || 'division'}${specialization.orgDescription ? ` (${specialization.orgDescription})` : ''}. The hierarchy should reflect the specific operations, terminology and processes of this sub-organization rather than the generic industry. Include value streams, processes, and activities.`
       : `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`;
     const response = await getClient().messages.create({
-      model: MODEL,
+      model: getConfiguredModel(),
       max_tokens: 8192,
       system: `You are a business process expert for the Procela platform. Generate a comprehensive process hierarchy for the specified industry.
 
@@ -244,7 +251,7 @@ Guidelines:
    */
   async generateDataDomains(industry: string): Promise<object> {
     const response = await getClient().messages.create({
-      model: MODEL,
+      model: getConfiguredModel(),
       max_tokens: 4096,
       system: `You are a data governance expert for the Procela platform. Given an industry, suggest the standard data domains that a company in that industry should define to organize their enterprise data assets.
 
@@ -282,7 +289,7 @@ Guidelines:
    */
   async suggestDataAssets(context: ProcessContext): Promise<object> {
     const response = await getClient().messages.create({
-      model: MODEL,
+      model: getConfiguredModel(),
       max_tokens: 4096,
       system:
         'You are a data governance expert. Given a process context, suggest data assets (tables, datasets, reports) that are likely consumed or produced by the process step. Return a JSON array of suggestions.',
@@ -368,7 +375,7 @@ Guidelines:
    */
   async chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string> {
     const response = await getClient().messages.create({
-      model: MODEL,
+      model: getConfiguredModel(),
       max_tokens: 2048,
       system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({
@@ -388,7 +395,7 @@ Guidelines:
    *  format the client expects (SSE, WebSocket, plain HTTP chunked). */
   async *chatStream(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): AsyncIterable<string> {
     const stream = getClient().messages.stream({
-      model: MODEL,
+      model: getConfiguredModel(),
       max_tokens: 2048,
       system: this.buildChatSystemPrompt(orgContext, catalogSummary),
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
@@ -437,7 +444,7 @@ Guidelines:
     lines.push('\nPerform this activity now and produce your draft deliverable.');
 
     const response = await getClient().messages.create({
-      model: MODEL,
+      model: getConfiguredModel(),
       max_tokens: 3000,
       system,
       messages: [{ role: 'user', content: lines.join('\n') }],

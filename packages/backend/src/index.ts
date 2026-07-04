@@ -352,7 +352,44 @@ const PORT = config.port;
 const server = app.listen(PORT, () => {
   logger.info({ port: PORT, env: config.nodeEnv }, 'Procela server started');
   warnOnMissingProdConfig();
+  pingAiModel().catch(() => { /* logged inside */ });
 });
+
+// Startup AI probe. Fires one cheap 1-token /messages call to
+// verify the currently-resolved model is actually reachable by the
+// configured API key. Would have caught the past three model-ID
+// drifts (claude-sonnet-4-6, claude-sonnet-5,
+// claude-3-7-sonnet-latest) at boot instead of at first user
+// click. Fire-and-forget — no blocking, no throwing.
+import { getConfiguredModel } from './services/ai.service';
+async function pingAiModel(): Promise<void> {
+  const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) {
+    logger.info('AI: API key not configured — skipping startup model probe');
+    return;
+  }
+  const model = getConfiguredModel();
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }),
+    });
+    if (res.ok) {
+      logger.info({ model }, 'AI: startup probe succeeded');
+      return;
+    }
+    const text = await res.text().catch(() => '');
+    logger.warn({ model, status: res.status, response: text.slice(0, 300) },
+      'AI: startup probe failed — the configured model may not be available to this API key. Fix at Settings → AI or in ANTHROPIC_MODEL.');
+  } catch (err) {
+    logger.warn({ err, model }, 'AI: startup probe threw (network error)');
+  }
+}
 
 // Production-config readiness check. Runs once at boot, after the
 // server starts listening, so a misconfigured prod env surfaces in

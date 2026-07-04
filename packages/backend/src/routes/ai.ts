@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { aiService } from '../services/ai.service';
+import { aiService, getConfiguredModel, setModelOverride } from '../services/ai.service';
 // INDUSTRIES / Industry no longer imported — validation is
 // free-form; the enum lives only on the frontend combobox as
 // autocomplete hints.
@@ -33,6 +33,26 @@ interface CachedTemplate {
 }
 const aiTemplateCache: CachedTemplate[] = loadStore<CachedTemplate>('aiTemplateCache');
 registerStore('aiTemplateCache', aiTemplateCache);
+
+// Persisted admin override for the Anthropic model. Wins over the
+// ANTHROPIC_MODEL env var so ops can bump the model from the UI
+// (Settings → AI) without redeploying. Reloaded into the service
+// module at boot in index.ts; changes here call setModelOverride
+// so the running service picks them up immediately.
+interface StoredAiSettings { model?: string; updatedAt?: string; updatedBy?: string | null }
+const aiSettingsStore: StoredAiSettings[] = loadStore<StoredAiSettings>('aiSettings');
+registerStore('aiSettings', aiSettingsStore);
+function currentSettings(): StoredAiSettings {
+  return aiSettingsStore[0] || {};
+}
+// Rehydrate the in-memory override from disk. Called once at
+// module load; also re-called by the startup ping in index.ts to
+// ensure the order is deterministic regardless of import timing.
+export function rehydrateAiOverride(): void {
+  const s = currentSettings();
+  setModelOverride(s.model || null);
+}
+rehydrateAiOverride();
 
 /**
  * POST /api/v1/ai/generate-template
@@ -177,6 +197,136 @@ router.delete('/template-cache', (_req: Request, res: Response) => {
   saveStore('aiTemplateCache', aiTemplateCache);
   logger.info({ cleared }, 'Cleared entire industry template cache');
   res.json({ success: true, cleared });
+});
+
+// ── Model management (Settings → AI) ────────────────────────────────
+
+interface AnthropicModel {
+  id: string;
+  display_name?: string;
+  created_at?: string;
+  type?: string;
+}
+
+/** GET /api/v1/ai/settings — current model config the UI reads.
+ *  `source` tells the admin where the resolved value came from so
+ *  they know what to change to override it. */
+router.get('/settings', (_req: Request, res: Response) => {
+  const s = currentSettings();
+  const overrideModel = s.model || null;
+  const envModel = process.env.ANTHROPIC_MODEL || null;
+  const resolved = getConfiguredModel();
+  const source: 'override' | 'env' | 'default' =
+    overrideModel ? 'override' : envModel ? 'env' : 'default';
+  res.json({
+    success: true,
+    data: {
+      resolvedModel: resolved,
+      overrideModel,
+      envModel,
+      defaultModel: config.anthropicModel,
+      source,
+      apiKeyConfigured: !!(config.anthropicApiKey || process.env.ANTHROPIC_API_KEY),
+      updatedAt: s.updatedAt || null,
+      updatedBy: s.updatedBy || null,
+    },
+  });
+});
+
+/** PUT /api/v1/ai/settings — persist a model override. Sending
+ *  `{ model: '' }` or `{ model: null }` clears the override and
+ *  falls back to the env var / default. */
+router.put('/settings', (req: Request, res: Response) => {
+  const model = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
+  const updatedBy = (req as { user?: { sub?: string } }).user?.sub || null;
+  const now = new Date().toISOString();
+  const next: StoredAiSettings = model
+    ? { model, updatedAt: now, updatedBy }
+    : { updatedAt: now, updatedBy };
+  aiSettingsStore.length = 0;
+  aiSettingsStore.push(next);
+  saveStore('aiSettings', aiSettingsStore);
+  setModelOverride(model || null);
+  logger.info({ model, updatedBy }, 'AI model override updated');
+  res.json({ success: true, data: { resolvedModel: getConfiguredModel() } });
+});
+
+/** GET /api/v1/ai/models — list every model the current API key
+ *  can access, straight from Anthropic. Used by the Settings UI
+ *  as the source of truth (no hardcoded ID lists to drift). */
+router.get('/models', async (_req: Request, res: Response) => {
+  const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) {
+    res.status(503).json({ success: false, error: 'Anthropic API key is not configured.' });
+    return;
+  }
+  try {
+    const upstream = await fetch('https://api.anthropic.com/v1/models', {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    });
+    if (!upstream.ok) {
+      const text = await upstream.text().catch(() => '');
+      res.status(upstream.status).json({
+        success: false,
+        error: `Anthropic returned ${upstream.status}: ${text.slice(0, 300)}`,
+      });
+      return;
+    }
+    const payload = await upstream.json() as { data?: AnthropicModel[] };
+    const models = Array.isArray(payload?.data) ? payload.data : [];
+    res.json({ success: true, data: models });
+  } catch (err) {
+    logger.error({ err }, 'Failed to list Anthropic models');
+    res.status(502).json({ success: false, error: 'Could not reach Anthropic to list models. Check network + API key.' });
+  }
+});
+
+/** POST /api/v1/ai/test — one-token probe against the currently-
+ *  resolved model. Used by the "Test now" button and by the boot
+ *  ping in index.ts. Returns { ok, model, message } — never
+ *  throws upstream errors, since a red badge is the point. */
+router.post('/test', async (_req: Request, res: Response) => {
+  const model = getConfiguredModel();
+  const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) {
+    res.json({ success: true, data: { ok: false, model, message: 'ANTHROPIC_API_KEY is not set.' } });
+    return;
+  }
+  try {
+    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ok' }],
+      }),
+    });
+    if (upstream.ok) {
+      res.json({ success: true, data: { ok: true, model, message: 'Model reachable.' } });
+      return;
+    }
+    const text = await upstream.text().catch(() => '');
+    res.json({
+      success: true,
+      data: {
+        ok: false,
+        model,
+        message: `Anthropic returned ${upstream.status}: ${text.slice(0, 250)}`,
+      },
+    });
+  } catch (err) {
+    const msg = (err as { message?: string })?.message || 'unknown error';
+    res.json({ success: true, data: { ok: false, model, message: `Network error: ${msg}` } });
+  }
 });
 
 export default router;
