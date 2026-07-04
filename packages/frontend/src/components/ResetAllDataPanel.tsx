@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { apiClient } from '../api/client';
-import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { signOutLocal } from '@/lib/signOut';
 import { successToast, errorToast } from '../lib/errorToast';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,10 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [phrase, setPhrase] = useState('');
   const [busy, setBusy] = useState(false);
-  const { logout } = useAuthStore();
+  // signOutLocal clears both the auth store and the org-context
+  // store. Without the org-context part, the header still shows the
+  // pre-reset activeOrgName after the redirect to /login — the
+  // backend org store is empty but localStorage disagrees.
 
   if (!isSuperAdmin) return null;
 
@@ -69,7 +72,7 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
       // user record is gone. Drop the local session and route to
       // /login so the next sign-in lands them in onboarding.
       setTimeout(() => {
-        logout();
+        signOutLocal();
         window.location.href = '/login';
       }, 1500);
     } catch (err: any) {
