@@ -183,7 +183,17 @@ class AnthropicAiService implements AiService {
       : `Generate a standard process hierarchy for the "${industry}" industry. Include value streams, processes, and activities.`;
     const response = await getClient().messages.create({
       model: getConfiguredModel(),
-      max_tokens: 8192,
+      // 8192 was the max_tokens for older Sonnets; newer models
+      // (Sonnet 5+) accept much higher and, more importantly, use
+      // more tokens for the same "3-5 value streams × 3-5
+      // processes × 3-6 activities" hierarchy. When the response
+      // hits the cap mid-JSON, extractJson has nothing balanceable
+      // to parse and the wizard fails with a mid-sentence
+      // rawPreview. 32000 leaves plenty of headroom for the
+      // most detailed industry template without paying for
+      // capacity we won't use — max_tokens is a ceiling, not a
+      // target.
+      max_tokens: 32000,
       system: `You are a business process expert for the Procela platform. Generate a comprehensive process hierarchy for the specified industry.
 
 Procela uses a universal process hierarchy with these levels:
@@ -252,7 +262,9 @@ Guidelines:
   async generateDataDomains(industry: string): Promise<object> {
     const response = await getClient().messages.create({
       model: getConfiguredModel(),
-      max_tokens: 4096,
+      // See generateIndustryTemplate for the max_tokens rationale.
+      // Smaller here since domain suggestions are a flatter list.
+      max_tokens: 8192,
       system: `You are a data governance expert for the Procela platform. Given an industry, suggest the standard data domains that a company in that industry should define to organize their enterprise data assets.
 
 A data domain is a top-level grouping of related data assets under a single governance umbrella — for example "Customer Data", "Financial Data", "Product Data", "Operational Data".
@@ -290,7 +302,9 @@ Guidelines:
   async suggestDataAssets(context: ProcessContext): Promise<object> {
     const response = await getClient().messages.create({
       model: getConfiguredModel(),
-      max_tokens: 4096,
+      // See generateIndustryTemplate — headroom for JSON list
+      // output that new-gen models render more verbosely.
+      max_tokens: 8192,
       system:
         'You are a data governance expert. Given a process context, suggest data assets (tables, datasets, reports) that are likely consumed or produced by the process step. Return a JSON array of suggestions.',
       messages: [
