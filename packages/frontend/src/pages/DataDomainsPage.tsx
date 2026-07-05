@@ -551,12 +551,22 @@ export default function DataDomainsPage() {
                       />
                     )}
                     <span style={statusDot(d.status)} title={d.status} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', display: 'flex', gap: 6, marginTop: 2 }}>
-                        <span>{d.assets.length} assets</span>
-                        {d.ownerName && <span>· {d.ownerName}</span>}
-                      </div>
+                    {/* Domain name only — matches the flat one-line
+                        list style on Systems / Data Assets / People.
+                        Asset count and owner used to sit under the
+                        name; they added row height and pushed rows
+                        out of alignment for the row-height-uniform
+                        rule the rest of the app follows. Both signals
+                        are still visible on the detail panel to the
+                        right when a domain is selected. */}
+                    <div
+                      style={{
+                        flex: 1, minWidth: 0,
+                        fontSize: 13, fontWeight: isActive ? 600 : 400,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {d.name}
                     </div>
                     {healthDots(d)}
                   </div>
