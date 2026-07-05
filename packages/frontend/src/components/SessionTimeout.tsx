@@ -188,7 +188,7 @@ const styles: Record<string, React.CSSProperties> = {
   countdownValue: {
     fontSize: '2rem',
     fontWeight: 700,
-    color: '#dc2626',
+    color: 'var(--color-error)',
     fontVariantNumeric: 'tabular-nums',
     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
   },

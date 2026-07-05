@@ -249,14 +249,14 @@ function MyDashboard() {
           label="Open Tasks"
           value={s.openTasks || 0}
           valueColor={s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)'}
-          sub={s.overdueTasks > 0 ? { text: `${s.overdueTasks} overdue`, color: '#dc2626' } : null}
+          sub={s.overdueTasks > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
         />
         <MyDashboardTile
           to="/governance-work?tab=issues"
           label="Open Issues"
           value={s.openIssues || 0}
           valueColor={s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)'}
-          sub={s.criticalIssues > 0 ? { text: `${s.criticalIssues} critical`, color: '#dc2626' } : null}
+          sub={s.criticalIssues > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
         />
         <MyDashboardTile
           to="/data-domains"
@@ -280,18 +280,18 @@ function MyDashboard() {
           {(data.myTasks || []).filter((t: any) => t.isOverdue).length === 0 &&
            (data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').length === 0 &&
            (data.pendingReviews || []).length === 0 ? (
-            <div style={{ color: '#16a34a', fontSize: 13 }}>All clear — no urgent items.</div>
+            <div style={{ color: 'var(--color-success)', fontSize: 13 }}>All clear — no urgent items.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {(data.myTasks || []).filter((t: any) => t.isOverdue).slice(0, 3).map((t: any) => (
                 <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: '#dc2626' }}>Overdue: {t.title}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Overdue: {t.title}</span>
                   <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
               {(data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').slice(0, 3).map((i: any) => (
                 <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: '#dc2626' }}>Critical: {i.title}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Critical: {i.title}</span>
                   <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
@@ -878,7 +878,7 @@ function StewardOnboarding() {
           <div style={{ height: '100%', width: `${rate}%`, background: rate === 100 ? '#22c55e' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.3s' }} />
         </div>
         {data.overdue > 0 && (
-          <div style={{ fontSize: 12, color: '#dc2626', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>
             {data.overdue} overdue task{data.overdue !== 1 ? 's' : ''}
           </div>
         )}
@@ -907,7 +907,7 @@ function GapsOverview({ stats }: { stats: DashboardStats }) {
     <div>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Governance Gaps</h2>
       {total === 0 ? (
-        <div style={{ padding: '16px 0', textAlign: 'center', color: '#16a34a', fontSize: 13, fontWeight: 500 }}>
+        <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--color-success)', fontSize: 13, fontWeight: 500 }}>
           No gaps detected — all processes are mapped and ownership is assigned.
         </div>
       ) : (

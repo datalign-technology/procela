@@ -550,7 +550,7 @@ export default function DataLineagePage() {
                 {systemsList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               {form.sourceSystemId && form.targetSystemId && form.sourceSystemId === form.targetSystemId && (
-                <div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Source and target cannot be the same system</div>
+                <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>Source and target cannot be the same system</div>
               )}
             </div>
             <div>

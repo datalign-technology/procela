@@ -41,7 +41,7 @@ const btnSecondary: React.CSSProperties = {
   padding: '6px 14px', fontSize: 12, fontWeight: 500, background: 'var(--color-surface)',
   color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer',
 };
-const btnDanger: React.CSSProperties = { ...btnSecondary, color: '#dc2626', borderColor: '#fca5a5' };
+const btnDanger: React.CSSProperties = { ...btnSecondary, color: 'var(--color-error)', borderColor: '#fca5a5' };
 const card: React.CSSProperties = {
   background: 'var(--color-surface)', border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)',

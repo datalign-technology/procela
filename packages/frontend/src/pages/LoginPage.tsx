@@ -729,7 +729,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '2rem',
   },
   errorBanner: {
-    color: '#dc2626',
+    color: 'var(--color-error)',
     background: '#fef2f2',
     border: '1px solid #fecaca',
     borderRadius: '8px',
@@ -820,7 +820,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '0.375rem',
     fontSize: '0.75rem',
     fontWeight: 600,
-    color: '#d97706',
+    color: 'var(--color-warning)',
     background: '#fffbeb',
     border: '1px solid #fde68a',
     borderRadius: '6px',

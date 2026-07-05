@@ -342,7 +342,7 @@ function DocField({ label, value, onSave, disabled, placeholder }: {
           >
             {value || placeholder}
           </span>
-          {saved && <span style={{ color: '#16a34a', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+          {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
         </>
       )}
     </div>
@@ -372,7 +372,7 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
         <option value="">{placeholder}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
-      {saved && <span style={{ color: '#16a34a', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+      {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
     </div>
   );
 }
@@ -2174,11 +2174,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           )}
           {/* Guided prompt for missing required children */}
           {warning && (
-            <div style={{ fontSize: 10, color: '#d97706', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, background: '#fef3c7', padding: '2px 8px', borderRadius: 4, width: 'fit-content' }}>
+            <div style={{ fontSize: 10, color: 'var(--color-warning)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, background: '#fef3c7', padding: '2px 8px', borderRadius: 4, width: 'fit-content' }}>
               <span style={{ fontSize: 11 }}>{'\u2192'}</span>
               <span style={{ fontWeight: 500 }}>{warning}</span>
               {guidedLevel && (
-                <button style={{ ...btnAdd, fontSize: 10, padding: '1px 8px', borderColor: '#d97706', color: '#d97706', background: '#fff', fontWeight: 600 }}
+                <button style={{ ...btnAdd, fontSize: 10, padding: '1px 8px', borderColor: '#d97706', color: 'var(--color-warning)', background: '#fff', fontWeight: 600 }}
                   onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }}>
                   + Add {LEVEL_CONFIG[guidedLevel].label}
                 </button>
@@ -2188,14 +2188,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {/* Progress checklist for value streams */}
           {completeness && (
             <div style={{ fontSize: 10, marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: '#16a34a' }}>{'\u2713'} Value Stream</span>
+              <span style={{ color: 'var(--color-success)' }}>{'\u2713'} Value Stream</span>
               <span style={{ color: completeness.hasProcess ? '#16a34a' : '#d97706' }}>
                 {completeness.hasProcess ? '\u2713' : '\u2717'} Process
               </span>
               <span style={{ color: completeness.hasActivity ? '#16a34a' : '#d97706' }}>
                 {completeness.hasActivity ? '\u2713' : '\u2717'} Activity
               </span>
-              {completeness.complete && <span style={{ color: '#16a34a', fontWeight: 500 }}>Ready</span>}
+              {completeness.complete && <span style={{ color: 'var(--color-success)', fontWeight: 500 }}>Ready</span>}
             </div>
           )}
         </div>

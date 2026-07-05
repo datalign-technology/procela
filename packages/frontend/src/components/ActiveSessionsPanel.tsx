@@ -106,7 +106,7 @@ export default function ActiveSessionsPanel() {
 
   return (
     <div>
-      {err && <div role="alert" style={{ fontSize: 12, color: '#dc2626', marginBottom: 8 }}>{err}</div>}
+      {err && <div role="alert" style={{ fontSize: 12, color: 'var(--color-error)', marginBottom: 8 }}>{err}</div>}
 
       {sessions.length === 0 ? (
         <div style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>

@@ -494,7 +494,7 @@ export default function PersonDetailPage() {
                 <button
                   onClick={() => removeDamaRole(r.id)}
                   disabled={busy}
-                  style={{ background: 'none', border: 'none', color: '#dc2626', cursor: busy ? 'default' : 'pointer', fontSize: 12 }}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-error)', cursor: busy ? 'default' : 'pointer', fontSize: 12 }}
                 >
                   Remove
                 </button>

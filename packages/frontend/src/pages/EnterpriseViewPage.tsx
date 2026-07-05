@@ -52,6 +52,9 @@ const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: (size: numb
   process:      { color: '#2563eb', bg: '#dbeafe', route: '/processes',    icon: (size) => renderNavIcon('/processes',    { size, strokeWidth: 1.8 }), label: 'Process',    plural: 'Processes' },
   system:       { color: '#7c3aed', bg: '#ede9fe', route: '/systems',      icon: (size) => renderNavIcon('/systems',      { size, strokeWidth: 1.8 }), label: 'System',     plural: 'Systems' },
   'data-asset': { color: '#059669', bg: '#d1fae5', route: '/data-assets',  icon: (size) => renderNavIcon('/data-assets',  { size, strokeWidth: 1.8 }), label: 'Data Asset', plural: 'Data Assets' },
+  // Palette entries stay hex on purpose — they're tied to the
+  // companion bg colour and shouldn't drift if a semantic
+  // variable is retuned. See design-audit PR 3/5.
   domain:       { color: '#dc2626', bg: '#fee2e2', route: '/data-domains', icon: (size) => renderNavIcon('/data-domains', { size, strokeWidth: 1.8 }), label: 'Domain',     plural: 'Domains' },
   person:       { color: '#d97706', bg: '#fef3c7', route: '/people',       icon: (size) => renderNavIcon('/people',       { size, strokeWidth: 1.8 }), label: 'Person',     plural: 'People' },
 };

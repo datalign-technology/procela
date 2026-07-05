@@ -357,7 +357,7 @@ export default function Layout() {
                 same position users instinctively check for context. */}
             {(() => {
               if (orgOptions.length === 0) return (
-                <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 500 }}>No organization defined</span>
+                <span style={{ fontSize: 12, color: 'var(--color-error)', fontWeight: 500 }}>No organization defined</span>
               );
               // Single-tier setup (one company, no divisions accessible): show
               // a static label, no picker — there's nowhere else to switch to.

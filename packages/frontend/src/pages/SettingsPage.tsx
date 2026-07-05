@@ -412,7 +412,7 @@ export default function SettingsPage() {
               </div>
 
               {currentProvider === 'dev' && (
-                <p style={{ fontSize: '0.8125rem', color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginTop: '0.5rem' }}>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--color-warning)', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginTop: '0.5rem' }}>
                   Development mode is active. This is not suitable for production use.
                 </p>
               )}
@@ -442,7 +442,7 @@ export default function SettingsPage() {
             <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '1rem' }}>Configure SSO</h3>
 
             {authError && (
-              <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginBottom: '1rem', fontSize: '0.8125rem' }}>
+              <div style={{ color: 'var(--color-error)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginBottom: '1rem', fontSize: '0.8125rem' }}>
                 {authError}
               </div>
             )}
@@ -648,7 +648,7 @@ export default function SettingsPage() {
           />
 
           {importError && (
-            <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.8125rem' }}>
+            <div style={{ color: 'var(--color-error)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.5rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.8125rem' }}>
               {importError}
             </div>
           )}
@@ -665,7 +665,7 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem', color: '#d97706' }}>
+              <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem', color: 'var(--color-warning)' }}>
                 Warning: This will replace ALL existing data. This cannot be undone.
               </div>
               <button
@@ -1232,7 +1232,7 @@ function MfaPanel() {
             <div style={{ fontSize: 12, marginBottom: 8 }}>
               Confirm with your current password and a code from your authenticator:
             </div>
-            {err && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 6 }}>{err}</div>}
+            {err && <div style={{ fontSize: 12, color: 'var(--color-error)', marginBottom: 6 }}>{err}</div>}
             <input
               type="password"
               value={disablePassword}
@@ -1316,7 +1316,7 @@ function MfaPanel() {
               {enrolling.secret}
             </div>
             <form onSubmit={verifyEnrollment}>
-              {err && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 6 }}>{err}</div>}
+              {err && <div style={{ fontSize: 12, color: 'var(--color-error)', marginBottom: 6 }}>{err}</div>}
               <input
                 type="text"
                 inputMode="numeric"
@@ -1366,7 +1366,7 @@ function MfaPanel() {
   // ── Default: not enrolled, offer to start ──
   return (
     <div>
-      {err && <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 6 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: 'var(--color-error)', marginBottom: 6 }}>{err}</div>}
       <button
         type="button"
         onClick={startEnrollment}

@@ -520,7 +520,7 @@ export default function DamaRolesPage() {
             all create the <strong>same</strong> assignment — it appears in every one of those places.
           </div>
           {error && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: 'var(--color-error)' }}>
               {error}
             </div>
           )}

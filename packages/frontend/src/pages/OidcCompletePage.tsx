@@ -95,7 +95,7 @@ export default function OidcCompletePage() {
       }}>
         {error ? (
           <>
-            <div style={{ color: '#dc2626', fontWeight: 600, marginBottom: 8 }}>Sign-in failed</div>
+            <div style={{ color: 'var(--color-error)', fontWeight: 600, marginBottom: 8 }}>Sign-in failed</div>
             <div style={{ fontSize: 14, color: '#475569', marginBottom: 16 }}>{error}</div>
             <a href="/login" style={{ color: '#0f4f46', textDecoration: 'underline' }}>Back to sign-in</a>
           </>

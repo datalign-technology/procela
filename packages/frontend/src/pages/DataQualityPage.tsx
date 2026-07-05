@@ -557,11 +557,11 @@ export default function DataQualityPage() {
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Passing</div>
           </div>
           <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#d97706' }}>{warningCount}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>{warningCount}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Warning</div>
           </div>
           <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#dc2626' }}>{failingCount}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-error)' }}>{failingCount}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Failing</div>
           </div>
           <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
@@ -1193,9 +1193,9 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                     ) : (
                       <span>
                         {rs.length} total
-                        {passing > 0 && <span style={{ color: '#16a34a', marginLeft: 6 }}>{'\u2714'} {passing}</span>}
+                        {passing > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 6 }}>{'\u2714'} {passing}</span>}
                         {warn > 0 && <span style={{ color: '#ca8a04', marginLeft: 6 }}>{'\u26A0'} {warn}</span>}
-                        {failing > 0 && <span style={{ color: '#dc2626', marginLeft: 6 }}>{'\u2716'} {failing}</span>}
+                        {failing > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 6 }}>{'\u2716'} {failing}</span>}
                       </span>
                     )}
                   </td>
@@ -1254,8 +1254,8 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                                       {(col.rulesCount || 0) > 0 ? (
                                         <span>
                                           {col.rulesCount}
-                                          {(col.rulesPassing || 0) > 0 && <span style={{ color: '#16a34a', marginLeft: 4 }}>{'\u2714'}{col.rulesPassing}</span>}
-                                          {(col.rulesFailing || 0) > 0 && <span style={{ color: '#dc2626', marginLeft: 4 }}>{'\u2716'}{col.rulesFailing}</span>}
+                                          {(col.rulesPassing || 0) > 0 && <span style={{ color: 'var(--color-success)', marginLeft: 4 }}>{'\u2714'}{col.rulesPassing}</span>}
+                                          {(col.rulesFailing || 0) > 0 && <span style={{ color: 'var(--color-error)', marginLeft: 4 }}>{'\u2716'}{col.rulesFailing}</span>}
                                         </span>
                                       ) : (
                                         <span style={{ color: 'var(--color-text-muted)' }}>None</span>
