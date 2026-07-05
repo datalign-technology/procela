@@ -1455,21 +1455,25 @@ export default function SystemsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
                       <input type="checkbox" checked={selectedIds.has(sys.id)} disabled={inherited} onChange={() => toggleSelect(sys.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
+                    <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 280 }}>
                       {/* Clicking the name opens the detail modal, matching
                        *  Data Assets / People / DAMA Roles. Editing the name
                        *  is still possible via the row's Edit pencil button -
                        *  but it's no longer a tap-target hazard on a column
-                       *  users naturally want to click. */}
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                       *  users naturally want to click. flex-nowrap so the
+                       *  OwnerBadge lock never falls to a second line — the
+                       *  name clips instead, tooltip carries the full text. */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                         <button
                           type="button"
                           onClick={() => setViewingSystemId(sys.id)}
-                          title="Click to view details"
+                          title={sys.name}
                           style={{
                             background: 'none', border: 'none', padding: 0,
                             color: 'var(--color-primary)', cursor: 'pointer',
                             font: 'inherit', fontWeight: 500, textAlign: 'left',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            minWidth: 0, flexShrink: 1,
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
