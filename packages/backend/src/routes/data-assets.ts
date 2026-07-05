@@ -470,18 +470,45 @@ router.get('/', (req: Request, res: Response) => {
         ownerSource = 'domain';
       }
     }
-    // Resolve steward names from asset-level stewardIds (preferred),
-    // falling back to domain stewards if asset has none.
-    const stewardSrc = asset.stewardIds?.length > 0 ? asset.stewardIds : (domain?.stewardIds || []);
-    if (stewardSrc.length > 0) {
-      stewardName = stewardSrc
+    // Stewards mirror the owner-inheritance model. Same three-way
+    // provenance:
+    //   stewardSource       — 'asset' if the row has its own list,
+    //                         'domain' if inherited, null if neither
+    //                         has any.
+    //   domainStewardIds    — the domain's own list, always emitted
+    //                         when present so the form can show
+    //                         "Overrides domain (…)" plus a reset.
+    // stewardName (comma-joined names) still surfaces the *effective*
+    // stewards for lists/table display — unchanged consumer contract.
+    const assetStewardIds = asset.stewardIds?.length > 0 ? asset.stewardIds : [];
+    const domainStewardIds: string[] = domain?.stewardIds || [];
+    const domainStewardNames = domainStewardIds
+      .map((sid: string) => people.find((p) => p.id === sid)?.name)
+      .filter(Boolean) as string[];
+    let stewardSource: 'asset' | 'domain' | null = null;
+    let effectiveStewardIds: string[] = [];
+    if (assetStewardIds.length > 0) {
+      effectiveStewardIds = assetStewardIds;
+      stewardSource = 'asset';
+    } else if (domainStewardIds.length > 0) {
+      effectiveStewardIds = domainStewardIds;
+      stewardSource = 'domain';
+    }
+    if (effectiveStewardIds.length > 0) {
+      stewardName = effectiveStewardIds
         .map((sid: string) => people.find((p) => p.id === sid)?.name)
         .filter(Boolean)
         .join(', ') || null;
     }
     const systemName = asset.systemId ? filteredSystems.find((s) => s.id === asset.systemId)?.name || null : null;
     const suggestedTier = computeSuggestedTier(asset);
-    return { ...asset, domainName, ownerName, ownerSource, domainOwnerId, domainOwnerName, stewardName, systemName, suggestedTier };
+    return {
+      ...asset,
+      domainName,
+      ownerName, ownerSource, domainOwnerId, domainOwnerName,
+      stewardName, stewardSource, domainStewardIds, domainStewardNames,
+      systemName, suggestedTier,
+    };
   });
 
   res.json({ success: true, data: enriched, systems: filteredSystems, dataTypes: STANDARD_DATA_TYPES });

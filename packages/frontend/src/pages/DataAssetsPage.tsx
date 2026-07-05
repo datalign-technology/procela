@@ -90,6 +90,15 @@ interface DataAssetEntity {
   domainOwnerId?: string | null;
   domainOwnerName?: string | null;
   stewardName?: string | null;
+  // Steward-resolution provenance, same shape as ownerSource.
+  // 'asset' = row has its own stewardIds list; 'domain' = inherited
+  // from the domain's stewards; null = neither. domainStewardIds /
+  // domainStewardNames are always populated when the domain has
+  // stewards so the form can render "Overrides domain (…)" plus
+  // the effective domain-level list.
+  stewardSource?: 'asset' | 'domain' | null;
+  domainStewardIds?: string[];
+  domainStewardNames?: string[];
   /** Highest tier the asset is eligible for given current signals.
    *  Advisory only — set by the backend, never persisted. The UI shows
    *  a Promote prompt when this exceeds the actual governanceTier. */
@@ -360,7 +369,7 @@ export default function DataAssetsPage() {
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
-  const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null }[]>([]);
+  const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }[]>([]);
   const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -483,7 +492,7 @@ export default function DataAssetsPage() {
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/connections${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/people${query}`),
-        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null }> }>(`/data-domains${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null; stewardIds?: string[]; stewards?: { id: string; name: string }[] }> }>(`/data-domains${query}`),
       ]);
       setPeopleList(peopleRes.data || []);
       setDomainsList(domainsRes.data || []);
@@ -1336,6 +1345,50 @@ export default function DataAssetsPage() {
                   })}
                 </div>
               )}
+              {/* Stewards inheritance hint — mirror of the Owner
+                  field. Three states:
+                    1. No stewards picked + domain has stewards →
+                       "Inherits from domain — X, Y". Non-destructive;
+                       leaving the picker empty IS the inherit choice.
+                    2. Explicit stewards + list differs from the
+                       domain's set → "Overrides domain (X, Y). Reset
+                       to domain stewards". Clicking Reset clears the
+                       asset's list, dropping back to inheritance.
+                    3. Empty picks + no domain stewards → nothing
+                       shown; the field is genuinely empty. */}
+              {(() => {
+                const domain = form.domainId ? domainsList.find((d) => d.id === form.domainId) : null;
+                const domainStewards = domain?.stewards || [];
+                if (domainStewards.length === 0) return null;
+                const domainList = domainStewards.map((s) => s.name).join(', ');
+                if (form.stewardIds.length === 0) {
+                  return (
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, fontStyle: 'italic' }}>
+                      Inherits from domain — {domainList}
+                    </div>
+                  );
+                }
+                // Compare set-equality: same members regardless of order.
+                const domainSet = new Set(domainStewards.map((s) => s.id));
+                const assetSet = new Set(form.stewardIds);
+                const same = domainSet.size === assetSet.size
+                  && [...domainSet].every((id) => assetSet.has(id));
+                if (!same) {
+                  return (
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span>Overrides domain ({domainList}).</span>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, stewardIds: [] }))}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11 }}
+                      >
+                        Reset to domain stewards
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
 
