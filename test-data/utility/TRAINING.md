@@ -634,8 +634,10 @@ not training data — so it answers about the org you just built.
 
 ### 11.1 Open the panel
 
-Click **Ask AI** in the top bar (or the green ? bubble bottom-right).
-Four starter prompts appear:
+Click **Ask AI** in the top bar. That's the only entry point — the
+floating bottom-right bubble is gone; the top-bar button is where
+you open, minimize, and resume the chat. Four starter prompts
+appear when the chat is empty:
 
 - Where are our data gaps?
 - Which assets are below 80% health and linked to critical processes?
@@ -672,7 +674,17 @@ Process Catalog (Module 3), with the system names rendered as links
 to the Systems page. Switch the **Working in…** scope to Water and
 ask the same question — the answer re-grounds to the new org.
 
-### 11.5 What it won't do
+### 11.5 Minimize and continue working
+
+Click the `–` in the panel header to close the panel and keep
+working elsewhere in the app — the conversation is preserved.
+Notice the **Ask AI** top-bar button now shows a small count badge
+telling you a chat is paused. Click it to resume; every message
+is where you left it. To clear history and start over, click
+**New chat** in the panel header — that's the only way to reset
+the conversation.
+
+### 11.6 What it won't do
 
 The assistant answers and points; it doesn't act. It won't delete an
 orphan, change ownership, or transition a process status — those
