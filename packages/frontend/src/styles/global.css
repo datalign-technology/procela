@@ -1,5 +1,33 @@
 /* ── CSS Reset ── */
 
+/* Data tables never wrap by default. Every list surface in the app
+ * (Systems, Data Assets, People, Skills, Business Glossary, Data
+ * Quality, Connections, Data Lineage, Data Dictionary, Agents,
+ * Governance Documents, Governance Groups, Data Domains,
+ * Mappings, DAMA Roles, and every future one) sits in a plain
+ * <table> and used to inherit the browser default `white-space:
+ * normal` — long content in one cell (a system type, a
+ * multi-word connection status, a long person title) wrapped and
+ * inflated that row's height, making the table visually noisy
+ * because rows were different sizes.
+ *
+ * Forcing `nowrap` at the cell level guarantees a uniform row
+ * height across every list without touching per-page code. Text
+ * that's genuinely too long to fit (descriptions, definitions,
+ * long system names) already clips through the TruncatedText
+ * component, which supplies its own overflow / ellipsis / tooltip
+ * — this rule doesn't fight that; it just keeps the OTHER
+ * columns (type, status, dates, counts, badges) from expanding
+ * into two lines when a row would otherwise squeeze.
+ *
+ * If a specific cell genuinely needs to wrap, override with an
+ * inline style: `style={{ whiteSpace: 'normal' }}`. */
+table th,
+table td {
+  white-space: nowrap;
+}
+
+
 *,
 *::before,
 *::after {
