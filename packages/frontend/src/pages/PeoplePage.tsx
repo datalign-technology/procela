@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -1576,9 +1577,9 @@ export default function PeoplePage() {
 
                 {/* ── ASSIGNED ORGANIZATIONS (editable, tree) ── */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <SectionLabel marginBottom={4}>
                     Assigned Organizations ({(viewing360.person.orgIds || []).length})
-                  </h3>
+                  </SectionLabel>
                   <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>
                     Toggle membership across the org hierarchy. The person must remain assigned to at least one org.
                   </p>
@@ -1645,9 +1646,9 @@ export default function PeoplePage() {
 
                 {/* Governance Groups — Editable */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <SectionLabel>
                     Governance Groups ({viewing360.governanceGroups.length} of {viewing360.allGroups.length})
-                  </h3>
+                  </SectionLabel>
                   {viewing360.allGroups.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No governance groups defined yet</p>
                   ) : (
@@ -1688,7 +1689,7 @@ export default function PeoplePage() {
                 {/* DAMA Roles — Editable */}
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Roles ({viewing360.damaRoles.length})</h3>
+                    <SectionLabel marginBottom={0}>Governance Roles ({viewing360.damaRoles.length})</SectionLabel>
                     <button
                       style={{ ...btnSecondary, padding: '3px 10px', fontSize: 11 }}
                       onClick={() => { setShowAddDamaRole(!showAddDamaRole); setNewDamaRole({ roleType: viewing360.allDamaRoleTypes[0] || 'CDO', scopeType: 'ORG', scopeId: '' }); }}
@@ -1758,9 +1759,9 @@ export default function PeoplePage() {
 
                 {/* Data Domains — Editable */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <SectionLabel>
                     Data Domains ({(viewing360.allDomains || []).filter((d) => d.ownerId === viewing360.person.id || d.stewardIds?.includes(viewing360.person.id)).length} of {(viewing360.allDomains || []).length})
-                  </h3>
+                  </SectionLabel>
                   {(viewing360.allDomains || []).length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data domains defined yet</p>
                   ) : (
@@ -1796,7 +1797,7 @@ export default function PeoplePage() {
 
                 {/* Owned Processes (read-only) */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Owned Processes ({viewing360.ownedProcessNodes.length})</h3>
+                  <SectionLabel>Owned Processes ({viewing360.ownedProcessNodes.length})</SectionLabel>
                   {viewing360.ownedProcessNodes.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Does not own any process nodes</p>
                   ) : (
@@ -1816,7 +1817,7 @@ export default function PeoplePage() {
 
                 {/* Owned/Stewarded Data Assets (read-only) */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Assets ({viewing360.dataAssets.length})</h3>
+                  <SectionLabel>Data Assets ({viewing360.dataAssets.length})</SectionLabel>
                   {viewing360.dataAssets.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data assets owned or stewarded</p>
                   ) : (
