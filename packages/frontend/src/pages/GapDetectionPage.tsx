@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import { renderNavIcon } from '../components/navIcons';
 import { useOrgContext } from '../stores/orgContext';
 import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
@@ -102,72 +103,82 @@ interface GapSection {
   title: string;
   description: string;
   severity: 'critical' | 'warning' | 'info';
-  icon: string;
+  // Icon is the sidebar SVG for the route this gap targets — so
+  // an Ownership Gaps row shows the People rail icon, a Low-Health
+  // Assets row shows the Data Assets rail icon, and so on. Rendered
+  // via renderNavIcon(route, {size}) at each call site.
+  icon: React.ReactNode;
 }
 
+// Each gap section's icon points at the sidebar SVG of the page
+// the gap describes, so the visual mapping between "Unmapped
+// Activities" and the /processes rail entry, "Ownership Gaps"
+// and /people, etc., stays consistent with the rest of the app.
+const SECTION_ICON_SIZE = 18;
+const gapIcon = (route: string) => renderNavIcon(route, { size: SECTION_ICON_SIZE, strokeWidth: 1.8 });
 const GAP_SECTIONS: GapSection[] = [
   {
     key: 'unmappedSteps',
     title: 'Unmapped Activities',
     description: 'Process activities with no data asset linked. These represent potential data gaps where business processes lack data coverage.',
     severity: 'critical',
-    icon: '\u26A0',
+    icon: gapIcon('/processes'),
   },
   {
     key: 'ownerlessProcesses',
     title: 'Ownership Gaps',
     description: 'Value streams and processes with no assigned owner. Every process should have clear accountability.',
     severity: 'critical',
-    icon: '\u263B',
+    icon: gapIcon('/people'),
   },
   {
     key: 'ungovernedAssets',
     title: 'Ungoverned Assets',
     description: 'Uncertified data assets linked to process activities. Critical processes depend on minimally governed data.',
     severity: 'warning',
-    icon: '\u26C1',
+    icon: gapIcon('/data-assets'),
   },
   {
     key: 'lowHealthAssets',
     title: 'Low-Health Assets',
     description: 'Data assets linked to processes with health score below 50%. Quality issues may affect dependent processes.',
     severity: 'warning',
-    icon: '\u2713',
+    icon: gapIcon('/data-quality'),
   },
   {
     key: 'unownedDomains',
     title: 'Unowned Domains',
     description: 'Data domains with no assigned owner. Domain ownership drives stewardship accountability.',
     severity: 'warning',
-    icon: '\u2637',
+    icon: gapIcon('/data-domains'),
   },
   {
     key: 'orphanedAssets',
     title: 'Orphaned Assets',
     description: 'Data assets not assigned to any data domain. These lack governance oversight.',
     severity: 'info',
-    icon: '\u26C1',
+    icon: gapIcon('/data-assets'),
   },
   {
     key: 'unlinkedAssets',
     title: 'Unlinked Assets',
     description: 'Data assets with no mapping to any process activity. It is unclear which processes these support.',
     severity: 'info',
-    icon: '\u2194',
+    icon: gapIcon('/data-assets/orphans'),
   },
   {
     key: 'unassignedPeople',
     title: 'Unassigned People',
     description: 'People in the organization with no ownership or stewardship assignments.',
     severity: 'info',
-    icon: '\u263B',
+    icon: gapIcon('/people'),
   },
   {
     key: 'duplicateAssetNames',
     title: 'Duplicate Asset Names',
     description: 'Multiple data assets share the same name (case-insensitive). Sometimes legitimate \u2014 e.g., two divisions both have "Customer Accounts" \u2014 but worth a look to decide whether to merge or rename for clarity.',
     severity: 'info',
-    icon: '\u29C4',
+    icon: gapIcon('/data-assets'),
   },
 ];
 
@@ -297,7 +308,7 @@ export default function GapDetectionPage() {
                   {count > 0 && (
                     <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{isOpen ? '\u25BC' : '\u25B6'}</span>
                   )}
-                  <span style={{ fontSize: 16 }}>{section.icon}</span>
+                  <span style={{ display: 'inline-flex', color: sev.color }}>{section.icon}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{section.title}</div>
                     <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{section.description}</div>

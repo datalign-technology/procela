@@ -9,6 +9,7 @@ import { getStatusColor } from '../lib/statusBadge';
 import { badgeColor } from '../lib/badgeColors';
 import HelpPopover from '../components/HelpPopover';
 import EnterpriseDiagram from '../components/EnterpriseDiagram';
+import { renderNavIcon } from '../components/navIcons';
 
 // ── Types ──
 
@@ -39,12 +40,20 @@ interface Summary {
 
 // ── Constants ──
 
-const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: string; label: string; plural: string }> = {
-  process:      { color: '#2563eb', bg: '#dbeafe', icon: '\u2630', label: 'Process', plural: 'Processes' },
-  system:       { color: '#7c3aed', bg: '#ede9fe', icon: '\u2699', label: 'System', plural: 'Systems' },
-  'data-asset': { color: '#059669', bg: '#d1fae5', icon: '\u26C1', label: 'Data Asset', plural: 'Data Assets' },
-  domain:       { color: '#dc2626', bg: '#fee2e2', icon: '\u2637', label: 'Domain', plural: 'Domains' },
-  person:       { color: '#d97706', bg: '#fef3c7', icon: '\u263B', label: 'Person', plural: 'People' },
+// Each type's icon is a callable that returns the same SVG the
+// sidebar uses for the corresponding route \u2014 Processes, Systems,
+// Data Assets, Domains, People. Previously this map hard-coded
+// Unicode glyphs (\u2630 \u2699 \u26C1 \u2637 \u263B) which didn't match the sidebar's
+// line-art icon set; the Enterprise View header, the summary
+// cards, the diagram, and the detail-panel chip all render one
+// of these, so every visual reference to a menu item stayed
+// consistent with the rail entry after we switched.
+const TYPE_CONFIG: Record<string, { color: string; bg: string; icon: (size: number) => React.ReactNode; label: string; plural: string; route: string }> = {
+  process:      { color: '#2563eb', bg: '#dbeafe', route: '/processes',    icon: (size) => renderNavIcon('/processes',    { size, strokeWidth: 1.8 }), label: 'Process',    plural: 'Processes' },
+  system:       { color: '#7c3aed', bg: '#ede9fe', route: '/systems',      icon: (size) => renderNavIcon('/systems',      { size, strokeWidth: 1.8 }), label: 'System',     plural: 'Systems' },
+  'data-asset': { color: '#059669', bg: '#d1fae5', route: '/data-assets',  icon: (size) => renderNavIcon('/data-assets',  { size, strokeWidth: 1.8 }), label: 'Data Asset', plural: 'Data Assets' },
+  domain:       { color: '#dc2626', bg: '#fee2e2', route: '/data-domains', icon: (size) => renderNavIcon('/data-domains', { size, strokeWidth: 1.8 }), label: 'Domain',     plural: 'Domains' },
+  person:       { color: '#d97706', bg: '#fef3c7', route: '/people',       icon: (size) => renderNavIcon('/people',       { size, strokeWidth: 1.8 }), label: 'Person',     plural: 'People' },
 };
 
 const COLUMN_ORDER: string[] = ['process', 'system', 'data-asset', 'domain', 'person'];
@@ -327,7 +336,7 @@ export default function EnterpriseViewPage() {
                       <div style={{ fontSize: 24, fontWeight: 700, color: cfg.color }}>{count}</div>
                       <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>{cfg.plural}</div>
                     </div>
-                    <span style={{ fontSize: 20, opacity: 0.4 }}>{cfg.icon}</span>
+                    <span style={{ opacity: 0.4, display: 'inline-flex' }}>{cfg.icon(20)}</span>
                   </div>
                   {count > 0 && (
                     <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 6 }}>
@@ -382,7 +391,7 @@ export default function EnterpriseViewPage() {
                 }}
               >
                 <span style={{ fontSize: 10, color: cfg.color }}>{isOpen ? '\u25BC' : '\u25B6'}</span>
-                <span style={{ fontSize: 16 }}>{cfg.icon}</span>
+                <span style={{ display: 'inline-flex', color: cfg.color }}>{cfg.icon(16)}</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: cfg.color }}>{cfg.plural}</span>
                 <span style={{ fontSize: 12, color: cfg.color, opacity: 0.6, marginLeft: 4 }}>({items.length})</span>
               </div>
@@ -417,7 +426,7 @@ export default function EnterpriseViewPage() {
                           background: cfg.bg, color: cfg.color, fontSize: 14,
                           border: `1.5px solid ${cfg.color}44`,
                         }}>
-                          {cfg.icon}
+                          {cfg.icon(16)}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -516,7 +525,7 @@ export default function EnterpriseViewPage() {
                   color: TYPE_CONFIG[selected.type]?.color,
                   fontSize: 14,
                 }}>
-                  {TYPE_CONFIG[selected.type]?.icon}
+                  {TYPE_CONFIG[selected.type]?.icon(16)}
                 </span>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{selected.label}</div>
@@ -589,7 +598,7 @@ export default function EnterpriseViewPage() {
                         onMouseLeave={(ev) => { ev.currentTarget.style.background = 'var(--color-bg)'; }}
                       >
                         <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{direction}</span>
-                        <span style={{ fontSize: 11 }}>{cfg.icon}</span>
+                        <span style={{ display: 'inline-flex', color: cfg.color }}>{cfg.icon(12)}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{other.label}</div>
                           <div style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>{e.label}</div>
@@ -616,7 +625,7 @@ export default function EnterpriseViewPage() {
                   return (
                     <div key={type}>
                       <div style={{ fontSize: 10, fontWeight: 600, color: cfg.color, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span>{cfg.icon}</span> {cfg.plural} ({items.length})
+                        <span style={{ display: 'inline-flex' }}>{cfg.icon(12)}</span> {cfg.plural} ({items.length})
                       </div>
                       {items.map((n) => (
                         <div key={n.id}
