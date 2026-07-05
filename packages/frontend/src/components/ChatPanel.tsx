@@ -145,13 +145,14 @@ export default function ChatPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const { activeOrgId, activeOrgName } = useOrgContext();
-  // The mobile sidebar collapses to a ~60px fixed bottom strip, so the
-  // floating chat bubble has to ride above it; on desktop we can pin
-  // to the viewport corner like before.
-  const bubbleBottom = isMobile ? 80 : 24;
+  // Panel positioning. Mobile pins the panel with margins, riding
+  // above the ~60px fixed bottom nav strip; desktop pins a 400x520
+  // card to the bottom-right corner. The floating bubble that used
+  // to occupy this corner is gone — the panel now sits where the
+  // bubble was.
   const panelStyle = isMobile
-    ? { left: 8, right: 8, bottom: bubbleBottom + 56, top: 56, width: 'auto' as const, height: 'auto' as const }
-    : { right: 24, bottom: bubbleBottom + 56, width: 400, height: 520 };
+    ? { left: 8, right: 8, bottom: 80, top: 56, width: 'auto' as const, height: 'auto' as const }
+    : { right: 24, bottom: 24, width: 400, height: 520 };
 
   useEffect(() => {
     if (listRef.current) {
@@ -170,9 +171,20 @@ export default function ChatPanel() {
     return () => window.removeEventListener('procela:toggle-chat', handler);
   }, []);
 
+  // Broadcast open + message count so the top-bar "Ask AI" button
+  // can render its own message-count badge and active styling. This
+  // replaced the floating bottom-right bubble — one entry point in
+  // the top bar, one signalling channel here. The meaningful-count
+  // filter drops the trailing empty assistant turn from an in-flight
+  // stream so a fresh restart doesn't show "1".
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('procela:chat-state', { detail: { open } }));
-  }, [open]);
+    const meaningful = messages.filter(
+      (m) => (m.role === 'user') || (m.content && m.content.length > 0),
+    ).length;
+    window.dispatchEvent(new CustomEvent('procela:chat-state', {
+      detail: { open, messageCount: meaningful },
+    }));
+  }, [open, messages]);
 
   async function send(text: string) {
     if (!text || loading) return;
@@ -274,89 +286,12 @@ export default function ChatPanel() {
 
   return (
     <>
-      {/* Toggle button. Toggling to closed only MINIMIZES the panel \u2014
-          messages and entities live in this component's state so
-          they survive across open/close cycles. A small badge in
-          the corner shows the message count when there's an active
-          conversation waiting, so the user can see the chat isn't
-          gone; the aria-label and tooltip use "minimize" language
-          instead of "close" for the same reason. */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          position: 'fixed',
-          bottom: bubbleBottom,
-          right: 24,
-          width: 48,
-          height: 48,
-          borderRadius: '50%',
-          backgroundColor: 'var(--color-primary)',
-          color: '#fff',
-          border: 'none',
-          fontSize: 22,
-          cursor: 'pointer',
-          boxShadow: 'var(--shadow-lg)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1001,
-          transition: 'background-color 0.15s',
-        }}
-        onMouseEnter={(e) =>
-          ((e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-primary-hover)')
-        }
-        onMouseLeave={(e) =>
-          ((e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-primary)')
-        }
-        title={
-          open
-            ? 'Minimize chat (conversation is kept)'
-            : messages.length > 0
-              ? 'Resume AI conversation'
-              : 'Open AI assistant'
-        }
-        aria-label={
-          open
-            ? 'Minimize chat'
-            : messages.length > 0
-              ? 'Resume AI conversation'
-              : 'Open AI assistant'
-        }
-        aria-expanded={open}
-      >
-        {open ? '\u2013' : '\u2753'}
-        {!open && messages.length > 0 && (
-          // Message-count badge only when there's a live conversation
-          // to resume. `messages` may contain a trailing empty
-          // assistant turn from an in-flight stream \u2014 filter those
-          // out so a fresh restart doesn't show "1".
-          (() => {
-            const meaningful = messages.filter(
-              (m) => (m.role === 'user') || (m.content && m.content.length > 0),
-            );
-            if (meaningful.length === 0) return null;
-            return (
-              <span
-                aria-label={`${meaningful.length} messages in your conversation`}
-                style={{
-                  position: 'absolute',
-                  top: -4, right: -4,
-                  minWidth: 20, height: 20, padding: '0 6px',
-                  borderRadius: 999,
-                  background: '#fff',
-                  color: 'var(--color-primary)',
-                  border: '2px solid var(--color-primary)',
-                  fontSize: 11, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  lineHeight: 1,
-                }}
-              >
-                {meaningful.length > 99 ? '99+' : meaningful.length}
-              </span>
-            );
-          })()
-        )}
-      </button>
+      {/* The floating bottom-right bubble was retired. The top-bar
+          "Ask AI" button (Layout.tsx) is the single entry point and
+          carries the message-count badge; the in-panel "\u2013" button
+          handles minimize from inside. Two intents, two buttons in
+          predictable places \u2014 no duplicate affordance sitting on
+          top of every page's UI. */}
 
       {/* Chat window. On phones it expands edge-to-edge with margins,
           riding above the mobile nav strip; on desktop it's a 400×520
