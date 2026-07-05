@@ -437,17 +437,38 @@ router.get('/', (req: Request, res: Response) => {
     let domainName: string | null = null;
     let ownerName: string | null = null;
     let stewardName: string | null = null;
-    // Resolve owner: prefer the new ownerPersonId FK; fall back to the legacy
-    // free-text/id `owner` field for assets that haven't been re-saved yet.
+    // Owner resolution has THREE fields the client cares about:
+    //   ownerName      — the effective owner name for display
+    //   ownerSource    — 'asset' if set on the row itself, 'domain'
+    //                    if inherited from the domain owner, null if
+    //                    the domain also has no owner
+    //   domainOwner*   — the domain's owner even when the asset
+    //                    overrides it, so the form can show
+    //                    "Overrides domain (X)" and offer a reset
+    // The 'domain' source is what makes ownership propagate: a
+    // domain owner change automatically shows through on every
+    // inheriting asset without a per-row update.
+    let ownerSource: 'asset' | 'domain' | null = null;
     if (asset.ownerPersonId) {
       ownerName = people.find((p) => p.id === asset.ownerPersonId)?.name || null;
+      if (ownerName) ownerSource = 'asset';
     }
     if (!ownerName && asset.owner) {
       ownerName = people.find((p) => p.id === asset.owner || p.name === asset.owner)?.name || asset.owner;
+      if (ownerName) ownerSource = 'asset';
     }
+    let domainOwnerId: string | null = null;
+    let domainOwnerName: string | null = null;
     if (domain) {
       domainName = domain.name;
-      if (!ownerName && domain.ownerId) ownerName = people.find((p) => p.id === domain.ownerId)?.name || null;
+      if (domain.ownerId) {
+        domainOwnerId = domain.ownerId;
+        domainOwnerName = people.find((p) => p.id === domain.ownerId)?.name || null;
+      }
+      if (!ownerName && domainOwnerName) {
+        ownerName = domainOwnerName;
+        ownerSource = 'domain';
+      }
     }
     // Resolve steward names from asset-level stewardIds (preferred),
     // falling back to domain stewards if asset has none.
@@ -460,7 +481,7 @@ router.get('/', (req: Request, res: Response) => {
     }
     const systemName = asset.systemId ? filteredSystems.find((s) => s.id === asset.systemId)?.name || null : null;
     const suggestedTier = computeSuggestedTier(asset);
-    return { ...asset, domainName, ownerName, stewardName, systemName, suggestedTier };
+    return { ...asset, domainName, ownerName, ownerSource, domainOwnerId, domainOwnerName, stewardName, systemName, suggestedTier };
   });
 
   res.json({ success: true, data: enriched, systems: filteredSystems, dataTypes: STANDARD_DATA_TYPES });
