@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -651,7 +652,12 @@ export default function AgentsPage() {
                           >
                             {a.name}
                           </span>
-                          {a.description && <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}>{a.description}</div>}
+                          {a.description && (
+                            <TruncatedText
+                              text={a.description}
+                              style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 400 }}
+                            />
+                          )}
                           {(roles.length > 0 || execs.length > 0) && (
                             <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
                               {roles.length > 0 && (

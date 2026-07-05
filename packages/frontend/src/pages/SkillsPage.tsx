@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -427,8 +428,8 @@ export default function SkillsPage() {
                         {formatCategory(s.category)}
                       </span>
                     </td>
-                    <td style={{ ...tdStyle, color: s.description ? 'var(--color-text)' : 'var(--color-text-muted)', maxWidth: 400 }}>
-                      {s.description || '—'}
+                    <td style={{ ...tdStyle, maxWidth: 400 }}>
+                      <TruncatedText text={s.description} />
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>

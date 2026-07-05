@@ -2,6 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -721,8 +722,8 @@ export default function DataLineagePage() {
                         </td>
                       )}
                       {lineageCols.isVisible('description') && (
-                        <td style={{ ...tdStyle, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {link.description || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>--</span>}
+                        <td style={{ ...tdStyle, maxWidth: 200 }}>
+                          <TruncatedText text={link.description} emptyPlaceholder="--" />
                         </td>
                       )}
                       <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
