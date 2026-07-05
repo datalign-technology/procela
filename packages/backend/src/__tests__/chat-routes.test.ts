@@ -55,6 +55,8 @@ const { governanceTasks } = require('../routes/governance-tasks');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataQualityRules } = require('../routes/data-quality');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const { connections, connectionSystemLinks } = require('../routes/connections');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiService } = require('../services/ai.service');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
@@ -105,6 +107,12 @@ describe('chat routes + buildOrgSnapshot', () => {
   const issueId = PREFIX + 'issue';
   const taskId = PREFIX + 'task';
   const dqId = PREFIX + 'dq';
+  const connId = PREFIX + 'conn';
+  const linkA = PREFIX + 'link-a';
+  const linkB = PREFIX + 'link-b';
+  // Second system on the same connection so we can assert the
+  // multi-system join renders in the snapshot.
+  const sysId2 = PREFIX + 'sys2';
 
   const originalChat = aiService.chat.bind(aiService);
   const originalChatStream = aiService.chatStream.bind(aiService);
@@ -140,6 +148,7 @@ describe('chat routes + buildOrgSnapshot', () => {
     };
     sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems); sweep(suggestionDismissals);
     sweep(glossaryTerms); sweep(governancePolicies); sweep(governanceIssues); sweep(governanceTasks); sweep(dataQualityRules);
+    sweep(connections); sweep(connectionSystemLinks);
     // Sweep both orgs so any stale rows from a previous run go away.
     const oiOld = organizations.findIndex((o: any) => o.id === orgId);
     if (oiOld >= 0) organizations.splice(oiOld, 1);
@@ -154,9 +163,24 @@ describe('chat routes + buildOrgSnapshot', () => {
 
     const now = new Date().toISOString();
     systems.push({ id: sysId, orgId, name: 'Epic EHR', description: '', systemType: 'EHR', createdAt: now, updatedAt: now });
+    systems.push({ id: sysId2, orgId, name: 'Systems_2', description: '', systemType: 'Ops', createdAt: now, updatedAt: now });
     // System owned at the parent — the child scope's snapshot must
     // include it. This is the scope-bug regression guard.
     systems.push({ id: parentSysId, orgId: parentOrgId, name: 'Corporate DW', description: '', systemType: 'DW', createdAt: now, updatedAt: now });
+    // Data connection wired to two systems via the join table.
+    // Regression guard for "what systems is <connection> tied to?" —
+    // the assistant returned "no such connection" until the
+    // snapshot named both the connection and the linked systems.
+    connections.push({
+      id: connId, orgId, name: 'Systems.csv',
+      connectionType: 'FILE_STORAGE',
+      config: { storageType: 'LOCAL', originalFileName: 'Systems.csv' },
+      credentials: {},
+      status: 'CONNECTED', lastTestedAt: now, lastTestResult: null,
+      createdAt: now, updatedAt: now,
+    });
+    connectionSystemLinks.push({ id: linkA, connectionId: connId, systemId: sysId });
+    connectionSystemLinks.push({ id: linkB, connectionId: connId, systemId: sysId2 });
     dataAssets.push(
       { id: mappedAsset, orgId, name: 'Patient encounter records', description: '', systemId: sysId, owner: '', stewardIds: [], governanceTier: 'GOLD', healthScore: 95, createdAt: now, updatedAt: now },
       { id: orphanAsset, orgId, name: 'Unused billing ledger', description: '', systemId: sysId, owner: '', stewardIds: [], governanceTier: 'BRONZE', healthScore: 40, createdAt: now, updatedAt: now },
@@ -328,6 +352,17 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.match(out!, /## DATA QUALITY/);
       assert.match(out!, /Summary: 0 passing, 1 failing\/warning/);
       assert.match(out!, /Encounter records completeness.*failing.*score:82\/95/s);
+    });
+
+    // Regression: user asked "what systems is the Systems.csv
+    // connection tied to?" and got "no such connection" — the
+    // snapshot didn't include data connections at all. The section
+    // must name the connection AND every system it's linked to
+    // via connectionSystemLinks so the AI can answer join questions.
+    it('lists data connections with their linked systems', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /## DATA CONNECTIONS/);
+      assert.match(out!, /Systems\.csv \(file storage, status:connected, systems:Epic EHR, Systems_2\)/);
     });
   });
 
