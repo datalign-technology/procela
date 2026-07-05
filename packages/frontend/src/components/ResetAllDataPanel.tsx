@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import { usePermissions } from '@/hooks/usePermissions';
 import { signOutLocal } from '@/lib/signOut';
 import { successToast, errorToast } from '../lib/errorToast';
+import Card from './Card';
 
 // ──────────────────────────────────────────────────────────────────────────
 // ResetAllDataPanel — admin-only "factory reset" for the data layer.
@@ -35,17 +36,10 @@ const sectionTitleStyle: React.CSSProperties = {
   marginBottom: '1rem',
 };
 
-// Matches SettingsPage's local sectionStyle (surface + border +
-// 1.5rem padding) except for the red border, which signals the
-// destructive intent. No maxWidth: SettingsPage's other cards
-// stretch to the page width, and a narrower reset card looked
-// mis-aligned next to Backup & Restore above it.
-const sectionStyle: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid #fecaca',
-  padding: '1.5rem',
-};
+// Retired in favour of the shared <Card> component. The red border
+// is expressed via Card's `borderColor` prop; the 1.5rem padding
+// via `padding`. All other styling comes from the standard card
+// tokens (surface bg, radius-md, shadow-sm).
 
 export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelProps) {
   const { isSuperAdmin } = usePermissions();
@@ -86,7 +80,7 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
   };
 
   return (
-    <div style={sectionStyle} data-testid="reset-all-data-panel">
+    <Card padding="1.5rem" borderColor="#fecaca" data-testid="reset-all-data-panel">
       <h2 style={{ ...sectionTitleStyle, color: '#991b1b' }}>Reset everything</h2>
       <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem', lineHeight: 1.5 }}>
         Permanently delete every organization, person, process, data asset,
@@ -189,6 +183,6 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
