@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { getVisibleOrgScope } from '../lib/org-scope';
+import { getVisibleOrgScope, getAncestorOrgIds } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { rankSuggestions } from '../services/asset-suggestion.service';
 import { rankSystemSuggestions } from '../services/system-suggestion.service';
@@ -481,10 +481,31 @@ router.delete('/all', (_req: Request, res: Response) => {
 /** GET / — list all nodes as flat list + tree + metadata */
 router.get('/', (req: Request, res: Response) => {
   const { orgId } = req.query;
+  // Governance content is defined once at the top of the org tree
+  // (company / enterprise level) and applies everywhere below it —
+  // divisions are subject to it but don't own it. Before this
+  // filter, `filterByOrgScope`'s ancestor walk pulled enterprise
+  // governance value streams down into every division's Process
+  // Catalog, inflating counts and showing a locked row a division
+  // user can't act on. Default behaviour is now: hide governance
+  // nodes whose orgId is a strict ancestor of the active scope.
+  // Governance defined AT the active scope or BELOW it still shows,
+  // and the query param below lets a user opt back in when they
+  // deliberately want to see what enterprise governance applies to
+  // them from their division seat.
+  const includeAncestorGovernance = req.query.includeAncestorGovernance === 'true';
   const filtered = orgId
     ? (() => {
         const scope = getVisibleOrgScope(orgId as string)!;
-        return processNodes.filter((n) => scope.has(n.orgId) || n.orgIds.some((id) => scope.has(id)));
+        const ancestors = getAncestorOrgIds(orgId as string) ?? new Set<string>();
+        return processNodes.filter((n) => {
+          const inScope = scope.has(n.orgId) || n.orgIds.some((id) => scope.has(id));
+          if (!inScope) return false;
+          if (!includeAncestorGovernance && n.domain === 'GOVERNANCE' && ancestors.has(n.orgId)) {
+            return false;
+          }
+          return true;
+        });
       })()
     : processNodes;
   const valueStreams = filtered.filter((n) => n.level === 'VALUE_STREAM');

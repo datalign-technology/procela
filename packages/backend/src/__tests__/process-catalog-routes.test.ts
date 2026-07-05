@@ -31,6 +31,8 @@ const {
 const { mappings } = require('../routes/mappings');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataAssets } = require('../routes/data-assets');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { organizations } = require('../routes/organizations');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -288,5 +290,99 @@ describe('process-catalog routes — Tier 2 coverage', () => {
       const row = processNodes.find((n: any) => n.id === lockActId);
       assert.strictEqual(row.name, 'Locked process');
     });
+  });
+});
+
+// ── Ancestor-owned governance filter ──
+// Governance value streams live at the enterprise (company) level
+// and roll down through filterByOrgScope's ancestor walk. A user
+// working in a division shouldn't see the parent's governance
+// content — it inflates their counts and shows a locked row they
+// can't act on. The default filter hides ancestor-owned governance;
+// the ?includeAncestorGovernance=true opt-in reveals it for users
+// who want to see what enterprise governance applies to them.
+describe('process-catalog GET / — ancestor-governance filter', () => {
+  let server: http.Server;
+  let port: number;
+  const PREFIX = 'test-pc-anc-gov-';
+  const parentOrgId = PREFIX + 'parent';
+  const childOrgId = PREFIX + 'child';
+  const parentGovVsId = PREFIX + 'parent-gov-vs';
+  const parentOpVsId = PREFIX + 'parent-op-vs';
+  const childOpVsId = PREFIX + 'child-op-vs';
+  const childGovVsId = PREFIX + 'child-gov-vs';
+
+  before(async () => {
+    const app = express();
+    app.use(express.json());
+    app.use('/process-catalog', processCatalogRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    port = (server.address() as AddressInfo).port;
+
+    const sweep = (arr: any[], pred: (r: any) => boolean) => {
+      for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i])) arr.splice(i, 1);
+    };
+    sweep(processNodes, (n) => typeof n.id === 'string' && n.id.startsWith(PREFIX));
+    sweep(organizations, (o) => typeof o.id === 'string' && o.id.startsWith(PREFIX));
+
+    const now = new Date().toISOString();
+    organizations.push({ id: parentOrgId, name: 'Test Utilities', industry: 'Utilities', type: 'company', parentId: null, createdAt: now, updatedAt: now });
+    organizations.push({ id: childOrgId,  name: 'Test Electric',  industry: 'Utilities', type: 'division', parentId: parentOrgId, createdAt: now, updatedAt: now });
+
+    const baseVs = (extra: Record<string, any>) => ({
+      parentId: null, level: 'VALUE_STREAM', activityId: null, version: 1,
+      ownerId: null, orderIndex: 0, status: 'DRAFT', description: '',
+      orgIds: [extra.orgId], createdAt: now, updatedAt: now,
+      ...extra,
+    });
+    processNodes.push(baseVs({ id: parentGovVsId, orgId: parentOrgId, name: 'Data Governance Management', domain: 'GOVERNANCE' }));
+    processNodes.push(baseVs({ id: parentOpVsId,  orgId: parentOrgId, name: 'Parent Operational VS',      domain: 'OPERATIONAL' }));
+    processNodes.push(baseVs({ id: childOpVsId,   orgId: childOrgId,  name: 'Child Operational VS',       domain: 'OPERATIONAL' }));
+    processNodes.push(baseVs({ id: childGovVsId,  orgId: childOrgId,  name: 'Division-owned Governance',  domain: 'GOVERNANCE' }));
+  });
+
+  after(async () => {
+    const sweep = (arr: any[], pred: (r: any) => boolean) => {
+      for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i])) arr.splice(i, 1);
+    };
+    sweep(processNodes, (n) => typeof n.id === 'string' && n.id.startsWith(PREFIX));
+    sweep(organizations, (o) => typeof o.id === 'string' && o.id.startsWith(PREFIX));
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('hides ancestor-owned governance value streams from the child scope by default', async () => {
+    const res = await request(port, 'GET', `/process-catalog?orgId=${childOrgId}`);
+    assert.strictEqual(res.status, 200);
+    const names = res.body.data.map((n: any) => n.name);
+    // Parent's operational VS still shows (it's not governance).
+    assert.ok(names.includes('Parent Operational VS'), 'parent operational VS should still appear');
+    // Child's own content still shows.
+    assert.ok(names.includes('Child Operational VS'), 'child operational VS should appear');
+    // Child's OWN governance still shows — only ANCESTOR governance is hidden.
+    assert.ok(names.includes('Division-owned Governance'), 'child-owned governance should still appear');
+    // The ancestor governance VS is filtered out.
+    assert.ok(!names.includes('Data Governance Management'), 'ancestor-owned governance VS should be hidden from the child scope');
+    // Header counts reflect the filter.
+    assert.strictEqual(res.body.stats.valueStreams, 3, 'value-stream count should exclude ancestor governance');
+  });
+
+  it('includes ancestor-owned governance when ?includeAncestorGovernance=true', async () => {
+    const res = await request(port, 'GET', `/process-catalog?orgId=${childOrgId}&includeAncestorGovernance=true`);
+    assert.strictEqual(res.status, 200);
+    const names = res.body.data.map((n: any) => n.name);
+    assert.ok(names.includes('Data Governance Management'), 'ancestor governance VS should appear when opted in');
+    assert.strictEqual(res.body.stats.valueStreams, 4, 'count should include ancestor governance on opt-in');
+  });
+
+  it('does not touch the parent scope — ancestor set is empty at the top', async () => {
+    // From the parent scope there ARE no ancestors, so the filter is
+    // a no-op: every VS the parent can see (its own + rolled-up
+    // child content) renders regardless of domain.
+    const res = await request(port, 'GET', `/process-catalog?orgId=${parentOrgId}`);
+    assert.strictEqual(res.status, 200);
+    const names = res.body.data.map((n: any) => n.name);
+    assert.ok(names.includes('Data Governance Management'), 'parent-owned governance shows at parent scope');
+    assert.ok(names.includes('Division-owned Governance'), 'child-owned governance rolls up to parent scope');
   });
 });

@@ -71,3 +71,24 @@ export function filterByOrgScope<T extends { orgId?: string; orgIds?: string[] }
     return false;
   });
 }
+
+/**
+ * Returns the set of org IDs that are STRICT ancestors of the given
+ * scope org — parent, grandparent, up to root, but NOT the scope
+ * org itself and not any descendants. Used by the process catalog
+ * to detect content that was defined above the current scope and
+ * has merely rolled down to it via getVisibleOrgScope.
+ *
+ * Returns null when no scope is set — caller should treat as "no
+ * ancestors known".
+ */
+export function getAncestorOrgIds(scopeOrgId: string | null | undefined): Set<string> | null {
+  if (!scopeOrgId) return null;
+  const ancestors = new Set<string>();
+  let current = organizations.find((o) => o.id === scopeOrgId);
+  while (current?.parentId) {
+    ancestors.add(current.parentId);
+    current = organizations.find((o) => o.id === current!.parentId);
+  }
+  return ancestors;
+}
