@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
+import SectionLabel from '../components/SectionLabel';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
@@ -1191,7 +1192,7 @@ export default function DataAssetsPage() {
           <UnsavedBanner visible={isDirty()} onSave={() => handleSave(false)} onDiscard={closeForm} />
 
           {/* ── Section 1: Basics (always visible) ── */}
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>What is this data?</div>
+          <SectionLabel marginBottom={4}>What is this data?</SectionLabel>
           <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
             Name the <em>business concept</em>, not the table or file. <em>Customer Accounts</em>, <em>Billing Records</em>, <em>Inventory Levels</em> — the underlying source is configured separately on the row via a Binding.
           </div>
@@ -1231,7 +1232,7 @@ export default function DataAssetsPage() {
           </div>
 
           {/* ── Section 2: Governance & Ownership (always visible) ── */}
-          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Governance & ownership</div>
+          <SectionLabel>Governance & ownership</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Domain</label>
@@ -1401,7 +1402,7 @@ export default function DataAssetsPage() {
           </button>
           {showAdvancedFields && (
             <>
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Technical details</div>
+              <SectionLabel>Technical details</SectionLabel>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>System</label>
@@ -1473,7 +1474,7 @@ export default function DataAssetsPage() {
               </div>
 
               {/* Source Connection */}
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Source connection</div>
+              <SectionLabel>Source connection</SectionLabel>
               <div style={{ padding: '14px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 14 }}>&#x26A1;</span>
@@ -2179,7 +2180,7 @@ export default function DataAssetsPage() {
 
                 {/* Data Domain */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Domain</h3>
+                  <SectionLabel>Data Domain</SectionLabel>
                   {viewing360.domain ? (
                     <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                       <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 4 }}>{viewing360.domain.name}</div>
@@ -2195,9 +2196,7 @@ export default function DataAssetsPage() {
 
                 {/* Mappings */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Process Mappings ({viewing360.mappings.length})
-                  </h3>
+                  <SectionLabel>Process Mappings ({viewing360.mappings.length})</SectionLabel>
                   {viewing360.mappings.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No process mappings for this asset</p>
                   ) : (
@@ -2218,9 +2217,7 @@ export default function DataAssetsPage() {
                 {/* Comments — uses the shared threaded panel with @mention
                   *  autocomplete and notifications. */}
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Discussion
-                  </h3>
+                  <SectionLabel>Discussion</SectionLabel>
                   <CommentsPanel
                     entityType="DataAsset"
                     entityId={viewing360.asset.id}
@@ -2228,9 +2225,7 @@ export default function DataAssetsPage() {
                   />
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Activity
-                  </h3>
+                  <SectionLabel>Activity</SectionLabel>
                   <ActivityFeed entityType="DataAsset" entityId={viewing360.asset.id} inline initialRows={5} />
                 </div>
               </>
