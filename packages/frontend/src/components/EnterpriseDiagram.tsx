@@ -24,7 +24,10 @@ export interface DiagramEdge {
 interface TypeCfg {
   color: string;
   bg: string;
-  icon: string;
+  // Icon is a function of size so this component can request the
+  // same sidebar SVG the Enterprise View page uses, sized to fit
+  // the lane header vs the node bubble independently.
+  icon: (size: number) => React.ReactNode;
   label: string;
   plural: string;
 }
@@ -135,7 +138,7 @@ export default function EnterpriseDiagram({
                 fontWeight={700}
                 style={{ fill: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}
               >
-                {cfg.icon} {cfg.plural}
+                {cfg.plural}
               </text>
             </g>
           );
@@ -215,15 +218,19 @@ export default function EnterpriseDiagram({
                 strokeWidth={strokeWidth}
                 opacity={opacity}
               />
-              <text
-                x={10}
-                y={NODE_H / 2 + 5}
-                fontSize={15}
-                style={{ fill: cfg.color }}
+              {/* Small filled circle in the type colour signals the
+                  node's type at a glance. Replaces a Unicode text
+                  glyph that couldn't be swapped for the sidebar's
+                  SVG icon set (SVG icons don't render inside SVG
+                  <text>) — the lane it's docked to still labels
+                  the type explicitly. */}
+              <circle
+                cx={16}
+                cy={NODE_H / 2}
+                r={4.5}
+                fill={cfg.color}
                 opacity={opacity}
-              >
-                {cfg.icon}
-              </text>
+              />
               <text
                 x={32}
                 y={n.meta?.governanceTier || n.meta?.systemType || n.meta?.level || n.meta?.role ? NODE_H / 2 - 2 : NODE_H / 2 + 4}
