@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
@@ -1106,7 +1107,7 @@ export default function ConnectionsPage() {
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(conn.id)} />
                     </td>
                     {connCols.isVisible('system') && (
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>
+                      <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 240 }}>
                         {(() => {
                           const ids = conn.systemIds && conn.systemIds.length > 0
                             ? conn.systemIds
@@ -1116,16 +1117,43 @@ export default function ConnectionsPage() {
                           }
                           const names = ids.map((id) => systemNameMap[id]).filter(Boolean);
                           if (names.length === 0) return <span style={{ color: 'var(--color-text-muted)' }}>--</span>;
-                          if (names.length === 1) return names[0];
+                          // Clip long system names to one line. The name
+                          // element takes the clipped space; the "+N"
+                          // affordance stays visible on the right and
+                          // hover surfaces the full list. Wrapping was
+                          // shoving `+1` onto a second row on long
+                          // names like "ArcGIS Utility Network Electric".
                           return (
-                            <span title={names.join(', ')}>
-                              {names[0]} <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>+{names.length - 1}</span>
-                            </span>
+                            <div
+                              title={names.join(', ')}
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
+                            >
+                              <span
+                                style={{
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: 0,
+                                  flexShrink: 1,
+                                }}
+                              >
+                                {names[0]}
+                              </span>
+                              {names.length > 1 && (
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }}>
+                                  +{names.length - 1}
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                       </td>
                     )}
-                    {connCols.isVisible('name') && <td style={{ ...tdStyle, fontWeight: 500 }}>{conn.name}</td>}
+                    {connCols.isVisible('name') && (
+                      <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 260 }}>
+                        <TruncatedText text={conn.name} />
+                      </td>
+                    )}
                     {connCols.isVisible('type') && (
                       <td style={tdStyle}>
                         <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: typeBadge.bg, color: typeBadge.color }}>
