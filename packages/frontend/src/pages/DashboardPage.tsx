@@ -597,13 +597,19 @@ function useDashboardLayout() {
   return { order, hidden, moveUp, moveDown, toggle, reset };
 }
 
+// Icons match the sidebar rail via renderNavIcon(route). Was
+// hand-picked Unicode glyphs (✶ ⛁ ✓ ▨ ⊞) — one Mappings tile
+// already used a Lucide icon which made the whole row look
+// half-migrated. `iconRoute` decouples the icon from the link
+// target so /processes/wizard (no sidebar entry) can inherit
+// the /processes rail icon instead of falling back to text.
 const quickActions = [
-  { icon: '✶', label: 'Run Wizard', description: 'Generate a process hierarchy with AI', link: '/processes/wizard' },
-  { icon: '⛁', label: 'Data Assets', description: 'Define and manage data assets', link: '/data-assets' },
-  { icon: '✓', label: 'Data Quality', description: 'Define quality rules and health scores', link: '/data-quality' },
-  { icon: <ArrowLeftRight size={24} strokeWidth={1.8} />, label: 'Data Mapping', description: 'Link data to process activities', link: '/mappings' },
-  { icon: '▨', label: 'Enterprise View', description: 'Full cross-entity visibility', link: '/enterprise-view' },
-  { icon: '⊞', label: 'Analysis', description: 'Pivot the catalog (systems × domains, roles × people…)', link: '/analysis' },
+  { iconRoute: '/processes',       label: 'Run Wizard',      description: 'Generate a process hierarchy with AI',                          link: '/processes/wizard' },
+  { iconRoute: '/data-assets',     label: 'Data Assets',     description: 'Define and manage data assets',                                 link: '/data-assets' },
+  { iconRoute: '/data-quality',    label: 'Data Quality',    description: 'Define quality rules and health scores',                        link: '/data-quality' },
+  { iconRoute: '/mappings',        label: 'Data Mapping',    description: 'Link data to process activities',                               link: '/mappings' },
+  { iconRoute: '/enterprise-view', label: 'Enterprise View', description: 'Full cross-entity visibility',                                   link: '/enterprise-view' },
+  { iconRoute: '/analysis',        label: 'Analysis',        description: 'Pivot the catalog (systems × domains, roles × people…)',       link: '/analysis' },
 ];
 
 function QuickActions() {
@@ -644,7 +650,7 @@ function QuickActions() {
               e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
             }}
           >
-            <span style={{ fontSize: 24 }}>{action.icon}</span>
+            <span style={{ display: 'inline-flex', color: 'var(--color-primary)' }}>{renderNavIcon(action.iconRoute, { size: 24, strokeWidth: 1.8 })}</span>
             <span style={{ fontSize: 13, fontWeight: 600 }}>{action.label}</span>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.3 }}>{action.description}</span>
           </Link>
