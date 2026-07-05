@@ -14,6 +14,7 @@ import { governancePolicies } from './governance-policies';
 import { governanceIssues } from './governance-issues';
 import { governanceTasks } from './governance-tasks';
 import { dataQualityRules } from './data-quality';
+import { connections, connectionSystemLinks } from './connections';
 import { filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
@@ -55,6 +56,7 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   const issues = filterByOrgScope(governanceIssues, orgId);
   const tasks = filterByOrgScope(governanceTasks, orgId);
   const dqRules = filterByOrgScope(dataQualityRules, orgId);
+  const conns = filterByOrgScope(connections, orgId);
 
   if (nodes.length === 0 && assets.length === 0 && sys.length === 0) return undefined;
 
@@ -97,6 +99,35 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   lines.push('', '## SYSTEMS');
   if (sys.length === 0) lines.push('  (none defined)');
   for (const s of sys) lines.push(`  - ${s.name}${s.systemType ? ` (${s.systemType})` : ''}`);
+
+  // Data connections (source connection profiles — DB, file, API,
+  // warehouse, spreadsheet). Each connection can be tied to zero
+  // or more systems via the connectionSystemLinks join table.
+  // Users routinely ask the assistant "what systems is <connection>
+  // tied to?" — that only works if the snapshot names both the
+  // connection AND the systems it feeds. Skipped when empty so
+  // orgs that haven't defined any connections don't pay tokens.
+  const MAX_CONNECTIONS = 40;
+  if (conns.length > 0) {
+    lines.push('', '## DATA CONNECTIONS');
+    conns.slice(0, MAX_CONNECTIONS).forEach((c) => {
+      const linkedSysIds = connectionSystemLinks
+        .filter((l) => l.connectionId === c.id)
+        .map((l) => l.systemId);
+      const linkedNames = linkedSysIds
+        .map((sid) => systemById.get(sid)?.name)
+        .filter(Boolean);
+      const bits = [
+        c.connectionType.replace('_', ' ').toLowerCase(),
+        `status:${c.status.toLowerCase()}`,
+      ];
+      const linkPart = linkedNames.length > 0
+        ? `, systems:${linkedNames.join(', ')}`
+        : ', systems:(none linked)';
+      lines.push(`  - ${c.name} (${bits.join(', ')}${linkPart})`);
+    });
+    if (conns.length > MAX_CONNECTIONS) lines.push(`  …(${conns.length - MAX_CONNECTIONS} more)`);
+  }
 
   // Data assets with tier + health.
   lines.push('', '## DATA ASSETS');
