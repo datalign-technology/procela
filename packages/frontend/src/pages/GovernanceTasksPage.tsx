@@ -587,7 +587,7 @@ export default function GovernanceTasksPage() {
                     {taskCols.isVisible('title') && (
                       <td style={{ ...tdStyle, fontWeight: 500 }}>
                         <span style={{ color: 'var(--color-primary)' }}>{task.title}</span>
-                        {overdue && <span style={{ marginLeft: 6, fontSize: 10, color: '#dc2626', fontWeight: 600 }}>OVERDUE</span>}
+                        {overdue && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-error)', fontWeight: 600 }}>OVERDUE</span>}
                       </td>
                     )}
                     {taskCols.isVisible('type') && (

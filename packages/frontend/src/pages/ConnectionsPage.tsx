@@ -746,7 +746,7 @@ export default function ConnectionsPage() {
             <span>{connections.length} connections</span>
             <span style={{ color: 'var(--color-border)' }}>&middot;</span>
             <span>{connectedCount} connected</span>
-            {errorCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span style={{ color: '#dc2626' }}>{errorCount} error</span></>}
+            {errorCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span style={{ color: 'var(--color-error)' }}>{errorCount} error</span></>}
             {untestedCount > 0 && <><span style={{ color: 'var(--color-border)' }}>&middot;</span><span>{untestedCount} untested</span></>}
           </div>
         ) : undefined}

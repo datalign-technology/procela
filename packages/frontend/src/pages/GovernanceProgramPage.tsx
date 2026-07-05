@@ -986,7 +986,7 @@ export default function GovernanceProgramPage() {
                                             );
                                           })}
                                         </div>
-                                      ) : (<div style={{ fontSize: 11, color: '#dc2626', marginTop: 4 }}>Not assigned</div>)}
+                                      ) : (<div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 4 }}>Not assigned</div>)}
                                     </div>
                                     {!isFilled ? (
                                       (() => {
@@ -1029,7 +1029,7 @@ export default function GovernanceProgramPage() {
                                         );
                                       })()
                                     ) : (
-                                      <span style={{ fontSize: 11, color: '#16a34a', flexShrink: 0 }}>✓ Filled</span>
+                                      <span style={{ fontSize: 11, color: 'var(--color-success)', flexShrink: 0 }}>✓ Filled</span>
                                     )}
                                   </div>
                                 );
@@ -1065,7 +1065,7 @@ export default function GovernanceProgramPage() {
                           <span style={{ width: 20, height: 20, borderRadius: '50%', background: check.done ? '#22c55e' : 'transparent', border: check.done ? 'none' : '2px solid #d1d5db', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{check.done ? '✓' : ''}</span>
                           <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: check.done ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{check.label}</span>
                           {target && !check.done && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', flexShrink: 0 }}>{target.label} &rarr;</span>}
-                          {check.done && <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Done</span>}
+                          {check.done && <span style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 600 }}>&#10003; Done</span>}
                         </div>
                       );
                     })}
@@ -1083,7 +1083,7 @@ export default function GovernanceProgramPage() {
                       Current status: <strong>{STATUS_LABEL[program.status] || program.status}</strong>
                     </span>
                     {program.status === 'ACTIVE' && (
-                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>&#10003; Program is live</span>
+                      <span style={{ fontSize: 12, color: 'var(--color-success)', fontWeight: 600 }}>&#10003; Program is live</span>
                     )}
                     {(VALID_TRANSITIONS[program.status as ProgramStatus] || []).map((to) => {
                       const key = `${program.status}>${to}`;

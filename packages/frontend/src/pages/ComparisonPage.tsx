@@ -359,7 +359,7 @@ export default function ComparisonPage() {
               <div
                 style={{
                   background: '#dcfce7',
-                  color: '#16a34a',
+                  color: 'var(--color-success)',
                   borderRadius: 6,
                   padding: '6px 14px',
                   fontSize: 12,

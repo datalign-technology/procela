@@ -1167,7 +1167,7 @@ export default function GovernanceGroupsPage() {
                                     {expected.multiAssign ? 'Multiple' : 'Single'}
                                   </StatusBadge>
                                   {!expected.multiAssign && peopleAssigned > 0 && (
-                                    <span style={{ fontSize: 11, color: '#16a34a', marginLeft: 'auto' }}>✓ Filled</span>
+                                    <span style={{ fontSize: 11, color: 'var(--color-success)', marginLeft: 'auto' }}>✓ Filled</span>
                                   )}
                                 </div>
                                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>{expected.purpose}</div>

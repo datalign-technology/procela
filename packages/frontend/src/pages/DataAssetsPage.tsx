@@ -1641,7 +1641,7 @@ export default function DataAssetsPage() {
           <span style={{ color: '#93c5fd' }}>|</span>
           <button
             onClick={() => setConfirmBulkDelete(true)}
-            style={{ ...bulkBtnStyle, background: '#fef2f2', borderColor: '#fca5a5', color: '#dc2626' }}
+            style={{ ...bulkBtnStyle, background: '#fef2f2', borderColor: '#fca5a5', color: 'var(--color-error)' }}
           >
             Delete Selected
           </button>

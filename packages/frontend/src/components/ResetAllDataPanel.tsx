@@ -114,7 +114,7 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
           aria-label="Reset all data"
           style={{
             padding: '0.5rem 1.25rem', fontSize: 13, fontWeight: 500,
-            background: 'var(--color-surface)', color: '#dc2626',
+            background: 'var(--color-surface)', color: 'var(--color-error)',
             border: '1px solid #dc2626', borderRadius: 'var(--radius-md)',
             cursor: busy ? 'default' : 'pointer',
           }}

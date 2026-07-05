@@ -465,9 +465,9 @@ export default function OrgDeleteCleanupDialog({
               padding: '8px 12px', background: '#f1f5f9', borderRadius: 6,
               fontSize: 12, color: '#334155', marginTop: 4,
             }}>
-              <strong style={{ color: '#dc2626' }}>{tally.deleted}</strong> deleted
-              {tally.moved > 0 && <>, <strong style={{ color: '#16a34a' }}>{tally.moved}</strong> moved</>}
-              {tally.orphaned > 0 && <>, <strong style={{ color: '#d97706' }}>{tally.orphaned}</strong> orphaned</>}
+              <strong style={{ color: 'var(--color-error)' }}>{tally.deleted}</strong> deleted
+              {tally.moved > 0 && <>, <strong style={{ color: 'var(--color-success)' }}>{tally.moved}</strong> moved</>}
+              {tally.orphaned > 0 && <>, <strong style={{ color: 'var(--color-warning)' }}>{tally.orphaned}</strong> orphaned</>}
               {tally.missingTarget > 0 && (
                 <span style={{ color: '#9a3412', marginLeft: 8 }}>
                   · {tally.missingTarget} categor{tally.missingTarget === 1 ? 'y' : 'ies'} need a move target

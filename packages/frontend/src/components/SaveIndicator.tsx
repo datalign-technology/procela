@@ -18,8 +18,8 @@ export default function SaveIndicator({ state, errorMessage }: SaveIndicatorProp
 
   const config = {
     saving: { color: '#64748b', label: 'Saving\u2026' },
-    saved:  { color: '#16a34a', label: '\u2713 Saved' },
-    error:  { color: '#dc2626', label: errorMessage || 'Save failed' },
+    saved:  { color: 'var(--color-success)', label: '\u2713 Saved' },
+    error:  { color: 'var(--color-error)', label: errorMessage || 'Save failed' },
   }[state];
 
   return (

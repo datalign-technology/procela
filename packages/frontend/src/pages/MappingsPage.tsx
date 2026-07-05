@@ -440,13 +440,13 @@ export default function MappingsPage() {
         }}>
           {unmappedCount > 0 && (
             <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fef2f2', border: '1px solid #fca5a5', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#dc2626' }}>{unmappedCount}</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-error)' }}>{unmappedCount}</span>
               <span style={{ fontSize: 12, color: '#991b1b' }}>activities have no data asset linked</span>
             </div>
           )}
           {unlinkedCount > 0 && (
             <div style={{ flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 'var(--radius-md)', background: '#fffbeb', border: '1px solid #fcd34d', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#d97706' }}>{unlinkedCount}</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-warning)' }}>{unlinkedCount}</span>
               <span style={{ fontSize: 12, color: '#92400e' }}>data assets are not mapped to any process</span>
             </div>
           )}
@@ -465,7 +465,7 @@ export default function MappingsPage() {
           borderRadius: 'var(--radius-md)',
           background: '#fef2f2', border: '1px solid #fca5a5',
         }}>
-          <span aria-hidden="true" style={{ fontSize: 16, color: '#dc2626' }}>⚠</span>
+          <span aria-hidden="true" style={{ fontSize: 16, color: 'var(--color-error)' }}>⚠</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#991b1b' }}>
               {orphans.length} orphan mapping{orphans.length === 1 ? '' : 's'} found

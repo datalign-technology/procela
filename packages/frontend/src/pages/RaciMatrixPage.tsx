@@ -295,7 +295,7 @@ export default function RaciMatrixPage() {
           <SkeletonRows rows={5} columns={4} />
         </div>
       )}
-      {error && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--color-error)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '0.75rem', fontSize: 13 }}>{error}</div>}
       {!loading && !error && !hasData && (
         <EmptyState
           icon={renderNavIcon('/dama-roles')}
@@ -433,7 +433,7 @@ export default function RaciMatrixPage() {
                           <span style={{ fontSize: 13, fontWeight: cfg.weight }}>{row.name}</span>
                           {(warningMap.get(row.id) || []).length > 0 && (
                             <span title={(warningMap.get(row.id) || []).join(', ')}
-                              style={{ color: '#d97706', marginLeft: 4, flexShrink: 0, display: 'inline-flex' }}>
+                              style={{ color: 'var(--color-warning)', marginLeft: 4, flexShrink: 0, display: 'inline-flex' }}>
                               <AlertTriangle size={11} strokeWidth={2.2} />
                             </span>
                           )}

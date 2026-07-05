@@ -711,7 +711,7 @@ export default function BusinessGlossaryPage() {
                         placeholder="e.g. Customer Lifetime Value"
                       />
                       {isDuplicate && (
-                        <div style={{ fontSize: 11, color: '#dc2626', marginTop: 3 }}>
+                        <div style={{ fontSize: 11, color: 'var(--color-error)', marginTop: 3 }}>
                           A term with this name already exists in this organization.
                         </div>
                       )}

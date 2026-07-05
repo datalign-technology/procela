@@ -161,7 +161,7 @@ export default function SuggestionsPanel({
         <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Loading suggestions…</div>
       )}
       {error && (
-        <div style={{ fontSize: 12, color: '#dc2626' }}>{error}</div>
+        <div style={{ fontSize: 12, color: 'var(--color-error)' }}>{error}</div>
       )}
 
       {!loading && !error && visible.map((s) => {
