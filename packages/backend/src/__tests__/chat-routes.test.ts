@@ -45,6 +45,16 @@ const { mappings } = require('../routes/mappings');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { organizations } = require('../routes/organizations');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const { glossaryTerms } = require('../routes/business-glossary');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governancePolicies } = require('../routes/governance-policies');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceIssues } = require('../routes/governance-issues');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { governanceTasks } = require('../routes/governance-tasks');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataQualityRules } = require('../routes/data-quality');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiService } = require('../services/ai.service');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
@@ -74,15 +84,27 @@ describe('chat routes + buildOrgSnapshot', () => {
   let server: http.Server;
   let port: number;
   const orgId = 'test-org-chat';
+  // Parent org so we can prove buildOrgSnapshot walks up the org
+  // tree the way filterByOrgScope does. Assets/systems owned by
+  // the parent must appear when snapshotting the child scope —
+  // the AI has to see the same rows the user is looking at.
+  const parentOrgId = 'test-org-chat-parent';
   const PREFIX = 'test-chat-';
   const sysId = PREFIX + 'sys';
+  const parentSysId = PREFIX + 'parent-sys';
   const mappedAsset = PREFIX + 'asset-mapped';
   const orphanAsset = PREFIX + 'asset-orphan';
+  const parentAsset = PREFIX + 'asset-parent';
   const vsId = PREFIX + 'vs';
   const procId = PREFIX + 'proc';
   const actId = PREFIX + 'act';
   const mapId = PREFIX + 'map';
   const dismissalId = PREFIX + 'dismissal';
+  const termId = PREFIX + 'term';
+  const policyId = PREFIX + 'policy';
+  const issueId = PREFIX + 'issue';
+  const taskId = PREFIX + 'task';
+  const dqId = PREFIX + 'dq';
 
   const originalChat = aiService.chat.bind(aiService);
   const originalChatStream = aiService.chatStream.bind(aiService);
@@ -117,14 +139,64 @@ describe('chat routes + buildOrgSnapshot', () => {
       }
     };
     sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems); sweep(suggestionDismissals);
-    organizations.push({ id: orgId, name: 'Chat Test Co', industry: 'Healthcare', type: 'company', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    sweep(glossaryTerms); sweep(governancePolicies); sweep(governanceIssues); sweep(governanceTasks); sweep(dataQualityRules);
+    // Sweep both orgs so any stale rows from a previous run go away.
+    const oiOld = organizations.findIndex((o: any) => o.id === orgId);
+    if (oiOld >= 0) organizations.splice(oiOld, 1);
+    const oiOldP = organizations.findIndex((o: any) => o.id === parentOrgId);
+    if (oiOldP >= 0) organizations.splice(oiOldP, 1);
+    const nowInit = new Date().toISOString();
+    // Parent-child hierarchy: the child scope (orgId) sits under
+    // parentOrgId. filterByOrgScope walks up from the child and
+    // must return items owned at parentOrgId as visible.
+    organizations.push({ id: parentOrgId, name: 'Chat Test Parent', industry: 'Healthcare', type: 'company', parentId: null, createdAt: nowInit, updatedAt: nowInit });
+    organizations.push({ id: orgId, name: 'Chat Test Co', industry: 'Healthcare', type: 'division', parentId: parentOrgId, createdAt: nowInit, updatedAt: nowInit });
 
     const now = new Date().toISOString();
     systems.push({ id: sysId, orgId, name: 'Epic EHR', description: '', systemType: 'EHR', createdAt: now, updatedAt: now });
+    // System owned at the parent — the child scope's snapshot must
+    // include it. This is the scope-bug regression guard.
+    systems.push({ id: parentSysId, orgId: parentOrgId, name: 'Corporate DW', description: '', systemType: 'DW', createdAt: now, updatedAt: now });
     dataAssets.push(
       { id: mappedAsset, orgId, name: 'Patient encounter records', description: '', systemId: sysId, owner: '', stewardIds: [], governanceTier: 'GOLD', healthScore: 95, createdAt: now, updatedAt: now },
       { id: orphanAsset, orgId, name: 'Unused billing ledger', description: '', systemId: sysId, owner: '', stewardIds: [], governanceTier: 'BRONZE', healthScore: 40, createdAt: now, updatedAt: now },
+      // Inherited-from-parent asset — must show up when we snapshot
+      // the child scope.
+      { id: parentAsset, orgId: parentOrgId, name: 'Corporate finance ledger', description: '', systemId: parentSysId, owner: '', stewardIds: [], governanceTier: 'GOLD', healthScore: 90, createdAt: now, updatedAt: now },
     );
+    // Seed a term, policy, open issue, open task, and a failing DQ
+    // rule so we can assert the newly-added snapshot sections.
+    glossaryTerms.push({
+      id: termId, orgId, term: 'Encounter', definition: 'A patient visit or clinical interaction.',
+      context: '', synonyms: [], relatedTerms: [], domainId: null, ownerPersonId: null,
+      status: 'APPROVED', category: 'BUSINESS', exampleValues: '', businessRules: '', sourceOfTruth: '',
+      createdAt: now, updatedAt: now,
+    });
+    governancePolicies.push({
+      id: policyId, orgId, code: 'POL-001', name: 'Data classification policy',
+      description: '', documentType: 'POLICY', status: 'ACTIVE', ownerAssignmentId: null,
+      category: 'CLASSIFICATION', reviewFrequency: 'ANNUAL', lastReviewDate: null, nextReviewDate: null,
+      effectiveDate: null, content: '', createdAt: now, updatedAt: now,
+    });
+    governanceIssues.push({
+      id: issueId, orgId, title: 'Missing steward for billing ledger', description: '',
+      issueType: 'STEWARDSHIP', severity: 'HIGH', status: 'OPEN', domainId: null,
+      dataAssetId: orphanAsset, systemId: null, reportedBy: null, assignedTo: null,
+      resolutionSummary: null, createdAt: now, updatedAt: now, closedAt: null,
+    });
+    governanceTasks.push({
+      id: taskId, orgId, title: 'Assign steward to billing ledger', description: '',
+      taskType: 'REMEDIATION', status: 'OPEN', priority: 'HIGH',
+      assigneeId: null, dueDate: null, linkedObjectType: null, linkedObjectId: null,
+      automationMode: 'MANUAL', resolution: null, createdBy: null,
+      createdAt: now, updatedAt: now, completedAt: null,
+    });
+    dataQualityRules.push({
+      id: dqId, orgId, dataAssetId: mappedAsset, dimension: 'COMPLETENESS',
+      name: 'Encounter records completeness', description: '', threshold: 95, currentScore: 82,
+      weight: 1, status: 'FAILING', lastMeasured: now,
+      createdAt: now, updatedAt: now,
+    });
     processNodes.push(
       { id: vsId,  parentId: null,  level: 'VALUE_STREAM', name: 'Patient care VS', description: '', activityId: null, status: 'DRAFT', orderIndex: 0, orgId, orgIds: [orgId], ownerId: null, version: 1, createdAt: now, updatedAt: now },
       { id: procId, parentId: vsId, level: 'PROCESS',     name: 'Schedule appointment', description: '', activityId: null, status: 'DRAFT', orderIndex: 0, orgId, orgIds: [orgId], ownerId: null, version: 1, domain: 'OPERATIONAL', createdAt: now, updatedAt: now },
@@ -151,8 +223,11 @@ describe('chat routes + buildOrgSnapshot', () => {
       }
     };
     sweep(mappings); sweep(processNodes); sweep(dataAssets); sweep(systems); sweep(suggestionDismissals);
-    const oi = organizations.findIndex((o: any) => o.id === orgId);
-    if (oi >= 0) organizations.splice(oi, 1);
+    sweep(glossaryTerms); sweep(governancePolicies); sweep(governanceIssues); sweep(governanceTasks); sweep(dataQualityRules);
+    for (const id of [orgId, parentOrgId]) {
+      const i = organizations.findIndex((o: any) => o.id === id);
+      if (i >= 0) organizations.splice(i, 1);
+    }
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -195,8 +270,64 @@ describe('chat routes + buildOrgSnapshot', () => {
     it('surfaces orphan assets and dismissal count in KNOWN GAPS', () => {
       const out = buildOrgSnapshot(orgId);
       assert.match(out!, /## KNOWN GAPS/);
-      assert.match(out!, /Orphan data assets.*\(1\).*Unused billing ledger/s);
+      // Two orphans in scope: the child's "Unused billing ledger"
+      // and the parent-inherited "Corporate finance ledger", both
+      // of which have no mapping. Names are both required so the
+      // regression covers the scope walk-up.
+      assert.match(out!, /Orphan data assets.*\(2\)/);
+      assert.match(out!, /Unused billing ledger/);
+      assert.match(out!, /Corporate finance ledger/);
       assert.match(out!, /Suggestions the user has dismissed.*: 1/);
+    });
+
+    // Regression guard for the scope bug: buildOrgSnapshot used to
+    // filter by raw `orgId === orgId`, so a child scope couldn't
+    // see parent-owned data even though every scoped route (via
+    // filterByOrgScope) exposed it. Aligning the snapshot with the
+    // same helper fixed the mismatch. Assets/systems/etc. owned
+    // above the current scope must now appear in the snapshot.
+    it('walks up to ancestors — parent-owned rows appear when scoping to a child', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /Corporate DW/, 'parent-owned system should appear in the child scope snapshot');
+      assert.match(out!, /Corporate finance ledger/, 'parent-owned asset should appear in the child scope snapshot');
+    });
+
+    it('walks down to descendants — child-owned rows appear when scoping to the parent', () => {
+      const out = buildOrgSnapshot(parentOrgId);
+      assert.ok(out, 'parent snapshot should render even if the parent has no direct rows');
+      assert.match(out!, /Epic EHR/, 'child-owned system should appear in the parent scope snapshot');
+      assert.match(out!, /Patient encounter records/, 'child-owned asset should appear in the parent scope snapshot');
+    });
+
+    it('includes the business glossary section with approved terms', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /## BUSINESS GLOSSARY/);
+      assert.match(out!, /Encounter: A patient visit/);
+    });
+
+    it('includes governance documents with code + name + type', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /## GOVERNANCE DOCUMENTS/);
+      assert.match(out!, /\[POL-001\] Data classification policy \(policy/);
+    });
+
+    it('lists open governance issues (severity + target)', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /## OPEN GOVERNANCE ISSUES/);
+      assert.match(out!, /Missing steward for billing ledger.*severity:high.*asset:Unused billing ledger/s);
+    });
+
+    it('lists open governance tasks with priority + assignee', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /## OPEN GOVERNANCE TASKS/);
+      assert.match(out!, /Assign steward to billing ledger.*priority:high.*unassigned/s);
+    });
+
+    it('summarises data quality and lists failing rules', () => {
+      const out = buildOrgSnapshot(orgId);
+      assert.match(out!, /## DATA QUALITY/);
+      assert.match(out!, /Summary: 0 passing, 1 failing\/warning/);
+      assert.match(out!, /Encounter records completeness.*failing.*score:82\/95/s);
     });
   });
 

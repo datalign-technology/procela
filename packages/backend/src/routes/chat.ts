@@ -9,6 +9,12 @@ import { mappings } from './mappings';
 import { organizations } from './organizations';
 import { people } from './people';
 import { dataDomains } from './data-domains';
+import { glossaryTerms } from './business-glossary';
+import { governancePolicies } from './governance-policies';
+import { governanceIssues } from './governance-issues';
+import { governanceTasks } from './governance-tasks';
+import { dataQualityRules } from './data-quality';
+import { filterByOrgScope } from '../lib/org-scope';
 
 const router = Router();
 
@@ -27,12 +33,28 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   if (!orgId) return undefined;
 
   const org = organizations.find((o) => o.id === orgId);
-  const nodes = processNodes.filter((n) => n.orgId === orgId || n.orgIds?.includes(orgId));
-  const assets = dataAssets.filter((a) => a.orgId === orgId);
-  const sys = systems.filter((s) => s.orgId === orgId);
-  const maps = mappings.filter((m) => m.orgId === orgId);
-  const ppl = people.filter((p) => p.orgIds?.includes(orgId));
-  const domains = dataDomains.filter((d) => d.orgId === orgId);
+  // Use the same visibility rules the rest of the app enforces:
+  // walk up to ancestors (a division sees company-level policies,
+  // systems, assets) AND down to descendants (a company user sees
+  // every division's data). Previously this used raw `orgId === X`
+  // filters, so the AI saw a strictly smaller world than the user
+  // — a Water-division user asking "what data supports outages?"
+  // would be told there's no ArcGIS system, even though the row
+  // was right there on the Systems page (inherited from the
+  // Utilities parent). filterByOrgScope is the shared helper every
+  // scoped route uses; keeping the chat snapshot on that same
+  // filter is the only way the two stay in sync.
+  const nodes = filterByOrgScope(processNodes, orgId);
+  const assets = filterByOrgScope(dataAssets, orgId);
+  const sys = filterByOrgScope(systems, orgId);
+  const maps = filterByOrgScope(mappings, orgId);
+  const ppl = filterByOrgScope(people, orgId);
+  const domains = filterByOrgScope(dataDomains, orgId);
+  const terms = filterByOrgScope(glossaryTerms, orgId);
+  const policies = filterByOrgScope(governancePolicies, orgId);
+  const issues = filterByOrgScope(governanceIssues, orgId);
+  const tasks = filterByOrgScope(governanceTasks, orgId);
+  const dqRules = filterByOrgScope(dataQualityRules, orgId);
 
   if (nodes.length === 0 && assets.length === 0 && sys.length === 0) return undefined;
 
@@ -172,6 +194,102 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   }
 
   lines.push('', `## PEOPLE\n  ${ppl.length} people in this organization.`);
+
+  // Business glossary — the "what does X mean" surface. Include
+  // approved terms first so the AI cites the canonical definition
+  // rather than a stale draft. Drafts/proposed terms show a
+  // status marker so answers can be qualified when needed. Bounded
+  // like the other list sections to keep the prompt compact.
+  const MAX_GLOSSARY = 60;
+  if (terms.length > 0) {
+    lines.push('', '## BUSINESS GLOSSARY (approved terms first)');
+    const sortedTerms = [...terms].sort((a, b) => {
+      const rank = (s: string) => (s === 'APPROVED' ? 0 : s === 'PROPOSED' ? 1 : s === 'DRAFT' ? 2 : 3);
+      return rank(a.status) - rank(b.status);
+    });
+    sortedTerms.slice(0, MAX_GLOSSARY).forEach((t) => {
+      const statusBit = t.status === 'APPROVED' ? '' : ` [${t.status.toLowerCase()}]`;
+      const def = (t.definition || '').replace(/\s+/g, ' ').trim();
+      lines.push(`  - ${t.term}${statusBit}: ${def}`);
+    });
+    if (terms.length > MAX_GLOSSARY) lines.push(`  …(${terms.length - MAX_GLOSSARY} more)`);
+  }
+
+  // Governance policies / charters / frameworks / standards. One
+  // line each — the assistant needs the code + name + category so
+  // it can answer "what's our data classification policy" without
+  // fabricating a fake policy name.
+  const MAX_POLICIES = 40;
+  if (policies.length > 0) {
+    lines.push('', '## GOVERNANCE DOCUMENTS');
+    policies.slice(0, MAX_POLICIES).forEach((p) => {
+      const bits = [
+        p.documentType.toLowerCase(),
+        `status:${p.status.toLowerCase()}`,
+        `category:${p.category.toLowerCase()}`,
+      ];
+      lines.push(`  - [${p.code}] ${p.name} (${bits.join(', ')})`);
+    });
+    if (policies.length > MAX_POLICIES) lines.push(`  …(${policies.length - MAX_POLICIES} more)`);
+  }
+
+  // Governance issues — open first, then in-progress. Closed
+  // issues are dropped: they're rarely relevant to the "what's
+  // broken right now?" questions users ask the assistant, and
+  // they burn tokens.
+  const openIssues = issues.filter((i) => i.status !== 'CLOSED' && i.status !== 'RESOLVED');
+  const MAX_ISSUES = 40;
+  if (openIssues.length > 0) {
+    lines.push('', '## OPEN GOVERNANCE ISSUES');
+    openIssues.slice(0, MAX_ISSUES).forEach((i) => {
+      const assetName = i.dataAssetId ? assetById.get(i.dataAssetId)?.name : null;
+      const sysName = i.systemId ? systemById.get(i.systemId)?.name : null;
+      const target = assetName ? `asset:${assetName}` : sysName ? `system:${sysName}` : null;
+      const bits = [
+        `severity:${i.severity.toLowerCase()}`,
+        `status:${i.status.toLowerCase()}`,
+        target,
+      ].filter(Boolean);
+      lines.push(`  - ${i.title} (${bits.join(', ')})`);
+    });
+    if (openIssues.length > MAX_ISSUES) lines.push(`  …(${openIssues.length - MAX_ISSUES} more open)`);
+  }
+
+  // Governance tasks — open work only, same rationale as issues.
+  const openTasks = tasks.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.status !== 'REJECTED');
+  const MAX_TASKS = 40;
+  if (openTasks.length > 0) {
+    lines.push('', '## OPEN GOVERNANCE TASKS');
+    openTasks.slice(0, MAX_TASKS).forEach((t) => {
+      const assignee = ownerName(t.assigneeId);
+      const bits = [
+        `priority:${t.priority.toLowerCase()}`,
+        `status:${t.status.toLowerCase()}`,
+        assignee ? `assignee:${assignee}` : 'unassigned',
+        t.dueDate ? `due:${t.dueDate}` : null,
+      ].filter(Boolean);
+      lines.push(`  - ${t.title} (${bits.join(', ')})`);
+    });
+    if (openTasks.length > MAX_TASKS) lines.push(`  …(${openTasks.length - MAX_TASKS} more open)`);
+  }
+
+  // Data quality rules — currently failing ones first so the
+  // assistant can answer "what DQ problems do we have right now?".
+  // Passing rules count is summarised but not listed line-by-line.
+  if (dqRules.length > 0) {
+    const failing = dqRules.filter((r) => r.status === 'FAILING' || r.status === 'WARNING');
+    const passing = dqRules.filter((r) => r.status === 'PASSING').length;
+    const notMeasured = dqRules.filter((r) => r.status === 'NOT_MEASURED').length;
+    lines.push('', '## DATA QUALITY');
+    lines.push(`  Summary: ${passing} passing, ${failing.length} failing/warning, ${notMeasured} not measured.`);
+    const MAX_DQ = 30;
+    failing.slice(0, MAX_DQ).forEach((r) => {
+      const assetName = assetById.get(r.dataAssetId)?.name ?? 'unknown asset';
+      const col = r.columnName ? `.${r.columnName}` : '';
+      lines.push(`  - ${assetName}${col} · ${r.name} (${r.dimension.toLowerCase()}, ${r.status.toLowerCase()}, score:${r.currentScore}/${r.threshold})`);
+    });
+    if (failing.length > MAX_DQ) lines.push(`  …(${failing.length - MAX_DQ} more failing/warning)`);
+  }
 
   const header = `Snapshot of "${org?.name ?? 'this organization'}"`
     + ` (industry: ${org?.industry || 'unspecified'}).`;
