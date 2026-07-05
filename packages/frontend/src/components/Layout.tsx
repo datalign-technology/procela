@@ -70,12 +70,19 @@ export default function Layout() {
 
   // Mirror the ChatPanel's open state so the top-bar "Ask AI" button
   // can reflect it (aria-expanded + active styling). The ChatPanel
-  // dispatches procela:chat-state whenever its internal open changes.
+  // dispatches procela:chat-state whenever its internal open state
+  // or message list changes; we track both so the top-bar button
+  // can render a count badge when a conversation is paused and
+  // waiting to be resumed — that signalling used to live on the
+  // now-retired floating bubble.
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessageCount, setChatMessageCount] = useState(0);
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ open: boolean }>).detail;
-      if (detail && typeof detail.open === 'boolean') setChatOpen(detail.open);
+      const detail = (e as CustomEvent<{ open: boolean; messageCount?: number }>).detail;
+      if (!detail) return;
+      if (typeof detail.open === 'boolean') setChatOpen(detail.open);
+      if (typeof detail.messageCount === 'number') setChatMessageCount(detail.messageCount);
     };
     window.addEventListener('procela:chat-state', handler);
     return () => window.removeEventListener('procela:chat-state', handler);
@@ -453,16 +460,31 @@ export default function Layout() {
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {/* Ask AI — surfaces the ChatPanel from the top bar. The
-                ChatPanel still owns its own open state and its floating
-                bottom-right bubble; this button is a second entry point
-                so dense pages don't bury it. */}
+            {/* Ask AI — the only entry point to the ChatPanel. The
+                floating bottom-right bubble was retired: two
+                affordances for the same thing was clutter, and the
+                button here is always visible in the same place. The
+                message-count badge appears when a conversation is
+                minimized and waiting to be resumed. */}
             <button
               onClick={() => window.dispatchEvent(new Event('procela:toggle-chat'))}
-              aria-label={chatOpen ? 'Close the AI assistant' : 'Ask the AI assistant'}
+              aria-label={
+                chatOpen
+                  ? 'Minimize the AI assistant'
+                  : chatMessageCount > 0
+                    ? `Resume AI conversation (${chatMessageCount} messages)`
+                    : 'Ask the AI assistant'
+              }
               aria-expanded={chatOpen}
-              title={chatOpen ? 'Close the AI assistant' : 'Ask the AI assistant'}
+              title={
+                chatOpen
+                  ? 'Minimize the AI assistant (conversation is kept)'
+                  : chatMessageCount > 0
+                    ? 'Resume your AI conversation'
+                    : 'Ask the AI assistant'
+              }
               style={{
+                position: 'relative',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 12px', fontSize: 12, fontWeight: 500,
                 background: chatOpen ? 'var(--color-primary)' : 'var(--color-surface)',
@@ -474,6 +496,24 @@ export default function Layout() {
             >
               <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>💬</span>
               <span>Ask AI</span>
+              {!chatOpen && chatMessageCount > 0 && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    top: -6, right: -6,
+                    minWidth: 18, height: 18, padding: '0 5px',
+                    borderRadius: 999,
+                    background: 'var(--color-primary)',
+                    color: '#fff',
+                    fontSize: 10, fontWeight: 700, lineHeight: 1,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+                  }}
+                >
+                  {chatMessageCount > 99 ? '99+' : chatMessageCount}
+                </span>
+              )}
             </button>
             {/* Help — opens the Help guide in a separate window so the
                 user can keep it open beside whatever they're doing. A
