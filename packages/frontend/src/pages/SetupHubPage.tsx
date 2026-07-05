@@ -6,6 +6,7 @@ import { useOrgContext } from '@/stores/orgContext';
 import { useSetupStore } from '@/stores/setupStore';
 import ProgressRing from '@/components/ProgressRing';
 import Page from '@/components/Page';
+import PageHeader from '@/components/PageHeader';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SetupHubPage — "Get Started". A resumable, data-driven journey that walks
@@ -357,21 +358,19 @@ export default function SetupHubPage() {
 
   return (
     <Page padding="8px 0 64px">
-      {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 18, padding: '20px 24px', marginBottom: 24,
-        background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12,
-      }}>
-        <ProgressRing percent={overall} size={64} stroke={6} showLabel />
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 2 }}>Get Started with Procela</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-            {overall === 100
-              ? `${activeOrgName} is fully set up. Revisit any step below to keep it current.`
-              : `Set up ${activeOrgName} in three phases — capture your business, assign ownership, then wrap governance around it.`}
-          </p>
-        </div>
-      </div>
+      {/* Was a custom card with a bordered container + h1 (20px) +
+          ProgressRing on the left. Now uses the shared PageHeader
+          so the title lands at the same 26px every other page uses;
+          the ProgressRing slots into the right-aligned actions area
+          where the progress is still glanceable but stops looking
+          like a competing hero panel. */}
+      <PageHeader
+        title="Get Started with Procela"
+        subtitle={overall === 100
+          ? `${activeOrgName} is fully set up. Revisit any step below to keep it current.`
+          : `Set up ${activeOrgName} in three phases — capture your business, assign ownership, then wrap governance around it.`}
+        actions={<ProgressRing percent={overall} size={56} stroke={6} showLabel />}
+      />
 
       {/* Expand-all / Collapse-all row. Matches the pattern used on
           Decision Rights, RACI Matrix, and Governance Groups —

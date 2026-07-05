@@ -6,6 +6,7 @@ import { useToastStore } from '@/stores/toastStore';
 import PersonPicker from '@/components/PersonPicker';
 import EmptyState from '@/components/EmptyState';
 import Page from '@/components/Page';
+import PageHeader from '@/components/PageHeader';
 import { CheckCircle2 } from 'lucide-react';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -168,15 +169,21 @@ export default function AssignOwnersPage() {
 
   return (
     <Page width="wizard" padding="8px 0 64px">
-      <button onClick={() => navigate('/setup')}
-        style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: 0, marginBottom: 12 }}>
-        ← Back to Get Started
-      </button>
-      <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Assign owners</h1>
-      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 24, lineHeight: 1.5 }}>
-        Everything in {activeOrgName} that currently has no owner, in one place. Assign a person to each — or use a
-        section's picker to assign one person to every remaining item at once.
-      </p>
+      {/* Was hand-rolled &lt;h1 fontSize:20&gt; + &lt;p&gt; subtitle + a
+          separate back link — one full point smaller than every
+          other page's header. Now uses the shared PageHeader for
+          consistent sizing; back-to-Setup lives in the actions
+          slot as a link-styled button. */}
+      <PageHeader
+        title="Assign owners"
+        subtitle={`Everything in ${activeOrgName} that currently has no owner, in one place. Assign a person to each — or use a section's picker to assign one person to every remaining item at once.`}
+        actions={(
+          <button onClick={() => navigate('/setup')}
+            style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 13, padding: 0 }}>
+            ← Back to Get Started
+          </button>
+        )}
+      />
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--color-text-muted)' }}>Loading…</div>
