@@ -81,6 +81,14 @@ interface DataAssetEntity {
   // Enriched by the list endpoint so the table can render inline.
   domainName?: string | null;
   ownerName?: string | null;
+  // Owner-resolution provenance. 'asset' = a specific person is
+  // assigned on this row; 'domain' = inherited from the containing
+  // domain's owner (ownerName still populated for display); null
+  // = no owner anywhere. Drives the "Inherits from domain / Overrides
+  // domain" hint under the Owner picker in the edit form.
+  ownerSource?: 'asset' | 'domain' | null;
+  domainOwnerId?: string | null;
+  domainOwnerName?: string | null;
   stewardName?: string | null;
   /** Highest tier the asset is eligible for given current signals.
    *  Advisory only — set by the backend, never persisted. The UI shows
@@ -352,7 +360,7 @@ export default function DataAssetsPage() {
   const [assets, setAssets] = useState<DataAssetEntity[]>([]);
   const [systems, setSystems] = useState<SystemRef[]>([]);
   const [peopleList, setPeopleList] = useState<{ id: string; name: string }[]>([]);
-  const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[] }[]>([]);
+  const [domainsList, setDomainsList] = useState<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null }[]>([]);
   const [standardDataTypes, setStandardDataTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -475,7 +483,7 @@ export default function DataAssetsPage() {
         apiClient.get<{ success: boolean; data: DataAssetEntity[]; systems: SystemRef[] }>(`/data-assets${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/connections${query}`),
         apiClient.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(`/people${query}`),
-        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; dataAssetIds: string[] }> }>(`/data-domains${query}`),
+        apiClient.get<{ success: boolean; data: Array<{ id: string; name: string; dataAssetIds: string[]; ownerId?: string | null; ownerName?: string | null }> }>(`/data-domains${query}`),
       ]);
       setPeopleList(peopleRes.data || []);
       setDomainsList(domainsRes.data || []);
@@ -1238,6 +1246,50 @@ export default function DataAssetsPage() {
                 onChange={(pid) => updateField('ownerPersonId', pid || '')}
                 placeholder="-- No owner --"
               />
+              {/* Ownership provenance hint. Three states:
+                    1. No pick + domain has an owner → show "Inherits
+                       from domain — X", so the user knows what will
+                       land once they save. Non-destructive; picking
+                       nothing IS the inherit choice.
+                    2. Explicit pick that differs from the domain
+                       owner → show "Overrides domain (X)" + a
+                       "Reset to domain owner" link that clears the
+                       explicit pick.
+                    3. Empty pick + no domain owner → nothing to
+                       show; the field is genuinely empty.
+                  See DAMA convention: Data Asset Owner and Data
+                  Domain Owner are separate accountabilities on
+                  purpose; the asset can override when a specific
+                  person is responsible for just that dataset. */}
+              {(() => {
+                const domain = form.domainId ? domainsList.find((d) => d.id === form.domainId) : null;
+                const domainOwnerId = domain?.ownerId || null;
+                const domainOwnerName = domain?.ownerName || null;
+                if (!domainOwnerId || !domainOwnerName) return null;
+                const explicit = form.ownerPersonId && form.ownerPersonId !== domainOwnerId;
+                if (!form.ownerPersonId) {
+                  return (
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                      Inherits from domain — {domainOwnerName}
+                    </div>
+                  );
+                }
+                if (explicit) {
+                  return (
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span>Overrides domain ({domainOwnerName}).</span>
+                      <button
+                        type="button"
+                        onClick={() => updateField('ownerPersonId', '')}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11 }}
+                      >
+                        Reset to domain owner
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
