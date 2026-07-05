@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import { usePolling } from '../hooks/usePolling';
@@ -1167,7 +1168,12 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
                   </td>
                   <td style={{ ...tdLocal, fontWeight: 500 }}>
                     {a.name}
-                    {a.description && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 1 }}>{a.description}</div>}
+                    {a.description && (
+                      <TruncatedText
+                        text={a.description}
+                        style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 1 }}
+                      />
+                    )}
                   </td>
                   <td style={tdLocal}>
                     {systemNameById[a.systemId] || <span style={{ color: 'var(--color-text-muted)' }}>--</span>}

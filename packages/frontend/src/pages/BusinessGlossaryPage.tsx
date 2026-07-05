@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -806,7 +807,10 @@ export default function BusinessGlossaryPage() {
                         <span style={{ fontSize: 13, fontWeight: 600 }}>{t.term}</span>
                         <span style={badgeStyle(CATEGORY_COLORS[t.category] || CATEGORY_COLORS.GENERAL)}>{t.category}</span>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2, lineHeight: 1.4 }}>{t.definition}</div>
+                      <TruncatedText
+                        text={t.definition}
+                        style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2, lineHeight: 1.4 }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -998,8 +1002,8 @@ export default function BusinessGlossaryPage() {
                           </td>
                         )}
                         {glossaryCols.isVisible('definition') && (
-                          <td style={{ ...tdStyle, color: t.definition ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.definition}>
-                            {t.definition || '—'}
+                          <td style={{ ...tdStyle, maxWidth: 360 }}>
+                            <TruncatedText text={t.definition} />
                           </td>
                         )}
                         <td style={{ ...tdStyle, textAlign: 'center' }}>

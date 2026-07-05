@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
 import { OwnerBadge, isInheritedAsset } from '../components/OwnerBadge';
@@ -1493,8 +1494,8 @@ export default function SystemsPage() {
                       </td>
                     )}
                     {systemCols.isVisible('description') && (
-                      <td style={{ ...tdStyle, color: sys.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 400 }}>
-                        {sys.description || '--'}
+                      <td style={{ ...tdStyle, maxWidth: 400, color: 'var(--color-text-secondary)' }}>
+                        <TruncatedText text={sys.description} emptyPlaceholder="--" />
                       </td>
                     )}
                     {systemCols.isVisible('owner') && (

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -498,9 +499,11 @@ export default function DataDictionaryPage() {
                           <td style={{ ...tdStyle, fontWeight: 500 }}>
                             {a.name}
                             {a.description && (
-                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }} title={a.description}>
-                                {a.description}
-                              </div>
+                              <TruncatedText
+                                text={a.description}
+                                maxWidth={320}
+                                style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 400, marginTop: 2 }}
+                              />
                             )}
                           </td>
                           {dictCols.isVisible('system') && (
