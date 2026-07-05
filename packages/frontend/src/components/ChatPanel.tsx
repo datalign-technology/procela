@@ -274,7 +274,13 @@ export default function ChatPanel() {
 
   return (
     <>
-      {/* Toggle button */}
+      {/* Toggle button. Toggling to closed only MINIMIZES the panel \u2014
+          messages and entities live in this component's state so
+          they survive across open/close cycles. A small badge in
+          the corner shows the message count when there's an active
+          conversation waiting, so the user can see the chat isn't
+          gone; the aria-label and tooltip use "minimize" language
+          instead of "close" for the same reason. */}
       <button
         onClick={() => setOpen((o) => !o)}
         style={{
@@ -302,11 +308,54 @@ export default function ChatPanel() {
         onMouseLeave={(e) =>
           ((e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-primary)')
         }
-        title={open ? 'Close chat' : 'Open AI assistant'}
-        aria-label={open ? 'Close chat' : 'Open AI assistant'}
+        title={
+          open
+            ? 'Minimize chat (conversation is kept)'
+            : messages.length > 0
+              ? 'Resume AI conversation'
+              : 'Open AI assistant'
+        }
+        aria-label={
+          open
+            ? 'Minimize chat'
+            : messages.length > 0
+              ? 'Resume AI conversation'
+              : 'Open AI assistant'
+        }
         aria-expanded={open}
       >
-        {open ? '\u2715' : '\u2753'}
+        {open ? '\u2013' : '\u2753'}
+        {!open && messages.length > 0 && (
+          // Message-count badge only when there's a live conversation
+          // to resume. `messages` may contain a trailing empty
+          // assistant turn from an in-flight stream \u2014 filter those
+          // out so a fresh restart doesn't show "1".
+          (() => {
+            const meaningful = messages.filter(
+              (m) => (m.role === 'user') || (m.content && m.content.length > 0),
+            );
+            if (meaningful.length === 0) return null;
+            return (
+              <span
+                aria-label={`${meaningful.length} messages in your conversation`}
+                style={{
+                  position: 'absolute',
+                  top: -4, right: -4,
+                  minWidth: 20, height: 20, padding: '0 6px',
+                  borderRadius: 999,
+                  background: '#fff',
+                  color: 'var(--color-primary)',
+                  border: '2px solid var(--color-primary)',
+                  fontSize: 11, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  lineHeight: 1,
+                }}
+              >
+                {meaningful.length > 99 ? '99+' : meaningful.length}
+              </span>
+            );
+          })()
+        )}
       </button>
 
       {/* Chat window. On phones it expands edge-to-edge with margins,
@@ -327,7 +376,11 @@ export default function ChatPanel() {
             overflow: 'hidden',
           }}
         >
-          {/* Header */}
+          {/* Header. "New chat" only appears once there's a
+              conversation to reset — otherwise it clutters the
+              first-time-open experience. Minimize is separate from
+              new chat: minimizing keeps state, new chat throws it
+              away — two intents, two buttons. */}
           <div
             style={{
               padding: '12px 16px',
@@ -335,9 +388,53 @@ export default function ChatPanel() {
               color: '#fff',
               fontWeight: 600,
               fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
             }}
           >
-            AI Assistant
+            <span>AI Assistant</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setMessages([]); setEntities([]); }}
+                  disabled={loading}
+                  title="Start a new conversation (clears history)"
+                  aria-label="Start a new conversation"
+                  style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '4px 10px',
+                    fontSize: 11, fontWeight: 500,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.5 : 1,
+                  }}
+                >
+                  New chat
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                title="Minimize (conversation is kept)"
+                aria-label="Minimize chat"
+                style={{
+                  background: 'transparent',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '4px 8px',
+                  fontSize: 18, lineHeight: 1,
+                  cursor: 'pointer',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                –
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
