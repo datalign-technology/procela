@@ -11,7 +11,10 @@
 //                    "active" so /report → /reports highlights Reports.
 //   GET_STARTED_ITEM the conditional "Get Started" entry pinned at the
 //                    top of the rail while setup is incomplete.
-//   bottomNavItems   the Settings / Help cluster pinned to the bottom.
+//   bottomNavItems   the Settings cluster pinned to the bottom.
+//                    Help was retired in favour of the top-bar Help
+//                    button (openHelpWindow) so the guide opens in a
+//                    popup without navigating the user away.
 //   MOBILE_PRIMARY   the four primary destinations pinned to the mobile
 //                    bottom bar; the fifth slot is the Menu button.
 //
@@ -162,11 +165,17 @@ export const navSections: NavSection[] = [
 export const GET_STARTED_ITEM: NavItem = { to: '/setup', label: 'Get Started' };
 
 export const bottomNavItems: NavItem[] = [
-  // Agents moved into the Organizations section alongside People —
-  // the bottom cluster now holds only the cross-cutting platform
-  // controls (Settings, Help).
+  // Help was retired from the rail in favour of the top-bar Help
+  // button (openHelpWindow above), which opens the same guide in
+  // a popup window so the user keeps their current view. The
+  // sidebar entry navigated to /help via React Router and put
+  // Layout into a chrome-free reading mode — useful, but the
+  // popup is a strict superset (can still be maximised) and
+  // doesn't destroy the user's in-progress work. The /help route
+  // itself stays registered so any existing deep links keep
+  // working; the keyboard shortcut Ctrl-K → 'h' still gets
+  // there too.
   { to: '/settings', label: 'Settings' },
-  { to: '/help', label: 'Help' },
 ];
 
 // The four primary destinations pinned to the mobile bottom bar; the
