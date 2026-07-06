@@ -36,7 +36,7 @@ The Get Started hub onboards the organization into Procela. The four-phase Gover
 
 The sidebar opens with Get Started for first-run onboarding (it auto-hides at 100%), then the platform's "who" and "what does work" before fanning out into the artefact buckets. Dashboard is a direct link; Organizations and Processes follow as the actors and the verb that connects them; Data / Systems / Governance / Insights cover the artefacts the work runs through. Sections with multiple destinations are accordions you can expand and collapse.
 
-- Get Started — Resumable three-phase onboarding hub (Capture / Assign / Govern) with a progress ring. Auto-hides once your org reaches 100%. See Section 1 for the mechanics.
+- Get Started — Resumable three-phase onboarding hub (Capture / Assign / Govern) with a progress ring. The page opens with a visual phase diagram — three coloured cards (blue / purple / green) with a live percent under each, connected by arrows — so a first-time user can see the whole journey at a glance without expanding sections. The active phase (first incomplete) is highlighted; the accordion below is still the interactive surface. Both the diagram and the sidebar entry auto-hide once your org reaches 100%. See Section 1 for the mechanics.
 - Dashboard — Personalized home with your tasks, issues, domains, and KPIs.
 - Organizations — Accordion covering the "who" of the platform: Structure (your company / division / team tree), People (the humans on your team), Agents (AI agents that hold governance roles and run automation), and Skills (the competencies your roles need).
 - Processes — the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under Insights → Data Mapping.)
@@ -45,7 +45,7 @@ The sidebar opens with Get Started for first-run onboarding (it auto-hides at 10
 - Governance — grouped into Set up (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and Operate (Documentation with Manual + Procedures tabs, Calendar, Tasks & Issues). The sub-labels are visual dividers in the expanded section — every item still navigates directly.
 - Insights — grouped into Explore (Enterprise View, Analysis, Data Mapping) and Review (Reports, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance — promoted out of Governance so they're easier to find.
 
-Settings and Help sit at the bottom of the sidebar.
+Settings sits at the bottom of the sidebar. Help lives only in the top bar (next to Ask AI) — it opens the guide in a separate popup window so you keep whatever page you're on. The Training Guide follows the same pattern. The `/help` URL still works if you have deep links saved (e.g. `/help#connectors`).
 
 ### Header controls
 
@@ -127,6 +127,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Link to Source connects an asset to a database table, file, or API in the add/edit form.
 - Expandable columns show data types and quality rules per column.
 - Bulk set Trust Level / owner / steward.
+- Owner and stewards inherit from the domain by default. Under both the Owner picker and the Stewards picker on the edit form, the field shows a hint reading "Inherits from domain — <person(s)>" when the pick is empty and the domain has an owner / stewards; the asset row still renders with the effective person(s) as if you'd picked them. Pick a specific person (or list) when the asset has its own accountable owner different from the domain's (regulatory scope, cross-functional asset, delegation, transition period); the hint switches to "Overrides domain (<person>) — Reset to domain owner" with a one-click reset. Changing a domain owner or steward propagates to every inheriting asset automatically. DAMA-aligned: Data Asset Owner and Data Steward are separate accountabilities from their Domain counterparts by design, but should default to the domain values.
 - Where Used in the detail modal shows every process, mapping, and policy referencing the asset.
 - **Synced N min ago** chip. When an on-prem connector last refreshed an asset's freshness signal, the row shows a small pill next to the name: green (**Live**, synced in the last 30 min), amber (synced 30 min – 4 h ago), red (synced > 4 h ago). The tooltip carries the exact ISO timestamp. Manually-added assets never show a chip. The chip is a "trust the number" cue — if it's green, the row count and last-write timestamp reflect the source database, not a human's last manual edit.
 - **Connector-discovered assets arrive as Bronze**. When an on-prem connector reports a new table, Procela creates the asset at Bronze tier with no owner, no steward, no linked processes. That's intentional — new arrivals should surface as work items for stewards on the Orphan Assets and Ungoverned dashboards, not silently melt into an approved catalog.
@@ -330,7 +331,8 @@ Skills drive four cross-page workflows:
 
 ### Analysis (cube)
 
-- Drag-and-drop pivot builder. Drag a dimension into Rows, another into Columns; the grid below shows how many records connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections. Reachable from the sidebar (Insights → Analysis) and from Dashboard Quick Actions.
+- Drag-and-drop pivot builder. Drag a dimension into Rows, another into Columns; the grid below shows how many distinct relationships connect each pair. Seven dimensions ship: Systems, Data Assets, Domains, Processes, Roles, People, Connections. Reachable from the sidebar (Insights → Analysis) and from Dashboard Quick Actions.
+- Distinct-pair counting. Cell counts are the number of unique (row, column) relationships that exist — not the number of underlying facts that touch both dimensions. So if a system↔connection link is described by both a direct join AND a downstream data-asset binding, it counts as one relationship, not two. Row / column totals become "how many columns / rows this axis value participates in". Drill-down still lists every underlying fact if you want to see them.
 - Starter pivots. Before you've configured anything, the empty state offers one-click examples (Data Assets by System, Roles by Person, Assets by Domain, Processes by System) so you can see a result immediately instead of facing a blank palette.
 - Sub-group. Drag a second dimension into either zone to create a nested grouping (max 2 per axis). The grid renders the parent label with a merged cell spanning all its sub-rows / sub-columns, so e.g. Systems > Data Assets on rows shows each system once with its assets indented underneath.
 - Pivot. The pivot button between the Rows and Columns zones swaps everything in one click — useful when you want to flip a tall report into a wide one without re-dragging.
