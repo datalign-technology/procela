@@ -389,3 +389,78 @@ A user can:
 - Abstract AWS-specific services (Cognito, S3) behind interfaces so they can be swapped for on-premise equivalents later.
 - Every entity needs `created_at`, `updated_at`, `created_by`, `updated_by`.
 - Audit logging is a first-class concern, not a nice-to-have.
+
+## Frontend Design Conventions — REQUIRED for new pages
+
+The frontend has a small set of shared primitives that MUST be
+composed rather than reinvented. A design-consistency sweep (six PRs
+in the design-consistency series) migrated ~50 pages to these; new
+pages must adopt them from day one. Do NOT hand-roll equivalents.
+
+**Layout primitives:**
+
+- `<Page>` — every routed page renders inside this. Width comes from
+  the `width` prop (`default`, `narrow`, `wizard`), never inline
+  `maxWidth`.
+- `<PageHeader>` — the standard title + subtitle + actions row.
+  Title renders at `1.625rem` (26px). Do NOT hand-roll an `<h1>` at
+  the top of a page.
+
+**Content primitives:**
+
+- `<Card>` — the standard content container (surface bg + border +
+  `var(--radius-md)` + `var(--shadow-sm)` + padding). Never repeat
+  those five properties inline. Props: `padding`, `marginBottom`,
+  `radius`, `shadow`, `borderColor`, `onClick`.
+- `<SectionLabel>` — the uppercase section header used inside cards
+  ("Governance & Ownership", "Advanced fields"). Style is fixed
+  (`fontSize: 10, fontWeight: 600, uppercase, letterSpacing: 0.05em,
+  color: var(--color-text-muted)`) and intentionally not
+  customisable — if a label needs to look different, it's probably
+  an h2/h3.
+- `<TruncatedText>` — list-row cells that could carry long content
+  (descriptions, definitions, long names). Renders single-line
+  ellipsis + hover tooltip. Combined with the global
+  `table th, table td { white-space: nowrap; }` rule, this keeps
+  every list uniform-height.
+
+**Interactive primitives:**
+
+- `<SecondaryButton>` — the neutral Cancel / Close affordance. Do NOT
+  hand-roll the `transparent bg + grey border + grey text` button
+  style; wire the same 8 properties through this component.
+- `<WizardProgress>` — the step-bar at the top of any multi-step
+  flow (Process Wizard, Sync Connection Wizard).
+
+**Colours — CSS variables only for semantic use:**
+
+- `var(--color-primary)` / `--color-primary-hover` / `--color-primary-light`
+- `var(--color-text)` / `--color-text-secondary` / `--color-text-muted`
+- `var(--color-bg)` / `--color-surface` / `--color-border`
+- `var(--color-success)` = #16a34a (green)
+- `var(--color-warning)` = #d97706 (amber)
+- `var(--color-error)` = #dc2626 (red)
+
+Never inline `color: '#dc2626'` — use `var(--color-error)`. Same for
+success and warning. Palette-object entries (`{ bg: '#fee2e2', color:
+'#dc2626' }`) — where the hex is paired with a companion `bg` to
+define a semantic-badge palette — should stay as hex so the
+palette entry doesn't drift when the semantic variable is retuned.
+
+**Icons — always match the sidebar:**
+
+Card headers, empty-state heroes, dashboards — anywhere a menu item
+is visually referenced — use `renderNavIcon(route, {size})` from
+`components/navIcons.tsx`. Do NOT hand-pick Unicode glyphs (⚙, ⛁,
+☰, ☻, etc.) for entities that have a sidebar entry.
+
+**Never wrap:**
+
+Global CSS rule (`table th, table td { white-space: nowrap; }`)
+means table cells clip by default. When a cell has genuinely long
+content, wrap it in `<TruncatedText>` for the ellipsis + tooltip
+affordance. Never re-enable wrapping on lists.
+
+**Full reference:** `packages/frontend/src/components/README.md`
+lists every shared primitive with usage examples and the "before /
+after" pattern from the audit.
