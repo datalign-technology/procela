@@ -7,6 +7,7 @@ import { useSetupStore } from '@/stores/setupStore';
 import ProgressRing from '@/components/ProgressRing';
 import Page from '@/components/Page';
 import PageHeader from '@/components/PageHeader';
+import SetupPhaseDiagram from '@/components/SetupPhaseDiagram';
 
 // ──────────────────────────────────────────────────────────────────────────
 // SetupHubPage — "Get Started". A resumable, data-driven journey that walks
@@ -371,6 +372,22 @@ export default function SetupHubPage() {
           : `Set up ${activeOrgName} in three phases — capture your business, assign ownership, then wrap governance around it.`}
         actions={<ProgressRing percent={overall} size={56} stroke={6} showLabel />}
       />
+
+      {/* Visual overview of the three phases. First-time users
+          couldn't tell what was coming after Capture without
+          expanding sections; the diagram surfaces the whole
+          journey at a glance and tags each phase with its
+          progress. Hidden once fully set up so the "you're done"
+          state stays clean. */}
+      {!loading && overall < 100 && (
+        <SetupPhaseDiagram
+          progress={{
+            capture: phaseProgress[1] || 0,
+            assign: phaseProgress[2] || 0,
+            govern: phaseProgress[3] || 0,
+          }}
+        />
+      )}
 
       {/* Expand-all / Collapse-all row. Matches the pattern used on
           Decision Rights, RACI Matrix, and Governance Groups —
