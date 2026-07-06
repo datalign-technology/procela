@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
+import SecondaryButton from '../components/SecondaryButton';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import { usePolling } from '../hooks/usePolling';
@@ -1048,12 +1049,9 @@ export default function ConnectionsPage() {
           >
             Delete Selected
           </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
+          <SecondaryButton onClick={() => setSelectedIds(new Set())}>
             Clear Selection
-          </button>
+          </SecondaryButton>
         </div>
       )}
 

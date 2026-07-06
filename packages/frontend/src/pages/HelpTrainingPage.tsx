@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
 import { renderMarkdown } from '../lib/markdown';
+import Page from '../components/Page';
 
 // ──────────────────────────────────────────────────────────────────────────
 // HelpTrainingPage — Tidewater Utilities training walkthrough.
@@ -15,10 +16,9 @@ import { renderMarkdown } from '../lib/markdown';
 // fallback in Layout handles both cases.
 // ──────────────────────────────────────────────────────────────────────────
 
-const contentStyle: React.CSSProperties = {
-  maxWidth: 820, margin: '0 auto',
-  padding: '8px 0 32px',
-};
+// Retired — replaced by <Page width="narrow" padding="8px 0 32px">
+// which supplies the same maxWidth:820 + centred margin from the
+// shared width preset.
 
 const titleStyle: React.CSSProperties = {
   fontSize: 28, fontWeight: 700, margin: '0 0 6px',
@@ -53,7 +53,7 @@ export default function HelpTrainingPage() {
   }, []);
 
   return (
-    <div style={contentStyle}>
+    <Page width="narrow" padding="8px 0 32px">
       <h1 style={titleStyle}>Training Guide</h1>
       <p style={subtitleStyle}>
         A 90-minute click-by-click walkthrough of Procela using the Tidewater Utilities fixture data.
@@ -86,6 +86,6 @@ export default function HelpTrainingPage() {
       )}
 
       {markdown !== null && <div>{renderMarkdown(markdown)}</div>}
-    </div>
+    </Page>
   );
 }

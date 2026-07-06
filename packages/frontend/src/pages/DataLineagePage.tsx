@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
+import SecondaryButton from '../components/SecondaryButton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
@@ -642,12 +643,9 @@ export default function DataLineagePage() {
           >
             Delete Selected
           </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
+          <SecondaryButton onClick={() => setSelectedIds(new Set())}>
             Clear Selection
-          </button>
+          </SecondaryButton>
         </div>
       )}
 
