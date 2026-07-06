@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import SecondaryButton from '../components/SecondaryButton';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -801,12 +802,9 @@ export default function DataQualityPage() {
           >
             Delete Selected
           </button>
-          <button
-            onClick={() => setSelectedRuleIds(new Set())}
-            style={{ padding: '5px 12px', fontSize: 12, fontWeight: 500, background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
+          <SecondaryButton onClick={() => setSelectedRuleIds(new Set())}>
             Clear Selection
-          </button>
+          </SecondaryButton>
         </div>
       )}
 
