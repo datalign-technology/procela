@@ -180,6 +180,30 @@ Electric**. You should see the electric-division roster only. Try:
   because activities don't have required-skill data yet. We'll come
   back to this in Module 6.
 
+### 2.5 The Get Started page
+
+Open **Get Started** in the sidebar. It's your onboarding hub — a
+resumable, data-driven journey. The page opens with a visual
+diagram of the three phases: **① Capture** (blue) → **② Assign**
+(purple) → **③ Govern** (green), each with a live percent under
+its name. The active phase (first incomplete) is outlined more
+strongly. Below the diagram is the phase accordion — the
+interactive surface where you'll actually check work off.
+
+The sidebar entry and the diagram both auto-hide once you reach
+100%, so the "you're done" state stays clean. Nothing else on the
+platform is gated by finishing the phases — you can drive
+straight to the Process Catalog from a fresh org — but the hub
+makes it obvious what's still missing.
+
+### 2.6 Where's Help?
+
+The Help button lives in the **top bar next to Ask AI**, not in
+the sidebar. Clicking it opens the guide in a popup window so
+you keep whatever page you were on. The Training Guide follows
+the same pattern. Direct-URL deep links (like `/help#connectors`)
+still resolve.
+
 ---
 
 ## Module 3 — Define processes (15 min)
@@ -270,7 +294,18 @@ We'll come back to this in Module 5 once we have assets to map.
 | Meter Reads | AMI 15-min interval consumption | Operational | Silver |
 | Generation Output | Plant-level MWh by hour | Operational | Bronze |
 
-4. Assign Owners and Stewards using the person picker.
+4. Assign Owners and Stewards using the person picker — but only
+   when the asset needs someone different from the domain's default.
+   By default, an asset inherits its Owner and Stewards from its
+   Data Domain. Look under the Owner picker: if you leave it empty
+   and the domain has an owner assigned, you'll see a hint reading
+   *"Inherits from domain — <person>"*. The row still renders with
+   the domain's owner as the effective one. Same for Stewards.
+   Pick a specific person only when the asset has its own
+   accountable person (regulatory scope, cross-functional dataset,
+   delegation) — the hint switches to *"Overrides domain (…) —
+   Reset to domain owner"*. Set the Domain first in step 4.3
+   below; then most assets don't need explicit owner/stewards.
 
 ### 4.2 Connect Assets to Systems
 
@@ -606,6 +641,17 @@ The same data, different views — that's the Procela model.
 3. This creates a *governance* value stream alongside the operational
    ones — Phase 1 Foundation, Phase 2 Design, Phase 3 People &
    Process, Phase 4 Operationalisation.
+
+Now switch **Working in…** back to **Tidewater Electric**. Notice
+the governance value stream you just created *doesn't appear* on
+the division's Process Catalog. That's by design: enterprise
+governance is one program for the whole org tree — surfacing it
+under every division would inflate their counts and add a locked
+row a division user can't act on. Switch back up to Tidewater
+Utilities whenever you need to touch the enterprise governance
+program. A division that defines its own governance content
+(rare, but supported) will still see that content in its own
+catalog.
 
 ### 10.2 Governance Documents
 
