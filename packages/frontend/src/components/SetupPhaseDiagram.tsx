@@ -1,67 +1,95 @@
-import React from 'react';
+import { renderNavIcon } from './navIcons';
 
 interface SetupPhaseDiagramProps {
   /**
-   * Per-phase progress (0..100). When supplied, each phase renders
-   * a small percent under its label so the diagram doubles as a
-   * live status view. Falls back to the muted "step N of 3"
-   * placeholder when omitted.
+   * Per-phase progress (0..100). When supplied, each phase's badge
+   * shows the live percent. Falls back to just the phase name when
+   * omitted.
    */
   progress?: { capture: number; assign: number; govern: number };
-  /** Optional current phase (1|2|3) — highlighted with a stronger
-   *  outline. Falls back to the first incomplete phase, then to
-   *  phase 1 when nothing has started. */
+  /**
+   * Optional current phase (1|2|3) — highlighted with a heavier
+   * border. When omitted, inferred as the first incomplete phase
+   * from `progress`, defaulting to 1.
+   */
   activePhase?: 1 | 2 | 3;
 }
 
-// Phase palette lifted from SetupHubPage's own Phase entries so
-// the diagram and the accordion below it read as the same three
-// things. If the phase colours change on the page, mirror them
-// here.
-const PHASES: Array<{
-  num: 1 | 2 | 3;
-  title: string;
-  tag: string;
-  color: string;
-  bg: string;
-  points: string[];
-}> = [
-  {
-    num: 1, title: 'Capture', tag: 'Tell Procela what you have',
-    color: '#3b82f6', bg: '#dbeafe',
-    points: ['Org tree & people', 'Processes & systems', 'Data assets'],
-  },
-  {
-    num: 2, title: 'Assign', tag: 'Give everything an owner',
-    color: '#8b5cf6', bg: '#ede9fe',
-    points: ['Process owners', 'Domain owners', 'Data stewards'],
-  },
-  {
-    num: 3, title: 'Govern', tag: 'Wrap governance around it',
-    color: '#22c55e', bg: '#dcfce7',
-    points: ['Connect data to processes', 'Tier & grade assets', 'Operating model'],
-  },
+// Phase palette mirrors SetupHubPage's own accordion so the
+// diagram and the phase list below it read as the same three
+// things.
+const PHASE_COLORS = {
+  capture: { color: '#3b82f6', bg: '#eff6ff' }, // blue
+  assign:  { color: '#8b5cf6', bg: '#f5f3ff' }, // purple
+  govern:  { color: '#22c55e', bg: '#f0fdf4' }, // green
+};
+
+// The four entities inside Capture. Icon comes from the sidebar
+// so the mental link between "this box" and "that rail entry" is
+// automatic — Procela's icon set is one system.
+const ENTITIES: Array<{ label: string; route: string }> = [
+  { label: 'Processes', route: '/processes' },
+  { label: 'Data',      route: '/data-assets' },
+  { label: 'Systems',   route: '/systems' },
+  { label: 'People',    route: '/people' },
 ];
+
+/** Small percent badge shown in the top-right corner of each nested
+ *  box. Matches the phase's colour when 100%; muted otherwise. */
+function PhaseBadge({ label, num, pct, color }: { label: string; num: number; pct: number | null; color: string }) {
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '3px 10px', borderRadius: 999,
+      background: 'var(--color-surface)',
+      border: `1.5px solid ${color}`,
+      fontSize: 11, fontWeight: 700,
+      color,
+      lineHeight: 1,
+    }}>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 16, height: 16, borderRadius: '50%',
+          background: color, color: '#fff',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 700,
+        }}
+      >
+        {num}
+      </span>
+      <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+      {pct !== null && (
+        <span style={{ color: pct === 100 ? color : 'var(--color-text-secondary)', fontSize: 11 }}>
+          {pct}%
+        </span>
+      )}
+    </div>
+  );
+}
 
 /**
  * SetupPhaseDiagram — the "three phases of Procela" hero used on
  * the Get Started page.
  *
- * Renders three connected step cards (Capture → Assign → Govern)
- * with an inline SVG arrow between each. Purely visual: it doesn't
- * navigate on click or drive the accordion state below it — the
- * page's existing accordion is the interactive surface. The
- * diagram exists so a first-time user can grok the shape of the
- * onboarding journey at a glance without expanding sections.
+ * Nested-rectangle model: **Capture** holds the four entities
+ * (Processes / Data / Systems / People); **Assign** wraps Capture
+ * (ownership is applied to the captured entities); **Govern**
+ * wraps Assign (governance is applied to owned entities). The
+ * physical nesting communicates the DAMA-style layering — each
+ * phase is a layer of accountability applied to the underlying
+ * catalog — in a way a row of arrows never could.
  *
- * Deliberately theme-aware: card backgrounds use the phase-tinted
- * light hex (matches the operational palette elsewhere) but
- * borders, arrows, and body text pull from CSS variables so the
- * component reads well against light or dark surfaces.
+ * Purely visual: doesn't drive the accordion state and doesn't
+ * navigate on click. The page's existing accordion is the
+ * interactive surface. This diagram just answers "what is the
+ * shape of this?" at a glance.
+ *
+ * Per-phase badges in the top-right of each box show live progress
+ * when provided. The active phase (first incomplete) gets a
+ * heavier border so the eye lands on where the user is.
  */
 export default function SetupPhaseDiagram({ progress, activePhase }: SetupPhaseDiagramProps) {
-  // Figure out which phase to highlight: explicit prop wins, else
-  // the first incomplete phase (per progress), else phase 1.
   const inferredActive: 1 | 2 | 3 = activePhase ?? (() => {
     if (!progress) return 1;
     if (progress.capture < 100) return 1;
@@ -69,105 +97,101 @@ export default function SetupPhaseDiagram({ progress, activePhase }: SetupPhaseD
     return 3;
   })();
 
-  const percentFor = (num: 1 | 2 | 3): number | null => {
+  const pct = (phase: 'capture' | 'assign' | 'govern'): number | null => {
     if (!progress) return null;
-    return num === 1 ? progress.capture : num === 2 ? progress.assign : progress.govern;
+    return progress[phase];
   };
+
+  // Border weights: 1.5 baseline, 2.5 for the active phase.
+  const borderFor = (phase: 1 | 2 | 3) => `${inferredActive === phase ? 2.5 : 1.5}px solid ${
+    phase === 1 ? PHASE_COLORS.capture.color
+    : phase === 2 ? PHASE_COLORS.assign.color
+    : PHASE_COLORS.govern.color
+  }`;
 
   return (
     <div
-      aria-label="The three phases of setting up Procela: Capture, Assign, Govern"
+      aria-label="The three phases of setting up Procela — Capture, Assign, Govern — as nested layers"
       style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 24px 1fr 24px 1fr',
-        gap: 0,
-        alignItems: 'stretch',
         marginBottom: 24,
+        // Outer: Govern wraps everything.
+        background: PHASE_COLORS.govern.bg,
+        border: borderFor(3),
+        borderRadius: 'var(--radius-lg)',
+        padding: 16,
+        position: 'relative',
       }}
     >
-      {PHASES.map((ph, i) => {
-        const isActive = ph.num === inferredActive;
-        const pct = percentFor(ph.num);
-        return (
-          <React.Fragment key={ph.num}>
-            <div
-              style={{
-                background: ph.bg,
-                border: `${isActive ? 2 : 1}px solid ${ph.color}`,
-                borderRadius: 'var(--radius-md)',
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-                minWidth: 0,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <div
-                  aria-hidden="true"
-                  style={{
-                    width: 24, height: 24, borderRadius: '50%',
-                    background: ph.color, color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 700, flexShrink: 0,
-                  }}
-                >
-                  {ph.num}
-                </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: ph.color, lineHeight: 1.15 }}>
-                  {ph.title}
-                </div>
-                {pct !== null && (
-                  <div
-                    aria-label={`${pct}% complete`}
-                    style={{
-                      marginLeft: 'auto',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: pct === 100 ? ph.color : 'var(--color-text-secondary)',
-                    }}
-                  >
-                    {pct}%
-                  </div>
-                )}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                {ph.tag}
-              </div>
-              <ul
-                style={{
-                  margin: '4px 0 0', paddingLeft: 16,
-                  fontSize: 11, color: 'var(--color-text-secondary)',
-                  lineHeight: 1.5,
-                }}
-              >
-                {ph.points.map((pt) => <li key={pt}>{pt}</li>)}
-              </ul>
-            </div>
-            {/* Arrow separator between cards. Rendered inline as SVG so it
-                inherits the theme colour and doesn't need an asset file. */}
-            {i < PHASES.length - 1 && (
+      {/* Govern badge, top-right of the outer box */}
+      <div style={{ position: 'absolute', top: -12, right: 16 }}>
+        <PhaseBadge label="Govern" num={3} pct={pct('govern')} color={PHASE_COLORS.govern.color} />
+      </div>
+      <div style={{ fontSize: 11, color: PHASE_COLORS.govern.color, fontWeight: 600, marginBottom: 10, marginTop: 4 }}>
+        Wrap governance around it — tier, grade, connect, and operate.
+      </div>
+
+      {/* Middle: Assign wraps Capture. */}
+      <div style={{
+        background: PHASE_COLORS.assign.bg,
+        border: borderFor(2),
+        borderRadius: 'var(--radius-md)',
+        padding: 16,
+        position: 'relative',
+      }}>
+        <div style={{ position: 'absolute', top: -12, right: 16 }}>
+          <PhaseBadge label="Assign" num={2} pct={pct('assign')} color={PHASE_COLORS.assign.color} />
+        </div>
+        <div style={{ fontSize: 11, color: PHASE_COLORS.assign.color, fontWeight: 600, marginBottom: 10, marginTop: 4 }}>
+          Give every entity a clear owner and steward.
+        </div>
+
+        {/* Inner: Capture holds the four entities. */}
+        <div style={{
+          background: PHASE_COLORS.capture.bg,
+          border: borderFor(1),
+          borderRadius: 'var(--radius-md)',
+          padding: 16,
+          position: 'relative',
+        }}>
+          <div style={{ position: 'absolute', top: -12, right: 16 }}>
+            <PhaseBadge label="Capture" num={1} pct={pct('capture')} color={PHASE_COLORS.capture.color} />
+          </div>
+          <div style={{ fontSize: 11, color: PHASE_COLORS.capture.color, fontWeight: 600, marginBottom: 12, marginTop: 4 }}>
+            Tell Procela what you have.
+          </div>
+
+          {/* The four captured entities. Sidebar icons keep the
+              visual mapping between diagram and rail identical. */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 8,
+          }}>
+            {ENTITIES.map((e) => (
               <div
-                aria-hidden="true"
+                key={e.label}
                 style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 8px',
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 4,
                 }}
               >
-                <svg
-                  width="20" height="16" viewBox="0 0 20 16"
-                  fill="none" stroke="var(--color-text-muted)"
-                  strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-                >
-                  <path d="M2 8 L18 8" />
-                  <path d="M12 3 L18 8 L12 13" />
-                </svg>
+                <span style={{ color: PHASE_COLORS.capture.color, display: 'inline-flex' }}>
+                  {renderNavIcon(e.route, { size: 22, strokeWidth: 1.8 })}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>
+                  {e.label}
+                </span>
               </div>
-            )}
-          </React.Fragment>
-        );
-      })}
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
