@@ -405,6 +405,24 @@ router.post('/cube', (req: Request, res: Response) => {
   const keyToPath = (key: string): string[] => key.split('\x00');
 
   // ── Group ──
+  //
+  // Cell count is DISTINCT-PAIR semantics: each unique (rowKey,
+  // colKey) contributes 1 regardless of how many facts attest it.
+  // Before this fix, a Systems × Connections pivot where a single
+  // (System, Connection) pair was described by two fact types
+  // (the sys-conn link fact AND a data-asset binding fact that
+  // joined through to the same system) would count 2 for that
+  // one relationship, and the grand total showed a phantom third
+  // link that didn't exist. Users read a pivot table as
+  // "how many relationships exist between rows and columns" —
+  // not "sum of all facts of any type that touch both dimensions"
+  // — so distinct-pair is the semantic that matches what people
+  // ask.
+  //
+  // Row / column totals below become "how many columns / rows
+  // this axis value participates in" — the standard pivot-table
+  // reading. Fact IDs are still collected for drill-down so a
+  // user clicking a cell can see every underlying assertion.
   const cells = new Map<string, CubeCell>();
   const rowKeys = new Set<string>();
   const colKeys = new Set<string>();
@@ -416,7 +434,8 @@ router.post('/cube', (req: Request, res: Response) => {
     const cellKey = `${rKey}\x01${cKey}`;
     let cell = cells.get(cellKey);
     if (!cell) { cell = { count: 0, factIds: [] }; cells.set(cellKey, cell); }
-    cell.count++;
+    // Each unique cell counts once — see block comment above.
+    cell.count = 1;
     if (cell.factIds.length < MAX_DRILL) cell.factIds.push(f.factId);
   }
 
