@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
+import { aiService, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
 import logger from '../lib/logger';
 import { systems } from './systems';
 import { dataDomains } from './data-domains';
@@ -39,6 +40,13 @@ interface StoredDataAsset {
   /** @deprecated see `bindings` */
   sourceColumn?: string;
   dataClassification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
+  /** Sensitivity classifications (PII/PHI/PCI/FINANCIAL/CREDENTIAL/…).
+   *  Distinct axis from dataClassification: a dataset can carry a
+   *  sensitivity tag without being CONFIDENTIAL (e.g. PII in an
+   *  INTERNAL asset), and vice versa. Populated by the AI classifier
+   *  route (POST /suggest-sensitivity → user accept →
+   *  PUT /sensitivity). Empty / undefined = untagged. */
+  sensitivityTags?: Array<'PII' | 'PHI' | 'PCI' | 'FINANCIAL' | 'CREDENTIAL' | 'CONFIDENTIAL' | 'PUBLIC'>;
   /** Content classification of the data, not how it's used.
    *  Replaces the legacy mixed-axis `category`. */
   dataType?: 'MASTER' | 'REFERENCE' | 'TRANSACTIONAL' | 'ANALYTICAL' | 'METADATA';
@@ -1144,6 +1152,74 @@ router.get('/:id/suggest-source', (req: Request, res: Response) => {
   // Cap at 10 — beyond that the user is better off using the
   // connection-rooted Discover flow with full filtering.
   res.json({ success: true, data: candidates.slice(0, 10) });
+});
+
+// ── Sensitivity classification ──
+//
+// Two-step flow so the user reviews before we tag anything:
+//
+//   POST /:id/suggest-sensitivity → asks Claude to classify the
+//     asset from its metadata (name, description, systemType,
+//     columns). Returns an array of {tag, confidence, reason} —
+//     NOT persisted. The client renders one chip per suggestion
+//     with accept/reject buttons.
+//
+//   PUT /:id/sensitivity → replaces the asset's sensitivityTags
+//     array with what the user accepted. Validated against the
+//     canonical SENSITIVITY_TAGS set so a rogue client can't
+//     write arbitrary strings.
+//
+// Delete-all: PUT with `tags: []` clears the asset back to
+// untagged. There is no separate DELETE endpoint — one PUT
+// route is the durable API.
+
+/** POST /api/v1/data-assets/:id/suggest-sensitivity */
+router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  const cols = dataAssetColumns
+    .filter((c) => c.dataAssetId === asset.id)
+    .map((c) => ({ name: c.columnName, dataType: c.dataType, description: c.description }));
+  const system = asset.systemId ? systems.find((s) => s.id === asset.systemId) : undefined;
+  try {
+    const suggestions = await aiService.suggestAssetSensitivity({
+      name: asset.name,
+      description: asset.description,
+      systemType: system?.systemType,
+      columns: cols,
+    });
+    res.json({ success: true, data: suggestions });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'AI classification failed.';
+    logger.error({ err, assetId: asset.id }, 'Sensitivity classification failed');
+    res.status(502).json({ success: false, error: `Sensitivity classification failed: ${msg}` });
+  }
+});
+
+/** PUT /api/v1/data-assets/:id/sensitivity */
+router.put('/:id/sensitivity', (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  const { tags } = req.body as { tags?: unknown };
+  if (!Array.isArray(tags)) {
+    res.status(400).json({ success: false, error: 'tags must be an array of sensitivity tag strings.' });
+    return;
+  }
+  const validSet = new Set<string>(SENSITIVITY_TAGS);
+  const clean: SensitivityTag[] = [];
+  for (const t of tags) {
+    if (typeof t !== 'string' || !validSet.has(t)) {
+      res.status(400).json({ success: false, error: `Unknown sensitivity tag: ${String(t)}. Valid: ${SENSITIVITY_TAGS.join(', ')}` });
+      return;
+    }
+    if (!clean.includes(t as SensitivityTag)) clean.push(t as SensitivityTag);
+  }
+  const previous = asset.sensitivityTags || [];
+  asset.sensitivityTags = clean.length > 0 ? clean : undefined;
+  asset.updatedAt = new Date().toISOString();
+  saveStore('dataAssets', dataAssets);
+  auditService.log(asset.orgId, null, 'DataAsset', asset.id, 'SENSITIVITY_UPDATED', { sensitivityTags: previous }, { sensitivityTags: clean });
+  res.json({ success: true, data: { id: asset.id, sensitivityTags: clean } });
 });
 
 export default router;

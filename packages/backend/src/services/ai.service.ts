@@ -138,6 +138,38 @@ export interface IndustryTemplateSpecialization {
   orgType?: string;
 }
 
+/** The canonical set of sensitivity tags the classifier can suggest.
+ *  Deliberately compact — a longer list dilutes precision. Adding
+ *  new tags means updating the prompt too. */
+export type SensitivityTag =
+  | 'PII'
+  | 'PHI'
+  | 'PCI'
+  | 'FINANCIAL'
+  | 'CREDENTIAL'
+  | 'CONFIDENTIAL'
+  | 'PUBLIC';
+
+export const SENSITIVITY_TAGS: readonly SensitivityTag[] = [
+  'PII', 'PHI', 'PCI', 'FINANCIAL', 'CREDENTIAL', 'CONFIDENTIAL', 'PUBLIC',
+] as const;
+
+export interface SensitivitySuggestion {
+  tag: SensitivityTag;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  /** One-sentence rationale so the reviewer can accept/reject with
+   *  context. E.g. "columns include email, phone, and date_of_birth". */
+  reason: string;
+}
+
+/** Everything the sensitivity classifier needs to see about an asset. */
+export interface AssetSensitivityContext {
+  name: string;
+  description?: string;
+  systemType?: string;
+  columns?: Array<{ name: string; dataType?: string; description?: string }>;
+}
+
 /** Everything an agent needs to actually perform one governance activity.
  *  Assembled server-side from the activity node and its linked context. */
 export interface GovernanceActivityRun {
@@ -171,6 +203,13 @@ export interface AiService {
   generateIndustryTemplateStream(industry: string, specialization?: IndustryTemplateSpecialization): AsyncIterable<TemplateStreamEvent>;
   generateDataDomains(industry: string): Promise<object>;
   suggestDataAssets(context: ProcessContext): Promise<object>;
+  /** Suggest sensitivity tags (PII/PHI/PCI/FINANCIAL/CREDENTIAL/etc.)
+   *  for a data asset based on its name, description, and column
+   *  names/types. Returns an array of {tag, confidence, reason}
+   *  objects. Conservative by prompt design — the model errs on
+   *  the side of not-tagging when signal is weak. Persistence is a
+   *  separate step so the user can review + accept individually. */
+  suggestAssetSensitivity(asset: AssetSensitivityContext): Promise<SensitivitySuggestion[]>;
   chat(messages: ChatMessage[], orgContext: OrgContext, catalogSummary?: string): Promise<string>;
   /** Streaming counterpart of chat(). Yields text fragments as they
    *  arrive from the Anthropic stream so the UI can render the reply
@@ -366,6 +405,81 @@ Guidelines:
 
     const text = textFromResponse(response);
     return extractJson(text) as object;
+  }
+
+  /**
+   * Classify an asset's sensitivity. Sends the asset's name,
+   * description, system type, and column list to Claude and gets
+   * back an array of {tag, confidence, reason} suggestions.
+   *
+   * Prompt is conservative: the model is instructed to only tag
+   * when there's clear signal in the metadata, and to skip tags
+   * rather than guess. False positives here are worse than false
+   * negatives — a bad tag creates noise across every downstream
+   * gap/coverage report; a missed tag just doesn't fire.
+   *
+   * The suggestions are not persisted here — the route layer
+   * returns them for user review, and a separate PUT route
+   * writes accepted tags to the asset.
+   */
+  async suggestAssetSensitivity(asset: AssetSensitivityContext): Promise<SensitivitySuggestion[]> {
+    const columns = (asset.columns || []).slice(0, 100).map((c) => ({
+      name: c.name,
+      type: c.dataType || 'unknown',
+      ...(c.description ? { description: c.description } : {}),
+    }));
+    const response = await getClient().messages.create({
+      model: getConfiguredModel(),
+      max_tokens: 4096,
+      system: `You are a data privacy and compliance classifier. Given a data asset's metadata, decide which sensitivity tags apply.
+
+Tags (only use these — exact spelling):
+- PII         — personally identifiable information (name, email, phone, address, DOB, SSN, national id, etc.)
+- PHI         — protected health information (medical records, diagnoses, provider names in a clinical context)
+- PCI         — payment card industry data (card numbers, CVV, cardholder name in a payment context)
+- FINANCIAL   — bank accounts, income, tax records, financial transactions (that aren't PCI)
+- CREDENTIAL  — passwords, API keys, tokens, secrets, private keys
+- CONFIDENTIAL— business confidential (unreleased plans, negotiations, competitive analysis) that isn't covered by another tag
+- PUBLIC      — deliberately public/open data (e.g. published reference data, public catalog)
+
+Rules:
+- Be conservative. Only apply a tag when the metadata gives clear signal — a column named "email", a table called "patient_encounters", a description mentioning "credit card numbers", etc. If you can't tell, don't tag.
+- Return only tags that apply. Assets can have zero tags. Do NOT invent new tags.
+- Confidence:
+    HIGH   — the metadata is unambiguous (e.g. "customer_ssn" column).
+    MEDIUM — strong signal but requires inference (e.g. "customer_records" description in a CRM system).
+    LOW    — weak signal, worth surfacing but the reviewer should probably reject.
+- Reason: one short sentence naming the specific columns or phrases you keyed off. Never restate the tag definition.
+
+Return ONLY a JSON array — no markdown, no code fences, no prose:
+[
+  { "tag": "PII", "confidence": "HIGH", "reason": "columns include email, phone, and date_of_birth" }
+]
+
+Return [] when no tag applies with any confidence.`,
+      messages: [
+        {
+          role: 'user',
+          content: JSON.stringify({
+            name: asset.name,
+            ...(asset.description ? { description: asset.description } : {}),
+            ...(asset.systemType ? { systemType: asset.systemType } : {}),
+            ...(columns.length ? { columns } : {}),
+          }),
+        },
+      ],
+    });
+
+    const text = textFromResponse(response);
+    const raw = extractJson(text);
+    if (!Array.isArray(raw)) return [];
+    // Validate: keep only well-shaped entries with a known tag.
+    const validTags = new Set<string>(SENSITIVITY_TAGS);
+    const validConf = new Set(['HIGH', 'MEDIUM', 'LOW']);
+    return (raw as any[])
+      .filter((s) => s && typeof s === 'object' && typeof s.tag === 'string' && typeof s.reason === 'string' && typeof s.confidence === 'string')
+      .filter((s) => validTags.has(s.tag) && validConf.has(s.confidence))
+      .map((s) => ({ tag: s.tag as SensitivityTag, confidence: s.confidence as 'HIGH' | 'MEDIUM' | 'LOW', reason: s.reason }));
   }
 
   /**
