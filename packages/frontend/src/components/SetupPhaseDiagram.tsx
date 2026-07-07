@@ -17,11 +17,15 @@ interface SetupPhaseDiagramProps {
 
 // Phase palette mirrors SetupHubPage's own accordion so the
 // diagram and the phase list below it read as the same three
-// things.
+// things. `color` matches the numbered circle in the accordion
+// (blue-500 / violet-500 / green-500) and is used for borders,
+// badges, and phase labels. `bg` uses the -100 tint so the box
+// carries visible weight — pale -50 tints made the diagram look
+// washed out against the numbered dots below.
 const PHASE_COLORS = {
-  capture: { color: '#3b82f6', bg: '#eff6ff' }, // blue
-  assign:  { color: '#8b5cf6', bg: '#f5f3ff' }, // purple
-  govern:  { color: '#22c55e', bg: '#f0fdf4' }, // green
+  capture: { color: '#3b82f6', bg: '#dbeafe' }, // blue-500 / blue-100
+  assign:  { color: '#8b5cf6', bg: '#ede9fe' }, // violet-500 / violet-100
+  govern:  { color: '#22c55e', bg: '#dcfce7' }, // green-500 / green-100
 };
 
 // The four entities inside Capture. Icon comes from the sidebar
