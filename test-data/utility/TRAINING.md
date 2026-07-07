@@ -615,7 +615,20 @@ step?", reverse asks "what step should use this asset?".
 Dashboard → **Skill Gaps** should now show real values now that
 activities have required-skill data and people have skills.
 
-### 9.5 Cross-page coherence
+### 9.5 Data Quality auto-issues
+
+**Data → Data Quality** lists rules per asset/column. Set a
+rule's *Frequency* to Hourly / Daily / Weekly and it runs
+automatically — no cron, no external orchestrator. When a run
+transitions a rule to FAILING, Procela auto-creates a
+governance issue (severity HIGH), assigns it to the domain
+steward, and pings the assignee via the notification bell.
+When the rule recovers, the same issue auto-resolves. The
+end-to-end shape: define the rule once, walk away, and the
+platform does the rest — see the Data Quality section of the
+Help Guide for the full mechanics.
+
+### 9.6 Cross-page coherence
 
 Test this end-to-end:
 
@@ -642,15 +655,14 @@ The same data, different views — that's the Procela model.
    Process, Phase 4 Operationalisation.
 
 Now switch **Working in…** back to **Tidewater Electric**. Notice
-the governance value stream you just created *doesn't appear* on
-the division's Process Catalog. That's by design: enterprise
-governance is one program for the whole org tree — surfacing it
-under every division would inflate their counts and add a locked
-row a division user can't act on. Switch back up to Tidewater
-Utilities whenever you need to touch the enterprise governance
-program. A division that defines its own governance content
-(rare, but supported) will still see that content in its own
-catalog.
+two things: the governance value stream you just created
+*doesn't appear* on the division's Process Catalog, and the
+**Generate governance processes** wand is not visible on this
+scope either. Both are by design: enterprise governance is one
+program for the whole org tree, so a division shouldn't be able
+to see it in its catalog counts *or* be able to accidentally
+create its own. Switch back up to Tidewater Utilities whenever
+you need to touch the enterprise governance program.
 
 ### 10.2 Governance Documents
 
