@@ -183,18 +183,17 @@ Electric**. You should see the electric-division roster only. Try:
 ### 2.5 The Get Started page
 
 Open **Get Started** in the sidebar. It's your onboarding hub — a
-resumable, data-driven journey. The page opens with a visual
-diagram of the three phases: **① Capture** (blue) → **② Assign**
-(purple) → **③ Govern** (green), each with a live percent under
-its name. The active phase (first incomplete) is outlined more
-strongly. Below the diagram is the phase accordion — the
-interactive surface where you'll actually check work off.
+resumable, data-driven journey through three phases: **Capture**,
+**Assign**, **Govern**. Each phase is an accordion you expand to
+work through checklist items with per-item Open links. The
+progress ring in the header aggregates the three phases so you
+can see how close you are to fully set up.
 
-The sidebar entry and the diagram both auto-hide once you reach
-100%, so the "you're done" state stays clean. Nothing else on the
-platform is gated by finishing the phases — you can drive
-straight to the Process Catalog from a fresh org — but the hub
-makes it obvious what's still missing.
+The sidebar entry auto-hides once you reach 100%, so the "you're
+done" state stays clean. Nothing else on the platform is gated by
+finishing the phases — you can drive straight to the Process
+Catalog from a fresh org — but the hub makes it obvious what's
+still missing.
 
 ### 2.6 Where's Help?
 
