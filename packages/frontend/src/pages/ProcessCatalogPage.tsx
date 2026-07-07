@@ -2377,14 +2377,19 @@ export default function ProcessCatalogPage() {
   const { divisions: subtreeDivisions, companyWithDivisions } = useValueStreamScope();
   const canCreateHere = canCreateValueStreams && !companyWithDivisions;
   // Governance value streams are exempt from the multi-division
-  // block. Corporate governance (policies, decision rights, the
+  // block — corporate governance (policies, decision rights, the
   // overall data-governance program) is intentionally one
-  // enterprise-wide program — duplicating it into every division
-  // and reconciling later is the wrong model. So the "Generate
-  // governance processes" wand needs the level guard
-  // (canCreateValueStreams) but not the
-  // !companyWithDivisions guard.
-  const canCreateGovernanceHere = canCreateValueStreams;
+  // enterprise-wide program, so a multi-division company can
+  // still create it at the parent. BUT it must ONLY be at the
+  // company level: a division can't own its own governance
+  // program (it wouldn't be enterprise-wide by definition), and
+  // an earlier fix already hides ancestor-owned governance from
+  // a division's Process Catalog, so exposing the "Generate
+  // governance processes" wand at the division level would let a
+  // user create a governance VS whose rows the same catalog then
+  // hides — confusing and inconsistent. Guard on activeOrgType.
+  const canCreateGovernanceHere =
+    canCreateValueStreams && activeOrgType === 'company';
   // Used by addMapping to detect cross-division links — when an
   // activity's value-stream org and the data asset's owner org are
   // on different vertical axes (e.g. Tidewater Water activity ↔
