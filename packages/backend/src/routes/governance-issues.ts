@@ -6,6 +6,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import { dataDomains } from './data-domains';
 import { dataAssets } from './data-assets';
+import { createNotification } from './notifications';
 import logger from '../lib/logger';
 
 const ISSUE_TYPES = [
@@ -33,6 +34,127 @@ const ISSUE_STATUSES = [
 
 const TERMINAL_STATUSES = new Set(['RESOLVED', 'CLOSED', 'WONT_FIX']);
 
+// ── Auto-issue sync (called by other subsystems on state change) ──
+
+/**
+ * Rule → issue sync. Called by the DQ engine after a rule run so a
+ * governance issue tracks the failure through to resolution —
+ * closing itself when the rule recovers instead of leaving orphaned
+ * tickets.
+ *
+ * Behaviour:
+ *   - Rule now FAILING or WARNING → ensure an OPEN issue exists
+ *     linked to the rule. Idempotent: a second run doesn't
+ *     duplicate. Assignee is the domain steward → domain owner →
+ *     asset owner, in that order. A notification is fired on first
+ *     creation.
+ *   - Rule now PASSING → close any OPEN linked issue with a
+ *     "rule recovered" resolution note. Notifies the assignee.
+ *   - NOT_MEASURED / no ruleType / no dataAssetId → no-op.
+ *
+ * Kept as a plain function (not a router) so the DQ scheduler can
+ * import it directly without pulling the whole router graph.
+ */
+export function syncDataQualityIssueForRule(rule: {
+  id: string;
+  orgId: string;
+  dataAssetId?: string;
+  name?: string;
+  currentScore?: number;
+  threshold?: number;
+  status?: string;
+  dimension?: string;
+}): void {
+  if (!rule.dataAssetId) return;
+  const status = rule.status;
+  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+  if (!asset) return;
+
+  // Find an existing open issue linked to this rule.
+  const existing = governanceIssues.find(
+    (i) => i.linkedRuleId === rule.id && !TERMINAL_STATUSES.has(i.status),
+  );
+
+  const now = new Date().toISOString();
+
+  if (status === 'PASSING') {
+    if (!existing) return;
+    existing.status = 'RESOLVED';
+    existing.resolutionSummary = `DQ rule recovered — score ${rule.currentScore ?? '?'} meets threshold ${rule.threshold ?? '?'}.`;
+    existing.closedAt = now;
+    existing.updatedAt = now;
+    saveStore('governanceIssues', governanceIssues);
+    auditService.log(rule.orgId, null, 'GovernanceIssue', existing.id, 'AUTO_RESOLVED', null, { linkedRuleId: rule.id });
+    if (existing.assignedTo) {
+      createNotification({
+        orgId: rule.orgId,
+        userId: existing.assignedTo,
+        type: 'INFO',
+        title: 'DQ issue auto-resolved',
+        message: `${rule.name || 'A DQ rule'} on ${asset.name} recovered.`,
+        link: `/governance-issues?id=${existing.id}`,
+      });
+    }
+    return;
+  }
+
+  if (status !== 'FAILING' && status !== 'WARNING') return;
+
+  if (existing) {
+    // Bump the description with the latest score so the issue detail
+    // shows current state without duplicating.
+    existing.description = `${rule.name || 'DQ rule'} is ${status.toLowerCase()} on ${asset.name} — score ${rule.currentScore ?? '?'} against threshold ${rule.threshold ?? '?'}.`;
+    existing.severity = status === 'FAILING' ? 'HIGH' : 'MEDIUM';
+    existing.updatedAt = now;
+    saveStore('governanceIssues', governanceIssues);
+    return;
+  }
+
+  // Pick the assignee. Domain steward > domain owner > asset owner.
+  // (Domain-level accountability matches DAMA: steward executes,
+  // owner is accountable; asset owner is the operational fallback.)
+  const domain = dataDomains.find((d) => d.dataAssetIds?.includes(asset.id));
+  let assignedTo: string | null = null;
+  if (domain?.stewardIds && domain.stewardIds.length > 0) assignedTo = domain.stewardIds[0];
+  else if (domain?.ownerId) assignedTo = domain.ownerId;
+  else if (asset.ownerPersonId) assignedTo = asset.ownerPersonId;
+
+  const newIssue: StoredGovernanceIssue = {
+    id: uuid(),
+    orgId: rule.orgId,
+    title: `DQ ${status.toLowerCase()}: ${rule.name || 'rule'} on ${asset.name}`,
+    description: `${rule.name || 'DQ rule'} is ${status.toLowerCase()} on ${asset.name} — score ${rule.currentScore ?? '?'} against threshold ${rule.threshold ?? '?'}.`,
+    issueType: 'DATA_QUALITY',
+    severity: status === 'FAILING' ? 'HIGH' : 'MEDIUM',
+    status: 'OPEN',
+    domainId: domain?.id || null,
+    dataAssetId: asset.id,
+    systemId: asset.systemId || null,
+    reportedBy: null,
+    assignedTo,
+    resolutionSummary: null,
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+    linkedRuleId: rule.id,
+  };
+  governanceIssues.push(newIssue);
+  saveStore('governanceIssues', governanceIssues);
+  auditService.log(rule.orgId, null, 'GovernanceIssue', newIssue.id, 'AUTO_CREATED', null, { linkedRuleId: rule.id, severity: newIssue.severity });
+  logger.info({ ruleId: rule.id, issueId: newIssue.id, severity: newIssue.severity }, 'DQ auto-issue created');
+
+  if (assignedTo) {
+    createNotification({
+      orgId: rule.orgId,
+      userId: assignedTo,
+      type: 'ACTION',
+      title: `DQ ${status.toLowerCase()}: ${asset.name}`,
+      message: `${rule.name || 'A DQ rule'} needs attention on ${asset.name}. Score ${rule.currentScore ?? '?'} against threshold ${rule.threshold ?? '?'}.`,
+      link: `/governance-issues?id=${newIssue.id}`,
+    });
+  }
+}
+
 interface StoredGovernanceIssue {
   id: string;
   orgId: string;
@@ -50,6 +172,12 @@ interface StoredGovernanceIssue {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+  /** For issues that were auto-created by another system (DQ engine,
+   *  policy-review reminder, etc.), the id of the originating record.
+   *  Lets the sync helper reopen or close the same issue on later
+   *  status changes rather than piling up duplicates. Null for
+   *  manually-authored issues. */
+  linkedRuleId?: string | null;
 }
 
 export const governanceIssues: StoredGovernanceIssue[] = loadStore<StoredGovernanceIssue>('governanceIssues');

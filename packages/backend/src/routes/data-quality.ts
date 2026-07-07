@@ -6,6 +6,7 @@ import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { dataAssets, getPrimaryBinding } from './data-assets';
 import { connections } from './connections';
+import { syncDataQualityIssueForRule } from './governance-issues';
 import {
   evaluateRule,
   suggestTemplates,
@@ -518,6 +519,13 @@ function runRuleNow(rule: DataQualityRule): { engineResult: RuleRunResult; asset
     assetHealthScore: newAssetHealth,
   });
   logger.info({ ruleId: rule.id, simulated: result.simulated, passRate: result.passRate, totalRows: result.totalRows, assetHealthScore: newAssetHealth }, 'DQ rule run');
+
+  // Sync a governance issue for the rule's current state. Creates
+  // one on FAILING/WARNING, closes it on recovery. Idempotent —
+  // safe to call every run. Wrapped in try/catch so a governance
+  // subsystem hiccup doesn't take the DQ engine down with it.
+  try { syncDataQualityIssueForRule(rule); }
+  catch (err) { logger.error({ err, ruleId: rule.id }, 'Failed to sync governance issue for DQ rule'); }
 
   return { engineResult: result, assetHealth: newAssetHealth };
 }
