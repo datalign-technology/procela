@@ -21,7 +21,7 @@ export interface StoredOrg {
   industry: string;
   description: string;
   headCount: number;
-  statusMode?: 'simple' | 'advanced';
+  statusMode?: 'simple' | 'review' | 'advanced';
   createdAt: string;
   updatedAt: string;
 }
@@ -187,7 +187,7 @@ router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
   if (industry !== undefined) org.industry = industry;
   if (description !== undefined) org.description = description;
   if (headCount !== undefined) org.headCount = headCount;
-  if (statusMode !== undefined && (statusMode === 'simple' || statusMode === 'advanced')) org.statusMode = statusMode;
+  if (statusMode !== undefined && (statusMode === 'simple' || statusMode === 'review' || statusMode === 'advanced')) org.statusMode = statusMode;
   org.updatedAt = new Date().toISOString();
   saveStore('organizations', organizations);
   res.json({ success: true, data: org });
@@ -696,8 +696,8 @@ router.post('/:id/status-mode', (req: AuthenticatedRequest, res: Response) => {
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
 
   const { mode } = req.body;
-  if (mode !== 'simple' && mode !== 'advanced') {
-    res.status(400).json({ success: false, error: 'mode must be "simple" or "advanced"' });
+  if (mode !== 'simple' && mode !== 'review' && mode !== 'advanced') {
+    res.status(400).json({ success: false, error: 'mode must be "simple", "review", or "advanced"' });
     return;
   }
 
@@ -711,12 +711,22 @@ router.post('/:id/status-mode', (req: AuthenticatedRequest, res: Response) => {
   org.updatedAt = new Date().toISOString();
   saveStore('organizations', organizations);
 
-  // Migrate process nodes and data domains in this org's scope
+  // Migrate process nodes and data domains in this org's scope. When
+  // switching *out of* a mode that carries statuses the new mode
+  // doesn't recognise, park those rows back on DRAFT so the
+  // transition machine on the target mode has valid ground state.
   let migrated = 0;
-  if (mode === 'simple') {
+  const needsMigration = mode === 'simple' || mode === 'review';
+  if (needsMigration) {
     const { getDescendantOrgIds } = accessHelpers();
     const scopeIds = new Set([org.id, ...getDescendantOrgIds(org.id)]);
-    const legacyStatuses = new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
+    // Statuses that exist in advanced but neither simple nor review.
+    // review understands PENDING_REVIEW natively, so leave those alone
+    // when moving simple → review or vice versa. simple recognises
+    // only DRAFT / ACTIVE / DEPRECATED and needs both bucket cleared.
+    const legacyStatuses = mode === 'simple'
+      ? new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'PENDING_REVIEW'])
+      : new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
 
     // Lazy-require to avoid circular deps
     const { processNodes } = require('./process-catalog');

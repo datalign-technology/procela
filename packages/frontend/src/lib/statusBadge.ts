@@ -21,11 +21,12 @@ const NEUTRAL: BadgeColor = { bg: '#f1f5f9', color: '#64748b' };
 // Lifecycle palette — informational by default, semantic when meaningful.
 const STATUS_PALETTE: Record<string, BadgeColor> = {
   // generic lifecycle
-  DRAFT:        { bg: '#f1f5f9', color: '#64748b' },
-  PROPOSED:     { bg: '#dbeafe', color: '#1e40af' },
-  UNDER_REVIEW: { bg: '#fef3c7', color: '#92400e' },
-  APPROVED:     { bg: '#ede9fe', color: '#5b21b6' },
-  ACTIVE:       { bg: '#d1f0eb', color: '#0f4f46' },
+  DRAFT:          { bg: '#f1f5f9', color: '#64748b' },
+  PENDING_REVIEW: { bg: '#fef3c7', color: '#92400e' },
+  PROPOSED:       { bg: '#dbeafe', color: '#1e40af' },
+  UNDER_REVIEW:   { bg: '#fef3c7', color: '#92400e' },
+  APPROVED:       { bg: '#ede9fe', color: '#5b21b6' },
+  ACTIVE:         { bg: '#d1f0eb', color: '#0f4f46' },
   INACTIVE:     { bg: '#f1f5f9', color: '#64748b' },
   PAUSED:       { bg: '#fef3c7', color: '#92400e' },
   RETIRED:      { bg: '#f1f5f9', color: '#64748b' },
