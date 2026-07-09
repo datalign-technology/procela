@@ -113,6 +113,31 @@ export interface ProcessNode {
   automationLevel?: string;
   estimatedDuration?: string;
   requiredSkillIds?: string[];
+  /** Business-continuity classification — TIER_1 (mission-critical),
+   *  TIER_2 (business-critical), TIER_3 (standard), TIER_4 (non-
+   *  critical). Utilities use this for BCM planning; a regulator
+   *  asking "what's the RTO for outage triage?" needs an answer
+   *  the platform can produce. Undefined = "Not rated". */
+  criticalityTier?: 'TIER_1' | 'TIER_2' | 'TIER_3' | 'TIER_4';
+  /** Recovery Time Objective in hours — how long can this process be
+   *  down before it materially affects the business? Paired with
+   *  criticalityTier for BCM reports. Zero means "must never fail";
+   *  undefined means "not set". */
+  rtoHours?: number;
+  /** Measurable success criterion — free-text, e.g. "Field crew on
+   *  site within 30 minutes for Tier 1 outages". Complements the
+   *  narrative `businessOutcome` with a target you can build a
+   *  dashboard against. */
+  successMeasure?: string;
+  /** SLA target — free-text so operators can express "P95 4h" or
+   *  "99.9% monthly" or "Same business day" without a schema war.
+   *  Rendered next to `successMeasure` on the activity detail. */
+  slaTarget?: string;
+  /** Governance controls this activity implements or is subject to.
+   *  IDs point at StoredGovernanceControl rows. Cascade: when a
+   *  control is deleted, its id is swept from every activity's
+   *  controlIds so nothing dangles. */
+  controlIds?: string[];
   /** Systems the step (or higher-level node) runs on. First-class link
    *  — independent of any data-asset mapping — so a step that runs on a
    *  system without (yet) a mapped data asset is still captured.
@@ -296,6 +321,21 @@ function param(val: string | string[]): string {
 
 function findNode(id: string): ProcessNode | undefined {
   return processNodes.find((n) => n.id === id);
+}
+
+// Business-continuity tiers, exported so the frontend picker and the
+// tests can enumerate them without magic strings.
+export const CRITICALITY_TIERS = ['TIER_1', 'TIER_2', 'TIER_3', 'TIER_4'] as const;
+
+// Drop any controlIds pointing at controls that don't exist. Silent
+// filter so a stale reference lingering on an activity gets pruned on
+// the next save instead of surfacing as a dangling id in the UI.
+function cleanControlIds(ids: unknown): string[] {
+  if (!Array.isArray(ids)) return [];
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { governanceControls } = require('./governance-controls') as typeof import('./governance-controls');
+  const known = new Set(governanceControls.map((c) => c.id));
+  return Array.from(new Set(ids.filter((id): id is string => typeof id === 'string' && known.has(id))));
 }
 
 function getChildren(parentId: string): ProcessNode[] {
@@ -569,7 +609,8 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 router.post('/nodes', (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
+    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
+    criticalityTier, rtoHours, successMeasure, slaTarget, controlIds } = req.body;
 
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -669,6 +710,13 @@ router.post('/nodes', (req: Request, res: Response) => {
     ...(statusJustification ? { statusJustification } : {}),
     ...(Array.isArray(requiredSkillIds) && requiredSkillIds.length ? { requiredSkillIds } : {}),
     ...(cleanedSystemIds && cleanedSystemIds.length ? { systemIds: cleanedSystemIds } : {}),
+    // New attributes — only persist when supplied so existing rows
+    // don't grow "" placeholders and pickers stay clean.
+    ...(criticalityTier && CRITICALITY_TIERS.includes(criticalityTier) ? { criticalityTier } : {}),
+    ...(typeof rtoHours === 'number' && rtoHours >= 0 ? { rtoHours } : {}),
+    ...(successMeasure ? { successMeasure } : {}),
+    ...(slaTarget ? { slaTarget } : {}),
+    ...(Array.isArray(controlIds) && controlIds.length ? { controlIds: cleanControlIds(controlIds) } : {}),
     domain: nodeDomain,
     createdAt: now,
     updatedAt: now,
@@ -693,7 +741,8 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
-    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds } = req.body;
+    responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
+    criticalityTier, rtoHours, successMeasure, slaTarget, controlIds } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
   if (version !== undefined && version !== (node.version ?? 1)) {
@@ -741,7 +790,10 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     || complianceTags !== undefined || inputsOutputs !== undefined || responsibleRole !== undefined
     || frequency !== undefined || riskLevel !== undefined || automationLevel !== undefined || estimatedDuration !== undefined
     || requiredSkillIds !== undefined || systemIds !== undefined
-    || responsiblePersonId !== undefined;
+    || responsiblePersonId !== undefined
+    || criticalityTier !== undefined || rtoHours !== undefined
+    || successMeasure !== undefined || slaTarget !== undefined
+    || controlIds !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = organizations.find((o) => o.id === node.orgId);
   const isAdvanced = nodeOrg?.statusMode === 'advanced';
@@ -782,6 +834,36 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     const cleaned = validateSystemIds(systemIds, res);
     if (cleaned === null) return;
     node.systemIds = cleaned.length > 0 ? cleaned : undefined;
+  }
+  // BCM + governance attributes — accept undefined (leave unchanged),
+  // null / empty (clear), or the new value. Enum + range checks so
+  // malformed callers see a 400 rather than a silent no-op.
+  if (criticalityTier !== undefined) {
+    if (criticalityTier === null || criticalityTier === '') {
+      node.criticalityTier = undefined;
+    } else if (CRITICALITY_TIERS.includes(criticalityTier)) {
+      node.criticalityTier = criticalityTier;
+    } else {
+      res.status(400).json({ success: false, error: `Unknown criticalityTier "${criticalityTier}". Expected one of: ${CRITICALITY_TIERS.join(', ')}.` });
+      return;
+    }
+  }
+  if (rtoHours !== undefined) {
+    if (rtoHours === null || rtoHours === '') {
+      node.rtoHours = undefined;
+    } else if (typeof rtoHours === 'number' && rtoHours >= 0) {
+      node.rtoHours = rtoHours;
+    } else {
+      res.status(400).json({ success: false, error: 'rtoHours must be a non-negative number.' });
+      return;
+    }
+  }
+  if (successMeasure !== undefined) node.successMeasure = successMeasure || undefined;
+  if (slaTarget !== undefined) node.slaTarget = slaTarget || undefined;
+  if (controlIds !== undefined) {
+    node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
+      ? cleanControlIds(controlIds)
+      : undefined;
   }
 
   // Validate status transition against the state machine
