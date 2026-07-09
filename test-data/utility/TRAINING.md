@@ -108,9 +108,14 @@ picker for each, then import:
 1. Working in… **Tidewater Utilities**.
 2. **Agents** → **Import** → paste `agents.csv`.
 
-Every imported agent lands as **Paused**. That's not a bug — Procela
-enforces a *responsible-person invariant*: an agent can only be
-Active when it has a real person assigned as accountable for its
+Five agents land — one of each type (AI, PIPELINE, BOT,
+SERVICE_ACCOUNT, OTHER) so you see the shape of the concept without
+being buried in owner-assignments. Extend the CSV once the model
+clicks.
+
+Every imported agent arrives as **Paused**. That's not a bug —
+Procela enforces a *responsible-person invariant*: an agent can only
+be Active when it has a real person assigned as accountable for its
 behaviour. On the Agents page, open any imported row, pick a
 Responsible Person from the roster you just imported, and flip the
 Status from Paused to Active. Try setting it to Active without
