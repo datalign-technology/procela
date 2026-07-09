@@ -116,15 +116,28 @@ clicks.
 Every imported agent arrives as **Paused**. That's not a bug —
 Procela enforces a *responsible-person invariant*: an agent can only
 be Active when it has a real person assigned as accountable for its
-behaviour. On the Agents page, open any imported row, pick a
-Responsible Person from the roster you just imported, and flip the
-Status from Paused to Active. Try setting it to Active without
-picking a person first — the option is greyed out, and the form
-warns you inline. Later, if you delete or deactivate that person on
-the People page, every active agent they own auto-pauses and a
-governance issue opens. Look for the *"N active agents were
-auto-paused"* toast; the issues land in **Governance → Tasks &
-Issues** for a lead to pick up.
+behaviour. Assign a Responsible Person to each row, then flip the
+Status from Paused to Active. Use these picks — they match the
+imported roster and the accountability shape you'd expect in a real
+utility:
+
+| Agent | Type | Responsible Person | Why this person |
+|---|---|---|---|
+| Outage Prediction Model | AI | **Amara Wambui** (Manager Data & Analytics) | Owns ML models against operational data |
+| AMI Meter Ingestion Pipeline | PIPELINE | **Kwame Osei** (Lead Data Engineer) | Pipeline delivery is his team |
+| Customer Notification Bot | BOT | **Samira Farooq** (Manager Contact Center) | Customer-facing bot; contact-center accountable |
+| PI Historian Service Account | SERVICE_ACCOUNT | **Tobias Reinholt** (Manager OT Cybersecurity) | Non-human identity into OT/SCADA lands with OT security |
+| Compliance Report Generator | OTHER | **Isabella Rossi** (Manager Water Compliance) | NPDES/DMR filings are water-compliance owned |
+
+Try setting an agent to Active *without* picking a person first —
+the option is greyed out and the form warns you inline. That's the
+invariant in action.
+
+Later, if you delete or deactivate one of the people above on the
+**Organizations → People** page, every active agent they own
+auto-pauses and a governance issue opens. Look for the *"N active
+agents were auto-paused"* toast; the issues land in **Governance →
+Tasks & Issues** with severity HIGH for a lead to pick up.
 
 ### 1.5 Seed the skill catalog
 
@@ -256,11 +269,17 @@ With *Working in…* on **Tidewater Electric**:
 - Click an **Activity** node. The right panel shows level-specific
   fields: Owner, Responsible Role, Responsible Person, Systems,
   Required Skills, Inputs/Outputs, Status, Frequency, Risk Level.
-- Try setting **Responsible Role** = `Field Operations Lead`,
-  **Responsible Person** = a real person from your imported roster
-  (use the picker — search by name).
+- Concrete example — on an **Outage Management → Outage triage**
+  activity, set:
+  - **Responsible Role** = `System Operator Lead`
+  - **Responsible Person** = **Melissa Patel** (System Operator
+    Lead, T&D) — search "Melissa" in the picker
+  - **Owner** = **Harold Lindstrom** (Manager Distribution Control
+    Center)
+  - **Systems** = SCADA + OMS
+  - Save.
 - The **Status lifecycle** is Draft → Active → Deprecated. Click the
-  status pill to advance it.
+  status pill to advance it — leave this one on Active.
 
 ### 3.4 Inputs / Outputs panel
 
@@ -302,14 +321,17 @@ We'll come back to this in Module 5 once we have assets to map.
 
 1. *Working in…* → **Tidewater Electric**.
 2. **Data Assets** page → **+ Add data asset**.
-3. Create a few real ones:
+3. Create these four — the *Domain* column is which Data Domain
+   you'll assign each to once you create the domains in step 4.3.
+   The *Owner Override* column tells you which assets need a
+   specific person (leave blank to inherit the domain owner):
 
-| Name | Description | Data Type | Trust Level |
-|---|---|---|---|
-| Outage Logs | Per-event SCADA records of distribution outages | Operational | Bronze |
-| Customer Master | Service addresses, account status, billing terms | Master | Silver |
-| Meter Reads | AMI 15-min interval consumption | Operational | Silver |
-| Generation Output | Plant-level MWh by hour | Operational | Bronze |
+| Name | Description | Data Type | Trust Level | Domain | Owner Override |
+|---|---|---|---|---|---|
+| Outage Logs | Per-event SCADA records of distribution outages | Operational | Bronze | Operational Data | — (inherit) |
+| Customer Master | Service addresses, account status, billing terms | Master | Silver | Customer Data | — (inherit) |
+| Meter Reads | AMI 15-min interval consumption | Operational | Silver | Operational Data | **Andre Ferguson** (Manager Billing & Revenue) — revenue owns the billed reads even though the data lives in Operational |
+| Generation Output | Plant-level MWh by hour | Operational | Bronze | Operational Data | **Deborah Kwon** (Data Steward Generation) — as override Owner because Generation is a separate accountability line from T&D |
 
 4. Assign Owners and Stewards using the person picker — but only
    when the asset needs someone different from the domain's default.
@@ -321,8 +343,9 @@ We'll come back to this in Module 5 once we have assets to map.
    Pick a specific person only when the asset has its own
    accountable person (regulatory scope, cross-functional dataset,
    delegation) — the hint switches to *"Overrides domain (…) —
-   Reset to domain owner"*. Set the Domain first in step 4.3
-   below; then most assets don't need explicit owner/stewards.
+   Reset to domain owner"*. In the table above, only Meter Reads
+   and Generation Output override the domain owner — the other two
+   inherit cleanly. Set the Domain first in step 4.3 below.
 
 ### 4.2 Connect Assets to Systems
 
@@ -332,11 +355,28 @@ Procela knows which system carries the canonical copy.
 
 ### 4.3 Data Domains
 
-1. **Data Domains** page → create three domains:
-   - *Customer Data* (owner: a Data Owner from your imported people)
-   - *Operational Data*
-   - *Regulatory Data*
-2. On each asset, assign it to a domain.
+1. **Data Domains** page → create three domains with these exact
+   owners and stewards — each pick matches a real person on the
+   imported roster and matches how a mid-sized utility organises
+   accountability:
+
+| Domain | Owner | Steward(s) |
+|---|---|---|
+| Customer Data | **Devon Kershaw** (Data Owner Tidewater Electric) | **Natalie Greer** (Data Steward Customer Data) |
+| Operational Data | **Jennifer Vasquez** (Director Transmission & Distribution Ops) | **Brandon Willis** (Data Steward Grid Operations) + **Deborah Kwon** (Data Steward Generation) |
+| Regulatory Data | **Lorraine Kimura** (Director Regulatory Affairs) | **Phillip Rosenberg** (Data Steward Compliance Evidence) |
+
+2. Go back to each asset from step 4.1 and assign it to its domain.
+   Watch the Owner picker on **Outage Logs** and **Customer Master**
+   — the hint reads *"Inherits from domain — Jennifer Vasquez"* and
+   *"Inherits from domain — Devon Kershaw"* respectively. That's
+   the inheritance model doing its job: two assets, zero explicit
+   owner assignments, still accountable.
+
+3. On **Meter Reads** and **Generation Output**, pick the override
+   owners from the 4.1 table. The hint switches to *"Overrides
+   domain — Reset to domain owner"* — a one-click undo if you
+   change your mind.
 
 The domain assignments feed the Governance Groups page in Module 8.
 
@@ -361,11 +401,18 @@ If you're rolling out to a customer now, keep going with the training as-is, the
 The day-to-day mapping workflow is **inside the Process Catalog**, not
 on the Mappings page.
 
-1. Open an activity (e.g. *Outage triage*).
+1. Open the **Outage Management → Outage triage** activity — the
+   one Melissa Patel is Responsible for from Module 3.3.
 2. In the **Inputs / Outputs** panel, click **+ Add Input** → tab
    *Data Asset* → pick *Outage Logs*.
 3. Add an output: **+ Add Output** → *Customer Master* (the activity
    updates the customer record with the outage event).
+4. Repeat with two more mappings to give the map in step 5.4
+   something to draw:
+   - **Meter Reading → Interval read ingest** (or the closest
+     activity the wand generated) → **Input: Meter Reads**
+   - **Customer Onboarding → Account creation** (or equivalent) →
+     **Output: Customer Master**
 
 ### 5.2 Cross-process review
 
@@ -433,21 +480,25 @@ into something operational. All four are exercised below.
 
 ### 6.1 Tag activities with required skills
 
-1. Back on an electric activity. In the right panel, **Required
-   Skills** is a multi-select.
-2. Add 2–3 skills (e.g. for an outage activity: `Anomaly Detection`,
-   `Stakeholder Management`).
-3. Notice if an amber chip appears next to the picker: ***Responsible
-   person lacks N required skills***. If so, the responsible person
-   doesn't hold one of the skills you just added — this is the
+1. Back on the **Outage triage** activity from Module 3.3 / 5.1.
+   In the right panel, **Required Skills** is a multi-select.
+2. Add these three: `Anomaly Detection`, `Stakeholder Management`,
+   `Incident Response`.
+3. Notice the amber chip that appears next to the picker:
+   ***Responsible person lacks N required skills*** — Melissa Patel
+   (the Responsible Person) doesn't hold these yet. This is the
    **qualified-person check**.
 
 ### 6.2 Skills on people
 
 1. *Organizations → People* with *Working in…* = **Tidewater Electric**.
-2. Open a person's detail (click their name).
-3. Add a couple of skills to their profile.
-4. Return to the activity panel — the amber chip should clear.
+2. Click **Melissa Patel** to open her detail.
+3. In the Skills panel, add `Anomaly Detection` and `Incident
+   Response` — leave `Stakeholder Management` off on purpose.
+4. Return to the Outage triage activity — the amber chip should
+   now read ***lacks 1 required skill*** instead of 3. Hover for
+   the tooltip that names the missing one (`Stakeholder
+   Management`).
 
 ### 6.3 Find people by skill
 
@@ -528,9 +579,18 @@ role scoped to it. Pair it with the inline holder list above
 (`Devon Kershaw — DOMAIN: Customer Data`) and you can read the
 coverage gap end-to-end without leaving the page.
 
-To exercise this: assign Devon Kershaw as Data Owner for *Customer
-Data* (scope = domain). The Customer Data chip moves out of the
-amber Unfilled panel into the holder list. Repeat for the others.
+To exercise this: assign the same trio you used in Module 4.3 as
+Data Owner (scope = domain):
+
+- *Customer Data* → **Devon Kershaw**
+- *Operational Data* → **Jennifer Vasquez**
+- *Regulatory Data* → **Lorraine Kimura**
+
+Each chip should move out of the amber *Unfilled* panel into the
+holder list, and the sub-line under each name lists the domain
+they own. The Data Domains page and the DAMA-role assignment are
+two views on the same accountability — keeping them aligned is
+what closes the coverage gap.
 
 ### 7.4 Governance Groups
 
