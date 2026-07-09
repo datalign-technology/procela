@@ -60,7 +60,7 @@ export default function OrphanAssetsPage() {
   return (
     <div>
       <PageHeader
-        title="Orphan data assets"
+        title="Orphan Data Assets"
         subtitle="Data assets in the catalog that aren't mapped to any process step. Investigate, retire, or map them to a step that uses them."
       />
 
