@@ -125,6 +125,27 @@ export default function LoginPage() {
     fetchProviders();
   }, []);
 
+  // Per-tenant branding — resolve the tenant from ?tenant=slug on
+  // the URL first (works on any dev + local host), then let the
+  // backend fall back to the Host-header subdomain in production.
+  // Silent failure → the sign-in card just renders the platform
+  // default, which is fine.
+  const [tenantBrand, setTenantBrand] = useState<{
+    tenantSlug: string | null;
+    displayName: string;
+    glyph: string;
+    ssoButtonLabel: string;
+    primaryColor: string;
+    isTenantBrand: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('tenant');
+    const path = q ? `/branding/tenant/${encodeURIComponent(q)}` : '/branding/tenant';
+    apiClient.get<{ success: boolean; data: any }>(path)
+      .then((r) => setTenantBrand(r.data))
+      .catch(() => { /* leave default */ });
+  }, []);
+
   // Show only the auth method the org has configured (set in
   // Settings → Authentication). The backend still surfaces every
   // configured OIDC provider so multi-IdP orgs render all their
@@ -306,17 +327,35 @@ export default function LoginPage() {
       <div style={styles.card}>
         {/* Brand mark — icon image + wordmark text as separate
             elements, so the composition centers cleanly regardless of
-            whatever padding lives inside the icon PNG. Swap the icon
-            by overwriting public/procela-icon.png. */}
+            whatever padding lives inside the icon PNG. On a tenant-
+            branded page (?tenant=<slug> or matching subdomain) the
+            wordmark switches to the customer's display name and the
+            emoji glyph replaces the icon. */}
         <div style={styles.brandMark}>
-          <img
-            src="/procela-icon.png"
-            alt=""
-            aria-hidden="true"
-            style={styles.brandIcon}
-          />
-          <span style={styles.brandWordmark}>Procela</span>
+          {tenantBrand?.isTenantBrand && tenantBrand.glyph ? (
+            <span aria-hidden="true" style={{ ...styles.brandIcon, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 30 }}>
+              {tenantBrand.glyph}
+            </span>
+          ) : (
+            <img
+              src="/procela-icon.png"
+              alt=""
+              aria-hidden="true"
+              style={styles.brandIcon}
+            />
+          )}
+          <span style={styles.brandWordmark}>
+            {tenantBrand?.displayName || 'Procela'}
+          </span>
         </div>
+        {/* Attribution line — reads "Powered by Procela" when we're
+            on a tenant-branded card so the platform stays credited
+            without dominating the sign-in surface. */}
+        {tenantBrand?.isTenantBrand && (
+          <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 12 }}>
+            Powered by Procela
+          </div>
+        )}
 
         {/* Heading — wordmark above already carries the brand, so
             this just states the action. */}
@@ -355,16 +394,26 @@ export default function LoginPage() {
                 neutral key glyph. */}
             {ssoProviders.length > 0 && (
               <div style={styles.ssoSection}>
-                {ssoProviders.map((p) => {
+                {ssoProviders.map((p, ssoIdx) => {
                   const isMs = p.id === 'microsoft' || /microsoft|entra|azure/i.test(p.name);
                   const isOkta = p.id === 'okta' || /okta/i.test(p.name);
                   const brandStyle = isMs ? styles.microsoftButton : isOkta ? styles.oktaButton : {};
+                  // On a tenant-branded page, the FIRST SSO button gets
+                  // the customer's own label ("Sign in with Corp SSO")
+                  // and their primary color. Additional providers keep
+                  // their built-in branding so users can still tell
+                  // Microsoft vs Okta apart at a glance.
+                  const useTenantLabel = ssoIdx === 0 && tenantBrand?.isTenantBrand;
+                  const buttonLabel = useTenantLabel ? tenantBrand.ssoButtonLabel : `Sign in with ${p.name}`;
+                  const tenantAccent = useTenantLabel && tenantBrand?.primaryColor
+                    ? { background: tenantBrand.primaryColor, color: '#fff', border: 'none' as const }
+                    : {};
                   return (
                     <button
                       key={p.id}
-                      style={{ ...styles.ssoButton, ...brandStyle }}
+                      style={{ ...styles.ssoButton, ...brandStyle, ...tenantAccent }}
                       onClick={() => handleSsoClick(p)}
-                      title={`Sign in with ${p.name}`}
+                      title={buttonLabel}
                     >
                       <span style={styles.ssoIcon}>
                         {isMs ? (
@@ -388,7 +437,7 @@ export default function LoginPage() {
                           </svg>
                         )}
                       </span>
-                      <span>Sign in with {p.name}</span>
+                      <span>{buttonLabel}</span>
                     </button>
                   );
                 })}

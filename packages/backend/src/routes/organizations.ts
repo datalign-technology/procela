@@ -22,6 +22,31 @@ export interface StoredOrg {
   description: string;
   headCount: number;
   statusMode?: 'simple' | 'review' | 'advanced';
+  // ── SSO white-labeling ─────────────────────────────────────────
+  // Only meaningful on company-level orgs. Populated when a
+  // customer runs Procela under their own subdomain / tenant slug
+  // and wants the sign-in card to read as their brand rather than
+  // generic Procela.
+  /** Tenant slug used to resolve branding on the login screen —
+   *  either `<slug>.procela.io` as a subdomain or `?tenant=<slug>`
+   *  as a query param. Lower-case ASCII + hyphens; unique across
+   *  companies. */
+  tenantSlug?: string;
+  /** Human display name shown on the login card ("Tidewater
+   *  Utilities" instead of "Procela"). Falls back to `name`. */
+  brandDisplayName?: string;
+  /** Emoji or single-character glyph rendered next to the display
+   *  name. Kept text-only in v1 to sidestep asset upload +
+   *  cache-invalidation complexity — a logo URL / SVG upload can
+   *  come later without breaking existing rows. */
+  brandGlyph?: string;
+  /** Label on the primary SSO button — "Sign in with Corp SSO",
+   *  "Sign in with Azure AD", etc. Falls back to the generic
+   *  provider name when unset. */
+  ssoButtonLabel?: string;
+  /** Hex color (with leading #) used for the SSO button + accent.
+   *  Falls back to Procela primary when unset. */
+  brandPrimaryColor?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -180,7 +205,7 @@ router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
       return;
     }
   }
-  const { statusMode } = req.body;
+  const { statusMode, tenantSlug, brandDisplayName, brandGlyph, ssoButtonLabel, brandPrimaryColor } = req.body;
   if (name !== undefined) org.name = name;
   if (parentId !== undefined) org.parentId = parentId;
   if (type !== undefined) org.type = type;
@@ -188,6 +213,37 @@ router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
   if (description !== undefined) org.description = description;
   if (headCount !== undefined) org.headCount = headCount;
   if (statusMode !== undefined && (statusMode === 'simple' || statusMode === 'review' || statusMode === 'advanced')) org.statusMode = statusMode;
+
+  // ── SSO white-labeling ──
+  if (tenantSlug !== undefined) {
+    const cleaned = typeof tenantSlug === 'string' ? tenantSlug.trim().toLowerCase() : '';
+    if (cleaned === '') {
+      org.tenantSlug = undefined;
+    } else if (!/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(cleaned)) {
+      res.status(400).json({ success: false, error: 'tenantSlug must be 3-64 lowercase letters, digits, or hyphens (no leading/trailing hyphen).' });
+      return;
+    } else {
+      const clash = organizations.find((o) => o.id !== org.id && o.tenantSlug === cleaned);
+      if (clash) {
+        res.status(409).json({ success: false, error: `Tenant slug "${cleaned}" is already in use.` });
+        return;
+      }
+      org.tenantSlug = cleaned;
+    }
+  }
+  if (brandDisplayName !== undefined) org.brandDisplayName = typeof brandDisplayName === 'string' ? brandDisplayName.slice(0, 80) : undefined;
+  if (brandGlyph !== undefined) org.brandGlyph = typeof brandGlyph === 'string' ? brandGlyph.slice(0, 8) : undefined;
+  if (ssoButtonLabel !== undefined) org.ssoButtonLabel = typeof ssoButtonLabel === 'string' ? ssoButtonLabel.slice(0, 80) : undefined;
+  if (brandPrimaryColor !== undefined) {
+    if (brandPrimaryColor === '' || brandPrimaryColor === null) {
+      org.brandPrimaryColor = undefined;
+    } else if (typeof brandPrimaryColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(brandPrimaryColor)) {
+      org.brandPrimaryColor = brandPrimaryColor;
+    } else {
+      res.status(400).json({ success: false, error: 'brandPrimaryColor must be a #RRGGBB hex string.' });
+      return;
+    }
+  }
   org.updatedAt = new Date().toISOString();
   saveStore('organizations', organizations);
   res.json({ success: true, data: org });

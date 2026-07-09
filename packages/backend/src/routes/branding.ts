@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { organizations } from './organizations';
 import logger from '../lib/logger';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -131,6 +132,55 @@ router.put('/', authenticateToken, (req: AuthenticatedRequest, res: Response) =>
   const { updatedBy: _ub, ...publicFields } = current;
   res.json({ success: true, data: publicFields });
 });
+
+// ── Per-tenant login branding ─────────────────────────────────────────
+// Composes the deployment defaults (above) with the tenant's org-
+// specific branding fields so the login screen can render as the
+// customer's brand before any sign-in has happened. Public — the
+// login page needs it before the user has a token.
+//
+// Tenant slug resolves from, in order:
+//   1. path param       — GET /tenant/:slug
+//   2. query param      — GET /tenant?tenant=<slug>
+//   3. Host header      — first subdomain label (production wildcard)
+//
+// Unknown / missing slug → the deployment defaults, marked
+// `isTenantBrand: false` so the client can decide whether to show a
+// "not your tenant?" affordance.
+
+function resolveTenantSlug(req: Request): string | null {
+  const p = (req.params?.slug || '').toString().trim().toLowerCase();
+  if (p) return p;
+  const q = (req.query?.tenant || '').toString().trim().toLowerCase();
+  if (q) return q;
+  const host = (req.headers.host || '').split(':')[0];
+  if (!host || host === 'localhost' || host === 'procela.io' || host === 'www.procela.io') return null;
+  const first = host.split('.')[0];
+  if (!first || first === 'www' || first === 'procela') return null;
+  return first;
+}
+
+function tenantBrandingFor(slug: string | null) {
+  const org = slug ? organizations.find((o) => o.tenantSlug === slug) : null;
+  return {
+    tenantSlug: org?.tenantSlug || null,
+    displayName: org?.brandDisplayName || org?.name || current.companyName,
+    glyph: org?.brandGlyph || '',
+    ssoButtonLabel: org?.ssoButtonLabel || 'Sign in with SSO',
+    primaryColor: org?.brandPrimaryColor || current.primaryColor,
+    logoUrl: current.logoUrl,
+    isTenantBrand: !!org,
+  };
+}
+
+router.get('/tenant', (req: Request, res: Response) => {
+  res.json({ success: true, data: tenantBrandingFor(resolveTenantSlug(req)) });
+});
+router.get('/tenant/:slug', (req: Request, res: Response) => {
+  res.json({ success: true, data: tenantBrandingFor(resolveTenantSlug(req)) });
+});
+
+export { resolveTenantSlug, tenantBrandingFor };
 
 // POST /reset — restores defaults. Useful during setup or when a bad colour
 // pair makes the UI unusable (which defeats the point of a settings page).
