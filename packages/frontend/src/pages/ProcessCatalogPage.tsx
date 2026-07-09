@@ -2366,8 +2366,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               </CollapsibleSection>
               {/* No count badge here: the feed is capped at limit=30, so a
                 *  badge could undercount a long audit trail. */}
+              {/* Renamed from "Activity" to disambiguate from the tree
+                *  level of the same name — an audit-log feed on a Value
+                *  Stream row sitting next to a `✓ Activity` completeness
+                *  check made the word ambiguous on the same page. */}
               <CollapsibleSection
-                title="Activity"
+                title="History"
                 open={openSections.has('activity')}
                 onToggle={() => toggleSection('activity')}
               >
@@ -2519,7 +2523,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               onClick={() => { if (!isExpanded) toggleExpand(node.id); onAddChild(node.id); }} title={`Add child to ${node.name}`}>+</button>
           )
         )}
-        <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onShowHistory(node.id)} title="Version History">Hist</button>
+        <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onShowHistory(node.id)} title="Version snapshots">Versions</button>
         {node.level === 'VALUE_STREAM' && (
           <button style={{ ...btnIcon, fontSize: 11, color: 'var(--color-text-muted)' }} onClick={() => onClone(node.id)} title="Clone Value Stream">Clone</button>
         )}

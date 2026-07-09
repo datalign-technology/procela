@@ -270,7 +270,7 @@ export default function SystemDetailModal({ systemId, onClose }: Props) {
             </div>
             <div style={{ marginTop: 20 }}>
               <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                Activity
+                History
               </h3>
               <ActivityFeed entityType="System" entityId={systemId} inline initialRows={5} />
             </div>
