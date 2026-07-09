@@ -112,6 +112,43 @@ export default function SettingsPage() {
     finally { setLifecycleBusy(false); setConfirmLifecycle(null); }
   };
 
+  // ── Sign-in branding (per-tenant) ──
+  //
+  // Populated from the active org's tenantSlug / brand* fields. The
+  // Preview panel below the form renders the login-card shell exactly
+  // as it'll appear at /login?tenant=<slug>, so a super-admin can
+  // eyeball their branding before shipping the URL to a customer.
+  const [branding, setBranding] = useState<{
+    tenantSlug: string; brandDisplayName: string; brandGlyph: string;
+    ssoButtonLabel: string; brandPrimaryColor: string;
+  }>({ tenantSlug: '', brandDisplayName: '', brandGlyph: '', ssoButtonLabel: '', brandPrimaryColor: '' });
+  const [brandingBusy, setBrandingBusy] = useState(false);
+  const [brandingMsg, setBrandingMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeOrgId) return;
+    apiClient
+      .get<{ success: boolean; data: any }>(`/organizations/${activeOrgId}`)
+      .then((res) => setBranding({
+        tenantSlug: res.data?.tenantSlug || '',
+        brandDisplayName: res.data?.brandDisplayName || '',
+        brandGlyph: res.data?.brandGlyph || '',
+        ssoButtonLabel: res.data?.ssoButtonLabel || '',
+        brandPrimaryColor: res.data?.brandPrimaryColor || '',
+      }))
+      .catch(() => { /* leave defaults */ });
+  }, [activeOrgId]);
+  const applyBranding = async () => {
+    if (!activeOrgId || brandingBusy) return;
+    setBrandingBusy(true);
+    setBrandingMsg(null);
+    try {
+      await apiClient.put(`/organizations/${activeOrgId}`, branding);
+      setBrandingMsg('Sign-in branding saved.');
+    } catch (e) {
+      setBrandingMsg(e instanceof Error ? e.message : 'Save failed');
+    } finally { setBrandingBusy(false); }
+  };
+
   // Auth settings state
   const [currentProvider, setCurrentProvider] = useState<DisplayProvider>('dev');
   const [currentIssuerUrl, setCurrentIssuerUrl] = useState<string>('');
@@ -394,6 +431,115 @@ export default function SettingsPage() {
         onConfirm={async () => { if (confirmLifecycle) await applyLifecycle(confirmLifecycle); }}
         onCancel={() => setConfirmLifecycle(null)}
       />
+
+      {/* Sign-in branding (per tenant). Only meaningful on the
+          company-level org — divisions inherit the parent's brand at
+          the sign-in card. Kept text-only in v1 (emoji glyph +
+          display name + button label + primary hex). */}
+      <div style={sectionStyle}>
+        <h2 style={sectionTitleStyle}>Sign-in branding</h2>
+        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+          Customises the sign-in card for users landing at your tenant URL — <code>/login?tenant=&lt;slug&gt;</code> or your subdomain — so the login page reads as <strong>{branding.brandDisplayName || activeOrgName || 'your company'}</strong> rather than generic Procela. Fields below stay optional; empty ones fall back to platform defaults.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Tenant slug</label>
+            <input
+              value={branding.tenantSlug}
+              onChange={(e) => setBranding((b) => ({ ...b, tenantSlug: e.target.value }))}
+              placeholder="e.g. tidewater"
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}
+            />
+            <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 3 }}>
+              3–64 lowercase letters, digits, or hyphens. Users land here via <code>?tenant=&lt;slug&gt;</code> or a subdomain match. Must be unique.
+            </p>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Display name</label>
+            <input
+              value={branding.brandDisplayName}
+              onChange={(e) => setBranding((b) => ({ ...b, brandDisplayName: e.target.value }))}
+              placeholder="e.g. Tidewater Utilities"
+              maxLength={80}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Glyph (emoji)</label>
+            <input
+              value={branding.brandGlyph}
+              onChange={(e) => setBranding((b) => ({ ...b, brandGlyph: e.target.value }))}
+              placeholder="e.g. ⚡ or 💧"
+              maxLength={8}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>Primary color (#RRGGBB)</label>
+            <input
+              value={branding.brandPrimaryColor}
+              onChange={(e) => setBranding((b) => ({ ...b, brandPrimaryColor: e.target.value }))}
+              placeholder="#1a7a6d"
+              maxLength={7}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}
+            />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 3 }}>SSO button label</label>
+            <input
+              value={branding.ssoButtonLabel}
+              onChange={(e) => setBranding((b) => ({ ...b, ssoButtonLabel: e.target.value }))}
+              placeholder="e.g. Sign in with Tidewater SSO"
+              maxLength={80}
+              style={{ width: '100%', padding: '6px 10px', border: '1px solid var(--color-border)', borderRadius: 4, fontSize: 13 }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <button
+              onClick={applyBranding}
+              disabled={!activeOrgId || brandingBusy}
+              style={{
+                padding: '8px 14px', fontSize: 13, fontWeight: 500,
+                background: 'var(--color-primary)', color: '#fff',
+                border: 'none', borderRadius: 6, cursor: 'pointer',
+              }}
+            >
+              {brandingBusy ? 'Saving…' : 'Save branding'}
+            </button>
+            {brandingMsg && (
+              <span style={{ marginLeft: 12, fontSize: 12, color: brandingMsg.includes('saved') ? 'var(--color-success)' : 'var(--color-error)' }}>
+                {brandingMsg}
+              </span>
+            )}
+            {branding.tenantSlug && (
+              <p style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                Test URL: <code>/login?tenant={branding.tenantSlug}</code>
+              </p>
+            )}
+          </div>
+          {/* Preview panel — a scaled-down mock of the sign-in card
+              rendered from the same fields the login page reads. */}
+          <div style={{ width: 260, padding: 14, border: '1px solid var(--color-border)', borderRadius: 8, background: 'var(--color-bg)' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Preview</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 24 }}>{branding.brandGlyph || '⬛'}</span>
+              <span style={{ fontSize: 18, fontWeight: 700 }}>{branding.brandDisplayName || 'Procela'}</span>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', marginBottom: 4 }}>Sign in</div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'center', marginBottom: 10 }}>Choose your authentication method to continue</div>
+            <div style={{
+              padding: '8px 12px', borderRadius: 6, fontSize: 12, fontWeight: 500, textAlign: 'center',
+              background: branding.brandPrimaryColor && /^#[0-9a-fA-F]{6}$/.test(branding.brandPrimaryColor) ? branding.brandPrimaryColor : '#1a7a6d',
+              color: '#fff',
+            }}>
+              {branding.ssoButtonLabel || 'Sign in with SSO'}
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--color-text-muted)', textAlign: 'center', marginTop: 8 }}>Powered by Procela</div>
+          </div>
+        </div>
+      </div>
 
       {/* Authentication Section */}
       <div style={sectionStyle}>
