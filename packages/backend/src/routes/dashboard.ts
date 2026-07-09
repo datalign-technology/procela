@@ -10,6 +10,7 @@ import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { OWNERSHIP_LEVELS } from '../lib/org-scope';
 
 // ── RACI Overrides ──
 interface RaciOverride {
@@ -113,6 +114,39 @@ router.get('/stats', (req: Request, res: Response) => {
   const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
   const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
 
+  // ── Descendant roll-up for the setup-complete banner ──
+  //
+  // The per-scope counters above are strict-equality: at parent-org
+  // scope they only see records owned directly by the parent. That's
+  // right for KPIs (mixing parent + child would double-count), but the
+  // "setup complete" banner needs to know whether *the tree below* is
+  // set up too — otherwise a company sees "all in place" when its
+  // divisions are still empty catalogs. Walk descendants once and
+  // return their aggregated process count + a flag saying whether any
+  // ownership-level descendants exist at all.
+  let descendantProcesses = 0;
+  let hasChildOwnershipOrgs = false;
+  if (oid) {
+    const descendants = new Set<string>();
+    const queue = [oid];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      for (const child of organizations) {
+        if (child.parentId === id && !descendants.has(child.id)) {
+          descendants.add(child.id);
+          queue.push(child.id);
+          if (OWNERSHIP_LEVELS.includes(child.type)) hasChildOwnershipOrgs = true;
+        }
+      }
+    }
+    if (descendants.size > 0) {
+      descendantProcesses = processNodes.filter((n) => {
+        const ids = n.orgIds && n.orgIds.length > 0 ? n.orgIds : (n.orgId ? [n.orgId] : []);
+        return ids.some((id) => descendants.has(id)) && n.level === 'PROCESS';
+      }).length;
+    }
+  }
+
   res.json({
     success: true,
     data: {
@@ -128,6 +162,8 @@ router.get('/stats', (req: Request, res: Response) => {
       mappings: filteredMappings.length,
       organizations: organizations.length,
       people: filteredPeople.length,
+      hasChildOwnershipOrgs,
+      descendantProcesses,
       coverage: {
         mapped: mappedCount,
         unmapped: unmappedCount,

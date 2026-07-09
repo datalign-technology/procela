@@ -25,6 +25,16 @@ interface DashboardStats {
   mappings: number;
   organizations: number;
   people: number;
+  /** True when the current scope org has at least one descendant org
+   *  at ownership level (company sees its divisions). Used by the
+   *  setup-complete banner to decide whether to require descendant
+   *  processes before declaring "done". */
+  hasChildOwnershipOrgs?: boolean;
+  /** Count of process nodes owned by descendants of the current scope
+   *  org — parent-scope only cares whether the divisions have processes
+   *  yet, not by how many. Zero when the current scope has no
+   *  ownership-level descendants. */
+  descendantProcesses?: number;
   coverage: { mapped: number; unmapped: number; percentage: number };
   governance: { bronze: number; silver: number; gold: number };
   averageHealth: number;
@@ -1106,8 +1116,16 @@ export default function DashboardPage() {
 // the user never gets an "you're set up" signal — they just silently
 // graduate to the full dashboard. Dismissal is keyed by orgId so each
 // org celebrates once.
+//
+// Company-scope caveat: if this org has descendant divisions, don't
+// declare setup complete until those divisions also have processes.
+// Otherwise a parent-scope user sees "all in place" when the divisions
+// where day-to-day work happens are still empty catalogs.
 function SetupCompleteBanner({ stats, orgId }: { stats: DashboardStats; orgId: string | null }) {
-  const complete = stats.processes > 0 && stats.systems > 0 && stats.dataAssets > 0 && stats.people > 0;
+  const selfComplete = stats.processes > 0 && stats.systems > 0 && stats.dataAssets > 0 && stats.people > 0;
+  const descendantsIncomplete =
+    stats.hasChildOwnershipOrgs === true && (stats.descendantProcesses ?? 0) === 0;
+  const complete = selfComplete && !descendantsIncomplete;
   const flag = orgId ? `procela:setup-celebrated:${orgId}` : '';
   const [dismissed, setDismissed] = useState<boolean>(() => {
     try { return !flag || localStorage.getItem(flag) === 'true'; } catch { return true; }
