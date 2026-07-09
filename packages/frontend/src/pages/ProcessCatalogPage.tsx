@@ -72,6 +72,15 @@ interface ProcessNode {
    *  surfaced. */
   systemIds?: string[];
   domain?: 'GOVERNANCE' | 'OPERATIONAL';
+  // BCM: business-continuity tier + RTO in hours
+  criticalityTier?: 'TIER_1' | 'TIER_2' | 'TIER_3' | 'TIER_4';
+  rtoHours?: number;
+  // Measurable success signals — free-text so operators can express
+  // "P95 4h" or "99.9% monthly" without a schema war
+  successMeasure?: string;
+  slaTarget?: string;
+  // Governance controls this activity implements or is subject to
+  controlIds?: string[];
   children?: ProcessNode[];
 }
 
@@ -373,6 +382,148 @@ function DocDropdown({ label, value, options, onSave, disabled, placeholder }: {
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
       {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+    </div>
+  );
+}
+
+// ── Criticality Tier + RTO Hours — BCM attributes on activities.
+//    Tier maps between the stored enum ("TIER_1") and the display
+//    label ("Tier 1 — Mission critical"); RTO stores hours as a
+//    number. Both accept null / empty to clear. ──
+
+const TIER_LABELS: Record<string, string> = {
+  '': 'Not rated',
+  TIER_1: 'Tier 1 — Mission critical',
+  TIER_2: 'Tier 2 — Business critical',
+  TIER_3: 'Tier 3 — Standard',
+  TIER_4: 'Tier 4 — Non-critical',
+};
+
+function TierField({ value, onSave, disabled }: {
+  value: string;
+  onSave: (v: string) => void;
+  disabled: boolean;
+}) {
+  const [saved, setSaved] = useState(false);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>Criticality:</span>
+      <select
+        value={value}
+        onChange={(e) => { onSave(e.target.value); setSaved(true); setTimeout(() => setSaved(false), 1500); }}
+        disabled={disabled}
+        style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: 260, appearance: 'auto' as any }}
+      >
+        {Object.entries(TIER_LABELS).map(([v, label]) => (
+          <option key={v} value={v}>{label}</option>
+        ))}
+      </select>
+      {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+    </div>
+  );
+}
+
+function RtoField({ value, onSave, disabled }: {
+  value: number | undefined;
+  onSave: (v: number | null) => void;
+  disabled: boolean;
+}) {
+  const [draft, setDraft] = useState<string>(value !== undefined ? String(value) : '');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setDraft(value !== undefined ? String(value) : ''); }, [value]);
+  const commit = () => {
+    if (draft.trim() === '') {
+      if (value !== undefined) { onSave(null); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+      return;
+    }
+    const n = Number(draft);
+    if (!Number.isFinite(n) || n < 0) { setDraft(value !== undefined ? String(value) : ''); return; }
+    if (n !== value) { onSave(n); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0 }}>RTO (hours):</span>
+      <input
+        type="number"
+        min={0}
+        step={0.5}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        disabled={disabled}
+        placeholder="e.g. 4"
+        style={{ ...inputStyle, fontSize: 11, padding: '2px 6px', width: 90 }}
+      />
+      {saved && <span style={{ color: 'var(--color-success)', fontSize: 9, fontWeight: 600 }}>Saved</span>}
+    </div>
+  );
+}
+
+// ── Controls Picker — multi-select for the governance controls this
+//    activity implements or is subject to. Options come from the
+//    governance-controls store; selection is stored as controlIds on
+//    the node. ──
+
+function ControlsPicker({ selected, options, onChange, disabled }: {
+  selected: string[];
+  options: Array<{ id: string; code: string; name: string; policyId: string }>;
+  onChange: (ids: string[]) => void;
+  disabled: boolean;
+}) {
+  const [adding, setAdding] = useState('');
+  const toggle = (id: string) => onChange(selected.filter((x) => x !== id));
+  const optionById = new Map(options.map((o) => [o.id, o]));
+  const add = (id: string) => {
+    if (!id || selected.includes(id)) return;
+    onChange([...selected, id]);
+    setAdding('');
+  };
+  const available = options.filter((o) => !selected.includes(o.id));
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 500, minWidth: 100, flexShrink: 0, paddingTop: 3 }}>Controls:</span>
+      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+        {selected.map((id) => {
+          const opt = optionById.get(id);
+          if (!opt) {
+            return (
+              <span key={id} title="Referenced control has been deleted" style={{ background: '#fef3c7', border: '1px solid #fbbf24', color: '#92400e', padding: '1px 6px', borderRadius: 3, fontSize: 10 }}>
+                Unknown control
+                {!disabled && (
+                  <button onClick={() => toggle(id)} style={{ background: 'transparent', border: 'none', color: '#92400e', cursor: 'pointer', marginLeft: 4, padding: 0 }}>×</button>
+                )}
+              </span>
+            );
+          }
+          return (
+            <span key={id} title={opt.name} style={{ background: '#e0e7ff', color: '#3730a3', padding: '1px 6px', borderRadius: 3, fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <strong>{opt.code}</strong> {opt.name}
+              {!disabled && (
+                <button onClick={() => toggle(id)} style={{ background: 'transparent', border: 'none', color: '#3730a3', cursor: 'pointer', padding: 0 }}>×</button>
+              )}
+            </span>
+          );
+        })}
+        {selected.length === 0 && <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>None</span>}
+        {!disabled && (
+          available.length > 0 ? (
+            <select
+              value={adding}
+              onChange={(e) => add(e.target.value)}
+              style={{ fontSize: 10, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)' }}
+            >
+              <option value="">+ Add control…</option>
+              {available.map((o) => (
+                <option key={o.id} value={o.id}>{o.code} — {o.name}</option>
+              ))}
+            </select>
+          ) : (
+            options.length === 0 && <span style={{ color: 'var(--color-text-muted)', fontSize: 9, fontStyle: 'italic' }}>Define controls on Governance Documents first</span>
+          )
+        )}
+      </div>
     </div>
   );
 }
@@ -1497,7 +1648,7 @@ function AddNodeForm({ validChildren, onAdd, onCancel }: {
 
 // ── Tree Node ──
 
-function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
+function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expanded, toggleExpand, validChildrenMap, flows, activitiesFlat, valueStreamName, controlsList, siblingIndex, siblingCount, onReorder, onShowHistory, allTags, onAddTag, onRemoveTag, selectedIds, toggleSelect, peopleList, assetsList, policiesList, systemsList, mappingsByStep, skillCoverageByNode, activePageOrgId, onAddMapping, onRemoveMapping, onRestoreMapping, statusMode, agentExecByActivity, onRunAgent, onReviewExecution, onPromoteExecution, runningActivity, agentRoles, governanceHolderIds, holdersByRoleLabel, viewMode, ancestorStatusChain, schedulesByActivity, onCreateSchedule, onToggleSchedule, onDeleteSchedule }: {
   node: ProcessNode; depth: number;
   onUpdate: (id: string, data: Record<string, any>) => void;
   onDelete: (id: string) => void;
@@ -1514,6 +1665,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
    *  the value-stream row itself and above. Used by the Dependencies
    *  panel to flag cross-stream picks. */
   valueStreamName: string;
+  /** Governance controls available for the Activity-level Controls
+   *  picker. Threaded from the top-level fetch so each row doesn't
+   *  have to fire its own request. */
+  controlsList: Array<{ id: string; code: string; name: string; policyId: string }>;
   peopleList: PersonRef[];
   assetsList: DataAssetRef[];
   policiesList: PolicyRef[];
@@ -1899,6 +2054,28 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         onSave={(v) => onUpdate(node.id, { estimatedDuration: v })}
                         disabled={isLocked}
                         placeholder="Pick a duration..."
+                      />
+                      {/* BCM: business-continuity tier + RTO. Value maps
+                         between the display label ("Tier 1") and the
+                         stored enum ("TIER_1") so the picker reads
+                         naturally while storage stays parseable. */}
+                      <TierField
+                        value={node.criticalityTier || ''}
+                        onSave={(v) => onUpdate(node.id, { criticalityTier: v || null })}
+                        disabled={isLocked}
+                      />
+                      <RtoField
+                        value={node.rtoHours}
+                        onSave={(v) => onUpdate(node.id, { rtoHours: v })}
+                        disabled={isLocked}
+                      />
+                      <DocField label="Success Measure" value={node.successMeasure || ''} onSave={(v) => onUpdate(node.id, { successMeasure: v })} disabled={isLocked} placeholder="Measurable target, e.g. resolve outage tickets within 4h P95" />
+                      <DocField label="SLA Target" value={node.slaTarget || ''} onSave={(v) => onUpdate(node.id, { slaTarget: v })} disabled={isLocked} placeholder="e.g. P95 4h, 99.9% monthly, Same business day" />
+                      <ControlsPicker
+                        selected={node.controlIds || []}
+                        options={controlsList}
+                        onChange={(ids) => onUpdate(node.id, { controlIds: ids })}
+                        disabled={isLocked}
                       />
                     </>
                   )}
@@ -2541,6 +2718,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           validChildrenMap={validChildrenMap} flows={flows}
           activitiesFlat={activitiesFlat}
           valueStreamName={node.level === 'VALUE_STREAM' ? node.name : valueStreamName}
+          controlsList={controlsList}
           siblingIndex={idx} siblingCount={arr.length} onReorder={onReorder}
           onShowHistory={onShowHistory}
           allTags={allTags}
@@ -2699,6 +2877,10 @@ export default function ProcessCatalogPage() {
   const [assetsList, setAssetsList] = useState<DataAssetRef[]>([]);
   const [policiesList, setPoliciesList] = useState<PolicyRef[]>([]);
   const [systemsList, setSystemsList] = useState<SystemRef[]>([]);
+  // Governance controls for the Activity-level Controls picker.
+  // Keeps id, code, and name — enough for the multi-select dropdown
+  // and the chip labels.
+  const [controlsList, setControlsList] = useState<Array<{ id: string; code: string; name: string; policyId: string }>>([]);
   const [mappingsByStep, setMappingsByStep] = useState<Record<string, MappingInfo[]>>({});
   // Skill-coverage map — keyed by nodeId. Populated for activity
   // nodes whose responsible person is missing one or more required
@@ -2766,7 +2948,7 @@ export default function ProcessCatalogPage() {
   const fetchData = useCallback(async () => {
     try {
       const qp = activeOrgId ? `?orgId=${activeOrgId}` : '';
-      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes] = await Promise.all([
+      const [catalogRes, flowsRes, tagsRes, peopleRes, assetsRes, policiesRes, systemsRes, mappingsRes, rolesRes, coverageRes, controlsRes] = await Promise.all([
         apiClient.get<{ success: boolean; tree: ProcessNode[]; stats: any; validChildren: Record<string, string[]> }>(`/process-catalog${qp}`),
         apiClient.get<{ success: boolean; data: FlowRelationship[] }>('/process-catalog/flows'),
         apiClient.get<{ success: boolean; data: TagEntry[] }>(`/tags?entityType=ProcessNode${activeOrgId ? `&orgId=${activeOrgId}` : ''}`),
@@ -2782,6 +2964,10 @@ export default function ProcessCatalogPage() {
         activeOrgId
           ? apiClient.get<{ success: boolean; data: { byNode: Record<string, { personId: string; missingSkillNames: string[] }> } }>(`/skills/coverage?orgId=${encodeURIComponent(activeOrgId)}`).catch(() => ({ data: { byNode: {} } }))
           : Promise.resolve({ data: { byNode: {} } }),
+        // Governance controls for the Activity-level Controls picker.
+        // Catch so a controls-endpoint fault doesn't take down the whole
+        // catalog — the picker just renders as empty.
+        apiClient.get<{ success: boolean; data: Array<{ id: string; code: string; name: string; policyId: string }> }>(`/governance-controls${qp}`).catch(() => ({ data: [] })),
       ]);
       setSkillCoverageByNode(coverageRes.data?.byNode || {});
       const byStep: Record<string, MappingInfo[]> = {};
@@ -2799,6 +2985,7 @@ export default function ProcessCatalogPage() {
       setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name, orgId: a.orgId })));
       setPoliciesList((policiesRes.data || []).map((p: any) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
       setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
+      setControlsList((controlsRes.data || []).map((c: any) => ({ id: c.id, code: c.code, name: c.name, policyId: c.policyId })));
       setRoleAssignments((rolesRes.data || []).map((r: any) => ({ personId: r.personId, roleType: r.roleType })));
       // Fetch agent executions, DAMA roles, and schedules for agent-assigned activities
       try {
@@ -3805,6 +3992,7 @@ export default function ProcessCatalogPage() {
               validChildrenMap={validChildrenMap} flows={flows}
               activitiesFlat={activitiesFlat}
               valueStreamName={node.level === 'VALUE_STREAM' ? node.name : ''}
+              controlsList={controlsList}
               siblingIndex={idx} siblingCount={lensedTree.length} onReorder={reorderNode}
               onShowHistory={showHistory}
               allTags={allTags}

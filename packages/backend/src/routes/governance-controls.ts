@@ -168,7 +168,27 @@ router.delete('/:id', (req: Request, res: Response) => {
   auditService.log(removed.orgId, null, 'GovernanceControl', removed.id, 'DELETE', removed, null);
   governanceControls.splice(idx, 1);
   saveStore('governanceControls', governanceControls);
-  logger.info({ controlId: removed.id, code: removed.code }, 'Deleted governance control');
+
+  // Cascade: sweep the deleted control id off every activity that
+  // referenced it. Lazy-require breaks the controls ↔ catalog import
+  // graph (catalog already lazy-requires controls the other way).
+  let processNodesTouched = 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
+    for (const n of processNodes) {
+      if (!n.controlIds || n.controlIds.length === 0) continue;
+      const next = n.controlIds.filter((id) => id !== removed.id);
+      if (next.length !== n.controlIds.length) {
+        n.controlIds = next.length > 0 ? next : undefined;
+        processNodesTouched++;
+      }
+    }
+    if (processNodesTouched > 0) saveStore('processNodes', processNodes);
+  } catch (err) {
+    logger.warn({ err, controlId: removed.id }, 'Failed to cascade control delete to activities');
+  }
+  logger.info({ controlId: removed.id, code: removed.code, processNodesTouched }, 'Deleted governance control');
   res.status(204).send();
 });
 

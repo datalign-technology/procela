@@ -323,7 +323,38 @@ Watch what the platform enforces:
 The compact `←N →M` chip on collapsed activity rows in the tree
 shows incoming/outgoing counts at a glance.
 
-### 3.6 Phase 3 suggestion panels
+### 3.6 BCM + measurable-target attributes
+
+Switch the tree view to **Advanced** (top of the Process Catalog).
+Four extra fields appear on each Activity, right below Automation
+and Estimated Duration:
+
+| Field | What it's for | Try on *Outage triage* |
+|---|---|---|
+| **Criticality** | Business-continuity tier | *Tier 1 — Mission critical* |
+| **RTO (hours)** | Recovery Time Objective | `4` |
+| **Success Measure** | Measurable target next to the narrative outcome | *Field crew on site within 30 minutes for Tier 1 outages* |
+| **SLA Target** | Free-text SLA — accept whatever fits | *P95 30 min from detection* |
+
+Then scroll one more field down to **Controls** — a multi-select
+tied to the controls you defined on **Governance → Documents**. If
+you haven't defined any controls yet, the picker reads *"Define
+controls on Governance Documents first"* — a small hint pointing
+you to the right page rather than leaving you guessing.
+
+Add one control if you have any defined (e.g. NERC CIP-007 R2.1
+from your Governance seed). Delete that control later on Governance
+Documents and watch this picker — the chip disappears
+automatically. No dangling references.
+
+Why this matters: a regulator asking *"what's the RTO for outage
+triage?"* now gets a real answer from the platform. Dashboards can
+group activities by criticalityTier. And the Controls link closes
+the loop between a policy definition and the concrete work that
+implements it — the reverse view (which activities implement this
+control?) is available from Governance Documents.
+
+### 3.7 Phase 3 suggestion panels
 
 Scroll past the I/O panel on an expanded activity. You'll see three
 "Suggested…" cards: **Suggested data assets**, **Suggested systems**,
