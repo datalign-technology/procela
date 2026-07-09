@@ -73,7 +73,9 @@ interface FormData {
 const emptyForm: FormData = {
   name: '', orgIds: [], agentType: 'AI',
   description: '', provider: '',
-  status: 'ACTIVE', ownerPersonId: '', skillIds: [],
+  // New agents default to PAUSED. Activation is deliberate — user has to
+  // pick a responsible person first (invariant enforced server-side).
+  status: 'PAUSED', ownerPersonId: '', skillIds: [],
   instructions: '',
 };
 
@@ -144,6 +146,7 @@ export default function AgentsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [confirmAutoPause, setConfirmAutoPause] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
   const [importFormat, setImportFormat] = useState<'csv' | 'json'>('csv');
@@ -236,7 +239,19 @@ export default function AgentsPage() {
     setShowForm(true);
   };
   const handleCancel = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); validation.clearErrors(); };
-  const handleSave = async () => {
+
+  // True when the form is about to submit ACTIVE + no owner, but the
+  // agent as it exists on the server is currently ACTIVE + owned.
+  // That's the "user is unassigning an active agent" case — we ask
+  // for confirmation before the auto-pause fires server-side.
+  const editingAgent = editingId ? agents.find((a) => a.id === editingId) : null;
+  const willAutoPause = !!editingAgent
+    && editingAgent.status === 'ACTIVE'
+    && !!editingAgent.ownerPersonId
+    && form.status === 'ACTIVE'
+    && !form.ownerPersonId;
+
+  const doSave = async () => {
     // The form's own "Assigned Organizations" picker (form.orgIds) is the
     // assignment of record — both for create and edit. We do not require a
     // header active-org: the user has already ticked their orgs in the form,
@@ -258,14 +273,43 @@ export default function AgentsPage() {
     }
     const payload = { ...form, orgIds: cleanOrgIds };
     try {
-      if (editingId) await apiClient.put(`/agents/${editingId}`, payload);
-      else await apiClient.post('/agents', payload);
-      addToast('success', editingId ? 'Agent updated' : 'Agent created');
+      const resp = editingId
+        ? await apiClient.put<{ success: boolean; cascade?: { autoPaused?: boolean } | null }>(`/agents/${editingId}`, payload)
+        : await apiClient.post<{ success: boolean; cascade?: { autoPaused?: boolean } | null }>('/agents', payload);
+      // The PUT can carry a cascade signal — the caller cleared the
+      // owner on an active agent, so the backend auto-paused. Surface
+      // that instead of the plain "updated" toast so the user sees the
+      // state transition.
+      if (resp && resp.cascade && resp.cascade.autoPaused) {
+        addToast(
+          'info',
+          'Agent auto-paused. It had no responsible person while active, so a governance issue was opened.',
+        );
+      } else {
+        addToast('success', editingId ? 'Agent updated' : 'Agent created');
+      }
       handleCancel();
       fetchData();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to save agent');
     }
+  };
+
+  const handleSave = async () => {
+    // Client-side guardrail on the block-on-activate case, so the user
+    // sees a friendly message rather than an eventual 400. The backend
+    // still enforces it.
+    if (form.status === 'ACTIVE' && !form.ownerPersonId) {
+      addToast('error', 'Assign a responsible person before setting an agent Active.');
+      return;
+    }
+    // Confirmation dialog before auto-pause. Backend will do it either
+    // way, but the user should acknowledge the state change.
+    if (willAutoPause) {
+      setConfirmAutoPause(true);
+      return;
+    }
+    await doSave();
   };
   const handleDelete = async (id: string) => {
     try {
@@ -506,8 +550,21 @@ export default function AgentsPage() {
             <div>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Status</label>
               <select style={selectStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })}>
-                {agentStatuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                {agentStatuses.map((s) => (
+                  <option
+                    key={s}
+                    value={s}
+                    disabled={s === 'ACTIVE' && !form.ownerPersonId}
+                  >
+                    {s}{s === 'ACTIVE' && !form.ownerPersonId ? ' — needs responsible person' : ''}
+                  </option>
+                ))}
               </select>
+              {form.status === 'ACTIVE' && !form.ownerPersonId && (
+                <p style={{ fontSize: 10, color: 'var(--color-error)', marginTop: 4 }}>
+                  Assign a responsible person before activating this agent.
+                </p>
+              )}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
@@ -526,11 +583,16 @@ export default function AgentsPage() {
               </p>
             </div>
             <div>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Responsible Person (optional)</label>
+              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Responsible Person</label>
               <select style={selectStyle} value={form.ownerPersonId} onChange={(e) => setForm({ ...form, ownerPersonId: e.target.value })}>
                 <option value="">-- Unassigned --</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
+              {willAutoPause && (
+                <p style={{ fontSize: 10, color: 'var(--color-warning)', marginTop: 4 }}>
+                  Saving will pause this agent — it can't stay Active without a responsible person.
+                </p>
+              )}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Assigned Organizations *</label>
@@ -596,6 +658,18 @@ export default function AgentsPage() {
           await handleBulkDelete();
         }}
         onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmAutoPause}
+        title="Pause this agent?"
+        message="An agent can't be Active without a responsible person. Saving will move this agent to Paused and open a governance issue so it re-surfaces for a lead."
+        confirmLabel="Save & Pause"
+        onConfirm={async () => {
+          setConfirmAutoPause(false);
+          await doSave();
+        }}
+        onCancel={() => setConfirmAutoPause(false)}
       />
 
       {/* Table */}

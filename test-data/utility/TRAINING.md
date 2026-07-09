@@ -108,6 +108,19 @@ picker for each, then import:
 1. Working in… **Tidewater Utilities**.
 2. **Agents** → **Import** → paste `agents.csv`.
 
+Every imported agent lands as **Paused**. That's not a bug — Procela
+enforces a *responsible-person invariant*: an agent can only be
+Active when it has a real person assigned as accountable for its
+behaviour. On the Agents page, open any imported row, pick a
+Responsible Person from the roster you just imported, and flip the
+Status from Paused to Active. Try setting it to Active without
+picking a person first — the option is greyed out, and the form
+warns you inline. Later, if you delete or deactivate that person on
+the People page, every active agent they own auto-pauses and a
+governance issue opens. Look for the *"N active agents were
+auto-paused"* toast; the issues land in **Governance → Tasks &
+Issues** for a lead to pick up.
+
 ### 1.5 Seed the skill catalog
 
 1. Navigate to **Organizations → Skills**.

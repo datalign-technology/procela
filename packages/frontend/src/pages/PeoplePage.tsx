@@ -313,7 +313,7 @@ export default function PeoplePage() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
-  const [deletePersonImpact, setDeletePersonImpact] = useState<{ ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number } | null>(null);
+  const [deletePersonImpact, setDeletePersonImpact] = useState<{ ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number; activeAgents: number } | null>(null);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssignOrgIds, setBulkAssignOrgIds] = useState<Set<string>>(new Set());
   const [bulkAssignMode, setBulkAssignMode] = useState<'add' | 'move'>('move');
@@ -594,14 +594,32 @@ export default function PeoplePage() {
   };
   const handleDeletePerson = async (id: string) => {
     const person = people.find((p) => p.id === id);
+    let cascade: { pausedAgents?: Array<{ agentId: string; agentName: string }> } | undefined;
     try {
-      await apiClient.delete(`/people/${id}`);
+      // Delete responses come back two shapes: 204 (no body) when there
+      // was nothing to cascade, or 200 with { cascade: { pausedAgents } }
+      // when active agents were auto-paused. The client returns null on
+      // 204 — treat undefined/null as "no cascade".
+      const resp = await apiClient.delete<{ success: boolean; cascade?: typeof cascade } | null>(
+        `/people/${id}`,
+      );
+      cascade = resp?.cascade;
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to delete person');
       return;
     }
     fetchData();
-    if (person) {
+    if (cascade?.pausedAgents && cascade.pausedAgents.length > 0) {
+      // Cascade toast wins over the "deleted" toast — the auto-pause is
+      // the surprise, not the delete. Keep the message short; the
+      // governance-issues queue carries the detail.
+      const n = cascade.pausedAgents.length;
+      addToast(
+        'info',
+        `Person deleted. ${n} active agent${n === 1 ? ' was' : 's were'} auto-paused (no responsible person).`,
+        { duration: 8000 },
+      );
+    } else if (person) {
       addToast('success', `"${person.name}" deleted`, {
         action: {
           label: 'Undo',
@@ -1072,8 +1090,8 @@ export default function PeoplePage() {
                 open={confirmDeletePerson !== null}
                 title="Delete Person?"
                 message={
-                  deletePersonImpact && (deletePersonImpact.ownedProcesses > 0 || deletePersonImpact.governanceGroups > 0 || deletePersonImpact.damaRoles > 0 || deletePersonImpact.domainOwner > 0 || deletePersonImpact.domainSteward > 0)
-                    ? `This will permanently remove this person. This person owns ${deletePersonImpact.ownedProcesses} process${deletePersonImpact.ownedProcesses !== 1 ? 'es' : ''}, belongs to ${deletePersonImpact.governanceGroups} governance group${deletePersonImpact.governanceGroups !== 1 ? 's' : ''}, has ${deletePersonImpact.damaRoles} DAMA role${deletePersonImpact.damaRoles !== 1 ? 's' : ''}, and owns ${deletePersonImpact.domainOwner} data domain${deletePersonImpact.domainOwner !== 1 ? 's' : ''}${deletePersonImpact.domainSteward > 0 ? ` (steward of ${deletePersonImpact.domainSteward})` : ''}. This cannot be undone.`
+                  deletePersonImpact && (deletePersonImpact.ownedProcesses > 0 || deletePersonImpact.governanceGroups > 0 || deletePersonImpact.damaRoles > 0 || deletePersonImpact.domainOwner > 0 || deletePersonImpact.domainSteward > 0 || deletePersonImpact.activeAgents > 0)
+                    ? `This will permanently remove this person. This person owns ${deletePersonImpact.ownedProcesses} process${deletePersonImpact.ownedProcesses !== 1 ? 'es' : ''}, belongs to ${deletePersonImpact.governanceGroups} governance group${deletePersonImpact.governanceGroups !== 1 ? 's' : ''}, has ${deletePersonImpact.damaRoles} DAMA role${deletePersonImpact.damaRoles !== 1 ? 's' : ''}, and owns ${deletePersonImpact.domainOwner} data domain${deletePersonImpact.domainOwner !== 1 ? 's' : ''}${deletePersonImpact.domainSteward > 0 ? ` (steward of ${deletePersonImpact.domainSteward})` : ''}.${deletePersonImpact.activeAgents > 0 ? ` ${deletePersonImpact.activeAgents} active agent${deletePersonImpact.activeAgents === 1 ? '' : 's'} will be auto-paused and a governance issue opened for each.` : ''} This cannot be undone.`
                     : 'This will permanently remove this person. This cannot be undone.'
                 }
                 confirmLabel="Delete"
@@ -1409,7 +1427,7 @@ export default function PeoplePage() {
                               <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEditPerson(person)} />
                               <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={async () => {
                                 try {
-                                  const res = await apiClient.get<{ success: boolean; data: { ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number } }>(`/people/${person.id}/impact`);
+                                  const res = await apiClient.get<{ success: boolean; data: { ownedProcesses: number; governanceGroups: number; damaRoles: number; domainOwner: number; domainSteward: number; activeAgents: number } }>(`/people/${person.id}/impact`);
                                   setDeletePersonImpact(res.data || null);
                                 } catch { setDeletePersonImpact(null); }
                                 setConfirmDeletePerson(person.id);

@@ -247,6 +247,7 @@ The "who" of the platform. The Organizations accordion gathers the four things t
 
 - AI agent registry for governance execution — pipelines, bots, service accounts.
 - Agents can hold governance roles too (e.g., an automated DQ agent as Data Quality Analyst), which is why they sit alongside People rather than in a separate "automation" bucket.
+- **Responsible-person invariant.** An agent can only carry the ACTIVE status when it has a valid responsible person. The Status picker greys out ACTIVE until a person is assigned; imports and freshly-created agents land as PAUSED. If the responsible person is later cleared, deleted, or deactivated, every active agent they own auto-transitions to PAUSED and a HIGH-severity OWNERSHIP issue opens against the org so the work re-surfaces. Reactivating the person doesn't auto-restart the agent — a lead has to review, confirm the ownership is right, and flip the status back.
 
 ### Skills
 
