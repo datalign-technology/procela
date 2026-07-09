@@ -187,7 +187,7 @@ Where value streams can be created. Streams attach to the active org in the Work
 - Business criticality rating (High / Medium / Low) with filter.
 - Clicking a system name opens the detail modal; inline editing is reserved for the Type column. Rename via the row's Edit pencil.
 - Owner, Deputy Owner, and Operators (DAMA: Custodians) per system — the people on the hook day-to-day. Clicking any of those role badges opens the Role Detail drawer for that entity-attached role, so users see the same definition / responsibilities / required-skills view as for DAMA roles.
-- Where Used panel shows every data asset, connection, and process touching the system. A Discussion (comments) and Activity section sit at the bottom of the modal.
+- Where Used panel shows every data asset, connection, and process touching the system. A Discussion (comments) and History section sit at the bottom of the modal.
 - Org scope and inheritance. Same rule as Data Assets — each system is owned by exactly one org (company or division), departments and teams can't own. The + Add system button hides when the active scope is a non-owning level; rows whose owner doesn't match the active Working in… scope carry an Owned by <Org> badge and have their edit / delete affordances disabled with a switch-scope tooltip. The level guard is enforced server-side.
 
 ### Connections
