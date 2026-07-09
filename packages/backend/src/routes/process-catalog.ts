@@ -1245,16 +1245,50 @@ router.get('/flows', (_req: Request, res: Response) => {
   res.json({ success: true, data: enriched });
 });
 
-/** GET /flows/by-node/:nodeId — get flows for a specific node */
+/** GET /flows/by-node/:nodeId — get flows for a specific node.
+ *
+ *  Enriches each flow row with the "other end" node's name, level,
+ *  status, and its ancestor breadcrumb (`Value Stream > Process >
+ *  Sub-Process > Activity`), so the Dependencies panel on the
+ *  Activity detail doesn't need to run a second lookup and doesn't
+ *  need the full node list in local state to render.
+ */
 router.get('/flows/by-node/:nodeId', (req: Request, res: Response) => {
   const nodeId = param(req.params.nodeId);
-  const outgoing = flowRelationships.filter((f) => f.fromNodeId === nodeId);
-  const incoming = flowRelationships.filter((f) => f.toNodeId === nodeId);
+  const outgoing = flowRelationships
+    .filter((f) => f.fromNodeId === nodeId)
+    .map((f) => ({ ...f, other: nodeSummary(f.toNodeId) }));
+  const incoming = flowRelationships
+    .filter((f) => f.toNodeId === nodeId)
+    .map((f) => ({ ...f, other: nodeSummary(f.fromNodeId) }));
   res.json({
     success: true,
     data: { outgoing, incoming },
   });
 });
+
+// Build a compact "other end" summary for a flow. Walk up the tree to
+// build the breadcrumb so the caller can render "Outage Management >
+// Response > Outage triage" without shipping the whole catalog. Null
+// when the referenced node is missing — the row still renders as
+// dangling so the user can delete it.
+function nodeSummary(id: string): { id: string; name: string; level: string; status: string; breadcrumb: string } | null {
+  const node = findNode(id);
+  if (!node) return null;
+  const crumbs: string[] = [];
+  let current: ProcessNode | undefined = node;
+  while (current) {
+    crumbs.unshift(current.name);
+    current = current.parentId ? findNode(current.parentId) : undefined;
+  }
+  return {
+    id: node.id,
+    name: node.name,
+    level: node.level,
+    status: node.status,
+    breadcrumb: crumbs.join(' > '),
+  };
+}
 
 /** POST /flows — create a flow relationship */
 router.post('/flows', (req: Request, res: Response) => {
@@ -1290,6 +1324,32 @@ router.post('/flows', (req: Request, res: Response) => {
   if (fromNodeId === toNodeId) {
     res.status(400).json({ success: false, error: 'Cannot create a flow from a node to itself' });
     return;
+  }
+
+  // Cycle detection — reject if adding this edge would make toNode
+  // reachable from itself via any path of SEQUENCE/PARALLEL/CONDITIONAL
+  // flows. Walk from `toNodeId` forward; if we hit `fromNodeId` before
+  // exhausting the graph, adding the new edge would close a loop.
+  // LOOP-type flows are the one edge type where a cycle is intentional
+  // — skip the check when the caller is explicitly declaring a LOOP.
+  if ((type || 'SEQUENCE') !== 'LOOP') {
+    const visited = new Set<string>();
+    const queue = [toNodeId];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      if (cur === fromNodeId) {
+        res.status(400).json({
+          success: false,
+          error: `Adding this flow would create a cycle back to ${fromNode.name}. Use a LOOP-type flow if the cycle is intentional.`,
+        });
+        return;
+      }
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      for (const f of flowRelationships) {
+        if (f.fromNodeId === cur && f.type !== 'LOOP') queue.push(f.toNodeId);
+      }
+    }
   }
 
   const flow: FlowRelationship = {

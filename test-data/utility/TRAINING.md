@@ -293,7 +293,37 @@ segmented picker has three tabs:
 
 Try adding a Data Asset (we'll create some in Module 4).
 
-### 3.5 Phase 3 suggestion panels
+### 3.5 Dependencies
+
+Expand any **Activity** in the catalog and scroll to the
+**Dependencies** panel — two columns, *Predecessors* and
+*Successors*. This is where you declare "what has to run before
+this activity" and "what this activity unblocks."
+
+Try it on the **Outage Management → Outage triage** activity from
+Module 3.3:
+
+1. Add a Predecessor: *Field crew dispatched* (or the closest
+   preceding activity the wand generated).
+2. Add a Successor: *Customer notification sent*.
+
+Watch what the platform enforces:
+
+- **Cycles are blocked.** Try adding *Customer notification sent*
+  as a Predecessor of *Outage triage* — Procela rejects it with
+  *"Adding this flow would create a cycle. Use a LOOP-type flow if
+  the cycle is intentional."*
+- **Cross-value-stream warnings.** Adding an activity from a
+  different value stream tags the row with a small amber
+  `CROSS-STREAM` chip — legal (some dependencies really do cross
+  streams), but usually a wrong pick.
+- **Delete cascades.** When you delete an activity, every
+  dependency edge touching it goes with it. No dangling references.
+
+The compact `←N →M` chip on collapsed activity rows in the tree
+shows incoming/outgoing counts at a glance.
+
+### 3.6 Phase 3 suggestion panels
 
 Scroll past the I/O panel on an expanded activity. You'll see three
 "Suggested…" cards: **Suggested data assets**, **Suggested systems**,
