@@ -81,6 +81,14 @@ interface ProcessNode {
   slaTarget?: string;
   // Governance controls this activity implements or is subject to
   controlIds?: string[];
+  // Change-management review workflow (only meaningful when the
+  // org's statusMode is 'review'). Populated by the backend on
+  // DRAFT → PENDING_REVIEW → (ACTIVE | DRAFT) transitions.
+  submittedBy?: string;
+  submittedAt?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewComment?: string;
   children?: ProcessNode[];
 }
 
@@ -115,13 +123,22 @@ const LEVEL_CONFIG: Record<NodeLevel, { color: string; bg: string; label: string
 
 import { getStatusColor } from '@/lib/statusBadge';
 
-const ALL_STATUSES = ['DRAFT', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
+const ALL_STATUSES = ['DRAFT', 'PENDING_REVIEW', 'PROPOSED', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED'];
 const statusColors = Object.fromEntries(ALL_STATUSES.map((s) => [s, getStatusColor(s)]));
 
 const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   DRAFT:      ['ACTIVE'],
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
   DEPRECATED: ['DRAFT'],
+};
+// Review mode — one review gate between DRAFT and ACTIVE. Sized for
+// enterprise change control that wants an approver check without the
+// four-state ceremony of `advanced`.
+const REVIEW_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:          ['PENDING_REVIEW'],
+  PENDING_REVIEW: ['ACTIVE', 'DRAFT'],
+  ACTIVE:         ['DRAFT', 'DEPRECATED'],
+  DEPRECATED:     ['DRAFT'],
 };
 const ADVANCED_TRANSITIONS: Record<string, string[]> = {
   DRAFT:        ['PROPOSED'],
@@ -132,6 +149,7 @@ const ADVANCED_TRANSITIONS: Record<string, string[]> = {
   DEPRECATED:   ['DRAFT'],
 };
 const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const REVIEW_LOCKED = new Set(['PENDING_REVIEW', 'ACTIVE', 'DEPRECATED']);
 const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 const COMPLIANCE_OPTIONS = [
@@ -1684,7 +1702,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   onAddMapping: (nodeId: string, target: AddMappingTarget, linkType: string) => void;
   onRemoveMapping: (mappingId: string) => void;
   onRestoreMapping: (snapshot: MappingInfo) => void;
-  statusMode: 'simple' | 'advanced';
+  statusMode: 'simple' | 'review' | 'advanced';
   siblingIndex: number;
   siblingCount: number;
   onReorder: (nodeId: string, direction: 'up' | 'down') => void;
@@ -1735,6 +1753,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   const [showTagInput, setShowTagInput] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [reviewCommentDraft, setReviewCommentDraft] = useState('');
   // Collaboration panels (Attachments / Discussion / Activity) are collapsed
   // by default to keep the tree compact; counts come from the panels via
   // onCount so the header badge is accurate before the section is opened.
@@ -1799,8 +1818,14 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
   const config = LEVEL_CONFIG[node.level];
   const validChildren = (validChildrenMap[node.level] || []) as NodeLevel[];
   const canAddChildren = validChildren.length > 0;
-  const STATUS_TRANSITIONS = statusMode === 'advanced' ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
-  const LOCKED_STATUSES = statusMode === 'advanced' ? ADVANCED_LOCKED : SIMPLE_LOCKED;
+  const STATUS_TRANSITIONS =
+    statusMode === 'advanced' ? ADVANCED_TRANSITIONS
+    : statusMode === 'review' ? REVIEW_TRANSITIONS
+    : SIMPLE_TRANSITIONS;
+  const LOCKED_STATUSES =
+    statusMode === 'advanced' ? ADVANCED_LOCKED
+    : statusMode === 'review' ? REVIEW_LOCKED
+    : SIMPLE_LOCKED;
   const isLocked = LOCKED_STATUSES.has(node.status);
 
   // Completeness check for value streams
@@ -1894,6 +1919,27 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           <div style={{ marginTop: 1 }}>
             <InlineEdit value={node.description} onSave={(description) => onUpdate(node.id, { description })} fontSize={11} placeholder="Add description..." disabled={isLocked} />
           </div>
+          {/* Review-workflow banner: whenever a node is sitting in
+              PENDING_REVIEW, the row shows a small yellow strip with
+              the submitter's name (resolved via peopleList) and the
+              comment the submitter left. The buttons for approve /
+              request-changes are on the status pill above; this banner
+              is purely informational. */}
+          {node.status === 'PENDING_REVIEW' && (
+            <div style={{ marginTop: 4, background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 4, padding: '4px 8px', fontSize: 11, color: '#92400e' }}>
+              <strong>Pending review</strong>
+              {(() => {
+                const p = node.submittedBy ? peopleList.find((x) => x.id === node.submittedBy) : null;
+                return p ? <> — submitted by <strong>{p.name}</strong></> : null;
+              })()}
+              {node.submittedAt && <> · {new Date(node.submittedAt).toLocaleString()}</>}
+              {node.reviewComment && (
+                <div style={{ marginTop: 2, fontStyle: 'italic', color: '#78350f' }}>
+                  &ldquo;{node.reviewComment}&rdquo;
+                </div>
+              )}
+            </div>
+          )}
           {/* Documentation fields — visible when expanded */}
           {isExpanded && (
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 2 }}>
@@ -2598,25 +2644,65 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           </span>
         )}
 
-        {/* Status — with confirmation */}
-        {pendingStatus ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fffbeb', border: '1px solid #f59e0b44', borderRadius: 4, padding: '2px 6px' }}>
-            <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
-              {node.status} {'\u2192'}
-            </span>
-            <span style={{ fontSize: 10, fontWeight: 600, color: statusColors[pendingStatus]?.color || '#64748b' }}>
-              {pendingStatus}
-            </span>
-            <button onClick={() => { onUpdate(node.id, { status: pendingStatus }); setPendingStatus(null); }}
-              style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, padding: '1px 6px', fontSize: 9, fontWeight: 600, cursor: 'pointer' }}>
-              Save
-            </button>
-            <button onClick={() => setPendingStatus(null)}
-              style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 3, padding: '1px 6px', fontSize: 9, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
-              Cancel
-            </button>
-          </div>
-        ) : (
+        {/* Status — with confirmation. Review-mode transitions
+            (submit / approve / request-changes) prompt for a comment. */}
+        {pendingStatus ? (() => {
+          const needsComment = statusMode === 'review'
+            && (
+              (node.status === 'DRAFT' && pendingStatus === 'PENDING_REVIEW')
+              || (node.status === 'PENDING_REVIEW')
+            );
+          const commit = () => {
+            const payload: any = { status: pendingStatus };
+            if (needsComment) payload.reviewComment = reviewCommentDraft;
+            onUpdate(node.id, payload);
+            setPendingStatus(null);
+            setReviewCommentDraft('');
+          };
+          const cancel = () => { setPendingStatus(null); setReviewCommentDraft(''); };
+          const saveLabel = statusMode === 'review'
+            ? (pendingStatus === 'PENDING_REVIEW' ? 'Submit for review'
+              : pendingStatus === 'ACTIVE' && node.status === 'PENDING_REVIEW' ? 'Approve'
+              : pendingStatus === 'DRAFT' && node.status === 'PENDING_REVIEW' ? 'Request changes'
+              : 'Save')
+            : 'Save';
+          return (
+            <div style={{ display: 'flex', flexDirection: needsComment ? 'column' : 'row', alignItems: needsComment ? 'stretch' : 'center', gap: 4, background: '#fffbeb', border: '1px solid #f59e0b44', borderRadius: 4, padding: '4px 6px', minWidth: needsComment ? 260 : undefined }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>
+                  {node.status.replace('_', ' ')} {'\u2192'}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: statusColors[pendingStatus]?.color || '#64748b' }}>
+                  {pendingStatus.replace('_', ' ')}
+                </span>
+              </div>
+              {needsComment && (
+                <input
+                  autoFocus
+                  value={reviewCommentDraft}
+                  onChange={(e) => setReviewCommentDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
+                  placeholder={
+                    pendingStatus === 'PENDING_REVIEW' ? 'What are you changing? (optional but helpful)'
+                    : pendingStatus === 'ACTIVE' ? 'Approval note (optional)'
+                    : 'Explain what needs to change'
+                  }
+                  style={{ fontSize: 10, padding: '2px 6px', border: '1px solid var(--color-border)', borderRadius: 3 }}
+                />
+              )}
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={commit}
+                  style={{ background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 3, padding: '2px 8px', fontSize: 9, fontWeight: 600, cursor: 'pointer' }}>
+                  {saveLabel}
+                </button>
+                <button onClick={cancel}
+                  style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 3, padding: '2px 8px', fontSize: 9, cursor: 'pointer', color: 'var(--color-text-muted)' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          );
+        })() : (
           <select value={node.status} onChange={(e) => {
               if (e.target.value === node.status) return;
               setPendingStatus(e.target.value);
@@ -2898,7 +2984,7 @@ export default function ProcessCatalogPage() {
     | null
   >(null);
   const [historyNodeId, setHistoryNodeId] = useState<string | null>(null);
-  const [statusMode, setStatusMode] = useState<'simple' | 'advanced'>('simple');
+  const [statusMode, setStatusMode] = useState<'simple' | 'review' | 'advanced'>('simple');
   const [showLevelGuide, setShowLevelGuide] = useState(false);
   // Simple / Advanced view mode — Simple is the default for newcomers
   // and hides the rarely-used per-level fields (Compliance, Frequency,
@@ -3014,7 +3100,7 @@ export default function ProcessCatalogPage() {
       if (activeOrgId) {
         try {
           const orgRes = await apiClient.get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`);
-          setStatusMode((orgRes.data?.statusMode as 'simple' | 'advanced') || 'simple');
+          setStatusMode((orgRes.data?.statusMode as 'simple' | 'review' | 'advanced') || 'simple');
         } catch { /* */ }
       }
     } catch { /* */ }

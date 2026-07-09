@@ -90,18 +90,18 @@ export default function SettingsPage() {
   // move through their statuses — wrong page for the audience.
   // It's a one-time configuration so Settings is the right home.
   const { activeOrgId, activeOrgName } = useOrgContext();
-  const [lifecycleMode, setLifecycleMode] = useState<'simple' | 'advanced'>('simple');
+  const [lifecycleMode, setLifecycleMode] = useState<'simple' | 'review' | 'advanced'>('simple');
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
-  const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'advanced' | null>(null);
+  const [confirmLifecycle, setConfirmLifecycle] = useState<'simple' | 'review' | 'advanced' | null>(null);
   const [lifecycleMigrationMsg, setLifecycleMigrationMsg] = useState<string | null>(null);
   useEffect(() => {
     if (!activeOrgId) return;
     apiClient
       .get<{ success: boolean; data: { statusMode?: string } }>(`/organizations/${activeOrgId}`)
-      .then((res) => setLifecycleMode((res.data?.statusMode as 'simple' | 'advanced') || 'simple'))
+      .then((res) => setLifecycleMode((res.data?.statusMode as 'simple' | 'review' | 'advanced') || 'simple'))
       .catch(() => { /* leave default */ });
   }, [activeOrgId]);
-  const applyLifecycle = async (newMode: 'simple' | 'advanced') => {
+  const applyLifecycle = async (newMode: 'simple' | 'review' | 'advanced') => {
     if (!activeOrgId || lifecycleBusy) return;
     setLifecycleBusy(true);
     try {
@@ -344,6 +344,7 @@ export default function SettingsPage() {
             </p>
             <ul style={{ fontSize: 12, color: 'var(--color-text-secondary)', paddingLeft: 18, listStyle: 'disc', marginBottom: 8 }}>
               <li><strong>Simple</strong> (3 statuses): Draft → Active → Deprecated. The default — right for most teams.</li>
+              <li><strong>Review</strong> (4 statuses): Draft → Pending Review → Active → Deprecated. Adds one approver gate with segregation of duties (the submitter can't approve their own change). Sized for enterprise change control that doesn't need the four-step ceremony of Advanced.</li>
               <li><strong>Advanced</strong> (6 statuses): Draft → Proposed → Under Review → Approved → Active → Deprecated. For regulated environments that need explicit review gates before items go live.</li>
             </ul>
             {lifecycleMigrationMsg && (
@@ -352,35 +353,43 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{lifecycleMode === 'advanced' ? 'Advanced' : 'Simple'}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current mode</span>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--color-border)', borderRadius: 6, overflow: 'hidden' }}>
+              {(['simple', 'review', 'advanced'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => activeOrgId && mode !== lifecycleMode && setConfirmLifecycle(mode)}
+                  disabled={!activeOrgId || lifecycleBusy}
+                  style={{
+                    padding: '6px 14px', fontSize: 13, fontWeight: 500,
+                    background: mode === lifecycleMode ? 'var(--color-primary)' : 'var(--color-surface)',
+                    color: mode === lifecycleMode ? '#fff' : 'var(--color-text)',
+                    border: 'none',
+                    borderLeft: mode !== 'simple' ? '1px solid var(--color-border)' : undefined,
+                    cursor: !activeOrgId ? 'not-allowed' : mode === lifecycleMode ? 'default' : 'pointer',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {lifecycleBusy && confirmLifecycle === mode ? '…' : mode}
+                </button>
+              ))}
             </div>
-            <button
-              onClick={() => setConfirmLifecycle(lifecycleMode === 'advanced' ? 'simple' : 'advanced')}
-              disabled={!activeOrgId || lifecycleBusy}
-              style={{
-                padding: '8px 14px', fontSize: 13, fontWeight: 500,
-                background: activeOrgId ? 'var(--color-surface)' : 'var(--color-bg)',
-                border: '1px solid var(--color-primary)',
-                color: activeOrgId ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                borderRadius: 6, cursor: activeOrgId ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {lifecycleBusy ? 'Switching…' : `Switch to ${lifecycleMode === 'advanced' ? 'Simple' : 'Advanced'}`}
-            </button>
           </div>
         </div>
       </div>
 
       <ConfirmDialog
         open={!!confirmLifecycle}
-        title={`Switch to ${confirmLifecycle === 'advanced' ? 'Advanced' : 'Simple'} lifecycle?`}
-        message={confirmLifecycle === 'simple'
-          ? 'Items currently in Proposed, Under Review, or Approved will be moved to Draft. Active and Deprecated items are unaffected. This setting takes effect immediately across every page that uses status (Process Catalog, Data Assets, Policies, etc.).'
-          : 'This adds Proposed, Under Review, and Approved steps between Draft and Active. Existing Draft / Active / Deprecated items keep their status. Once enabled, new items created at higher tiers will go through the review gates.'}
-        confirmLabel={`Switch to ${confirmLifecycle === 'advanced' ? 'Advanced' : 'Simple'}`}
+        title={confirmLifecycle ? `Switch to ${confirmLifecycle.charAt(0).toUpperCase() + confirmLifecycle.slice(1)} lifecycle?` : ''}
+        message={
+          confirmLifecycle === 'simple'
+            ? 'Items currently in Pending Review, Proposed, Under Review, or Approved will be moved to Draft. Active and Deprecated items are unaffected. This setting takes effect immediately across every page that uses status.'
+          : confirmLifecycle === 'review'
+            ? 'This adds one Pending Review gate between Draft and Active with segregation of duties — the submitter cannot approve their own change. Items currently in Proposed, Under Review, or Approved (from the Advanced flow) will be moved to Draft. Active and Deprecated items are unaffected.'
+          : 'This adds Proposed, Under Review, and Approved steps between Draft and Active. Existing Draft / Active / Deprecated / Pending Review items keep or are migrated to a valid state. Once enabled, new items go through the review gates.'
+        }
+        confirmLabel={confirmLifecycle ? `Switch to ${confirmLifecycle.charAt(0).toUpperCase() + confirmLifecycle.slice(1)}` : ''}
         variant="primary"
         onConfirm={async () => { if (confirmLifecycle) await applyLifecycle(confirmLifecycle); }}
         onCancel={() => setConfirmLifecycle(null)}

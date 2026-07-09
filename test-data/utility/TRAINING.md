@@ -354,7 +354,56 @@ the loop between a policy definition and the concrete work that
 implements it — the reverse view (which activities implement this
 control?) is available from Governance Documents.
 
-### 3.7 Phase 3 suggestion panels
+### 3.7 Change-management review workflow
+
+For enterprise buyers, "who approved this?" isn't optional. Switch
+your org into review mode and watch the workflow appear:
+
+1. Go to **Settings → Process & Asset Lifecycle**. The picker is a
+   three-way segmented control: **Simple** (default), **Review**,
+   **Advanced**. Click **Review** and confirm the switch.
+2. Back on the Process Catalog, find an **Active** activity (e.g.
+   *Outage triage*) and change its status pill to **Draft** — you'll
+   need to make it draft to trigger a change cycle.
+3. Edit any field (say, bump the RTO from 4 to 2 hours).
+4. Click the status pill again — the only option is **Pending
+   Review**. Pick it. A yellow banner drops with a text box asking
+   *"What are you changing?"* Type "Tightened RTO after Q3
+   incident review" and click **Submit for review**.
+5. Watch the status pill change to **Pending Review** and a yellow
+   banner appear on the row: *"Pending review — submitted by
+   Melissa Patel · 2 min ago"* with your comment underneath.
+6. Open the notifications bell — a new item lands:
+   *"Change submitted for review: Outage triage"*.
+
+Now switch to a different user (e.g. Harold Lindstrom, Melissa's
+manager) and act as reviewer:
+
+7. Open the same activity and click the status pill. Two options:
+   **Active** (approve) and **Draft** (request changes). Pick
+   **Active** → a comment box appears; type *"Approved — noted the
+   incident postmortem"* → click **Approve**. Status flips to
+   **Active**.
+8. Sign back in as Melissa — the bell shows *"Change approved:
+   Outage triage"*.
+
+Two things Procela enforces you'll want to demo:
+
+- **Segregation of duties.** Sign in as Melissa (the submitter) and
+  try to approve her own submission — the platform blocks it with
+  *"The submitter cannot approve their own change. A different
+  reviewer must sign off."* She can still **Request changes** on
+  her own submission (self-withdrawal).
+- **Fresh cycle after rejection.** If a reviewer requests changes,
+  Melissa's next Submit for review starts clean — the earlier
+  reviewer's decision doesn't carry over, so nothing looks
+  pre-approved that isn't.
+
+Switch back to **Simple** mode when you're done to keep the rest
+of the training uncluttered — the migration confirmation dialog
+walks any Pending Review rows back to Draft.
+
+### 3.8 Phase 3 suggestion panels
 
 Scroll past the I/O panel on an expanded activity. You'll see three
 "Suggested…" cards: **Suggested data assets**, **Suggested systems**,

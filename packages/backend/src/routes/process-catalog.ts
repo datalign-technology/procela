@@ -25,6 +25,16 @@ const SIMPLE_TRANSITIONS: Record<string, string[]> = {
   ACTIVE:     ['DRAFT', 'DEPRECATED'],
   DEPRECATED: ['DRAFT'],
 };
+// Review mode — one review gate between DRAFT and ACTIVE, sized for
+// enterprise change control that wants an approver check without the
+// four-state ceremony of `advanced`. Segregation of duties (submitter
+// ≠ reviewer) enforced separately at the PUT layer.
+const REVIEW_TRANSITIONS: Record<string, string[]> = {
+  DRAFT:          ['PENDING_REVIEW'],
+  PENDING_REVIEW: ['ACTIVE', 'DRAFT'],
+  ACTIVE:         ['DRAFT', 'DEPRECATED'],
+  DEPRECATED:     ['DRAFT'],
+};
 const ADVANCED_TRANSITIONS: Record<string, string[]> = {
   DRAFT:        ['PROPOSED'],
   PROPOSED:     ['UNDER_REVIEW', 'DRAFT'],
@@ -34,6 +44,7 @@ const ADVANCED_TRANSITIONS: Record<string, string[]> = {
   DEPRECATED:   ['DRAFT'],
 };
 const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
+const REVIEW_LOCKED = new Set(['PENDING_REVIEW', 'ACTIVE', 'DEPRECATED']);
 const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -138,6 +149,27 @@ export interface ProcessNode {
    *  control is deleted, its id is swept from every activity's
    *  controlIds so nothing dangles. */
   controlIds?: string[];
+  // ── Change-management review workflow ─────────────────────────
+  // Populated when the org's status mode is `review` and the node
+  // transits DRAFT → PENDING_REVIEW → ACTIVE. All five fields are
+  // reset when the node returns to DRAFT (a new submission starts
+  // its own review cycle) so a rejected item doesn't carry stale
+  // approval metadata.
+  /** Person id of who submitted the current change for review. Set
+   *  on DRAFT → PENDING_REVIEW; unset when the node returns to
+   *  DRAFT. */
+  submittedBy?: string;
+  submittedAt?: string;
+  /** Person id of the reviewer who approved / requested changes. Set
+   *  on PENDING_REVIEW → (ACTIVE | DRAFT); unset when the node
+   *  returns to DRAFT after a new submission. */
+  reviewedBy?: string;
+  reviewedAt?: string;
+  /** Free-text justification from either the submitter (on submit)
+   *  or the reviewer (on approve / reject). Kept on the row so the
+   *  audit trail travels with the node, not just the version
+   *  history log. */
+  reviewComment?: string;
   /** Systems the step (or higher-level node) runs on. First-class link
    *  — independent of any data-asset mapping — so a step that runs on a
    *  system without (yet) a mapped data asset is still captured.
@@ -187,7 +219,7 @@ export interface ProcessVersion {
 
 // ── Persistent stores ──
 
-export { SIMPLE_TRANSITIONS, ADVANCED_TRANSITIONS, SIMPLE_LOCKED, ADVANCED_LOCKED };
+export { SIMPLE_TRANSITIONS, REVIEW_TRANSITIONS, ADVANCED_TRANSITIONS, SIMPLE_LOCKED, REVIEW_LOCKED, ADVANCED_LOCKED };
 export const processNodes: ProcessNode[] = loadStore<ProcessNode>('processNodes');
 registerStore('processNodes', processNodes);
 export const flowRelationships: FlowRelationship[] = loadStore<FlowRelationship>('flowRelationships');
@@ -742,7 +774,8 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
-    criticalityTier, rtoHours, successMeasure, slaTarget, controlIds } = req.body;
+    criticalityTier, rtoHours, successMeasure, slaTarget, controlIds,
+    reviewComment } = req.body;
 
   // Optimistic locking: if version is provided and doesn't match, reject the update
   if (version !== undefined && version !== (node.version ?? 1)) {
@@ -796,9 +829,9 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
     || controlIds !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
   const nodeOrg = organizations.find((o) => o.id === node.orgId);
-  const isAdvanced = nodeOrg?.statusMode === 'advanced';
-  const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;
-  const transitionMap = isAdvanced ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
+  const mode = nodeOrg?.statusMode || 'simple';
+  const lockedSet = mode === 'advanced' ? ADVANCED_LOCKED : mode === 'review' ? REVIEW_LOCKED : SIMPLE_LOCKED;
+  const transitionMap = mode === 'advanced' ? ADVANCED_TRANSITIONS : mode === 'review' ? REVIEW_TRANSITIONS : SIMPLE_TRANSITIONS;
 
   if (hasFieldEdits && lockedSet.has(node.status)) {
     res.status(403).json({
@@ -922,12 +955,83 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
       }
     }
     const oldStatus = node.status;
+
+    // ── Change-management review workflow (statusMode === 'review') ──
+    // Track who submitted / who approved on the row itself so the
+    // audit trail travels with the node and the UI can render the
+    // Pending-review chip without walking the version log.
+    const actingPersonId: string | null = (req as any).user?.sub || null;
+    if (mode === 'review') {
+      if (oldStatus === 'DRAFT' && status === 'PENDING_REVIEW') {
+        if (!actingPersonId) {
+          res.status(401).json({ success: false, error: 'Sign in required to submit for review.' });
+          return;
+        }
+        node.submittedBy = actingPersonId;
+        node.submittedAt = new Date().toISOString();
+        // A fresh submission clears the prior reviewer decision so the
+        // node doesn't carry stale approval metadata from a rejected
+        // earlier cycle.
+        node.reviewedBy = undefined;
+        node.reviewedAt = undefined;
+        if (typeof reviewComment === 'string') node.reviewComment = reviewComment;
+      } else if (oldStatus === 'PENDING_REVIEW' && (status === 'ACTIVE' || status === 'DRAFT')) {
+        // Segregation of duties — the submitter is not allowed to
+        // approve their own submission. Rejection (→ DRAFT) is
+        // allowed because self-withdrawal must always be possible.
+        if (status === 'ACTIVE' && actingPersonId && node.submittedBy && actingPersonId === node.submittedBy) {
+          res.status(403).json({
+            success: false,
+            error: 'The submitter cannot approve their own change. A different reviewer must sign off.',
+          });
+          return;
+        }
+        if (actingPersonId) {
+          node.reviewedBy = actingPersonId;
+          node.reviewedAt = new Date().toISOString();
+        }
+        if (typeof reviewComment === 'string') node.reviewComment = reviewComment;
+      } else if (status === 'DRAFT') {
+        // Any other transition back to DRAFT (e.g. from ACTIVE) clears
+        // the review metadata — a new draft starts its own cycle.
+        node.submittedBy = undefined;
+        node.submittedAt = undefined;
+        node.reviewedBy = undefined;
+        node.reviewedAt = undefined;
+        node.reviewComment = undefined;
+      }
+    }
+
     node.status = status;
 
     // Workflow notifications on status transitions
     if (status !== oldStatus) {
       const levelLabel = node.level.toLowerCase().replace('_', ' ');
-      if (status === 'ACTIVE') {
+      if (status === 'PENDING_REVIEW') {
+        // Notify the org — the org admins pick it up from the
+        // "Pending review" tile on the Dashboard. Directed to a
+        // specific reviewer would need a reviewer-assignment model;
+        // v1 fans out to the org so any authorised approver can act.
+        createNotification({
+          orgId: node.orgId,
+          type: 'ACTION',
+          title: `Change submitted for review: ${node.name}`,
+          message: `A change to the ${levelLabel} "${node.name}" has been submitted for review.`,
+          link: `/processes?node=${node.id}`,
+        });
+      } else if (status === 'ACTIVE') {
+        // Notify the original submitter that their change was
+        // approved, when we know who they were.
+        if (node.submittedBy) {
+          createNotification({
+            orgId: node.orgId,
+            userId: node.submittedBy,
+            type: 'INFO',
+            title: `Change approved: ${node.name}`,
+            message: `Your change to the ${levelLabel} "${node.name}" was approved and is now Active.`,
+            link: `/processes?node=${node.id}`,
+          });
+        }
         createNotification({
           orgId: node.orgId,
           type: 'INFO',
@@ -935,6 +1039,20 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
           message: `The ${levelLabel} "${node.name}" is now active in the process catalog.`,
           link: '/processes',
         });
+      } else if (status === 'DRAFT' && oldStatus === 'PENDING_REVIEW') {
+        // Rejection — tell the submitter what the reviewer said.
+        if (node.submittedBy) {
+          createNotification({
+            orgId: node.orgId,
+            userId: node.submittedBy,
+            type: 'WARNING',
+            title: `Changes requested: ${node.name}`,
+            message: node.reviewComment
+              ? `The reviewer requested changes on "${node.name}": "${node.reviewComment}".`
+              : `The reviewer requested changes on "${node.name}". Update and resubmit.`,
+            link: `/processes?node=${node.id}`,
+          });
+        }
       } else if (status === 'DEPRECATED') {
         createNotification({
           orgId: node.orgId,
