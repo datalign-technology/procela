@@ -178,6 +178,65 @@ interface StoredGovernanceIssue {
    *  status changes rather than piling up duplicates. Null for
    *  manually-authored issues. */
   linkedRuleId?: string | null;
+  /** Agent id when an auto-issue tracks an ownership problem on an
+   *  agent (owner cleared, owner deleted / deactivated). Same purpose
+   *  as linkedRuleId — dedup + navigation back to the source record. */
+  linkedAgentId?: string | null;
+}
+
+/**
+ * Agent-ownership auto-issue. Called by the agents route when the
+ * responsible person is removed on an ACTIVE agent (edit-clear,
+ * person delete, person deactivate). Opens a HIGH-severity OWNERSHIP
+ * issue with no assignee — nobody obvious to route it to — so it lands
+ * in the org's Open Issues queue for a governance lead to pick up.
+ *
+ * Returns the created issue id (or null if the agent's org is missing).
+ * Idempotent per (agentId, still-open) — a duplicate open ownership
+ * issue for the same agent is a bug we don't want.
+ */
+export function openAgentOwnershipIssue(input: {
+  agent: { id: string; name: string; orgIds: string[] };
+  reason: string;
+}): string | null {
+  const { agent, reason } = input;
+  const orgId = agent.orgIds[0];
+  if (!orgId) return null;
+
+  const existing = governanceIssues.find(
+    (i) => i.linkedAgentId === agent.id && !TERMINAL_STATUSES.has(i.status),
+  );
+  if (existing) return existing.id;
+
+  const now = new Date().toISOString();
+  const newIssue: StoredGovernanceIssue = {
+    id: uuid(),
+    orgId,
+    title: `Agent paused — no responsible person: ${agent.name}`,
+    description: `${reason}. Agent is now PAUSED and cannot run activities until a responsible person is assigned and the status is set back to ACTIVE.`,
+    issueType: 'OWNERSHIP',
+    severity: 'HIGH',
+    status: 'OPEN',
+    domainId: null,
+    dataAssetId: null,
+    systemId: null,
+    reportedBy: null,
+    assignedTo: null,
+    resolutionSummary: null,
+    createdAt: now,
+    updatedAt: now,
+    closedAt: null,
+    linkedRuleId: null,
+    linkedAgentId: agent.id,
+  };
+  governanceIssues.push(newIssue);
+  saveStore('governanceIssues', governanceIssues);
+  auditService.log(orgId, null, 'GovernanceIssue', newIssue.id, 'AUTO_CREATED', null, {
+    linkedAgentId: agent.id,
+    reason,
+  });
+  logger.info({ agentId: agent.id, issueId: newIssue.id }, 'Agent ownership auto-issue created');
+  return newIssue.id;
 }
 
 export const governanceIssues: StoredGovernanceIssue[] = loadStore<StoredGovernanceIssue>('governanceIssues');

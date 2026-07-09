@@ -570,10 +570,15 @@ router.get('/:id/impact', (req: Request, res: Response) => {
   const damaRoleCount = damaRoles.filter((r) => r.personId === id).length;
   const domainOwner = dataDomains.filter((d) => d.ownerId === id).length;
   const domainSteward = dataDomains.filter((d) => d.stewardIds.includes(id)).length;
+  // Lazy require to avoid pulling agents at module load — impact is
+  // rarely called at boot, and agents.ts imports people.ts already.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { agents } = require('./agents') as typeof import('./agents');
+  const activeAgents = agents.filter((a) => a.ownerPersonId === id && a.status === 'ACTIVE').length;
 
   res.json({
     success: true,
-    data: { ownedProcesses, governanceGroups: govGroups, damaRoles: damaRoleCount, domainOwner, domainSteward },
+    data: { ownedProcesses, governanceGroups: govGroups, damaRoles: damaRoleCount, domainOwner, domainSteward, activeAgents },
   });
 });
 
@@ -581,8 +586,31 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
   const idx = people.findIndex((p) => p.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  const personId = people[idx].id;
+
+  // Cascade: any ACTIVE agent that lists this person as its
+  // responsible party is auto-paused, and an ownership issue opens.
+  // We clear the dangling ownerPersonId reference on the paused agents
+  // too — leaving it pointing at a deleted person would trip the
+  // "unknown person" fallback in every list view.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { pauseAgentsForMissingOwner } = require('./agents') as typeof import('./agents');
+  const pausedAgents = pauseAgentsForMissingOwner(
+    personId,
+    'Responsible person was deleted',
+    { clearOwnerReference: true },
+  );
+
   people.splice(idx, 1);
   saveStore('people', people);
+
+  // 204 has no body, so switch to 200 when the cascade produced work
+  // the caller needs to know about (frontend uses this to render a
+  // toast + linked list of paused agents).
+  if (pausedAgents.length > 0) {
+    res.json({ success: true, cascade: { pausedAgents } });
+    return;
+  }
   res.status(204).send();
 });
 
@@ -665,7 +693,20 @@ router.post('/:id/deactivate', (req: Request, res: Response) => {
   person.deactivatedAt = new Date().toISOString();
   person.updatedAt = person.deactivatedAt;
   saveStore('people', people);
-  res.json({ success: true, data: publicPerson(person) });
+
+  // Cascade: a deactivated person is no longer a valid responsible
+  // party. Any ACTIVE agent they own auto-pauses (owner reference is
+  // preserved — reactivation should be able to restore the pairing
+  // even if it doesn't auto-resume the agent).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { pauseAgentsForMissingOwner } = require('./agents') as typeof import('./agents');
+  const pausedAgents = pauseAgentsForMissingOwner(
+    person.id,
+    'Responsible person was deactivated',
+    { clearOwnerReference: false },
+  );
+
+  res.json({ success: true, data: publicPerson(person), cascade: { pausedAgents } });
 });
 
 /** POST /api/v1/people/:id/reactivate */

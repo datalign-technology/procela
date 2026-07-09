@@ -72,7 +72,9 @@ describe('agents routes', () => {
     });
     assert.strictEqual(res.status, 201);
     assert.strictEqual(res.body.data.agentType, 'PIPELINE');
-    assert.strictEqual(res.body.data.status, 'ACTIVE'); // default
+    // Default is PAUSED — see the responsible-person invariant. An
+    // agent can't be created ACTIVE without also assigning an owner.
+    assert.strictEqual(res.body.data.status, 'PAUSED');
     assert.deepStrictEqual(res.body.data.orgIds, [orgId]);
   });
 

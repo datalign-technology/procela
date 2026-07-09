@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
+import { people } from './people';
 import logger from '../lib/logger';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,91 @@ registerStore('agents', agents);
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Responsible-person invariant
+//
+//   An agent can only carry status = ACTIVE if it has a valid, non-
+//   deactivated ownerPersonId. If the owner is removed, cleared, or the
+//   underlying person is deleted / deactivated, the agent auto-transitions
+//   to PAUSED and a governance issue is opened so the work re-surfaces.
+//
+//   Two edges enforce this:
+//     1. Direct writes to the agent (POST /agents, PUT /agents/:id) —
+//        checked below with hasValidOwner().
+//     2. Cascades from person-level changes — DELETE /people/:id and
+//        POST /people/:id/deactivate call pauseAgentsForMissingOwner()
+//        to sweep every agent whose owner just went away.
+// ──────────────────────────────────────────────────────────────────────────
+
+function hasValidOwner(ownerPersonId: string | undefined): boolean {
+  if (!ownerPersonId) return false;
+  const person = people.find((p) => p.id === ownerPersonId);
+  if (!person) return false;
+  if ((person as any).active === false) return false;
+  return true;
+}
+
+const OWNERLESS_MSG =
+  'An agent cannot be Active without a responsible person. Assign a responsible person, or set the status to Paused.';
+
+export interface AgentPauseResult {
+  agentId: string;
+  agentName: string;
+  issueId: string | null;
+}
+
+/**
+ * Cascade helper — pauses every ACTIVE agent whose responsible person
+ * is the given personId, opens a governance issue for each, and returns
+ * a summary the caller can surface (delete response, toast, etc).
+ *
+ * Called by:
+ *   - people DELETE / deactivate handlers
+ *   - the agent PUT handler when a user clears ownerPersonId on an
+ *     already-active agent (auto-pause with confirmation upstream)
+ *
+ * Idempotent: an agent that's already PAUSED / RETIRED is skipped.
+ * If clearOwnerReference is true, the agent's ownerPersonId is nulled
+ * out too (used by the person-delete cascade — the reference would be
+ * dangling otherwise).
+ */
+export function pauseAgentsForMissingOwner(
+  personId: string,
+  reason: string,
+  opts: { clearOwnerReference?: boolean } = {},
+): AgentPauseResult[] {
+  const paused: AgentPauseResult[] = [];
+  const now = new Date().toISOString();
+  const affected = agents.filter(
+    (a) => a.ownerPersonId === personId && a.status === 'ACTIVE',
+  );
+  if (affected.length === 0) return paused;
+
+  // Lazy-require the issue + notification wiring to avoid the route
+  // import graph loading in circular fashion at boot.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { openAgentOwnershipIssue } = require('./governance-issues') as typeof import('./governance-issues');
+
+  for (const agent of affected) {
+    agent.status = 'PAUSED';
+    if (opts.clearOwnerReference) agent.ownerPersonId = '';
+    agent.updatedAt = now;
+    let issueId: string | null = null;
+    try {
+      issueId = openAgentOwnershipIssue({
+        agent,
+        reason,
+      });
+    } catch (err) {
+      logger.warn({ err, agentId: agent.id }, 'Failed to open ownership issue on agent auto-pause');
+    }
+    paused.push({ agentId: agent.id, agentName: agent.name, issueId });
+    logger.info({ agentId: agent.id, personId, reason }, 'Agent auto-paused for missing owner');
+  }
+  saveStore('agents', agents);
+  return paused;
+}
+
 const router = Router();
 
 /** DELETE /api/v1/agents/all — delete all agents */
@@ -102,7 +188,17 @@ router.post('/', (req: Request, res: Response) => {
     }
   }
   const resolvedType = AGENT_TYPES.includes(agentType) ? agentType : 'OTHER';
-  const resolvedStatus = AGENT_STATUSES.includes(status) ? status : 'ACTIVE';
+  // Default is PAUSED, not ACTIVE. An agent should only go active on an
+  // explicit request from the caller, and only when a responsible person
+  // is already wired up. This lines up with the responsible-person
+  // invariant and stops CSV imports from bulk-activating everything.
+  const requestedStatus = AGENT_STATUSES.includes(status) ? status : 'PAUSED';
+  // Invariant: reject explicit ACTIVE without a valid responsible person.
+  if (requestedStatus === 'ACTIVE' && !hasValidOwner(ownerPersonId)) {
+    res.status(400).json({ success: false, error: OWNERLESS_MSG });
+    return;
+  }
+  const resolvedStatus = requestedStatus;
   const now = new Date().toISOString();
   const agent: StoredAgent = {
     id: uuid(),
@@ -127,6 +223,18 @@ router.put('/:id', (req: Request, res: Response) => {
   const agent = agents.find((a) => a.id === req.params.id);
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
+
+  // Case 1: caller explicitly asked for ACTIVE. Reject if the resulting
+  // owner would be invalid — a direct API caller shouldn't get a silent
+  // downgrade to PAUSED when they meant to activate. The UI blocks this
+  // client-side too so this branch only fires on API misuse.
+  const explicitlyActivating = status === 'ACTIVE';
+  const nextOwner = ownerPersonId !== undefined ? ownerPersonId : agent.ownerPersonId;
+  if (explicitlyActivating && !hasValidOwner(nextOwner)) {
+    res.status(400).json({ success: false, error: OWNERLESS_MSG });
+    return;
+  }
+
   if (name !== undefined) agent.name = name;
   if (description !== undefined) agent.description = description;
   if (provider !== undefined) agent.provider = provider;
@@ -148,9 +256,32 @@ router.put('/:id', (req: Request, res: Response) => {
     }
     agent.orgIds = orgIds;
   }
+
+  // Case 2: the write leaves the agent ACTIVE with a missing/invalid
+  // owner. The UI shows a confirmation dialog before this reaches us;
+  // here we do the safe thing — auto-pause and open a governance issue
+  // — and tell the caller what happened via `cascade`.
+  let cascade: { autoPaused: true; issueId: string | null } | null = null;
+  if (agent.status === 'ACTIVE' && !hasValidOwner(agent.ownerPersonId)) {
+    agent.status = 'PAUSED';
+    let issueId: string | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { openAgentOwnershipIssue } = require('./governance-issues') as typeof import('./governance-issues');
+      issueId = openAgentOwnershipIssue({
+        agent,
+        reason: 'Responsible person cleared while agent was active',
+      });
+    } catch (err) {
+      logger.warn({ err, agentId: agent.id }, 'Failed to open ownership issue on agent auto-pause');
+    }
+    cascade = { autoPaused: true, issueId };
+    logger.info({ agentId: agent.id }, 'Agent auto-paused: owner cleared while active');
+  }
+
   agent.updatedAt = new Date().toISOString();
   saveStore('agents', agents);
-  res.json({ success: true, data: agent });
+  res.json({ success: true, data: agent, cascade });
 });
 
 /** DELETE /api/v1/agents/:id */
@@ -218,7 +349,9 @@ router.post('/import', (req: Request, res: Response) => {
         agentType: type,
         description: row.description || '',
         provider: row.provider || '',
-        status: 'ACTIVE',
+        // Imported without an owner → PAUSED. A steward has to review
+        // the row, wire up a responsible person, then activate.
+        status: 'PAUSED',
         ownerPersonId: '',
         skillIds: [],
         instructions: '',
