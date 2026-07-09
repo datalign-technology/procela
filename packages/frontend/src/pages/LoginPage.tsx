@@ -315,7 +315,7 @@ export default function LoginPage() {
             aria-hidden="true"
             style={styles.brandIcon}
           />
-          <span style={styles.brandWordmark}>Procela.ai</span>
+          <span style={styles.brandWordmark}>Procela</span>
         </div>
 
         {/* Heading — wordmark above already carries the brand, so
