@@ -57,12 +57,24 @@ describe('POST /digest/run', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     port = (server.address() as AddressInfo).port;
 
-    // Sweep stale state from prior runs.
+    // Sweep stale state from prior runs — including dataAssets and
+    // processNodes that may have leaked from earlier tests via the
+    // on-disk persistence layer. Without this, the assertions on
+    // orphanAssets === 3 fail when the file already holds prior
+    // seed rows under the same orgId. (This was the digest test
+    // flake CI was hitting: real behaviour was correct, but the
+    // baseline snapshot counted the leaked rows too.)
     for (let i = gapSnapshots.length - 1; i >= 0; i--) {
       if (gapSnapshots[i].orgId === orgId) gapSnapshots.splice(i, 1);
     }
     for (let i = notifications.length - 1; i >= 0; i--) {
       if (notifications[i].orgId === orgId) notifications.splice(i, 1);
+    }
+    for (let i = dataAssets.length - 1; i >= 0; i--) {
+      if (dataAssets[i].orgId === orgId) dataAssets.splice(i, 1);
+    }
+    for (let i = processNodes.length - 1; i >= 0; i--) {
+      if (processNodes[i].orgId === orgId) processNodes.splice(i, 1);
     }
     // Seed an asset that will become orphan delta on week 2.
     const now = new Date().toISOString();
@@ -83,6 +95,10 @@ describe('POST /digest/run', () => {
   });
 
   after(async () => {
+    // Sweep in-memory AND persist the swept state so a later test
+    // that loads the store from disk doesn't inherit our seed rows.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { saveStore } = require('../lib/persistence');
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) {
         const id = arr[i].id;
@@ -91,6 +107,10 @@ describe('POST /digest/run', () => {
       }
     };
     sweep(dataAssets); sweep(processNodes); sweep(gapSnapshots); sweep(notifications);
+    saveStore('dataAssets', dataAssets);
+    saveStore('processNodes', processNodes);
+    saveStore('gapSnapshots', gapSnapshots);
+    saveStore('notifications', notifications);
     await new Promise<void>((r) => server.close(() => r()));
   });
 

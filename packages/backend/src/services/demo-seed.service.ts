@@ -22,6 +22,8 @@ import { processNodes } from '../routes/process-catalog';
 import { mappings } from '../routes/mappings';
 import { governanceTasks } from '../routes/governance-tasks';
 import { governanceIssues } from '../routes/governance-issues';
+import { dataQualityRules } from '../routes/data-quality';
+import { aiTemplateCache } from '../routes/ai';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
@@ -46,6 +48,7 @@ function sweep(): void {
     [mappings, 'mappings'],
     [governanceTasks, 'governanceTasks'],
     [governanceIssues, 'governanceIssues'],
+    [dataQualityRules, 'dataQualityRules'],
   ];
   for (const [arr, storeName] of stores) {
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -53,6 +56,17 @@ function sweep(): void {
     }
     saveStore(storeName, arr);
   }
+  // AI template cache is keyed by industry string, not `id`. Sweep
+  // demo-owned keys separately so a reseed refreshes the pre-warmed
+  // Electric + Water entries.
+  const demoCacheKeys = new Set([
+    'utilities|tidewater electric',
+    'utilities|tidewater water',
+  ]);
+  for (let i = aiTemplateCache.length - 1; i >= 0; i--) {
+    if (demoCacheKeys.has(aiTemplateCache[i]?.industry)) aiTemplateCache.splice(i, 1);
+  }
+  saveStore('aiTemplateCache', aiTemplateCache);
 }
 
 export interface DemoSeedReport {
@@ -66,6 +80,7 @@ export interface DemoSeedReport {
   mappings: number;
   governanceTasks: number;
   governanceIssues: number;
+  dataQualityRules: number;
   persona: { id: string; name: string };
 }
 
@@ -209,6 +224,185 @@ export function seedDemoData(): DemoSeedReport {
   } as any);
   saveStore('governanceIssues', governanceIssues);
 
+  // ── Data Quality rules ──
+  // Two rules that tell a demo story:
+  //   * Customer Master · Completeness · currently PASSING at 96 —
+  //     the healthy state. Demonstrates the green DQ tile on the
+  //     Dashboard and the rule detail on the DQ page.
+  //   * Generation Output · Timeliness · currently FAILING at 62 —
+  //     under threshold. Same asset as the seeded governance issue,
+  //     so the DQ tile and the issue tell one coherent story.
+  const dqPassing = {
+    id: P + 'dq-rule-passing',
+    orgId: orgTidewater.id,
+    dataAssetId: assetCustomerMaster.id,
+    dimension: 'COMPLETENESS' as const,
+    name: 'Customer Master · email completeness',
+    description: 'At least 95% of customer records must have a non-null email address.',
+    threshold: 95,
+    currentScore: 96,
+    weight: 1,
+    status: 'PASSING' as const,
+    lastMeasured: ts,
+    scheduleFrequency: 'DAILY' as const,
+    nextRunAt: daysFromNow(1),
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  const dqFailing = {
+    id: P + 'dq-rule-failing',
+    orgId: orgElectric.id,
+    dataAssetId: assetGeneration.id,
+    dimension: 'TIMELINESS' as const,
+    name: 'Generation Output · hourly write latency',
+    description: 'Every hour the plant should write within 5 minutes of the reporting boundary. Rolling 24h.',
+    threshold: 95,
+    currentScore: 62,
+    weight: 1,
+    status: 'FAILING' as const,
+    lastMeasured: ts,
+    scheduleFrequency: 'HOURLY' as const,
+    nextRunAt: daysFromNow(0),
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  dataQualityRules.push(dqPassing, dqFailing);
+  saveStore('dataQualityRules', dataQualityRules);
+
+  // ── AI template cache — pre-warm the wand for Tidewater ──
+  // A live demo can't afford the 10–30s Claude wait on the "Generate
+  // processes" wand. Seeding two hand-crafted templates against the
+  // real cache keys means the first click for Electric OR Water
+  // returns instantly. The user can still hit "Regenerate from AI"
+  // if they want a fresh live call — the button bypasses the cache.
+  aiTemplateCache.push(
+    {
+      industry: 'utilities|tidewater electric',
+      industryLabel: 'Utilities — Tidewater Electric',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Outage Management',
+            description: 'Detect, dispatch, restore, and communicate through distribution outages.',
+            purpose: 'Restore electric service safely and quickly when the grid is disrupted.',
+            businessOutcome: 'Reliable power delivery and defensible SAIDI / SAIFI performance to the regulator.',
+            processes: [
+              { name: 'Detect & Assess', description: 'Identify the outage and its scope from SCADA and customer channels.', purpose: 'Turn raw signals into an actionable event.', activities: [
+                { name: 'Detect outage from SCADA', description: 'SCADA breaker + FCI events land in the OMS.' },
+                { name: 'Correlate customer reports', description: 'Cross-reference contact-centre calls with the outage extent.' },
+                { name: 'Classify severity', description: 'Assign a Tier 1/2/3 based on customer count and critical loads.' },
+              ] },
+              { name: 'Dispatch & Restore', description: 'Assign crews, execute switching, restore service.', purpose: 'Get the lights back on with the safest possible plan.', activities: [
+                { name: 'Assign crew', description: 'Match the closest qualified crew to the outage in GIS.' },
+                { name: 'Execute switching plan', description: 'Isolate the fault and back-feed unaffected customers.' },
+                { name: 'Confirm restoration', description: 'Verify restoration via meter reads and customer callback.' },
+              ] },
+              { name: 'Communicate & Report', description: 'Keep customers and regulators informed throughout the event.', purpose: 'Meet notification SLAs and regulatory reporting deadlines.', activities: [
+                { name: 'Notify affected customers', description: 'SMS, voice, and email based on customer contact preferences.' },
+                { name: 'Update outage map', description: 'Publish restoration ETAs on the public outage map.' },
+                { name: 'File regulatory report', description: 'Submit reliability event data to the PUC.' },
+              ] },
+            ],
+          },
+          {
+            name: 'Generation Operations',
+            description: 'Run the generation fleet to meet load and reliability targets.',
+            purpose: 'Deliver dispatchable capacity into the wholesale + retail markets.',
+            businessOutcome: 'Margin on generation vs market prices while staying inside environmental limits.',
+            processes: [
+              { name: 'Day-Ahead Planning', description: 'Forecast load, commit units, and file day-ahead bids.', purpose: 'Line up the least-cost generation stack for tomorrow.', activities: [
+                { name: 'Forecast day-ahead load', description: 'Combine weather + historical patterns into an hourly forecast.' },
+                { name: 'Commit units', description: 'Schedule unit start-ups given fuel and ramp constraints.' },
+              ] },
+              { name: 'Real-Time Operations', description: 'Balance generation against load in real time.', purpose: 'Keep the lights on and frequency stable across the interconnect.', activities: [
+                { name: 'Monitor plant output', description: 'Watch MW output vs schedule per unit.' },
+                { name: 'Dispatch adjustments', description: 'Move generation up or down to hold ACE within limits.' },
+              ] },
+            ],
+          },
+          {
+            name: 'Customer Operations',
+            description: 'Onboard, bill, and serve residential + commercial electric customers.',
+            purpose: 'Deliver a defensible customer experience across the meter-to-cash lifecycle.',
+            businessOutcome: 'Cash collected on time; low arrears; high CSAT.',
+            processes: [
+              { name: 'New Service Onboarding', description: 'Set up a new customer at a new address.', purpose: 'Get the meter energised, billed, and pointed at the right rate.', activities: [
+                { name: 'Receive new service request', description: 'From the web portal or contact centre.' },
+                { name: 'Provision meter', description: 'Schedule field visit + install the AMI meter.' },
+                { name: 'Activate billing account', description: 'Create the CIS account and enrol in the correct rate.' },
+              ] },
+              { name: 'Meter-to-Cash', description: 'Read meters, bill customers, collect payment.', purpose: 'Convert consumption into revenue.', activities: [
+                { name: 'Ingest interval reads', description: 'AMI reads flow into the billing engine hourly.' },
+                { name: 'Generate bill', description: 'Apply the customer rate schedule to their consumption.' },
+                { name: 'Receive payment', description: 'Post payment to the CIS account.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      industry: 'utilities|tidewater water',
+      industryLabel: 'Utilities — Tidewater Water',
+      generatedAt: ts,
+      data: {
+        valueStreams: [
+          {
+            name: 'Water Treatment',
+            description: 'Convert raw source water into potable water that meets SDWA standards.',
+            purpose: 'Produce safe drinking water at the volumes customers demand.',
+            businessOutcome: 'Zero SDWA violations, minimum chemical cost, defensible turbidity trend.',
+            processes: [
+              { name: 'Coagulation & Sedimentation', description: 'Add coagulant + settle solids.', purpose: 'Remove suspended particles before filtration.', activities: [
+                { name: 'Dose coagulant', description: 'Adjust dose based on raw water turbidity + temperature.' },
+                { name: 'Settle sludge', description: 'Sediment settles into the sludge collection zone.' },
+              ] },
+              { name: 'Filtration & Disinfection', description: 'Filter + chlorinate.', purpose: 'Meet the primary drinking water standards.', activities: [
+                { name: 'Run filter cycle', description: 'Media filters catch remaining solids; backwash on turbidity breakthrough.' },
+                { name: 'Chlorinate', description: 'Dose chlorine to hit residual + CT targets.' },
+              ] },
+            ],
+          },
+          {
+            name: 'Water Distribution',
+            description: 'Move potable water from plants to customer taps under pressure.',
+            purpose: 'Deliver enough water at the right pressure to every service line.',
+            businessOutcome: 'Low non-revenue water; low main-break rate; predictable pressure at all zones.',
+            processes: [
+              { name: 'Pressure Management', description: 'Keep distribution pressure inside a safe operating band.', purpose: 'Balance customer service against pipe stress.', activities: [
+                { name: 'Monitor DMA pressure', description: 'Read PRV telemetry across the district metered areas.' },
+                { name: 'Adjust PRV setpoints', description: 'Tune valve setpoints in response to demand patterns.' },
+              ] },
+              { name: 'Main Break Response', description: 'Detect + repair main breaks.', purpose: 'Restore service before customer complaints escalate.', activities: [
+                { name: 'Detect main break', description: 'Acoustic sensors + pressure anomalies flag likely breaks.' },
+                { name: 'Dispatch repair crew', description: 'Match crew to break location.' },
+                { name: 'Restore service', description: 'Repair the main and re-pressurise the affected zone.' },
+              ] },
+            ],
+          },
+          {
+            name: 'Wastewater Operations',
+            description: 'Collect and treat wastewater to NPDES permit standards.',
+            purpose: 'Return safe effluent to the receiving water body.',
+            businessOutcome: 'Zero NPDES exceedances; steady biosolids production.',
+            processes: [
+              { name: 'Collection', description: 'Convey wastewater from customers to the treatment plant.', purpose: 'Keep the collection system flowing.', activities: [
+                { name: 'Monitor pump stations', description: 'Watch wet-well levels + pump run-hours.' },
+                { name: 'Respond to blockages', description: 'Vac truck dispatch for grease + root intrusion events.' },
+              ] },
+              { name: 'Treatment', description: 'Biological + chemical treatment of collected wastewater.', purpose: 'Meet effluent permit limits.', activities: [
+                { name: 'Run activated sludge process', description: 'Aerate + return sludge to hit BOD/TSS targets.' },
+                { name: 'Disinfect effluent', description: 'UV or chlorine disinfection before discharge.' },
+              ] },
+            ],
+          },
+        ],
+      },
+    },
+  );
+  saveStore('aiTemplateCache', aiTemplateCache);
+
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
@@ -222,6 +416,7 @@ export function seedDemoData(): DemoSeedReport {
     mappings: 4,
     governanceTasks: 3,
     governanceIssues: 1,
+    dataQualityRules: 2,
     persona: { id: susan.id, name: susan.name },
   };
 }
