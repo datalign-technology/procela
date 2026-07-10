@@ -10,6 +10,7 @@ import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
 import ActiveSessionsPanel from '../components/ActiveSessionsPanel';
 import ResetAllDataPanel from '../components/ResetAllDataPanel';
+import LoadDemoDataPanel from '../components/LoadDemoDataPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { Link } from 'react-router-dom';
 import { useOrgContext } from '../stores/orgContext';
@@ -873,6 +874,13 @@ export default function SettingsPage() {
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
+
+      {/* Load demo data — one-click seed of the Tidewater Utilities
+          fixture. Idempotent; a second call wipes the prior seed and
+          reseeds so the button always converges on a known state.
+          Positioned above Reset so the demo-mode workflow reads top-
+          to-bottom: seed → demo → reset. */}
+      <LoadDemoDataPanel />
 
       {/* Reset everything — super-admin only "factory reset" that
           wipes every store on disk + in memory. Lives next to Backup

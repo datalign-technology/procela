@@ -73,6 +73,7 @@ import governancePoliciesRouter from './routes/governance-policies';
 import governanceControlsRouter from './routes/governance-controls';
 import governanceTasksRouter from './routes/governance-tasks';
 import governanceIssuesRouter from './routes/governance-issues';
+import adminRouter from './routes/admin';
 import controlTowerRouter from './routes/control-tower';
 import governanceProgramRouter from './routes/governance-program';
 import governanceCalendarRouter from './routes/governance-calendar';
@@ -228,6 +229,7 @@ app.use('/api/v1/governance-policies', authenticateToken, governancePoliciesRout
 app.use('/api/v1/governance-controls', authenticateToken, governanceControlsRouter);
 app.use('/api/v1/governance-tasks', authenticateToken, governanceTasksRouter);
 app.use('/api/v1/governance-issues', authenticateToken, governanceIssuesRouter);
+app.use('/api/v1/admin', authenticateToken, adminRouter);
 app.use('/api/v1/control-tower', authenticateToken, controlTowerRouter);
 app.use('/api/v1/governance-program', authenticateToken, governanceProgramRouter);
 app.use('/api/v1/governance-calendar', authenticateToken, governanceCalendarRouter);
