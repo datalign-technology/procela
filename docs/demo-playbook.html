@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Procela demo playbook — Tidewater Utilities</title>
+<style>
+  :root {
+    --paper: #FAF8F5;
+    --ink: #1a2320;
+    --muted: #6b7a75;
+    --rule: #d7d3cc;
+    --accent: #0f4f46;
+    --accent-soft: #dfece8;
+    --marker: #b48844;
+    --marker-soft: #f0e6d0;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", Times, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1614;
+      --ink: #E8EFEC;
+      --muted: #8FA29D;
+      --rule: #243230;
+      --accent: #5cd0b6;
+      --accent-soft: #14322c;
+      --marker: #d4a959;
+      --marker-soft: #2a2417;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0d1614;
+    --ink: #E8EFEC;
+    --muted: #8FA29D;
+    --rule: #243230;
+    --accent: #5cd0b6;
+    --accent-soft: #14322c;
+    --marker: #d4a959;
+    --marker-soft: #2a2417;
+  }
+  :root[data-theme="light"] {
+    --paper: #FAF8F5;
+    --ink: #1a2320;
+    --muted: #6b7a75;
+    --rule: #d7d3cc;
+    --accent: #0f4f46;
+    --accent-soft: #dfece8;
+    --marker: #b48844;
+    --marker-soft: #f0e6d0;
+  }
+
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 15.5px;
+    line-height: 1.55;
+    font-feature-settings: "kern", "liga";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 4.5rem 2.75rem 5rem;
+  }
+
+  /* Masthead ─────────────────────────────────────────── */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1.25rem;
+    align-items: end;
+    padding-bottom: 1.1rem;
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 2.5rem;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 2.6rem;
+    line-height: 1.05;
+    letter-spacing: -0.012em;
+    margin: 0 0 0.15em;
+    text-wrap: balance;
+  }
+  .masthead .subtitle {
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin: 0;
+  }
+  .masthead aside {
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    text-align: right;
+    line-height: 1.5;
+    padding-bottom: 0.35rem;
+  }
+  .masthead aside strong { color: var(--accent); font-weight: 600; }
+
+  .theme-toggle {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.4em 0.75em;
+    cursor: pointer;
+    border-radius: 999px;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* Eyebrow / section header ─────────────────────────── */
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-weight: 600;
+    margin: 0 0 0.5em;
+  }
+  h2.section {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.6rem;
+    letter-spacing: -0.005em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  h2.section + .lede {
+    color: var(--muted);
+    max-width: 40rem;
+    margin: -0.4rem 0 1.6rem;
+    font-size: 0.98rem;
+  }
+
+  section { margin: 3.2rem 0; }
+
+  /* Cold-open — the checklist that runs before demo ─── */
+  .prep {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 1.4rem 1.6rem 1.35rem;
+    border-radius: 0 3px 3px 0;
+  }
+  .prep .eyebrow { color: var(--accent); margin-bottom: 0.35rem; }
+  .prep h2.section { font-size: 1.35rem; margin-bottom: 0.9rem; }
+  .prep ol { padding: 0; margin: 0; list-style: none; counter-reset: step; }
+  .prep ol li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 2rem;
+    margin: 0.55rem 0;
+    line-height: 1.5;
+  }
+  .prep ol li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 0; top: 0.05em;
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .prep ol li strong { font-weight: 600; }
+  .prep .verify {
+    margin-top: 0.9rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid color-mix(in oklab, var(--accent) 25%, transparent);
+    font-family: var(--sans);
+    font-size: 0.83rem;
+    color: var(--ink);
+  }
+  .prep .verify strong {
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.4em;
+    font-weight: 600;
+  }
+
+  /* Step ─────────────────────────────────────────────── */
+  .step {
+    display: grid;
+    grid-template-columns: 3.6rem 1fr;
+    gap: 1.35rem;
+    padding: 1.4rem 0;
+    border-top: 1px solid var(--rule);
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .step:last-of-type { border-bottom: 1px solid var(--rule); }
+  .step .marker {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 2.4rem;
+    line-height: 1;
+    color: var(--marker);
+    letter-spacing: -0.01em;
+    padding-top: 0.05em;
+  }
+  .step .body h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.22rem;
+    letter-spacing: -0.005em;
+    margin: 0 0 0.4rem;
+    line-height: 1.25;
+  }
+  .step .body .meta {
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-bottom: 0.5rem;
+    display: flex;
+    gap: 0.9rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .step .body .meta .time {
+    color: var(--marker);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+  }
+  .step .body .meta .location {
+    padding-left: 0.9rem;
+    border-left: 1px solid var(--rule);
+  }
+  .step .body p { margin: 0.5rem 0; }
+  .step .body p.setup {
+    font-family: var(--sans);
+    font-size: 0.86rem;
+    color: var(--muted);
+    margin: 0 0 0.7rem;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border-left: 2px solid var(--rule);
+    line-height: 1.5;
+  }
+  .step .body .payoff {
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    color: var(--ink);
+    background: var(--marker-soft);
+    padding: 0.45rem 0.7rem;
+    border-radius: 3px;
+    margin: 0.65rem 0 0;
+    display: block;
+  }
+  .step .body .payoff strong {
+    display: inline;
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--marker);
+    margin-right: 0.5em;
+  }
+
+  code, .code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: color-mix(in oklab, var(--accent) 10%, transparent);
+    color: var(--accent);
+    padding: 0.05em 0.35em;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Reference ────────────────────────────────────────── */
+  .reference h2.section { margin-bottom: 1.4rem; }
+  .reference .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem 2.4rem;
+  }
+  .reference .grid > div { break-inside: avoid; }
+  .reference h4 {
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 0.7rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .reference dl {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .reference dl div {
+    display: grid;
+    grid-template-columns: 42% 1fr;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dotted color-mix(in oklab, var(--rule) 65%, transparent);
+  }
+  .reference dl div:last-child { border-bottom: none; }
+  .reference dt {
+    color: var(--ink);
+    font-weight: 500;
+    font-family: var(--serif);
+  }
+  .reference dd {
+    margin: 0;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.82rem;
+  }
+  .reference dd em {
+    font-style: normal;
+    color: var(--marker);
+    font-weight: 500;
+  }
+  .reference .list {
+    margin: 0; padding: 0; list-style: none;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+  }
+  .reference .list li {
+    padding: 0.35rem 0;
+    border-bottom: 1px dotted color-mix(in oklab, var(--rule) 65%, transparent);
+  }
+  .reference .list li:last-child { border-bottom: none; }
+  .reference .list li span.tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--marker);
+    font-weight: 600;
+    margin-right: 0.75em;
+    min-width: 5em;
+  }
+
+  /* Colophon ─────────────────────────────────────────── */
+  .colophon {
+    margin-top: 4rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--ink);
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .colophon strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Print styles — the whole point of this artifact ── */
+  @media print {
+    :root { --paper: #ffffff; --ink: #000; --muted: #444; --rule: #bbb;
+            --accent: #0f4f46; --accent-soft: #eef4f2;
+            --marker: #6b4b1c; --marker-soft: #f5efe0; }
+    html, body { background: #fff; color: #000; }
+    .theme-toggle { display: none; }
+    .page { padding: 1.4cm 1.2cm; max-width: 100%; }
+    body { font-size: 10.5pt; line-height: 1.45; }
+    .masthead h1 { font-size: 20pt; }
+    h2.section { font-size: 15pt; }
+    .step { padding: 0.55rem 0; page-break-inside: avoid; }
+    .step .marker { font-size: 24pt; }
+    .step .body h3 { font-size: 12pt; }
+    section { margin: 1.4rem 0; }
+    .prep { background: #f5f1e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .payoff, .prep, code, .code { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .colophon { margin-top: 2rem; }
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 2.5rem 1.2rem 3rem; }
+    .masthead { grid-template-columns: 1fr; }
+    .masthead aside { text-align: left; padding-bottom: 0; }
+    .masthead h1 { font-size: 2rem; }
+    .reference .grid { grid-template-columns: 1fr; gap: 1.5rem; }
+    .step { grid-template-columns: 2.4rem 1fr; gap: 0.9rem; }
+    .step .marker { font-size: 2rem; }
+    .reference dl div { grid-template-columns: 1fr; gap: 0.2rem; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="
+  var r=document.documentElement;
+  var t=r.getAttribute('data-theme');
+  r.setAttribute('data-theme', t==='dark' ? 'light' : (t==='light' ? 'dark' : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark')));
+">Theme</button>
+
+<div class="page">
+
+  <header class="masthead">
+    <div>
+      <p class="subtitle">Demo playbook</p>
+      <h1>Procela &mdash; Tidewater&nbsp;Utilities</h1>
+    </div>
+    <aside>
+      <strong>45 min</strong><br>
+      Q&amp;A + demo<br>
+      Presenter: solo
+    </aside>
+  </header>
+
+  <!-- Cold open ─────────────────────────────────────── -->
+  <section class="prep">
+    <p class="eyebrow">Cold open &middot; before you speak</p>
+    <h2 class="section">Setup checklist</h2>
+    <ol>
+      <li>Sign in as <strong>super&#8209;admin</strong>. Open <strong>Settings</strong>.</li>
+      <li>Click <strong>Load Tidewater demo</strong>. Confirm. Wait for the seeded banner.</li>
+      <li>Sign out. Sign back in as <strong>Susan&nbsp;Chen</strong>.</li>
+      <li>Land on the Dashboard.</li>
+    </ol>
+    <div class="verify">
+      <strong>Sanity check</strong>
+      My Dashboard reads <strong>3</strong> open tasks, <strong>1</strong> open issue, <strong>Customer&nbsp;Data</strong> under My Domains.
+      Overview strip shows non-zero counts for Value Streams, Data Assets, Systems.
+      If not: reseed and start again.
+    </div>
+  </section>
+
+  <!-- The flow ──────────────────────────────────────── -->
+  <section>
+    <p class="eyebrow">The flow &middot; eight beats</p>
+    <h2 class="section">Run the demo</h2>
+    <p class="lede">Every beat below is a checkpoint. The time on the left is what you should have spent by the end of it. If you're two minutes over, cut the next beat's detail, not its point.</p>
+
+    <div class="step">
+      <div class="marker">01</div>
+      <div class="body">
+        <div class="meta"><span class="time">30&nbsp;sec</span><span class="location">Dashboard, signed in as Susan Chen</span></div>
+        <h3>The persona is populated, not stubbed</h3>
+        <p>Point at <strong>My Dashboard</strong>: three open tasks with real due dates, one HIGH severity issue, ownership of a domain. Contrast implicit: most catalogues open on zeros.</p>
+        <p class="payoff"><strong>Say</strong> Every one of these numbers is real accountability against a real person.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">02</div>
+      <div class="body">
+        <div class="meta"><span class="time">2&nbsp;min</span><span class="location">Working in&hellip; Tidewater Electric &rarr; Processes</span></div>
+        <h3>Wand for Electric, then Water &mdash; same code, different output</h3>
+        <p class="setup">The cache is pre&#8209;warmed: both wands return instantly. If you want the live path, hit <em>Regenerate from AI</em>.</p>
+        <p>Click the wand at Electric &rarr; hierarchy fills with SCADA, outage management, generation. Switch <strong>Working in</strong> to Water &rarr; wand again &rarr; treatment, distribution, wastewater.</p>
+        <p class="payoff"><strong>Say</strong> Same code path, different active&#8209;org context. This is what business&#8209;first means &mdash; the platform speaks their operational language.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">03</div>
+      <div class="body">
+        <div class="meta"><span class="time">5&nbsp;min</span><span class="location">Outage Management &rarr; Detect &amp; Assess &rarr; Outage triage</span></div>
+        <h3>An activity carries operational weight</h3>
+        <p>Open the seeded <strong>Outage triage</strong> activity. Walk down the panel: Responsible <strong>Melissa Patel</strong>, systems <strong>SCADA</strong> + <strong>OMS</strong>, dependencies show a predecessor and a successor, Criticality <strong>Tier&nbsp;1</strong>, RTO <strong>4h</strong>, Success measure &ldquo;<em>Field crew on site within 30&nbsp;min</em>&rdquo;.</p>
+        <p>Scroll to Inputs/Outputs. Mapped to <strong>Outage Logs</strong> and <strong>Customer Master</strong>.</p>
+        <p class="payoff"><strong>Say</strong> When a regulator asks &ldquo;what&rsquo;s the RTO for outage triage?&rdquo; &mdash; this is where the answer lives, not in a spreadsheet somebody has to go find.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">04</div>
+      <div class="body">
+        <div class="meta"><span class="time">3&nbsp;min</span><span class="location">Ask AI &middot; top bar</span></div>
+        <h3>The Ask AI money moment</h3>
+        <p>Open Ask AI. Click the starter prompt <em>&ldquo;Which data assets do we have that no process uses?&rdquo;</em></p>
+        <p>Answer names <strong>Legacy Billing Extract</strong> and <strong>Meter CSV Dump</strong> with clickable inline citations, plus a green <em>Orphan Assets &rarr;</em> chip.</p>
+        <p class="payoff"><strong>Say</strong> Every asset name is a link back to the row. The chip is a one&#8209;click handoff to the page that solves the problem. No hallucination &mdash; if it&rsquo;s in the answer, it&rsquo;s in your catalog.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">05</div>
+      <div class="body">
+        <div class="meta"><span class="time">5&nbsp;min</span><span class="location">Settings &rarr; Process &amp; Asset Lifecycle</span></div>
+        <h3>Change management with segregation of duties</h3>
+        <p>Switch to <strong>Review</strong> mode. Back on the Catalog, demote an Active activity to Draft, edit the RTO, click the status pill: only option is <strong>Pending Review</strong>.</p>
+        <p>Type &ldquo;Tightened RTO after Q3 incident review&rdquo; and submit. Yellow banner shows submitter + comment.</p>
+        <p>Try to approve as the same user &rarr; blocked (<strong>&ldquo;submitter cannot approve their own change&rdquo;</strong>). Sign in as a different reviewer &rarr; approve.</p>
+        <p class="payoff"><strong>Say</strong> This is your change control. The audit trail travels with the row.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">06</div>
+      <div class="body">
+        <div class="meta"><span class="time">2&nbsp;min</span><span class="location">New tab &rarr; <code>/login?tenant=tidewater</code></span></div>
+        <h3>Tenant white-label</h3>
+        <p>Sign-in card reads <strong>Tidewater Utilities</strong> with the &#9889; glyph. Primary SSO button is teal, labelled <em>&ldquo;Sign in with Tidewater SSO&rdquo;</em>. Small <em>Powered by Procela</em> line.</p>
+        <p class="payoff"><strong>Say</strong> Your prospects, your customers, your brand &mdash; not ours.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">07</div>
+      <div class="body">
+        <div class="meta"><span class="time">3&nbsp;min</span><span class="location">Data &rarr; Data Quality &middot; then Governance &rarr; Tasks &amp; Issues</span></div>
+        <h3>DQ and issues tell one story</h3>
+        <p>Two rules land: Customer Master email completeness at <strong>96</strong> (green), Generation Output write&#8209;latency at <strong>62</strong> (red).</p>
+        <p>Cross to Governance &rarr; Issues: the seeded HIGH severity ownership issue is against <strong>Generation Output</strong>. Same asset.</p>
+        <p class="payoff"><strong>Say</strong> When a rule fails, an issue opens and the responsible steward gets pinged. This one is already in flight.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="marker">08</div>
+      <div class="body">
+        <div class="meta"><span class="time">Close</span><span class="location">Wherever you are &mdash; don&rsquo;t navigate</span></div>
+        <h3>Land the thesis</h3>
+        <p>Return to Susan&rsquo;s Dashboard if you drifted. Say what the ten prior minutes proved:</p>
+        <p><em>Every process step has an owner, every data asset has a domain, every dependency is declared, every governance decision is auditable. Not because we told a data steward to type it in &mdash; because the platform&rsquo;s shape made it the path of least resistance.</em></p>
+        <p class="payoff"><strong>Ask</strong> What would it take to get your catalog to look like this?</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Reference ─────────────────────────────────────── -->
+  <section class="reference">
+    <p class="eyebrow">Reference &middot; keep to hand</p>
+    <h2 class="section">Personas, URLs, seeded artefacts</h2>
+
+    <div class="grid">
+      <div>
+        <h4>Personas to know</h4>
+        <dl>
+          <div><dt>Susan Chen</dt><dd><em>CDO</em> &middot; the demo persona &middot; owns Customer Data</dd></div>
+          <div><dt>Melissa Patel</dt><dd>System Operator Lead &middot; Responsible for Outage triage</dd></div>
+          <div><dt>Harold Lindstrom</dt><dd>Mgr Distribution Control &middot; reviewer</dd></div>
+          <div><dt>Amara Wambui</dt><dd>Mgr Data &amp; Analytics &middot; owns Outage Prediction Model</dd></div>
+          <div><dt>Kwame Osei</dt><dd>Lead Data Engineer &middot; owns AMI Pipeline</dd></div>
+          <div><dt>Marisol Hadid</dt><dd>Data Governance Lead &middot; task creator</dd></div>
+        </dl>
+      </div>
+
+      <div>
+        <h4>Seeded catalog</h4>
+        <dl>
+          <div><dt>Value stream</dt><dd>Outage Management</dd></div>
+          <div><dt>Processes</dt><dd>Detect &amp; Assess &middot; Restore &amp; Communicate</dd></div>
+          <div><dt>Activities</dt><dd>Outage triage &middot; Crew dispatch &middot; Notification sent</dd></div>
+          <div><dt>Domains</dt><dd>Customer &middot; Operational &middot; Regulatory</dd></div>
+          <div><dt>Assets</dt><dd>Outage Logs &middot; Customer Master &middot; Meter Reads &middot; Generation Output</dd></div>
+          <div><dt>Planted orphans</dt><dd><em>Legacy Billing Extract</em> &middot; <em>Meter CSV Dump</em></dd></div>
+        </dl>
+      </div>
+
+      <div>
+        <h4>Key URLs</h4>
+        <ul class="list">
+          <li><span class="tag">Demo</span><code>/login?tenant=tidewater</code></li>
+          <li><span class="tag">Settings</span><code>/settings</code> &middot; Load demo, lifecycle, branding</li>
+          <li><span class="tag">Ask AI</span>Top bar &middot; four starter prompts</li>
+          <li><span class="tag">Orphans</span><code>/data-assets/orphans</code></li>
+          <li><span class="tag">Reset</span>Settings &rarr; Reset everything &middot; supers only</li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>If it breaks</h4>
+        <ul class="list">
+          <li><span class="tag">Zeros</span>Wrong <em>Working in&hellip;</em> scope. Switch org.</li>
+          <li><span class="tag">Wand hang</span>Cache miss. Try Water instead. Or use planted hierarchy.</li>
+          <li><span class="tag">Auth fail</span>Sign out, sign back in as super&#8209;admin.</li>
+          <li><span class="tag">Duplicate seed</span>Re&#8209;click <em>Load Tidewater demo</em>. Idempotent.</li>
+          <li><span class="tag">Nuclear</span>Settings &rarr; Reset everything &rarr; Load demo again.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    <span>Procela &middot; Tidewater&nbsp;Utilities fixture</span>
+    <span>Ship head &middot; <strong>PR #88</strong></span>
+    <span>Presenter&rsquo;s copy</span>
+  </footer>
+</div>
+</body>
+</html>
