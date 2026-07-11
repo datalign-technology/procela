@@ -31,7 +31,7 @@ interface CachedTemplate {
   data: any;
   generatedAt: string;
 }
-const aiTemplateCache: CachedTemplate[] = loadStore<CachedTemplate>('aiTemplateCache');
+export const aiTemplateCache: CachedTemplate[] = loadStore<CachedTemplate>('aiTemplateCache');
 registerStore('aiTemplateCache', aiTemplateCache);
 
 // Persisted admin override for the Anthropic model. Wins over the

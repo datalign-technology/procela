@@ -35,6 +35,10 @@ const { mappings } = require('../routes/mappings');
 const { governanceTasks } = require('../routes/governance-tasks');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { governanceIssues } = require('../routes/governance-issues');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { dataQualityRules } = require('../routes/data-quality');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { aiTemplateCache } = require('../routes/ai');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -100,11 +104,19 @@ describe('demo-seed endpoint', () => {
       [mappings, 'mappings'],
       [governanceTasks, 'governanceTasks'],
       [governanceIssues, 'governanceIssues'],
+      [dataQualityRules, 'dataQualityRules'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
       saveStore(name, arr);
     }
+    // AI cache doesn't carry a `demo-` id field — clean the two
+    // known demo-owned entries by industry key.
+    const demoKeys = new Set(['utilities|tidewater electric', 'utilities|tidewater water']);
+    for (let i = aiTemplateCache.length - 1; i >= 0; i--) {
+      if (demoKeys.has(aiTemplateCache[i]?.industry)) aiTemplateCache.splice(i, 1);
+    }
+    saveStore('aiTemplateCache', aiTemplateCache);
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -112,7 +124,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules]) sweep(s);
   });
 
   it('rejects non-super-admin callers with 403', async () => {
@@ -138,6 +150,7 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(mappings), 4, 'mappings');
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
+    assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
   });
 
   it('is idempotent — second call replaces the first, no row compounding', async () => {
@@ -158,6 +171,32 @@ describe('demo-seed endpoint', () => {
     assert.ok(susanTasks.length >= 3, `expected 3+ tasks for Susan, got ${susanTasks.length}`);
     const susanIssues = governanceIssues.filter((i: any) => i.assignedTo === susan.id);
     assert.ok(susanIssues.length >= 1, `expected 1+ issues for Susan, got ${susanIssues.length}`);
+  });
+
+  it('seeds two DQ rules — one passing, one failing — for the demo tile story', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const rules = dataQualityRules.filter((r: any) => r.id?.startsWith('demo-'));
+    assert.strictEqual(rules.length, 2);
+    const passing = rules.find((r: any) => r.status === 'PASSING');
+    const failing = rules.find((r: any) => r.status === 'FAILING');
+    assert.ok(passing, 'expected a PASSING rule');
+    assert.ok(failing, 'expected a FAILING rule');
+    // The FAILING rule should target Generation Output — that's the
+    // asset the seeded governance issue references, so the demo
+    // story stays coherent.
+    assert.strictEqual(failing.dataAssetId, 'demo-asset-generation-output');
+  });
+
+  it('pre-warms the AI wand cache for Tidewater Electric + Water', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const electric = aiTemplateCache.find((c: any) => c.industry === 'utilities|tidewater electric');
+    const water = aiTemplateCache.find((c: any) => c.industry === 'utilities|tidewater water');
+    assert.ok(electric, 'expected pre-warmed cache for Tidewater Electric');
+    assert.ok(water, 'expected pre-warmed cache for Tidewater Water');
+    assert.ok(Array.isArray(electric.data?.valueStreams));
+    assert.ok(electric.data.valueStreams.length >= 2);
+    assert.ok(Array.isArray(water.data?.valueStreams));
+    assert.ok(water.data.valueStreams.length >= 2);
   });
 
   it('plants orphan assets not referenced by any mapping', async () => {
