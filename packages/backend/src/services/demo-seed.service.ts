@@ -24,6 +24,7 @@ import { governanceTasks } from '../routes/governance-tasks';
 import { governanceIssues } from '../routes/governance-issues';
 import { dataQualityRules } from '../routes/data-quality';
 import { connectors, connectorEvents } from '../routes/connectors';
+import { calendarEvents } from '../routes/governance-calendar';
 import { aiTemplateCache } from '../routes/ai';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
@@ -52,6 +53,7 @@ function sweep(): void {
     [dataQualityRules, 'dataQualityRules'],
     [connectors, 'connectors'],
     [connectorEvents, 'connectorEvents'],
+    [calendarEvents, 'calendarEvents'],
   ];
   for (const [arr, storeName] of stores) {
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -86,6 +88,7 @@ export interface DemoSeedReport {
   dataQualityRules: number;
   connectors: number;
   connectorEvents: number;
+  calendarEvents: number;
   persona: { id: string; name: string };
 }
 
@@ -347,6 +350,59 @@ export function seedDemoData(): DemoSeedReport {
   );
   saveStore('connectorEvents', connectorEvents);
 
+  // Second connector — PAIRING state. Shows the other half of the
+  // agent lifecycle so the demo can walk both "just installed,
+  // waiting to be claimed" and "steady-state ONLINE". Pairing code
+  // is a fixed 8-digit string; expiry ~5 minutes into the future
+  // so a live claim from the CLI during the demo would actually
+  // work if the presenter wanted to prove the round-trip.
+  const pairingConn = {
+    id: P + 'conn-pairing',
+    orgId: orgTidewater.id,
+    name: 'Water Plant SCADA Connector',
+    tokenHash: null,
+    pairingCode: '19427301',
+    pairingCodeExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    systemIds: [] as string[],
+    lastHeartbeatAt: null,
+    agentVersion: null,
+    status: 'PAIRED' as const,
+    createdAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    updatedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+  };
+  connectors.push(pairingConn as any);
+  saveStore('connectors', connectors);
+
+  // ── Governance calendar event ──
+  // Populates the fourth My Dashboard tile (Upcoming Events) so
+  // the persona doesn't have three lit tiles and one blank.
+  // Weekly Data Governance Committee sync — the archetypal DAMA
+  // artefact, Susan owns it, meets Fridays at 09:00.
+  const dayNow = new Date();
+  const daysUntilFriday = (5 - dayNow.getDay() + 7) % 7 || 7;
+  const nextFriday = new Date(dayNow.getFullYear(), dayNow.getMonth(), dayNow.getDate() + daysUntilFriday, 9, 0, 0);
+  calendarEvents.push({
+    id: P + 'cal-dgc',
+    orgId: orgTidewater.id,
+    name: 'Data Governance Committee weekly',
+    description: 'Weekly cross-domain review — open issues, escalations, control decisions, upcoming policy work.',
+    eventType: 'COMMITTEE_MEETING' as const,
+    cadence: 'WEEKLY' as const,
+    dayOfMonth: null,
+    dayOfWeek: 5,
+    timeOfDay: '09:00',
+    durationMinutes: 60,
+    attendees: [susan.id, marisol.id, devon.id, lorraine.id],
+    agendaTemplate: '1. Open governance issues (from bell)\n2. Domain scope changes\n3. Control effectiveness review\n4. Upcoming policy publications',
+    nextOccurrence: nextFriday.toISOString(),
+    lastOccurrence: null,
+    autoCreateTasks: false,
+    status: 'ACTIVE' as const,
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  saveStore('calendarEvents', calendarEvents);
+
   // ── AI template cache — pre-warm the wand for Tidewater ──
   // A live demo can't afford the 10–30s Claude wait on the "Generate
   // processes" wand. Seeding two hand-crafted templates against the
@@ -495,8 +551,9 @@ export function seedDemoData(): DemoSeedReport {
     governanceTasks: 3,
     governanceIssues: 1,
     dataQualityRules: 2,
-    connectors: 1,
+    connectors: 2,
     connectorEvents: 5,
+    calendarEvents: 1,
     persona: { id: susan.id, name: susan.name },
   };
 }

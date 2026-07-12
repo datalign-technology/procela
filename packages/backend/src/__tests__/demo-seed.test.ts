@@ -40,6 +40,8 @@ const { dataQualityRules } = require('../routes/data-quality');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { connectors, connectorEvents } = require('../routes/connectors');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const { calendarEvents } = require('../routes/governance-calendar');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiTemplateCache } = require('../routes/ai');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
@@ -109,6 +111,7 @@ describe('demo-seed endpoint', () => {
       [dataQualityRules, 'dataQualityRules'],
       [connectors, 'connectors'],
       [connectorEvents, 'connectorEvents'],
+      [calendarEvents, 'calendarEvents'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
@@ -128,7 +131,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents, calendarEvents]) sweep(s);
   });
 
   it('rejects non-super-admin callers with 403', async () => {
@@ -155,8 +158,9 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
     assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
-    assert.strictEqual(demoCount(connectors), 1, 'connectors');
+    assert.strictEqual(demoCount(connectors), 2, 'connectors');
     assert.strictEqual(demoCount(connectorEvents), 5, 'connector events');
+    assert.strictEqual(demoCount(calendarEvents), 1, 'calendar events');
   });
 
   it('is idempotent — second call replaces the first, no row compounding', async () => {
@@ -226,6 +230,25 @@ describe('demo-seed endpoint', () => {
     assert.ok(meter);
     assert.strictEqual((meter as any).lastSyncedByConnectorId, conn.id);
     assert.ok((meter as any).lastSyncedAt);
+  });
+
+  it('seeds a PAIRING connector alongside the ONLINE one', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const online = connectors.find((c: any) => c.id === 'demo-conn-tidewater');
+    const pairing = connectors.find((c: any) => c.id === 'demo-conn-pairing');
+    assert.ok(online);
+    assert.ok(pairing, 'expected the PAIRING connector');
+    assert.strictEqual(pairing.tokenHash, null, 'PAIRING connector should not have a claimed token');
+    assert.match(String(pairing.pairingCode), /^\d{8}$/, 'pairing code should be 8 digits');
+  });
+
+  it('seeds a governance calendar event owned by Susan', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const ev = calendarEvents.find((c: any) => c.id === 'demo-cal-dgc');
+    assert.ok(ev);
+    assert.strictEqual(ev.cadence, 'WEEKLY');
+    assert.ok(Array.isArray(ev.attendees) && ev.attendees.includes('demo-person-susan-chen'), 'Susan is an attendee');
+    assert.ok(new Date(ev.nextOccurrence).getTime() > Date.now());
   });
 
   it('plants orphan assets not referenced by any mapping', async () => {
