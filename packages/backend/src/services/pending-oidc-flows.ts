@@ -60,7 +60,8 @@ export interface PendingFlow {
 const FLOW_TTL_MS = 10 * 60 * 1000;
 const flows = new Map<string, PendingFlow>();
 
-const sweep = setInterval(() => {
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => {
   const now = Date.now();
   let removed = 0;
   for (const [state, flow] of flows) {
@@ -71,7 +72,6 @@ const sweep = setInterval(() => {
   }
   if (removed > 0) logger.debug({ removed }, 'Swept expired pending OIDC flows');
 }, 60_000);
-sweep.unref?.();
 
 /** Generate a URL-safe random string of the given byte length encoded
  *  as base64url. 32 bytes = 256 bits of entropy. */

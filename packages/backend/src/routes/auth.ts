@@ -11,6 +11,7 @@ import { auditService } from '../services/audit.service';
 import { people, computeAccessibleOrgs, isActive as isPersonActive, getRoleForOrg } from './people';
 import { organizations } from './organizations';
 import { saveStore } from '../lib/persistence';
+import { startBackgroundSweep } from '../lib/background-timer';
 import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
 import { peekFlow } from '../services/pending-oidc-flows';
@@ -1667,12 +1668,12 @@ function generateTempPassword(length: number): string {
 const pendingEnrollments = new Map<string, { secret: string; expiresAt: number }>();
 const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
 
-setInterval(() => {
+startBackgroundSweep(() => {
   const now = Date.now();
   for (const [k, v] of pendingEnrollments) {
     if (v.expiresAt < now) pendingEnrollments.delete(k);
   }
-}, 60_000).unref?.();
+}, 60_000);
 
 router.post('/mfa/start', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;

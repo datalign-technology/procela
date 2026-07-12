@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
+import { startBackgroundSweep } from '../lib/background-timer';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { dataAssets, getPrimaryBinding } from './data-assets';
@@ -551,7 +552,6 @@ function tickScheduler(): void {
     }
   }
 }
-const schedulerHandle = setInterval(tickScheduler, SCHEDULER_TICK_MS);
-if (typeof schedulerHandle.unref === 'function') schedulerHandle.unref();
+startBackgroundSweep(tickScheduler, SCHEDULER_TICK_MS);
 
 export default router;

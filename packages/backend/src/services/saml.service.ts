@@ -53,12 +53,13 @@ interface PendingSamlState {
 const pendingStates = new Map<string, PendingSamlState>();
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-setInterval(() => {
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => {
   const now = Date.now();
   for (const [k, v] of pendingStates) {
     if (now - v.createdAt > STATE_TTL_MS) pendingStates.delete(k);
   }
-}, 60_000).unref?.();
+}, 60_000);
 
 export function normaliseCert(raw: string): string {
   // node-saml accepts certs with or without PEM headers, but it's
