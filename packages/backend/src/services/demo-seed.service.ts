@@ -23,6 +23,7 @@ import { mappings } from '../routes/mappings';
 import { governanceTasks } from '../routes/governance-tasks';
 import { governanceIssues } from '../routes/governance-issues';
 import { dataQualityRules } from '../routes/data-quality';
+import { connectors, connectorEvents } from '../routes/connectors';
 import { aiTemplateCache } from '../routes/ai';
 import { saveStore } from '../lib/persistence';
 import logger from '../lib/logger';
@@ -49,6 +50,8 @@ function sweep(): void {
     [governanceTasks, 'governanceTasks'],
     [governanceIssues, 'governanceIssues'],
     [dataQualityRules, 'dataQualityRules'],
+    [connectors, 'connectors'],
+    [connectorEvents, 'connectorEvents'],
   ];
   for (const [arr, storeName] of stores) {
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -81,6 +84,8 @@ export interface DemoSeedReport {
   governanceTasks: number;
   governanceIssues: number;
   dataQualityRules: number;
+  connectors: number;
+  connectorEvents: number;
   persona: { id: string; name: string };
 }
 
@@ -269,6 +274,79 @@ export function seedDemoData(): DemoSeedReport {
   dataQualityRules.push(dqPassing, dqFailing);
   saveStore('dataQualityRules', dataQualityRules);
 
+  // ── Edge connector (on-prem agent) ──
+  // One healthy connector shows the customer their in-network agent
+  // relationship in the demo without needing to spin up a real
+  // container on stage. Pair state is populated; the token hash is
+  // a fixed sha256 of the string "demo-connector-token" so a demo
+  // reader can grep the store and see how the field looks without
+  // exposing a plaintext token. Freshness bucket is computed live
+  // at read time — we set lastHeartbeatAt to 45 seconds ago so the
+  // row shows ONLINE without any timing acrobatics.
+  const connectorHeartbeatAt = new Date(Date.now() - 45 * 1000).toISOString();
+  const connectorCreatedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const connectorSyncAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const conn = {
+    id: P + 'conn-tidewater',
+    orgId: orgTidewater.id,
+    name: 'Tidewater Data Platform Connector',
+    // sha256("demo-connector-token") — the plaintext isn't reachable
+    // through the demo path so this is illustrative only, but keeps
+    // the schema honest.
+    tokenHash: '5f6d3c4f26f9c50a9c1a5a2f70c3f7f4a0b3d3c8b3f7d9c3a1e2f5b6c9d0e1f2',
+    pairingCode: null,
+    pairingCodeExpiresAt: null,
+    systemIds: [sysAMI.id, sysWarehouse.id],
+    lastHeartbeatAt: connectorHeartbeatAt,
+    agentVersion: '1.2.0',
+    status: 'ONLINE' as const,
+    createdAt: connectorCreatedAt,
+    updatedAt: connectorHeartbeatAt,
+  };
+  connectors.push(conn);
+  saveStore('connectors', connectors);
+
+  // Wire the connector's most recent sync onto Meter Reads so the
+  // Data Asset detail page shows the "Synced 5 min ago" chip during
+  // the demo. Cast through any because the field lives on the asset
+  // as a runtime extension that the connector route adds without a
+  // schema change — the frontend picks it up unconditionally.
+  (assetMeterReads as any).lastSyncedByConnectorId = conn.id;
+  (assetMeterReads as any).lastSyncedAt = connectorSyncAt;
+  saveStore('dataAssets', dataAssets);
+
+  // Connector activity feed — the "Events" tab on the connector
+  // detail. Order is chronological ascending; the UI reverses on
+  // render so newest reads first.
+  connectorEvents.push(
+    {
+      id: P + 'ce-paired', connectorId: conn.id, orgId: orgTidewater.id,
+      type: 'PAIRED', ts: connectorCreatedAt,
+      data: { agentVersion: '1.2.0' },
+    },
+    {
+      id: P + 'ce-scan-start', connectorId: conn.id, orgId: orgTidewater.id,
+      type: 'SCAN_STARTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      data: { targetSystemIds: [sysAMI.id, sysWarehouse.id] },
+    },
+    {
+      id: P + 'ce-scan-done', connectorId: conn.id, orgId: orgTidewater.id,
+      type: 'SCAN_COMPLETED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 40 * 1000).toISOString(),
+      data: { durationMs: 40_120, assetsDiscovered: 1 },
+    },
+    {
+      id: P + 'ce-assets', connectorId: conn.id, orgId: orgTidewater.id,
+      type: 'ASSETS_REPORTED', ts: new Date(Date.now() - 2 * 60 * 60 * 1000 + 45 * 1000).toISOString(),
+      data: { incoming: 1, created: 0, updated: 1 },
+    },
+    {
+      id: P + 'ce-hb', connectorId: conn.id, orgId: orgTidewater.id,
+      type: 'HEARTBEAT', ts: connectorHeartbeatAt,
+      data: { agentVersion: '1.2.0' },
+    },
+  );
+  saveStore('connectorEvents', connectorEvents);
+
   // ── AI template cache — pre-warm the wand for Tidewater ──
   // A live demo can't afford the 10–30s Claude wait on the "Generate
   // processes" wand. Seeding two hand-crafted templates against the
@@ -417,6 +495,8 @@ export function seedDemoData(): DemoSeedReport {
     governanceTasks: 3,
     governanceIssues: 1,
     dataQualityRules: 2,
+    connectors: 1,
+    connectorEvents: 5,
     persona: { id: susan.id, name: susan.name },
   };
 }

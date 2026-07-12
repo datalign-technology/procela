@@ -38,6 +38,8 @@ const { governanceIssues } = require('../routes/governance-issues');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { dataQualityRules } = require('../routes/data-quality');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const { connectors, connectorEvents } = require('../routes/connectors');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { aiTemplateCache } = require('../routes/ai');
 
 function request(port: number, method: string, path: string, body?: unknown, role?: string): Promise<{ status: number; body: any }> {
@@ -105,6 +107,8 @@ describe('demo-seed endpoint', () => {
       [governanceTasks, 'governanceTasks'],
       [governanceIssues, 'governanceIssues'],
       [dataQualityRules, 'dataQualityRules'],
+      [connectors, 'connectors'],
+      [connectorEvents, 'connectorEvents'],
     ];
     for (const [arr, name] of stores) {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
@@ -124,7 +128,7 @@ describe('demo-seed endpoint', () => {
     const sweep = (arr: any[]) => {
       for (let i = arr.length - 1; i >= 0; i--) if (arr[i]?.id?.startsWith('demo-')) arr.splice(i, 1);
     };
-    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules]) sweep(s);
+    for (const s of [organizations, people, systems, agents, dataDomains, dataAssets, processNodes, mappings, governanceTasks, governanceIssues, dataQualityRules, connectors, connectorEvents]) sweep(s);
   });
 
   it('rejects non-super-admin callers with 403', async () => {
@@ -151,6 +155,8 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
     assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
+    assert.strictEqual(demoCount(connectors), 1, 'connectors');
+    assert.strictEqual(demoCount(connectorEvents), 5, 'connector events');
   });
 
   it('is idempotent — second call replaces the first, no row compounding', async () => {
@@ -197,6 +203,29 @@ describe('demo-seed endpoint', () => {
     assert.ok(electric.data.valueStreams.length >= 2);
     assert.ok(Array.isArray(water.data?.valueStreams));
     assert.ok(water.data.valueStreams.length >= 2);
+  });
+
+  it('seeds a paired connector, its events, and wires Meter Reads sync fields', async () => {
+    await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
+    const conn = connectors.find((c: any) => c.id === 'demo-conn-tidewater');
+    assert.ok(conn, 'expected the demo connector');
+    assert.strictEqual(conn.status, 'ONLINE');
+    assert.strictEqual(conn.agentVersion, '1.2.0');
+    assert.ok(conn.systemIds.length >= 2, 'expected connector to cover AMI + warehouse');
+
+    // Events story — at least one PAIRED and one HEARTBEAT.
+    const events = connectorEvents.filter((e: any) => e.connectorId === conn.id);
+    assert.ok(events.length >= 5);
+    assert.ok(events.some((e: any) => e.type === 'PAIRED'));
+    assert.ok(events.some((e: any) => e.type === 'HEARTBEAT'));
+    assert.ok(events.some((e: any) => e.type === 'ASSETS_REPORTED'));
+
+    // Meter Reads should carry the sync chip fields so the Data Asset
+    // detail page reads "Synced N min ago".
+    const meter = dataAssets.find((a: any) => a.id === 'demo-asset-meter-reads');
+    assert.ok(meter);
+    assert.strictEqual((meter as any).lastSyncedByConnectorId, conn.id);
+    assert.ok((meter as any).lastSyncedAt);
   });
 
   it('plants orphan assets not referenced by any mapping', async () => {
