@@ -285,6 +285,7 @@ import { operationsManuals } from './routes/operations-manuals';
 import { skills } from './routes/skills';
 import { agentExecutions } from './routes/agent-executions';
 import { connectors, connectorEvents, scanForOfflineConnectors } from './routes/connectors';
+import { startScheduler, stopScheduler } from './services/scheduler.service';
 
 const stores = {
   processNodes: () => processNodes,
@@ -359,6 +360,11 @@ const offlineScanHandle = config.nodeEnv === 'test'
       }
     }, OFFLINE_SCAN_INTERVAL_MS);
 offlineScanHandle?.unref();
+
+// Overdue-task sweep + weekly digest. See services/scheduler.service.ts
+// — 1h tick, disabled in tests (NODE_ENV=test) and via
+// PROCELA_DISABLE_SCHEDULER=1.
+startScheduler();
 
 // ---------------------------------------------------------------------------
 // Start server
@@ -472,6 +478,7 @@ function shutdown(signal: string): void {
   logger.info({ signal }, 'Shutting down');
   clearInterval(autoSaveHandle);
   if (offlineScanHandle) clearInterval(offlineScanHandle);
+  stopScheduler();
   flushStores(stores);
   server.close((err) => {
     if (err) logger.error({ err }, 'Error closing HTTP server');
