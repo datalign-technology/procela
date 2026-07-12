@@ -8,13 +8,45 @@ export function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+/**
+ * Persist a store to disk atomically. Writes to a sibling `.tmp` file
+ * first, then renames over the real file — POSIX rename is atomic, so
+ * a crash mid-write leaves either the old file or the fully-written
+ * new file, never a truncated / half-serialized one. A prior direct
+ * `writeFileSync` could produce a zero-byte JSON on power loss which
+ * would then load as `[]` on next boot and silently wipe the store.
+ *
+ * The write itself stays synchronous — Node's fs.rename is atomic on
+ * the same filesystem (which .procela-data always is), and the sync
+ * path keeps the existing call-site shape. If the rename fails the
+ * temp file is best-effort deleted so we don't accumulate garbage on
+ * repeated retries.
+ */
 export function saveStore(name: string, data: any[]) {
   ensureDataDir();
-  fs.writeFileSync(path.join(DATA_DIR, `${name}.json`), JSON.stringify(data, null, 2));
+  const finalPath = path.join(DATA_DIR, `${name}.json`);
+  const tmpPath = path.join(DATA_DIR, `${name}.json.tmp`);
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+  try {
+    fs.renameSync(tmpPath, finalPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore — tmp already gone */ }
+    throw err;
+  }
 }
 
 export function loadStore<T>(name: string): T[] {
   const filePath = path.join(DATA_DIR, `${name}.json`);
+  // A stale `.tmp` sibling means a crash occurred between the tmp
+  // write and the rename. The real file is either the old good copy
+  // (rename never fired) or the new one (rename succeeded and a
+  // subsequent write raced). Either way, discard the stray tmp
+  // rather than leaving it to grow across restarts.
+  const tmpPath = path.join(DATA_DIR, `${name}.json.tmp`);
+  if (fs.existsSync(tmpPath)) {
+    try { fs.unlinkSync(tmpPath); }
+    catch { /* best-effort */ }
+  }
   if (!fs.existsSync(filePath)) return [];
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
