@@ -1173,6 +1173,147 @@ router.get('/:id/suggest-source', (req: Request, res: Response) => {
 // untagged. There is no separate DELETE endpoint — one PUT
 // route is the durable API.
 
+/**
+ * GET /api/v1/data-assets/:id/impact
+ *
+ * "What breaks if this asset changes?" A change-management view over
+ * the same catalog data the 360 endpoint reads, but framed as a
+ * blast-radius answer rather than an informational lookup.
+ *
+ * Response shape:
+ *   summary — headline counts (activities, processes, value streams,
+ *             people to notify).
+ *   activities — every activity that consumes or produces the asset,
+ *                each with its ancestor breadcrumb + linkType + the
+ *                owner and responsible person on that activity.
+ *   people — de-duped notify list: for each affected person we record
+ *            the *roles* they hold that make them relevant, so a
+ *            reviewer can see "Susan Chen — Domain owner (Customer
+ *            Data), Responsible on 2 activities" in one line.
+ *   domain — the domain owner + stewards (they always need to know).
+ */
+router.get('/:id/impact', (req: Request, res: Response) => {
+  const asset = dataAssets.find((a) => a.id === req.params.id);
+  if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+
+  // Build a per-node ancestor breadcrumb.
+  const breadcrumb = (nodeId: string): string => {
+    const node = processNodes.find((n) => n.id === nodeId);
+    if (!node) return nodeId;
+    const parts: string[] = [node.name];
+    let cur = node;
+    while (cur.parentId) {
+      const p = processNodes.find((n) => n.id === cur.parentId);
+      if (!p) break;
+      parts.unshift(p.name);
+      cur = p;
+    }
+    return parts.join(' > ');
+  };
+
+  const findValueStreamName = (nodeId: string): string | null => {
+    const node = processNodes.find((n) => n.id === nodeId);
+    if (!node) return null;
+    let cur = node;
+    while (cur.parentId) {
+      const p = processNodes.find((n) => n.id === cur.parentId);
+      if (!p) break;
+      cur = p;
+    }
+    return cur.level === 'VALUE_STREAM' ? cur.name : null;
+  };
+
+  const findProcessName = (nodeId: string): string | null => {
+    const node = processNodes.find((n) => n.id === nodeId);
+    if (!node) return null;
+    let cur: typeof node | undefined = node;
+    while (cur && cur.level !== 'PROCESS') {
+      cur = cur.parentId ? processNodes.find((n) => n.id === cur!.parentId) : undefined;
+    }
+    return cur ? cur.name : null;
+  };
+
+  // Every mapping row that references this asset.
+  const relevant = mappings.filter((m) => m.dataAssetId === asset.id);
+  const activityRows = relevant.map((m) => {
+    const node = processNodes.find((n) => n.id === m.processStepId);
+    const owner = node?.ownerId ? people.find((p) => p.id === node.ownerId) : null;
+    const responsible = node?.responsiblePersonId ? people.find((p) => p.id === node.responsiblePersonId) : null;
+    return {
+      id: node?.id || m.processStepId,
+      name: node?.name || m.processStepId,
+      breadcrumb: breadcrumb(m.processStepId),
+      valueStream: findValueStreamName(m.processStepId),
+      process: findProcessName(m.processStepId),
+      linkType: m.linkType,
+      owner: owner ? { id: owner.id, name: owner.name } : null,
+      responsible: responsible ? { id: responsible.id, name: responsible.name } : null,
+    };
+  });
+
+  // Domain owners and stewards always need to know about changes to
+  // assets in their domain.
+  const domain = dataDomains.find((d) => d.dataAssetIds && d.dataAssetIds.includes(asset.id));
+  const domainOwner = domain?.ownerId ? people.find((p) => p.id === domain.ownerId) : null;
+  const domainStewards = ((domain?.stewardIds) || [])
+    .map((sid) => people.find((p) => p.id === sid))
+    .filter(Boolean) as Array<{ id: string; name: string }>;
+
+  // The asset's own owner / stewards (if set at the asset level).
+  const assetOwner = asset.ownerPersonId ? people.find((p) => p.id === asset.ownerPersonId) : null;
+  const assetStewards = (asset.stewardIds || [])
+    .map((sid) => people.find((p) => p.id === sid))
+    .filter(Boolean) as Array<{ id: string; name: string }>;
+
+  // Aggregate the people-to-notify list with role provenance. Roles
+  // deduped per person so someone who's responsible on two activities
+  // reads as "Responsible on 2 activities" rather than two entries.
+  const peopleMap = new Map<string, { id: string; name: string; roles: Map<string, number> }>();
+  const stampRole = (person: { id: string; name: string } | null | undefined, roleLabel: string) => {
+    if (!person) return;
+    const existing = peopleMap.get(person.id) || { id: person.id, name: person.name, roles: new Map() };
+    existing.roles.set(roleLabel, (existing.roles.get(roleLabel) || 0) + 1);
+    peopleMap.set(person.id, existing);
+  };
+  if (assetOwner) stampRole(assetOwner, 'Asset owner');
+  for (const s of assetStewards) stampRole(s, 'Asset steward');
+  if (domainOwner) stampRole(domainOwner, `Domain owner (${domain!.name})`);
+  for (const s of domainStewards) stampRole(s, `Domain steward (${domain!.name})`);
+  for (const a of activityRows) {
+    stampRole(a.owner, 'Activity owner');
+    stampRole(a.responsible, 'Responsible on activity');
+  }
+
+  const peopleList = Array.from(peopleMap.values()).map((p) => ({
+    id: p.id,
+    name: p.name,
+    roles: Array.from(p.roles.entries()).map(([label, count]) => count > 1 ? `${label} × ${count}` : label),
+  }));
+
+  const uniqueProcessIds = new Set(activityRows.map((a) => a.process).filter(Boolean));
+  const uniqueVsIds = new Set(activityRows.map((a) => a.valueStream).filter(Boolean));
+
+  res.json({
+    success: true,
+    data: {
+      summary: {
+        activityCount: activityRows.length,
+        processCount: uniqueProcessIds.size,
+        valueStreamCount: uniqueVsIds.size,
+        peopleCount: peopleList.length,
+      },
+      activities: activityRows,
+      people: peopleList,
+      domain: domain ? {
+        id: domain.id,
+        name: domain.name,
+        owner: domainOwner ? { id: domainOwner.id, name: domainOwner.name } : null,
+        stewards: domainStewards,
+      } : null,
+    },
+  });
+});
+
 /** POST /api/v1/data-assets/:id/suggest-sensitivity */
 router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);

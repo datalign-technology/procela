@@ -14,6 +14,7 @@ import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SensitivityPanel from '../components/SensitivityPanel';
+import ImpactAnalysisPanel from '../components/ImpactAnalysisPanel';
 import CommentsPanel from '../components/CommentsPanel';
 import { renderNavIcon } from '../components/navIcons';
 import ActivityFeed from '../components/ActivityFeed';
@@ -2131,11 +2132,19 @@ export default function DataAssetsPage() {
                   initialTags={viewing360.asset.sensitivityTags}
                   disabled={!canWrite || isInheritedAsset(viewing360.asset.orgId, activeOrgId)}
                   onCommittedChange={(next) => {
-                    // Mirror the change into local state so a reopen
-                    // doesn't have to re-fetch to see the accepted tags.
                     setViewing360((prev) => prev ? { ...prev, asset: { ...prev.asset, sensitivityTags: next } } : prev);
                     setAssets((prev) => prev.map((a) => a.id === viewing360.asset.id ? { ...a, sensitivityTags: next } : a));
                   }}
+                />
+
+                {/* Impact analysis — the "what breaks + who to tell"
+                    question. Sits above the WhereUsed view because
+                    change management is the more urgent read; WhereUsed
+                    stays as the general-purpose informational lookup. */}
+                <ImpactAnalysisPanel
+                  assetId={viewing360.asset.id}
+                  onNavigateToActivity={(nodeId) => { setViewing360(null); navigate(`/processes?node=${encodeURIComponent(nodeId)}`); }}
+                  onNavigateToPerson={(personId) => { setViewing360(null); navigate(`/people/${encodeURIComponent(personId)}`); }}
                 />
 
                 {/* Cross-layer view — same WhereUsed shape used on Systems,
