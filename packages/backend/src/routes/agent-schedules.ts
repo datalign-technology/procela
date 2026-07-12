@@ -220,8 +220,8 @@ function tickAgentSchedules(): void {
   }
 }
 
-const schedulerHandle = setInterval(tickAgentSchedules, SCHEDULER_TICK_MS);
-if (typeof schedulerHandle.unref === 'function') schedulerHandle.unref();
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(tickAgentSchedules, SCHEDULER_TICK_MS);
 
 // Exported for tests that want to deterministically trigger the loop.
 export { tickAgentSchedules };

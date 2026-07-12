@@ -10,7 +10,7 @@ import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { OWNERSHIP_LEVELS } from '../lib/org-scope';
+import { OWNERSHIP_LEVELS, filterByOrgScope } from '../lib/org-scope';
 
 // ── RACI Overrides ──
 interface RaciOverride {
@@ -42,20 +42,18 @@ router.get('/stats', (req: Request, res: Response) => {
   // never silently disappear when the user picks the Operational lens.
   const nodeMatchesDomain = (n: any) => !dom || (n.domain || 'OPERATIONAL') === dom;
 
-  const filteredNodes = (oid ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid) : processNodes)
-    .filter(nodeMatchesDomain);
-  const filteredAssets = oid ? dataAssets.filter((a) => a.orgId === oid) : dataAssets;
-  const filteredMappings = oid ? mappings.filter((m) => m.orgId === oid) : mappings;
-  const filteredSystems = oid ? systems.filter((s) => s.orgId === oid) : systems;
-  const filteredPeople = oid ? people.filter((p) => p.orgIds?.includes(oid)) : people;
-  const filteredFlows = (oid ? flowRelationships.filter((f) => {
-    const from = processNodes.find((n) => n.id === f.fromNodeId);
-    return from && (from.orgIds.includes(oid) || from.orgId === oid);
-  }) : flowRelationships).filter((f) => {
-    if (!dom) return true;
-    const from = processNodes.find((n) => n.id === f.fromNodeId);
-    return from ? nodeMatchesDomain(from) : true;
-  });
+  // filterByOrgScope walks both ancestors and descendants so a
+  // division-scope dashboard includes company-level items rolled down
+  // AND team-level items rolled up — matching the rest of the app.
+  const filteredNodes = filterByOrgScope(processNodes, oid).filter(nodeMatchesDomain);
+  const filteredAssets = filterByOrgScope(dataAssets, oid);
+  const filteredMappings = filterByOrgScope(mappings, oid);
+  const filteredSystems = filterByOrgScope(systems, oid);
+  const filteredPeople = filterByOrgScope(people, oid);
+  // Flows don't carry orgId — walk them via the (already-scoped) node
+  // set so scope + domain filtering fall out naturally.
+  const inScopeNodeIds = new Set(filteredNodes.map((n) => n.id));
+  const filteredFlows = flowRelationships.filter((f) => inScopeNodeIds.has(f.fromNodeId));
 
   // Count by level
   const byLevel = Object.fromEntries(
@@ -107,11 +105,12 @@ router.get('/stats', (req: Request, res: Response) => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { suggestionDismissals } = require('./process-catalog');
-    dismissedSuggestions = (suggestionDismissals as Array<{ orgId: string }>)
-      .filter((d) => !oid || d.orgId === oid).length;
+    dismissedSuggestions = filterByOrgScope(
+      suggestionDismissals as Array<{ orgId: string }>, oid,
+    ).length;
   } catch { /* store not loaded yet — leave at 0 */ }
 
-  const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
+  const filteredDomains = filterByOrgScope(dataDomains, oid);
   const ungovernedDomains = filteredDomains.filter((d) => !d.ownerId).length;
 
   // ── Descendant roll-up for the setup-complete banner ──
@@ -188,11 +187,11 @@ router.get('/scorecard', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
-  const filteredNodes = oid ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid) : processNodes;
-  const filteredAssets = oid ? dataAssets.filter((a) => a.orgId === oid) : dataAssets;
-  const filteredDomains = oid ? dataDomains.filter((d) => d.orgId === oid) : dataDomains;
-  const filteredGroups = oid ? governanceGroups.filter((g) => g.orgId === oid) : governanceGroups;
-  const filteredPeople = oid ? people.filter((p) => (p as any).orgId === oid || p.orgIds?.includes(oid)) : people;
+  const filteredNodes = filterByOrgScope(processNodes, oid);
+  const filteredAssets = filterByOrgScope(dataAssets, oid);
+  const filteredDomains = filterByOrgScope(dataDomains, oid);
+  const filteredGroups = filterByOrgScope(governanceGroups, oid);
+  const filteredPeople = filterByOrgScope(people, oid);
 
   // 1. processDocumentation: % of value streams with ACTIVE status that have complete paths
   //    (complete path = VS has at least one PROCESS descendant which has at least one ACTIVITY descendant)
@@ -305,19 +304,15 @@ router.get('/raci', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
-  // Filter data by org
-  const filteredNodes = oid
-    ? processNodes.filter((n) => n.orgIds.includes(oid) || n.orgId === oid)
-    : processNodes;
-  const filteredPeople = oid
-    ? people.filter((p) => (p as any).orgId === oid || p.orgIds?.includes(oid))
-    : people;
+  // Filter data by org. damaRoles keeps its bespoke filter — it uses
+  // scopeType/scopeId rather than orgId/orgIds so filterByOrgScope
+  // doesn't apply.
+  const filteredNodes = filterByOrgScope(processNodes, oid);
+  const filteredPeople = filterByOrgScope(people, oid);
   const filteredRoles = oid
     ? damaRoles.filter((r) => r.scopeType === 'ORG' && r.scopeId === oid)
     : damaRoles;
-  const filteredGroups = oid
-    ? governanceGroups.filter((g) => g.orgId === oid)
-    : governanceGroups;
+  const filteredGroups = filterByOrgScope(governanceGroups, oid);
 
   // Rows: every planning-level node in the hierarchy. EXECUTION is a
   // run-time logging level (instances of a TASK), not something you
@@ -372,9 +367,7 @@ router.get('/raci', (req: Request, res: Response) => {
   //   relevant domains, plus the Data Governance Lead and DQ Analysts.
 
   // Build lookup: processNodeId -> mapped data asset IDs
-  const filteredMappings = oid
-    ? mappings.filter((m: any) => m.orgId === oid)
-    : mappings;
+  const filteredMappings = filterByOrgScope(mappings, oid);
   const assetsByNode: Record<string, string[]> = {};
   for (const m of filteredMappings) {
     if (!m.dataAssetId) continue; // policy / attachment rows aren't assets
@@ -1031,13 +1024,12 @@ router.get('/governance-status', (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
-  // Check each component
-  const hasGovProcesses = processNodes.some((n) =>
-    n.level === 'VALUE_STREAM' && isGovernanceProcess(n) &&
-    (oid ? n.orgId === oid || n.orgIds?.includes(oid) : true),
-  );
-  const hasGovGroups = governanceGroups.some((g) => oid ? g.orgId === oid : true);
-  const hasDomains = dataDomains.some((d) => oid ? d.orgId === oid : true);
+  // Check each component. filterByOrgScope handles the "no orgId set →
+  // don't filter" case as well as the ancestor/descendant roll-up.
+  const hasGovProcesses = filterByOrgScope(processNodes, oid)
+    .some((n) => n.level === 'VALUE_STREAM' && isGovernanceProcess(n));
+  const hasGovGroups = filterByOrgScope(governanceGroups, oid).length > 0;
+  const hasDomains = filterByOrgScope(dataDomains, oid).length > 0;
 
   res.json({
     success: true,

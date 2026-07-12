@@ -302,7 +302,7 @@ async function tickPollScheduler(): Promise<void> {
     scheduling = false;
   }
 }
-const pollSchedulerHandle = setInterval(() => { void tickPollScheduler(); }, POLL_TICK_MS);
-if (typeof pollSchedulerHandle.unref === 'function') pollSchedulerHandle.unref();
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => { void tickPollScheduler(); }, POLL_TICK_MS);
 
 export default router;

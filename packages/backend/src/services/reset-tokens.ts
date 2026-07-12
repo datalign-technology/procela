@@ -33,7 +33,8 @@ export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 // Sweep expired tokens periodically so a flood of forgot-password
 // requests doesn't grow the Map indefinitely.
-const sweepInterval = setInterval(() => {
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => {
   const now = Date.now();
   let removed = 0;
   for (const [token, entry] of tokens) {
@@ -44,7 +45,6 @@ const sweepInterval = setInterval(() => {
   }
   if (removed > 0) logger.debug({ removed }, 'Swept expired reset tokens');
 }, 5 * 60 * 1000);
-sweepInterval.unref?.();
 
 export function mintResetToken(personId: string): string {
   const token = randomBytes(32).toString('base64url');

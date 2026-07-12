@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -40,6 +40,7 @@ export interface StoredScimGroup {
 }
 
 export const scimGroups: StoredScimGroup[] = loadStore<StoredScimGroup>('scim-groups');
+registerStore('scim-groups', scimGroups);
 
 export function findGroup(id: string): StoredScimGroup | undefined {
   return scimGroups.find((g) => g.id === id);

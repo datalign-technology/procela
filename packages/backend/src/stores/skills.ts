@@ -1,4 +1,4 @@
-import { loadStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Skills store — the in-memory `skills` array, lifted out of routes so
@@ -32,3 +32,4 @@ export interface StoredSkill {
 }
 
 export const skills: StoredSkill[] = loadStore<StoredSkill>('skills');
+registerStore('skills', skills);

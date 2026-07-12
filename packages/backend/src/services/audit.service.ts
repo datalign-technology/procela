@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore } from '../lib/persistence';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 
 export interface AuditLogEntry {
@@ -26,6 +26,7 @@ export interface AuditLogEntry {
 
 // Persistent audit log (replace with Prisma when DB is connected)
 export const auditLogs: AuditLogEntry[] = loadStore<AuditLogEntry>('auditLogs');
+registerStore('auditLogs', auditLogs);
 
 // One-time bootstrap: when the hash-chain code first lands, every
 // previously-written entry lacks prevHash / entryHash. The verifier

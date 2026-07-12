@@ -228,11 +228,11 @@ interface PendingChallenge {
 const challenges = new Map<string, PendingChallenge>();
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-const sweep = setInterval(() => {
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => {
   const now = Date.now();
   for (const [k, v] of challenges) if (v.expiresAt < now) challenges.delete(k);
 }, 60_000);
-sweep.unref?.();
 
 export function stashChallenge(challenge: string, context: PendingChallenge['context']): void {
   challenges.set(challenge, {

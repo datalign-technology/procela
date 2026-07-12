@@ -170,13 +170,13 @@ const memStore = new Map<string, Counter>();
 export function _resetRateLimitForTesting(): void {
   memStore.clear();
 }
-const memSweep = setInterval(() => {
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => {
   const now = Date.now();
   for (const [k, c] of memStore) {
     if (now - c.windowStart > 24 * 60 * 60_000) memStore.delete(k);
   }
 }, 60_000);
-memSweep.unref?.();
 
 function incrInMemory(key: string, windowMs: number): { count: number; ttlMs: number } {
   const now = Date.now();

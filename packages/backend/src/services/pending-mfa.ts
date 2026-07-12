@@ -27,7 +27,8 @@ interface PendingMfa {
 
 const pending = new Map<string, PendingMfa>();
 
-const sweep = setInterval(() => {
+import { startBackgroundSweep } from '../lib/background-timer';
+startBackgroundSweep(() => {
   const now = Date.now();
   let removed = 0;
   for (const [token, entry] of pending) {
@@ -38,7 +39,6 @@ const sweep = setInterval(() => {
   }
   if (removed > 0) logger.debug({ removed }, 'Swept expired pending-MFA tokens');
 }, 60_000);
-sweep.unref?.();
 
 export function mintPendingMfa(personId: string): string {
   const token = mintOpaqueMfaToken();
