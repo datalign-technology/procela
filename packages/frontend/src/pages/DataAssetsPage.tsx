@@ -13,6 +13,7 @@ import { useColumnPicker } from '../hooks/useColumnPicker';
 import ColumnPicker from '../components/ColumnPicker';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
+import SensitivityPanel from '../components/SensitivityPanel';
 import CommentsPanel from '../components/CommentsPanel';
 import { renderNavIcon } from '../components/navIcons';
 import ActivityFeed from '../components/ActivityFeed';
@@ -66,6 +67,10 @@ interface DataAssetEntity {
   retentionReason?: string;
   refreshFrequency?: string;
   origin?: 'MANUAL' | 'GOVERNANCE_TEMPLATE' | 'DISCOVERED' | 'IMPORTED' | 'SYNCED';
+  /** Human-accepted sensitivity classification. Populated via the
+   *  Suggest & Review flow (POST /:id/suggest-sensitivity → user
+   *  Accept/Reject → PUT /:id/sensitivity). Empty means untagged. */
+  sensitivityTags?: Array<'PII' | 'PHI' | 'PCI' | 'FINANCIAL' | 'CREDENTIAL' | 'CONFIDENTIAL' | 'PUBLIC'>;
   /** Set by the on-prem connector when it last refreshed this asset.
    *  Drives the freshness chip on the row so users can tell at a
    *  glance whether the metadata reflects reality. */
@@ -1776,6 +1781,18 @@ export default function DataAssetsPage() {
                           </button>
                           <OriginBadge origin={asset.origin} />
                           <SyncFreshnessChip lastSyncedAt={asset.lastSyncedAt} />
+                          {asset.sensitivityTags && asset.sensitivityTags.length > 0 && (
+                            <span
+                              title={`Sensitivity: ${asset.sensitivityTags.join(', ')}`}
+                              style={{
+                                fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+                                background: '#fee2e2', color: '#991b1b',
+                                padding: '1px 6px', borderRadius: 3,
+                              }}
+                            >
+                              {asset.sensitivityTags[0]}{asset.sensitivityTags.length > 1 ? ` +${asset.sensitivityTags.length - 1}` : ''}
+                            </span>
+                          )}
                           <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
                         </div>
                       </div>
@@ -2104,6 +2121,22 @@ export default function DataAssetsPage() {
                     </span>
                   )}
                 </div>
+
+                {/* Sensitivity — Suggest & Review flow. Sits above the
+                    cross-layer WhereUsed view so a reviewer sees the
+                    classification before deciding whether the asset's
+                    downstream footprint is defensible. */}
+                <SensitivityPanel
+                  assetId={viewing360.asset.id}
+                  initialTags={viewing360.asset.sensitivityTags}
+                  disabled={!canWrite || isInheritedAsset(viewing360.asset.orgId, activeOrgId)}
+                  onCommittedChange={(next) => {
+                    // Mirror the change into local state so a reopen
+                    // doesn't have to re-fetch to see the accepted tags.
+                    setViewing360((prev) => prev ? { ...prev, asset: { ...prev.asset, sensitivityTags: next } } : prev);
+                    setAssets((prev) => prev.map((a) => a.id === viewing360.asset.id ? { ...a, sensitivityTags: next } : a));
+                  }}
+                />
 
                 {/* Cross-layer view — same WhereUsed shape used on Systems,
                     Activities, and People so users learn one navigation
