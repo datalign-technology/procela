@@ -4,6 +4,7 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
+import { createNotification } from './notifications';
 import logger from '../lib/logger';
 
 const TASK_TYPES = [
@@ -61,6 +62,13 @@ interface StoredGovernanceTask {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  /** ISO timestamp of the most recent overdue notification the sweep
+   *  fired for this task. Used to dedupe: sweep only fires a new
+   *  notification when overdueNotifiedAt is missing OR older than the
+   *  task's dueDate (i.e. the due date was pushed forward and the row
+   *  became overdue again). Cleared on completion / cancel so a
+   *  reopened task can re-fire. */
+  overdueNotifiedAt?: string | null;
 }
 
 export const governanceTasks: StoredGovernanceTask[] = loadStore<StoredGovernanceTask>('governanceTasks');
@@ -74,7 +82,72 @@ function enrichTask(task: StoredGovernanceTask): any {
   };
 }
 
+/**
+ * Overdue-task sweep. Scans OPEN + IN_PROGRESS + PENDING_APPROVAL
+ * tasks in scope, notifies the assignee (or org-wide when the task
+ * is unassigned) for each task whose dueDate has slipped and hasn't
+ * already been notified for this cycle.
+ *
+ * Idempotency: overdueNotifiedAt is stamped on the task after a fire.
+ * A second sweep skips the row unless overdueNotifiedAt < dueDate —
+ * which happens when the reviewer pushed the due date forward and
+ * missed the new one too. Completing or cancelling the task should
+ * clear overdueNotifiedAt so a reopened task can re-fire (handled in
+ * the status branches below).
+ *
+ * Optional orgId param scopes the sweep; omit to sweep every org.
+ * Returns the ids of the tasks that fired so a caller (or the
+ * scheduler) can log the result.
+ */
+const ACTIVE_STATUSES = new Set(['OPEN', 'IN_PROGRESS', 'PENDING_APPROVAL']);
+
+export function sweepOverdueTasks(scopeOrgId?: string): { fired: string[] } {
+  const now = Date.now();
+  const fired: string[] = [];
+  for (const task of governanceTasks) {
+    if (scopeOrgId && task.orgId !== scopeOrgId) continue;
+    if (!ACTIVE_STATUSES.has(task.status)) continue;
+    if (!task.dueDate) continue;
+    const due = new Date(task.dueDate).getTime();
+    if (Number.isNaN(due) || due >= now) continue;
+    // Idempotent: skip if we already notified since the current
+    // due date was set. A pushed-forward dueDate re-arms the fire.
+    if (task.overdueNotifiedAt) {
+      const notifiedAt = new Date(task.overdueNotifiedAt).getTime();
+      if (!Number.isNaN(notifiedAt) && notifiedAt >= due) continue;
+    }
+    const daysOverdue = Math.floor((now - due) / (24 * 60 * 60 * 1000));
+    const suffix = daysOverdue === 0 ? 'today' : daysOverdue === 1 ? '1 day ago' : `${daysOverdue} days ago`;
+    createNotification({
+      orgId: task.orgId,
+      userId: task.assigneeId || null,
+      type: 'WARNING',
+      title: `Task overdue: ${task.title}`,
+      message: `Due ${suffix}. Update the status or push the due date if it's still in flight.`,
+      link: `/governance-work?tab=tasks&id=${task.id}`,
+    });
+    task.overdueNotifiedAt = new Date().toISOString();
+    task.updatedAt = task.overdueNotifiedAt;
+    fired.push(task.id);
+  }
+  if (fired.length > 0) {
+    saveStore('governanceTasks', governanceTasks);
+    logger.info({ scopeOrgId, count: fired.length }, 'Overdue task sweep fired');
+  }
+  return { fired };
+}
+
 const router = Router();
+
+/** POST /api/v1/governance-tasks/sweep-overdue?orgId=... — trigger the
+ *  overdue sweep manually. The scheduler in index.ts calls the same
+ *  function on a timer; this route exists so an admin (or a test) can
+ *  drive the flow synchronously. */
+router.post('/sweep-overdue', (req: Request, res: Response) => {
+  const orgId = ((req.query.orgId as string) || '').trim() || undefined;
+  const result = sweepOverdueTasks(orgId);
+  res.json({ success: true, data: result });
+});
 
 /** GET /api/v1/governance-tasks/summary */
 router.get('/summary', (req: Request, res: Response) => {
@@ -235,6 +308,18 @@ router.put('/:id', (req: Request, res: Response) => {
     if (status === 'COMPLETED' && !task.completedAt) {
       task.completedAt = new Date().toISOString();
     }
+    // Clear the overdue-notified marker on terminal or reopen
+    // transitions so a reopened task can re-fire the sweep on its
+    // next due date. Also cleared when the due date itself changes
+    // below.
+    if (status === 'COMPLETED' || status === 'CANCELLED' || status === 'OPEN') {
+      task.overdueNotifiedAt = null;
+    }
+  }
+  // A pushed-forward due date re-arms the fire even without a status
+  // change. Clear the marker so the sweep considers this row again.
+  if (dueDate !== undefined && dueDate !== before.dueDate) {
+    task.overdueNotifiedAt = null;
   }
 
   task.updatedAt = new Date().toISOString();
