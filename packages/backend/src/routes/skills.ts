@@ -109,13 +109,23 @@ router.get('/:id', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   const { orgId, name, category, description } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
+  if (typeof name !== 'string' || !name.trim()) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
+  const trimmedName = name.trim();
+  // Uniqueness — one skill per name per org. The seed endpoint
+  // already dedupes; this closes the same door on the direct-create
+  // path so a script can't produce two "Data Profiling" rows. Case-
+  // insensitive so "Data Profiling" and "data profiling" collide.
+  const clash = skills.find((s) => s.orgId === orgId && s.name.toLowerCase() === trimmedName.toLowerCase());
+  if (clash) {
+    res.status(409).json({ success: false, error: `A skill named "${clash.name}" already exists in this organization.` });
+    return;
+  }
   const resolvedCategory: SkillCategory = SKILL_CATEGORIES.includes(category) ? category : 'GOVERNANCE';
   const now = new Date().toISOString();
   const skill: StoredSkill = {
     id: uuid(),
     orgId,
-    name,
+    name: trimmedName,
     category: resolvedCategory,
     description: description || '',
     createdAt: now,
@@ -157,7 +167,22 @@ router.put('/:id', (req: Request, res: Response) => {
   const skill = skills.find((s) => s.id === req.params.id);
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   const { name, category, description } = req.body;
-  if (name !== undefined) skill.name = name;
+  if (name !== undefined) {
+    if (typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ success: false, error: 'Name cannot be empty' });
+      return;
+    }
+    const trimmedName = name.trim();
+    // Same uniqueness check as POST — a rename that collides with
+    // another skill in the same org gets 409. Own-row match is fine
+    // (a no-op rename or a case change).
+    const clash = skills.find((s) => s.id !== skill.id && s.orgId === skill.orgId && s.name.toLowerCase() === trimmedName.toLowerCase());
+    if (clash) {
+      res.status(409).json({ success: false, error: `A skill named "${clash.name}" already exists in this organization.` });
+      return;
+    }
+    skill.name = trimmedName;
+  }
   if (category !== undefined && SKILL_CATEGORIES.includes(category)) skill.category = category;
   if (description !== undefined) skill.description = description;
   skill.updatedAt = new Date().toISOString();
@@ -165,13 +190,80 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: skill });
 });
 
-/** DELETE /api/v1/skills/:id — delete a skill */
+/** DELETE /api/v1/skills/:id — delete a skill.
+ *
+ *  Cascade: sweep the removed id off every person's, every
+ *  agent's, and every activity's skill-id array so nothing
+ *  dangles. Same pattern as the control-cascade on
+ *  governance-controls DELETE. Persists each touched store
+ *  independently so a partial failure downstream doesn't leave
+ *  the skills list out of sync with the reference tables.
+ *
+ *  Response body reports the sweep counts so a caller (or a
+ *  future confirm-dialog on the Skills page) can surface a
+ *  meaningful blast-radius summary.
+ */
 router.delete('/:id', (req: Request, res: Response) => {
   const idx = skills.findIndex((s) => s.id === req.params.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
+  const removed = skills[idx];
   skills.splice(idx, 1);
   saveStore('skills', skills);
-  res.status(204).send();
+
+  // Cascade off people, agents, and process nodes. Lazy requires
+  // break any lingering import-graph cycle at boot; each store is a
+  // simple in-memory array that just needs the id filtered out.
+  let peopleTouched = 0;
+  let agentsTouched = 0;
+  let nodesTouched = 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { people } = require('./people') as typeof import('./people');
+    for (const p of people) {
+      if (!Array.isArray(p.skillIds) || p.skillIds.length === 0) continue;
+      const next = p.skillIds.filter((id) => id !== removed.id);
+      if (next.length !== p.skillIds.length) {
+        p.skillIds = next;
+        peopleTouched++;
+      }
+    }
+    if (peopleTouched > 0) saveStore('people', people);
+  } catch (err) {
+    logger.warn({ err, skillId: removed.id }, 'Failed to cascade skill delete to people');
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { agents } = require('./agents') as typeof import('./agents');
+    for (const a of agents) {
+      if (!Array.isArray(a.skillIds) || a.skillIds.length === 0) continue;
+      const next = a.skillIds.filter((id) => id !== removed.id);
+      if (next.length !== a.skillIds.length) {
+        a.skillIds = next;
+        agentsTouched++;
+      }
+    }
+    if (agentsTouched > 0) saveStore('agents', agents);
+  } catch (err) {
+    logger.warn({ err, skillId: removed.id }, 'Failed to cascade skill delete to agents');
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
+    for (const n of processNodes) {
+      if (!Array.isArray(n.requiredSkillIds) || n.requiredSkillIds.length === 0) continue;
+      const next = n.requiredSkillIds.filter((id) => id !== removed.id);
+      if (next.length !== n.requiredSkillIds.length) {
+        n.requiredSkillIds = next.length > 0 ? next : undefined;
+        nodesTouched++;
+      }
+    }
+    if (nodesTouched > 0) saveStore('processNodes', processNodes);
+  } catch (err) {
+    logger.warn({ err, skillId: removed.id }, 'Failed to cascade skill delete to process nodes');
+  }
+
+  logger.info({ skillId: removed.id, name: removed.name, peopleTouched, agentsTouched, nodesTouched }, 'Deleted skill');
+  res.json({ success: true, cascade: { peopleTouched, agentsTouched, nodesTouched } });
 });
 
 // ──────────────────────────────────────────────────────────────────────────
