@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
@@ -242,7 +243,36 @@ export function openAgentOwnershipIssue(input: {
 export const governanceIssues: StoredGovernanceIssue[] = loadStore<StoredGovernanceIssue>('governanceIssues');
 registerStore('governanceIssues', governanceIssues);
 
-function enrichIssue(issue: StoredGovernanceIssue): any {
+// Request-body schemas at the API boundary. See governance-tasks
+// for the rationale.
+const createIssueBodySchema = z.object({
+  title: z.string().min(1, 'title is required'),
+  orgId: z.string().min(1, 'orgId is required'),
+  description: z.string().optional(),
+  issueType: z.enum(ISSUE_TYPES).optional(),
+  severity: z.enum(ISSUE_SEVERITIES).optional(),
+  status: z.enum(ISSUE_STATUSES).optional(),
+  domainId: z.string().nullable().optional(),
+  dataAssetId: z.string().nullable().optional(),
+  systemId: z.string().nullable().optional(),
+  reportedBy: z.string().nullable().optional(),
+  assignedTo: z.string().nullable().optional(),
+  resolutionSummary: z.string().nullable().optional(),
+});
+const updateIssueBodySchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  issueType: z.enum(ISSUE_TYPES).optional(),
+  severity: z.enum(ISSUE_SEVERITIES).optional(),
+  status: z.enum(ISSUE_STATUSES).optional(),
+  domainId: z.string().nullable().optional(),
+  dataAssetId: z.string().nullable().optional(),
+  systemId: z.string().nullable().optional(),
+  assignedTo: z.string().nullable().optional(),
+  resolutionSummary: z.string().nullable().optional(),
+});
+
+function enrichIssue(issue: StoredGovernanceIssue): StoredGovernanceIssue & { reporterName: string | null; assigneeName: string | null; domainName: string | null; dataAssetName: string | null } {
   const reporter = issue.reportedBy ? people.find((p) => p.id === issue.reportedBy) : null;
   const assignee = issue.assignedTo ? people.find((p) => p.id === issue.assignedTo) : null;
   const domain = issue.domainId ? dataDomains.find((d) => d.id === issue.domainId) : null;
@@ -306,44 +336,30 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/governance-issues */
 router.post('/', (req: Request, res: Response) => {
-  const {
-    title, orgId, description, issueType, severity, status,
-    domainId, dataAssetId, systemId, reportedBy, assignedTo,
-    resolutionSummary,
-  } = req.body;
-
-  if (!title) { res.status(400).json({ success: false, error: 'Title is required' }); return; }
-  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-
-  if (issueType && !ISSUE_TYPES.includes(issueType as any)) {
-    res.status(400).json({ success: false, error: `Invalid issueType. Must be one of: ${ISSUE_TYPES.join(', ')}` });
+  const parsed = createIssueBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  if (severity && !ISSUE_SEVERITIES.includes(severity as any)) {
-    res.status(400).json({ success: false, error: `Invalid severity. Must be one of: ${ISSUE_SEVERITIES.join(', ')}` });
-    return;
-  }
-  if (status && !ISSUE_STATUSES.includes(status as any)) {
-    res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${ISSUE_STATUSES.join(', ')}` });
-    return;
-  }
+  const body = parsed.data;
 
   const now = new Date().toISOString();
-  const resolvedStatus = status || 'OPEN';
+  const resolvedStatus = body.status || 'OPEN';
   const issue: StoredGovernanceIssue = {
     id: uuid(),
-    orgId,
-    title,
-    description: description || '',
-    issueType: issueType || 'METADATA',
-    severity: severity || 'MEDIUM',
+    orgId: body.orgId,
+    title: body.title,
+    description: body.description || '',
+    issueType: body.issueType || 'METADATA',
+    severity: body.severity || 'MEDIUM',
     status: resolvedStatus,
-    domainId: domainId || null,
-    dataAssetId: dataAssetId || null,
-    systemId: systemId || null,
-    reportedBy: reportedBy || null,
-    assignedTo: assignedTo || null,
-    resolutionSummary: resolutionSummary || null,
+    domainId: body.domainId || null,
+    dataAssetId: body.dataAssetId || null,
+    systemId: body.systemId || null,
+    reportedBy: body.reportedBy || null,
+    assignedTo: body.assignedTo || null,
+    resolutionSummary: body.resolutionSummary || null,
     createdAt: now,
     updatedAt: now,
     closedAt: TERMINAL_STATUSES.has(resolvedStatus) ? now : null,
@@ -361,34 +377,23 @@ router.put('/:id', (req: Request, res: Response) => {
   const issue = governanceIssues.find((i) => i.id === req.params.id);
   if (!issue) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
 
+  const parsed = updateIssueBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const body = parsed.data;
+
   const before = { ...issue };
   const {
     title, description, issueType, severity, status,
     domainId, dataAssetId, systemId, assignedTo,
     resolutionSummary,
-  } = req.body;
+  } = body;
 
-  if (issueType !== undefined) {
-    if (!ISSUE_TYPES.includes(issueType as any)) {
-      res.status(400).json({ success: false, error: `Invalid issueType. Must be one of: ${ISSUE_TYPES.join(', ')}` });
-      return;
-    }
-    issue.issueType = issueType;
-  }
-  if (severity !== undefined) {
-    if (!ISSUE_SEVERITIES.includes(severity as any)) {
-      res.status(400).json({ success: false, error: `Invalid severity. Must be one of: ${ISSUE_SEVERITIES.join(', ')}` });
-      return;
-    }
-    issue.severity = severity;
-  }
-  if (status !== undefined) {
-    if (!ISSUE_STATUSES.includes(status as any)) {
-      res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${ISSUE_STATUSES.join(', ')}` });
-      return;
-    }
-  }
-
+  if (issueType !== undefined) issue.issueType = issueType;
+  if (severity !== undefined) issue.severity = severity;
   if (title !== undefined) issue.title = title;
   if (description !== undefined) issue.description = description;
   if (domainId !== undefined) issue.domainId = domainId;

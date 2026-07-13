@@ -100,7 +100,39 @@ const governanceTaskRowSchema = z.object({
 export const governanceTasks: StoredGovernanceTask[] = loadStore<StoredGovernanceTask>('governanceTasks', governanceTaskRowSchema);
 registerStore('governanceTasks', governanceTasks);
 
-function enrichTask(task: StoredGovernanceTask): any {
+// Request-body schemas — Zod at the API boundary. Enum checks + type
+// guarantees fall out of the parse so downstream code can drop the
+// `.includes(x as any)` runtime checks and use the typed body directly.
+const createTaskBodySchema = z.object({
+  title: z.string().min(1, 'title is required'),
+  orgId: z.string().min(1, 'orgId is required'),
+  description: z.string().optional(),
+  taskType: z.enum(TASK_TYPES).optional(),
+  status: z.enum(TASK_STATUSES).optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
+  assigneeId: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  linkedObjectType: z.string().nullable().optional(),
+  linkedObjectId: z.string().nullable().optional(),
+  automationMode: z.enum(AUTOMATION_MODES).optional(),
+  resolution: z.string().nullable().optional(),
+  createdBy: z.string().nullable().optional(),
+});
+const updateTaskBodySchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  taskType: z.enum(TASK_TYPES).optional(),
+  status: z.enum(TASK_STATUSES).optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
+  assigneeId: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  linkedObjectType: z.string().nullable().optional(),
+  linkedObjectId: z.string().nullable().optional(),
+  automationMode: z.enum(AUTOMATION_MODES).optional(),
+  resolution: z.string().nullable().optional(),
+});
+
+function enrichTask(task: StoredGovernanceTask): StoredGovernanceTask & { assigneeName: string | null } {
   const assignee = task.assigneeId ? people.find((p) => p.id === task.assigneeId) : null;
   return {
     ...task,
@@ -219,49 +251,31 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/governance-tasks */
 router.post('/', (req: Request, res: Response) => {
-  const {
-    title, orgId, description, taskType, status, priority,
-    assigneeId, dueDate, linkedObjectType, linkedObjectId,
-    automationMode, resolution, createdBy,
-  } = req.body;
-
-  if (!title) { res.status(400).json({ success: false, error: 'Title is required' }); return; }
-  if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-
-  if (taskType && !TASK_TYPES.includes(taskType as any)) {
-    res.status(400).json({ success: false, error: `Invalid taskType. Must be one of: ${TASK_TYPES.join(', ')}` });
+  const parsed = createTaskBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  if (status && !TASK_STATUSES.includes(status as any)) {
-    res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${TASK_STATUSES.join(', ')}` });
-    return;
-  }
-  if (priority && !TASK_PRIORITIES.includes(priority as any)) {
-    res.status(400).json({ success: false, error: `Invalid priority. Must be one of: ${TASK_PRIORITIES.join(', ')}` });
-    return;
-  }
-  if (automationMode && !AUTOMATION_MODES.includes(automationMode as any)) {
-    res.status(400).json({ success: false, error: `Invalid automationMode. Must be one of: ${AUTOMATION_MODES.join(', ')}` });
-    return;
-  }
+  const body = parsed.data;
 
   const now = new Date().toISOString();
-  const resolvedStatus = status || 'OPEN';
+  const resolvedStatus = body.status || 'OPEN';
   const task: StoredGovernanceTask = {
     id: uuid(),
-    orgId,
-    title,
-    description: description || '',
-    taskType: taskType || 'GENERAL',
+    orgId: body.orgId,
+    title: body.title,
+    description: body.description || '',
+    taskType: body.taskType || 'GENERAL',
     status: resolvedStatus,
-    priority: priority || 'MEDIUM',
-    assigneeId: assigneeId || null,
-    dueDate: dueDate || null,
-    linkedObjectType: linkedObjectType || null,
-    linkedObjectId: linkedObjectId || null,
-    automationMode: automationMode || 'HUMAN',
-    resolution: resolution || null,
-    createdBy: createdBy || null,
+    priority: body.priority || 'MEDIUM',
+    assigneeId: body.assigneeId || null,
+    dueDate: body.dueDate || null,
+    linkedObjectType: body.linkedObjectType || null,
+    linkedObjectId: body.linkedObjectId || null,
+    automationMode: body.automationMode || 'HUMAN',
+    resolution: body.resolution || null,
+    createdBy: body.createdBy || null,
     createdAt: now,
     updatedAt: now,
     completedAt: resolvedStatus === 'COMPLETED' ? now : null,
@@ -279,12 +293,20 @@ router.put('/:id', (req: Request, res: Response) => {
   const task = governanceTasks.find((t) => t.id === req.params.id);
   if (!task) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
 
+  const parsed = updateTaskBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const body = parsed.data;
+
   const before = { ...task };
   const {
     title, description, taskType, status, priority,
     assigneeId, dueDate, linkedObjectType, linkedObjectId,
     automationMode, resolution,
-  } = req.body;
+  } = body;
 
   // Validate status transition
   if (status !== undefined && status !== task.status) {
@@ -298,27 +320,9 @@ router.put('/:id', (req: Request, res: Response) => {
     }
   }
 
-  if (taskType !== undefined) {
-    if (!TASK_TYPES.includes(taskType as any)) {
-      res.status(400).json({ success: false, error: `Invalid taskType. Must be one of: ${TASK_TYPES.join(', ')}` });
-      return;
-    }
-    task.taskType = taskType;
-  }
-  if (priority !== undefined) {
-    if (!TASK_PRIORITIES.includes(priority as any)) {
-      res.status(400).json({ success: false, error: `Invalid priority. Must be one of: ${TASK_PRIORITIES.join(', ')}` });
-      return;
-    }
-    task.priority = priority;
-  }
-  if (automationMode !== undefined) {
-    if (!AUTOMATION_MODES.includes(automationMode as any)) {
-      res.status(400).json({ success: false, error: `Invalid automationMode. Must be one of: ${AUTOMATION_MODES.join(', ')}` });
-      return;
-    }
-    task.automationMode = automationMode;
-  }
+  if (taskType !== undefined) task.taskType = taskType;
+  if (priority !== undefined) task.priority = priority;
+  if (automationMode !== undefined) task.automationMode = automationMode;
 
   if (title !== undefined) task.title = title;
   if (description !== undefined) task.description = description;
