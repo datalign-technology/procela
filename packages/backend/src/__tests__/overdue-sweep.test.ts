@@ -160,6 +160,8 @@ describe('sweepOverdueTasks', () => {
 });
 
 describe('shouldFireWeeklyDigest (boundary check)', () => {
+  before(() => scheduler.resetSchedulerState());
+  after(() => scheduler.resetSchedulerState());
   it('returns false Monday-Saturday regardless of hour', () => {
     // Monday 23:59 UTC — 2026-06-01 was a Monday.
     const monday = new Date('2026-06-01T23:59:00Z').getTime();

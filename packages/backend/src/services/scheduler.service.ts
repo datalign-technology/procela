@@ -1,4 +1,11 @@
 import logger from '../lib/logger';
+import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { sweepOverdueTasks } from '../routes/governance-tasks';
+import { digestForOrg } from './digest.service';
+import { processNodes } from '../routes/process-catalog';
+import { dataAssets } from '../routes/data-assets';
+import { mappings } from '../routes/mappings';
+import { organizations } from '../routes/organizations';
 
 // ──────────────────────────────────────────────────────────────────────────
 // scheduler.service — self-driving background loops that turn
@@ -27,7 +34,25 @@ import logger from '../lib/logger';
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 let timer: NodeJS.Timeout | null = null;
-let lastWeeklyDigestFiredAt: number | null = null;
+
+// The weekly-digest last-fired timestamp is persisted so a boot in the
+// firing window (e.g. Sunday 23:30 after a Sunday 23:15 fire) doesn't
+// forget the earlier run and double-notify. Stored as a single-row
+// array to fit the loadStore/saveStore shape everything else uses.
+interface SchedulerStateRow { key: string; lastWeeklyDigestFiredAt: number | null }
+const schedulerState: SchedulerStateRow[] = loadStore<SchedulerStateRow>('schedulerState');
+registerStore('schedulerState', schedulerState);
+function getLastWeeklyDigestFiredAt(): number | null {
+  return schedulerState[0]?.lastWeeklyDigestFiredAt ?? null;
+}
+function setLastWeeklyDigestFiredAt(ms: number): void {
+  if (schedulerState.length === 0) {
+    schedulerState.push({ key: 'default', lastWeeklyDigestFiredAt: ms });
+  } else {
+    schedulerState[0].lastWeeklyDigestFiredAt = ms;
+  }
+  saveStore('schedulerState', schedulerState);
+}
 
 function isDisabled(): boolean {
   return process.env.PROCELA_DISABLE_SCHEDULER === '1'
@@ -45,20 +70,17 @@ function shouldFireWeeklyDigest(nowMs: number): boolean {
   // Sunday = 0 in JS. Fire when it's Sunday AFTER 23:00 UTC, once.
   const isSundayLate = now.getUTCDay() === 0 && now.getUTCHours() >= 23;
   if (!isSundayLate) return false;
-  if (lastWeeklyDigestFiredAt === null) return true;
+  const last = getLastWeeklyDigestFiredAt();
+  if (last === null) return true;
   // At least six days must have passed since the last fire so a
-  // Sunday sweep at 23:15 and then 23:45 don't double-fire.
+  // Sunday sweep at 23:15 and then 23:45 don't double-fire, and so a
+  // restart during the firing window doesn't re-trigger.
   const sixDays = 6 * 24 * 60 * 60 * 1000;
-  return nowMs - lastWeeklyDigestFiredAt >= sixDays;
+  return nowMs - last >= sixDays;
 }
 
 async function tick(): Promise<void> {
-  // Every store is required lazily so the scheduler module doesn't
-  // pull the whole route graph in at import time (nothing else does
-  // — index.ts wires the routes; this service only needs the data).
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { sweepOverdueTasks } = require('../routes/governance-tasks') as typeof import('../routes/governance-tasks');
     const overdue = sweepOverdueTasks();
     if (overdue.fired.length > 0) {
       logger.info({ fired: overdue.fired.length }, 'Scheduler: overdue sweep fired');
@@ -69,16 +91,6 @@ async function tick(): Promise<void> {
 
   if (shouldFireWeeklyDigest(Date.now())) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { digestForOrg } = require('./digest.service') as typeof import('./digest.service');
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { processNodes } = require('../routes/process-catalog');
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { dataAssets } = require('../routes/data-assets');
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { mappings } = require('../routes/mappings');
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { organizations } = require('../routes/organizations');
       let totalWritten = 0;
       for (const org of organizations) {
         try {
@@ -88,7 +100,7 @@ async function tick(): Promise<void> {
           logger.error({ err, orgId: org.id }, 'Scheduler: digest failed for org');
         }
       }
-      lastWeeklyDigestFiredAt = Date.now();
+      setLastWeeklyDigestFiredAt(Date.now());
       logger.info({ totalWritten, orgs: organizations.length }, 'Scheduler: weekly digest fired');
     } catch (err) {
       logger.error({ err }, 'Scheduler: weekly digest failed');
@@ -119,4 +131,10 @@ export function stopScheduler(): void {
 
 // Exports for tests. The tick and boundary helper are pure over the
 // stores, so tests can drive them directly without touching the timer.
-export const __test__ = { tick, shouldFireWeeklyDigest };
+// resetSchedulerState lets a test wipe the persisted last-fire time
+// so its assertions don't depend on run ordering across suites.
+function resetSchedulerState(): void {
+  schedulerState.length = 0;
+  saveStore('schedulerState', schedulerState);
+}
+export const __test__ = { tick, shouldFireWeeklyDigest, resetSchedulerState };
