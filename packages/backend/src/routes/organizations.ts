@@ -70,14 +70,22 @@ const DEFAULT_ORG: StoredOrg = {
 // the log-and-quarantine behaviour on drift. Every route in the app
 // reads from this array, so a bad row here has a wide blast radius;
 // the schema catches drift at boot rather than at the first read.
+//
+// The three "informational" fields (industry / description / headCount)
+// carry safe defaults on parse. Older rows and every test fixture
+// that predates them omit these fields, and forcing them to match
+// would quarantine legitimate data — the safer behaviour is to
+// backfill on load so downstream code sees the shape it expects
+// while still catching genuine drift (missing id, wrong parentId
+// type, etc.).
 const organizationRowSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
   name: z.string(),
   type: z.string(),
-  industry: z.string(),
-  description: z.string(),
-  headCount: z.number(),
+  industry: z.string().default(''),
+  description: z.string().default(''),
+  headCount: z.number().default(0),
   statusMode: z.enum(['simple', 'review', 'advanced']).optional(),
   tenantSlug: z.string().optional(),
   brandDisplayName: z.string().optional(),
@@ -86,7 +94,11 @@ const organizationRowSchema = z.object({
   brandPrimaryColor: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-}) satisfies z.ZodType<StoredOrg>;
+  // `unknown` for the input type so `z.string().default('')` (which
+  // accepts `undefined` on the way in) doesn't clash with `StoredOrg`
+  // where the field is a required string on the way out. Output type
+  // is still pinned to StoredOrg, which is what downstream code sees.
+}) satisfies z.ZodType<StoredOrg, z.ZodTypeDef, unknown>;
 
 export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations', organizationRowSchema);
 registerStore('organizations', organizations);
