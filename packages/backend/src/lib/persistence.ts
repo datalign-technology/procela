@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomBytes } from 'crypto';
+import type { ZodType } from 'zod';
 import logger from './logger';
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
@@ -47,7 +48,23 @@ export function saveStore(name: string, data: any[]) {
   }
 }
 
-export function loadStore<T>(name: string): T[] {
+/**
+ * Load a store from disk.
+ *
+ * Optional `rowSchema` (Zod) validates each row on load. Malformed
+ * rows — the shape drifted after a rename, migration, or hand-edit —
+ * are dropped from the returned array and logged individually so an
+ * operator can trace which rows lost their shape. This is the
+ * "log-and-quarantine" behaviour called out in the tech-debt sweep:
+ * a shape mismatch surfaces at boot, not at the first mutation that
+ * assumes the missing field.
+ *
+ * Without a schema, the store loads exactly as before — every row
+ * comes through untyped, and the caller trusts the JSON. That path
+ * stays the default so existing call sites don't need to adopt
+ * schemas all at once.
+ */
+export function loadStore<T>(name: string, rowSchema?: ZodType<T>): T[] {
   const filePath = path.join(DATA_DIR, `${name}.json`);
   // Stale `.tmp` siblings mean a crash occurred between the tmp
   // write and the rename. Sweep them so they don't accumulate — but
@@ -70,12 +87,36 @@ export function loadStore<T>(name: string): T[] {
     }
   }
   if (!fs.existsSync(filePath)) return [];
+  let raw: unknown;
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   } catch {
     logger.warn({ name }, 'Failed to load store, starting fresh');
     return [];
   }
+  if (!Array.isArray(raw)) {
+    logger.warn({ name }, 'Store root is not an array, starting fresh');
+    return [];
+  }
+  if (!rowSchema) return raw as T[];
+  const valid: T[] = [];
+  let dropped = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const parsed = rowSchema.safeParse(raw[i]);
+    if (parsed.success) {
+      valid.push(parsed.data);
+    } else {
+      dropped++;
+      logger.warn(
+        { name, index: i, issues: parsed.error.issues.slice(0, 3) },
+        'Store row failed schema validation, quarantining',
+      );
+    }
+  }
+  if (dropped > 0) {
+    logger.warn({ name, kept: valid.length, dropped }, 'Store loaded with quarantined rows');
+  }
+  return valid;
 }
 
 // Auto-save on interval. Returns the timer handle so the caller can

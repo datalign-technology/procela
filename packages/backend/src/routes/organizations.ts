@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
@@ -65,7 +66,29 @@ const DEFAULT_ORG: StoredOrg = {
   updatedAt: new Date().toISOString(),
 };
 
-export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations');
+// Shape validator applied by loadStore — see lib/persistence.ts for
+// the log-and-quarantine behaviour on drift. Every route in the app
+// reads from this array, so a bad row here has a wide blast radius;
+// the schema catches drift at boot rather than at the first read.
+const organizationRowSchema = z.object({
+  id: z.string(),
+  parentId: z.string().nullable(),
+  name: z.string(),
+  type: z.string(),
+  industry: z.string(),
+  description: z.string(),
+  headCount: z.number(),
+  statusMode: z.enum(['simple', 'review', 'advanced']).optional(),
+  tenantSlug: z.string().optional(),
+  brandDisplayName: z.string().optional(),
+  brandGlyph: z.string().optional(),
+  ssoButtonLabel: z.string().optional(),
+  brandPrimaryColor: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}) satisfies z.ZodType<StoredOrg>;
+
+export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations', organizationRowSchema);
 registerStore('organizations', organizations);
 
 // ── Helpers ──

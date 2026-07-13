@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
@@ -71,7 +72,32 @@ export interface StoredGovernanceTask {
   overdueNotifiedAt?: string | null;
 }
 
-export const governanceTasks: StoredGovernanceTask[] = loadStore<StoredGovernanceTask>('governanceTasks');
+// Shape validator applied by loadStore — a row missing a required
+// field (drift after a rename / migration / hand-edit) is quarantined
+// and logged rather than crashing at first mutation. Kept in this
+// module because the interface + enums are already declared here.
+const governanceTaskRowSchema = z.object({
+  id: z.string(),
+  orgId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  taskType: z.enum(TASK_TYPES),
+  status: z.enum(TASK_STATUSES),
+  priority: z.enum(TASK_PRIORITIES),
+  assigneeId: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  linkedObjectType: z.string().nullable(),
+  linkedObjectId: z.string().nullable(),
+  automationMode: z.enum(AUTOMATION_MODES),
+  resolution: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().nullable(),
+  overdueNotifiedAt: z.string().nullable().optional(),
+}) satisfies z.ZodType<StoredGovernanceTask>;
+
+export const governanceTasks: StoredGovernanceTask[] = loadStore<StoredGovernanceTask>('governanceTasks', governanceTaskRowSchema);
 registerStore('governanceTasks', governanceTasks);
 
 function enrichTask(task: StoredGovernanceTask): any {
