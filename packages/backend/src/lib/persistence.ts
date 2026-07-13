@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomBytes } from 'crypto';
-import type { ZodType } from 'zod';
+import type { ZodType, ZodTypeDef } from 'zod';
 import logger from './logger';
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
@@ -64,7 +64,11 @@ export function saveStore(name: string, data: any[]) {
  * stays the default so existing call sites don't need to adopt
  * schemas all at once.
  */
-export function loadStore<T>(name: string, rowSchema?: ZodType<T>): T[] {
+// rowSchema uses `unknown` for the Zod input type so callers can pass
+// schemas that carry `.default(...)` for legacy fields (where the
+// input shape differs from the parsed StoredX shape). Output type is
+// still pinned to T, so downstream code sees the concrete row shape.
+export function loadStore<T>(name: string, rowSchema?: ZodType<T, ZodTypeDef, unknown>): T[] {
   const filePath = path.join(DATA_DIR, `${name}.json`);
   // Stale `.tmp` siblings mean a crash occurred between the tmp
   // write and the rename. Sweep them so they don't accumulate — but

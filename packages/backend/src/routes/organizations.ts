@@ -94,7 +94,11 @@ const organizationRowSchema = z.object({
   brandPrimaryColor: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-}) satisfies z.ZodType<StoredOrg>;
+  // `unknown` for the input type so `z.string().default('')` (which
+  // accepts `undefined` on the way in) doesn't clash with `StoredOrg`
+  // where the field is a required string on the way out. Output type
+  // is still pinned to StoredOrg, which is what downstream code sees.
+}) satisfies z.ZodType<StoredOrg, z.ZodTypeDef, unknown>;
 
 export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations', organizationRowSchema);
 registerStore('organizations', organizations);
