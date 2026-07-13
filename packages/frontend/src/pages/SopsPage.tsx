@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
@@ -352,7 +353,7 @@ export default function SopsPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16 }}>
+        <Card padding={20} marginBottom={16} shadow="none">
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit SOP' : 'Add New SOP'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
             <div>
@@ -431,7 +432,7 @@ export default function SopsPage() {
               {editingId ? 'Save Changes' : 'Create SOP'}
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog
@@ -463,9 +464,9 @@ export default function SopsPage() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+        <Card shadow="none">
           <SkeletonRows rows={5} columns={5} />
-        </div>
+        </Card>
       ) : sops.length === 0 ? (
         <EmptyState
           icon="☑"
@@ -475,7 +476,7 @@ export default function SopsPage() {
           secondaryAction={canWrite ? { label: '+ Create SOP', onClick: openAdd } : undefined}
         />
       ) : (
-        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+        <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
@@ -618,7 +619,7 @@ export default function SopsPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
 
       <ConfirmDialog

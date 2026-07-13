@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import SecondaryButton from '../components/SecondaryButton';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
@@ -419,9 +420,9 @@ export default function DataQualityPage() {
   if (loading) {
     return (
       <div>
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+        <Card shadow="none">
           <SkeletonRows rows={5} columns={4} />
-        </div>
+        </Card>
       </div>
     );
   }
@@ -549,26 +550,26 @@ export default function DataQualityPage() {
       {/* Stats */}
       {rules.length > 0 && (
         <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
+          <Card padding="12px 16px" style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700 }}>{totalRules}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Rules</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
+          </Card>
+          <Card padding="12px 16px" style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: '#059669' }}>{passingCount}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Passing</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
+          </Card>
+          <Card padding="12px 16px" style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>{warningCount}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Warning</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
+          </Card>
+          <Card padding="12px 16px" style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-error)' }}>{failingCount}</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Failing</div>
-          </div>
-          <div style={{ flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px', boxShadow: 'var(--shadow-sm)' }}>
+          </Card>
+          <Card padding="12px 16px" style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700 }}>{avgScore}%</div>
             <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Avg Score</div>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -603,14 +604,7 @@ export default function DataQualityPage() {
 
       {/* Compute Health Buttons */}
       {assetsWithRules.length > 0 && (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: '12px 16px',
-          marginBottom: 16,
-          boxShadow: 'var(--shadow-sm)',
-        }}>
+        <Card padding="12px 16px" marginBottom={16}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Compute Health Scores
           </div>
@@ -639,19 +633,12 @@ export default function DataQualityPage() {
               );
             })}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 20,
-          marginBottom: 20,
-          boxShadow: 'var(--shadow-sm)',
-        }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit Quality Rule' : 'Add New Quality Rule'}
           </h3>
@@ -768,7 +755,7 @@ export default function DataQualityPage() {
               {editingId ? 'Save Changes' : 'Add Rule'}
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Confirm dialogs */}
@@ -818,25 +805,12 @@ export default function DataQualityPage() {
             action={{ label: '+ Add Rule', onClick: openAdd }}
           />
         ) : (
-          <div style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 40,
-            textAlign: 'center',
-            color: 'var(--color-text-muted)',
-          }}>
+          <Card padding={40} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
             <div style={{ fontSize: 14 }}>No rules match the current filters.</div>
-          </div>
+          </Card>
         )
       ) : (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          overflow: 'auto',
-          boxShadow: 'var(--shadow-sm)',
-        }}>
+        <Card padding={0} style={{ overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)' }}>
@@ -907,12 +881,7 @@ export default function DataQualityPage() {
                       </span>
                     </div>
                     {scheduleOpen === rule.id && (
-                      <div style={{
-                        position: 'absolute', top: '100%', left: 0, zIndex: 20,
-                        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                        borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
-                        padding: 8, minWidth: 150, fontSize: 12,
-                      }}>
+                      <Card padding={8} shadow="md" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, minWidth: 150, fontSize: 12 }}>
                         {(['NEVER', 'HOURLY', 'DAILY', 'WEEKLY'] as ScheduleFrequency[]).map((f) => (
                           <div
                             key={f}
@@ -933,7 +902,7 @@ export default function DataQualityPage() {
                             Next run: {new Date(rule.nextRunAt).toLocaleString()}
                           </div>
                         )}
-                      </div>
+                      </Card>
                     )}
                   </td>
                   )}
@@ -962,7 +931,7 @@ export default function DataQualityPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
       </>)}
     </div>
@@ -1091,9 +1060,9 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
 
   if (assets.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+      <Card padding="4rem 2rem" shadow="none" style={{ textAlign: 'center' }}>
         <p style={{ color: 'var(--color-text-muted)' }}>No data assets yet. Create data assets on the Data Assets page first.</p>
-      </div>
+      </Card>
     );
   }
 
@@ -1126,7 +1095,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
           </span>
         )}
       </div>
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+      <Card padding={0} shadow="none">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
@@ -1281,7 +1250,7 @@ function AssetsTab({ assets, rulesByAsset, systemNameById, activeOrgId, onRefres
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   );
 }
