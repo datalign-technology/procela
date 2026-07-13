@@ -490,7 +490,34 @@ Procela knows which system carries the canonical copy.
 
 The domain assignments feed the Governance Groups page in Module 8.
 
-### 4.4 How real Data Assets arrive in production
+### 4.4 The Data Asset 360 view — Sensitivity + Impact
+
+Click any asset in the list to open the **Data Asset 360** modal.
+Two panels there are worth pausing on because they're the ones a
+steward reaches for during a real change:
+
+**Sensitivity — Suggest & Review.** Click *Suggest sensitivity
+tags* on the Sensitivity chip row. Procela AI reads the asset's
+name + description and proposes tags (PII, PHI, PCI, FINANCIAL,
+CREDENTIAL, CONFIDENTIAL, PUBLIC) with a confidence label. Each
+suggestion has its own **Accept / Reject** button — you don't
+have to swallow all of them or none. Rejected tags stay
+rejected across re-runs so a subsequent *Suggest* doesn't re-
+propose the same thing. Try it on **Customer Master** — the
+AI reliably suggests PII on the account/address content.
+
+**Impact analysis — "If this asset changes, what breaks?"** The
+*Impact* panel below the Sensitivity row runs
+`GET /data-assets/:id/impact` and returns four counts: how many
+activities consume the asset, how many processes those roll up
+to, how many value streams that touches, and how many people
+need to be told. The **Notify** list expands to a per-person
+row — each entry shows *why* they'd be notified (Owner on
+Outage triage, Domain steward for Customer Data, etc.). Use
+this before deprecating a system or retiring a field: the
+Notify list is your change-comms distribution list.
+
+### 4.5 How real Data Assets arrive in production
 
 In this training you're typing the assets in by hand — fine for a demo. In production most orgs seed the catalog one of two ways:
 
@@ -979,10 +1006,25 @@ bell.
 
 ### 12.4 Scheduling
 
-In production this endpoint would be called by a cron at, say,
-Sunday 23:59 UTC — the service is side-effect-only, so any
-scheduler can drive it without code changes. For the prototype the
-manual trigger above is the supported pattern.
+The digest doesn't need you to remember to run it. Procela ships a
+built-in scheduler that fires every hour and, on the first tick
+after Sunday 23:00 UTC each week, walks every org and runs the
+digest for you. The last-fired timestamp is persisted, so a restart
+in the firing window doesn't double-notify.
+
+The same scheduler also runs an **overdue task sweep** every hour:
+any governance task with a due date in the past — status OPEN,
+IN_PROGRESS, or PENDING_APPROVAL — writes a *Task overdue: …*
+warning into the notifications bell for its assignee (or org-wide
+if the task is unassigned). It's idempotent — the sweep stamps the
+task after firing and re-arms itself only when the due date is
+pushed forward or the task cycles back to OPEN. `POST
+/api/v1/governance-tasks/sweep-overdue` triggers the same code
+synchronously if you want to drive it from the API console.
+
+The manual `POST /api/v1/digest/run` trigger from 12.1 still works
+— use it for one-off runs (e.g., before a demo). Disable the
+scheduler entirely by setting `PROCELA_DISABLE_SCHEDULER=1`.
 
 ---
 
