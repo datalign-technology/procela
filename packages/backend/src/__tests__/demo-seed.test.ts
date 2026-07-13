@@ -147,14 +147,14 @@ describe('demo-seed endpoint', () => {
     assert.strictEqual(res.body.data.persona.name, 'Susan Chen');
 
     const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
-    assert.strictEqual(demoCount(organizations), 8, 'orgs');
-    assert.strictEqual(demoCount(people), 16, 'people');
-    assert.strictEqual(demoCount(systems), 6, 'systems');
+    assert.strictEqual(demoCount(organizations), 10, 'orgs');
+    assert.strictEqual(demoCount(people), 23, 'people');
+    assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
     assert.strictEqual(demoCount(dataDomains), 3, 'domains');
-    assert.strictEqual(demoCount(dataAssets), 6, 'assets');
-    assert.strictEqual(demoCount(processNodes), 7, 'process nodes');
-    assert.strictEqual(demoCount(mappings), 4, 'mappings');
+    assert.strictEqual(demoCount(dataAssets), 9, 'assets');
+    assert.strictEqual(demoCount(processNodes), 14, 'process nodes');
+    assert.strictEqual(demoCount(mappings), 7, 'mappings');
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
     assert.strictEqual(demoCount(dataQualityRules), 2, 'DQ rules');
@@ -168,9 +168,9 @@ describe('demo-seed endpoint', () => {
     await request(port, 'POST', '/admin/demo-seed', {}, 'SUPER_ADMIN');
     const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
     // Counts should match the single-seed expectations.
-    assert.strictEqual(demoCount(organizations), 8);
-    assert.strictEqual(demoCount(people), 16);
-    assert.strictEqual(demoCount(dataAssets), 6);
+    assert.strictEqual(demoCount(organizations), 10);
+    assert.strictEqual(demoCount(people), 23);
+    assert.strictEqual(demoCount(dataAssets), 9);
   });
 
   it('populates Susan Chen persona with tasks + issue', async () => {

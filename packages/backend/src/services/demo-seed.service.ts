@@ -111,14 +111,19 @@ export function seedDemoData(): DemoSeedReport {
   const orgRegulatory = { id: P + 'org-regulatory', parentId: orgShared.id, name: 'Regulatory Affairs', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
   const orgTd = { id: P + 'org-td', parentId: orgElectric.id, name: 'Transmission & Distribution', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
   const orgCustomerElectric = { id: P + 'org-electric-customer', parentId: orgElectric.id, name: 'Electric Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
-  organizations.push(orgTidewater, orgElectric, orgWater, orgShared, orgIT, orgRegulatory, orgTd, orgCustomerElectric);
+  // Water division mirrors Electric's shape: an operations department
+  // (parallel to T&D) and a customer-service department, both nested
+  // under the water division so the tree isn't lopsided.
+  const orgWaterOps = { id: P + 'org-water-ops', parentId: orgWater.id, name: 'Water Operations', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  const orgWaterCustomer = { id: P + 'org-water-customer', parentId: orgWater.id, name: 'Water Customer Service', type: 'department', industry: '', description: '', headCount: 0, createdAt: ts, updatedAt: ts };
+  organizations.push(orgTidewater, orgElectric, orgWater, orgShared, orgIT, orgRegulatory, orgTd, orgCustomerElectric, orgWaterOps, orgWaterCustomer);
   saveStore('organizations', organizations);
 
   // ── People (compact — enough to tell the demo story) ──
   // Susan Chen is the demo persona: signed-in user for the demo. Owns
   // Customer Data, holds three open tasks + one issue, has an
   // upcoming event.
-  const susan = { id: P + 'person-susan-chen', orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id, orgElectric.id, orgWater.id, orgShared.id], name: 'Susan Chen', email: 'susan.chen@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const susan = { id: P + 'person-susan-chen', orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id, orgElectric.id, orgWater.id, orgShared.id, orgWaterOps.id, orgWaterCustomer.id], name: 'Susan Chen', email: 'susan.chen@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Chief Data Officer', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const marisol = { id: P + 'person-marisol', orgIds: [orgTidewater.id], accessibleOrgIds: [orgTidewater.id], name: 'Marisol Hadid', email: 'marisol.hadid@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Governance Lead', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const devon = { id: P + 'person-devon', orgIds: [orgElectric.id], accessibleOrgIds: [orgElectric.id], name: 'Devon Kershaw', email: 'devon.kershaw@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Owner Tidewater Electric', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const jennifer = { id: P + 'person-jennifer', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id, orgElectric.id], name: 'Jennifer Vasquez', email: 'jennifer.vasquez@tidewater-utilities.com', role: 'EDITOR', title: 'Director Transmission & Distribution Ops', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
@@ -134,7 +139,17 @@ export function seedDemoData(): DemoSeedReport {
   const phillip = { id: P + 'person-phillip', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Phillip Rosenberg', email: 'phillip.rosenberg@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const samira = { id: P + 'person-samira', orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Samira Farooq', email: 'samira.farooq@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Contact Center', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const isabella = { id: P + 'person-isabella', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Isabella Rossi', email: 'isabella.rossi@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  people.push(susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella);
+  // Water division staff — mirrors the Electric footprint (division-
+  // level Data Owner, an Ops director and two operators, plus a
+  // customer-side steward + billing manager).
+  const nadia = { id: P + 'person-nadia', orgIds: [orgWater.id], accessibleOrgIds: [orgWater.id], name: 'Nadia Petrov', email: 'nadia.petrov@tidewater-utilities.com', role: 'ORG_ADMIN', title: 'Data Owner Tidewater Water', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const marcus = { id: P + 'person-marcus', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id, orgWater.id], name: 'Marcus Chen', email: 'marcus.chen@tidewater-utilities.com', role: 'EDITOR', title: 'Director Water Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const sophie = { id: P + 'person-sophie', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Sophie Larsson', email: 'sophie.larsson@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Operations', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const rafael = { id: P + 'person-rafael', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Rafael Ortiz', email: 'rafael.ortiz@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'System Operator Lead — Water Treatment', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const priya = { id: P + 'person-priya', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Priya Sharma', email: 'priya.sharma@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Distribution Control', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const kaia = { id: P + 'person-kaia', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Kaia Nakamura', email: 'kaia.nakamura@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  const diego = { id: P + 'person-diego', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Diego Alvarez', email: 'diego.alvarez@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Billing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  people.push(susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella, nadia, marcus, sophie, rafael, priya, kaia, diego);
   saveStore('people', people);
 
   // ── Systems ──
@@ -144,7 +159,10 @@ export function seedDemoData(): DemoSeedReport {
   const sysOMS = { id: P + 'sys-oms', orgId: orgElectric.id, name: 'OMS', description: 'Outage Management System — event tracking, restoration workflows.', systemType: 'OT', vendorName: 'ABB', ownerPersonId: harold.id, stewardIds: [], createdAt: ts, updatedAt: ts };
   const sysGIS = { id: P + 'sys-gis', orgId: orgTidewater.id, name: 'GIS', description: 'Geospatial Information System — assets in the field.', systemType: 'IT', vendorName: 'Esri', ownerPersonId: jennifer.id, stewardIds: [], createdAt: ts, updatedAt: ts };
   const sysWarehouse = { id: P + 'sys-warehouse', orgId: orgTidewater.id, name: 'Data Warehouse', description: 'Enterprise analytics warehouse (Snowflake).', systemType: 'IT', vendorName: 'Snowflake', ownerPersonId: kwame.id, stewardIds: [], createdAt: ts, updatedAt: ts };
-  systems.push(sysSCADA, sysCIS, sysAMI, sysOMS, sysGIS, sysWarehouse);
+  // Water-specific systems (parallel to electric's SCADA + OMS).
+  const sysLIMS = { id: P + 'sys-lims', orgId: orgWater.id, name: 'LIMS', description: 'Laboratory Information Management System — water quality tests, sample chain of custody, effluent monitoring.', systemType: 'IT', vendorName: 'LabWare', ownerPersonId: sophie.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  const sysHydraulic = { id: P + 'sys-hydraulic', orgId: orgWater.id, name: 'Hydraulic Model', description: 'Distribution network hydraulic simulation — pressure, flow, main-break impact analysis.', systemType: 'OT', vendorName: 'Bentley OpenFlows', ownerPersonId: priya.id, stewardIds: [] as string[], createdAt: ts, updatedAt: ts };
+  systems.push(sysSCADA, sysCIS, sysAMI, sysOMS, sysGIS, sysWarehouse, sysLIMS, sysHydraulic);
   saveStore('systems', systems);
 
   // ── Agents (5 — one of each type, all wired to responsible persons) ──
@@ -172,12 +190,20 @@ export function seedDemoData(): DemoSeedReport {
   // have no process using them?" produces a quotable answer.
   const orphanLegacyBilling = { id: P + 'asset-legacy-billing', orgId: orgTidewater.id, name: 'Legacy Billing Extract', description: 'Nightly dump from the retired billing system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
   const orphanMeterCsv = { id: P + 'asset-meter-csv', orgId: orgTidewater.id, name: 'Meter CSV Dump', description: 'Ad-hoc CSV extract of yesterday\'s meter reads for an old vendor. Nobody remembers if it\'s still used.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
-  dataAssets.push(assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv);
+  // Water-side assets (parallel to Outage Logs / Generation Output on
+  // the electric side). Distribution Pressure feeds the Main Break
+  // Response process below; Water Quality Results are LIMS-sourced;
+  // NPDES Discharge is the compliance evidence asset.
+  const assetDistPressure = { id: P + 'asset-dist-pressure', orgId: orgWater.id, name: 'Distribution Pressure Reads', description: 'Continuous pressure telemetry from PRV stations and district metered areas.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 84, createdAt: ts, updatedAt: ts };
+  const assetWaterQuality = { id: P + 'asset-water-quality', orgId: orgWater.id, name: 'Water Quality Results', description: 'Lab and in-line water quality samples — turbidity, chlorine residual, coliform, pH.', systemId: sysLIMS.id, owner: '', ownerPersonId: sophie.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 79, createdAt: ts, updatedAt: ts };
+  const assetNPDES = { id: P + 'asset-npdes', orgId: orgWater.id, name: 'NPDES Discharge Records', description: 'Wastewater effluent discharge monitoring reports for state and EPA submissions.', systemId: sysLIMS.id, owner: '', ownerPersonId: isabella.id, stewardIds: [phillip.id] as string[], governanceTier: 'GOLD' as const, healthScore: 92, createdAt: ts, updatedAt: ts };
+  dataAssets.push(assetOutageLogs, assetCustomerMaster, assetMeterReads, assetGeneration, orphanLegacyBilling, orphanMeterCsv, assetDistPressure, assetWaterQuality, assetNPDES);
   saveStore('dataAssets', dataAssets);
 
   // Wire the domain → asset backrefs so the Domains page shows counts.
   domCustomer.dataAssetIds = [assetCustomerMaster.id];
-  domOps.dataAssetIds = [assetOutageLogs.id, assetMeterReads.id, assetGeneration.id];
+  domOps.dataAssetIds = [assetOutageLogs.id, assetMeterReads.id, assetGeneration.id, assetDistPressure.id, assetWaterQuality.id];
+  domRegulatory.dataAssetIds = [assetNPDES.id];
   saveStore('dataDomains', dataDomains);
 
   // ── Process hierarchy (Tidewater Electric) ──
@@ -192,6 +218,20 @@ export function seedDemoData(): DemoSeedReport {
   const actDispatch = { id: P + 'node-act-dispatch', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actNotify = { id: P + 'node-act-notify', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   processNodes.push(vs, procDetect, procRestore, spTriage, actTriage, actDispatch, actNotify);
+
+  // ── Process hierarchy (Tidewater Water) ──
+  // Mirrors the Electric shape: one value stream, two processes, one
+  // sub-process, three activities. Priority pair with Outage Management
+  // — Main Break Response is the equivalent restoration flow, plus a
+  // Treatment process for the quality-testing story.
+  const vsW = { id: P + 'node-vs-water', parentId: null, level: 'VALUE_STREAM' as const, name: 'Water Distribution & Quality', description: 'End-to-end delivery of safe potable water — treat, distribute, monitor, restore.', activityId: 'VS-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: marcus.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procMainBreak = { id: P + 'node-proc-main-break', parentId: vsW.id, level: 'PROCESS' as const, name: 'Main Break Response', description: 'Detect and repair distribution main breaks before customer complaints escalate.', activityId: 'PRO-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const procTreatment = { id: P + 'node-proc-treatment', parentId: vsW.id, level: 'PROCESS' as const, name: 'Treatment Operations', description: 'Run treatment plants + monitor water quality against permit thresholds.', activityId: 'PRO-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 1, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const spBreakTriage = { id: P + 'node-sp-break-triage', parentId: procMainBreak.id, level: 'SUBPROCESS' as const, name: 'Break Triage', description: 'Confirm break, size the affected zone, dispatch the right crew.', activityId: 'SP-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDetectBreak = { id: P + 'node-act-detect-break', parentId: spBreakTriage.id, level: 'ACTIVITY' as const, name: 'Detect main break', description: 'Acoustic sensors + pressure anomalies flag likely breaks.', activityId: 'ACT-DEMO-W1', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'System Operator Lead — Water Treatment', responsiblePersonId: rafael.id, systemIds: [sysSCADA.id, sysHydraulic.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Break confirmed within 15 minutes of anomaly signal', slaTarget: 'P95 15 min from anomaly to dispatch', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actDispatchWater = { id: P + 'node-act-dispatch-water', parentId: procMainBreak.id, level: 'ACTIVITY' as const, name: 'Dispatch repair crew', description: 'Match crew skill + equipment to the break location and severity.', activityId: 'ACT-DEMO-W2', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: priya.id, responsibleRole: 'Manager Water Distribution Control', systemIds: [sysGIS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actWaterQualityTest = { id: P + 'node-act-quality-test', parentId: procTreatment.id, level: 'ACTIVITY' as const, name: 'Water quality sample test', description: 'Draw + analyse the shift sample; log turbidity, chlorine residual, coliform.', activityId: 'ACT-DEMO-W3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, responsibleRole: 'Data Steward Water Operations', responsiblePersonId: sophie.id, systemIds: [sysLIMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 2, successMeasure: 'Every shift sample logged within 4 hours', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  processNodes.push(vsW, procMainBreak, procTreatment, spBreakTriage, actDetectBreak, actDispatchWater, actWaterQualityTest);
   saveStore('processNodes', processNodes);
 
   // ── Mappings ──
@@ -200,6 +240,10 @@ export function seedDemoData(): DemoSeedReport {
     { id: P + 'map-2', orgId: orgElectric.id, processStepId: actTriage.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Cross-references affected customers', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: P + 'map-3', orgId: orgElectric.id, processStepId: actNotify.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Pulls customer contact preferences', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
     { id: P + 'map-4', orgId: orgTidewater.id, processStepId: actDispatch.id, dataAssetId: assetMeterReads.id, linkType: 'INPUT', notes: 'Verifies restoration via meter reads', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    // Water side mappings — parallel shape to electric's three.
+    { id: P + 'map-w1', orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetDistPressure.id, linkType: 'INPUT', notes: 'Reads pressure telemetry to confirm the break signal', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: P + 'map-w2', orgId: orgWater.id, processStepId: actDetectBreak.id, dataAssetId: assetCustomerMaster.id, linkType: 'INPUT', notes: 'Identifies the customers in the affected zone', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
+    { id: P + 'map-w3', orgId: orgWater.id, processStepId: actWaterQualityTest.id, dataAssetId: assetWaterQuality.id, linkType: 'OUTPUT', notes: 'Writes the shift sample result set', aiSuggested: false, userOverridden: false, createdAt: ts, updatedAt: ts, createdBy: null } as any,
   );
   saveStore('mappings', mappings);
 
@@ -540,14 +584,14 @@ export function seedDemoData(): DemoSeedReport {
   logger.info({ persona: susan.name }, 'Demo data seeded');
 
   return {
-    organizations: 8,
-    people: 16,
-    systems: 6,
+    organizations: 10,
+    people: 23,
+    systems: 8,
     agents: 5,
     dataDomains: 3,
-    dataAssets: 6,
-    processNodes: 7,
-    mappings: 4,
+    dataAssets: 9,
+    processNodes: 14,
+    mappings: 7,
     governanceTasks: 3,
     governanceIssues: 1,
     dataQualityRules: 2,
