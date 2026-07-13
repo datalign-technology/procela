@@ -348,11 +348,13 @@ export default function SetupHubPage() {
 
   if (!activeOrgId) {
     return (
-      <div style={{ maxWidth: 640, margin: '48px auto', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', marginBottom: 8 }}>Get Started</h1>
-        <p>Select or create an organization from the header to begin setting up Procela.</p>
-        <button onClick={() => navigate('/organizations')} style={primaryBtn}>Go to Organizations</button>
-      </div>
+      <Page width="narrow" padding="48px 0">
+        <div style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', marginBottom: 8 }}>Get Started</h1>
+          <p>Select or create an organization from the header to begin setting up Procela.</p>
+          <button onClick={() => navigate('/organizations')} style={primaryBtn}>Go to Organizations</button>
+        </div>
+      </Page>
     );
   }
 

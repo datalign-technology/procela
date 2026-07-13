@@ -4,7 +4,9 @@ import {
 } from '@simplewebauthn/browser';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ConnectorsSection from '../components/ConnectorsSection';
 import AiSettingsPanel from '../components/AiSettingsPanel';
@@ -62,26 +64,30 @@ export default function SettingsPage() {
   const isAdmin = !!user?.role && ADMIN_ROLES.has(user.role);
   if (!isAdmin) {
     return (
-      <div style={{ maxWidth: 560, margin: '64px auto', padding: '32px', textAlign: 'center', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Admins only</h2>
-        <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
-          The Settings page holds organization-wide configuration that
-          only administrators can change. For your personal display
-          preferences (Plain / DAMA, Cozy / Compact), click your name
-          in the top-right corner of any page.
-        </p>
-        <Link
-          to="/"
-          style={{
-            display: 'inline-block', padding: '8px 16px',
-            fontSize: 13, fontWeight: 600,
-            background: 'var(--color-primary)', color: '#fff',
-            borderRadius: 'var(--radius-md)', textDecoration: 'none',
-          }}
-        >
-          Back to dashboard
-        </Link>
-      </div>
+      <Page width="narrow" padding="64px 0">
+        <Card padding="32px">
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Admins only</h2>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+              The Settings page holds organization-wide configuration that
+              only administrators can change. For your personal display
+              preferences (Plain / DAMA, Cozy / Compact), click your name
+              in the top-right corner of any page.
+            </p>
+            <Link
+              to="/"
+              style={{
+                display: 'inline-block', padding: '8px 16px',
+                fontSize: 13, fontWeight: 600,
+                background: 'var(--color-primary)', color: '#fff',
+                borderRadius: 'var(--radius-md)', textDecoration: 'none',
+              }}
+            >
+              Back to dashboard
+            </Link>
+          </div>
+        </Card>
+      </Page>
     );
   }
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
