@@ -482,7 +482,8 @@
         <h3>An activity carries operational weight</h3>
         <p>Open the seeded <strong>Outage triage</strong> activity. Walk down the panel: Responsible <strong>Melissa Patel</strong>, systems <strong>SCADA</strong> + <strong>OMS</strong>, dependencies show a predecessor and a successor, Criticality <strong>Tier&nbsp;1</strong>, RTO <strong>4h</strong>, Success measure &ldquo;<em>Field crew on site within 30&nbsp;min</em>&rdquo;.</p>
         <p>Scroll to Inputs/Outputs. Mapped to <strong>Outage Logs</strong> and <strong>Customer Master</strong>.</p>
-        <p class="payoff"><strong>Say</strong> When a regulator asks &ldquo;what&rsquo;s the RTO for outage triage?&rdquo; &mdash; this is where the answer lives, not in a spreadsheet somebody has to go find.</p>
+        <p>Click into <strong>Customer Master</strong> to open the Data Asset 360. Two panels are the payoff shot: <strong>Sensitivity</strong> (AI-suggested tags with per-tag Accept / Reject — Customer Master lights up PII with high confidence) and <strong>Impact</strong> (activity + process + value-stream counts, expandable to a per-person <em>Notify</em> list). This is the change-comms distribution list on tap.</p>
+        <p class="payoff"><strong>Say</strong> When a regulator asks &ldquo;what&rsquo;s the RTO for outage triage?&rdquo; &mdash; this is where the answer lives, not in a spreadsheet somebody has to go find. And &ldquo;if we retire this asset, who needs to know?&rdquo; is a click, not a meeting.</p>
       </div>
     </div>
 
@@ -538,7 +539,8 @@
         <h3>DQ and issues tell one story</h3>
         <p>Two rules land: Customer Master email completeness at <strong>96</strong> (green), Generation Output write&#8209;latency at <strong>62</strong> (red).</p>
         <p>Cross to Governance &rarr; Issues: the seeded HIGH severity ownership issue is against <strong>Generation Output</strong>. Same asset.</p>
-        <p class="payoff"><strong>Say</strong> When a rule fails, an issue opens and the responsible steward gets pinged. This one is already in flight.</p>
+        <p>Move over to <strong>Tasks</strong> and pull up one of Susan&rsquo;s three: the row shows a due date and, if it&rsquo;s slipped, an <em>overdue</em> chip. The hourly sweep writes that same signal into the notifications bell &mdash; no cron, no external orchestrator.</p>
+        <p class="payoff"><strong>Say</strong> When a rule fails, an issue opens and the responsible steward gets pinged. When a task falls behind, the same bell rings automatically. This one is already in flight.</p>
       </div>
     </div>
 
