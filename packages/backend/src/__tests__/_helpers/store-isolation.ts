@@ -1,11 +1,26 @@
 import fs from 'fs';
 import path from 'path';
+import { before, after, beforeEach } from 'node:test';
 
 // Test helpers for snapshotting / restoring JSON store files under
 // .procela-data/. Used by tests that exercise services with hard-
 // coded persistence side effects (account-lockout saves people, the
 // audit chain saves auditLogs, etc.) so a test run can't clobber a
 // developer's local data directory.
+//
+// The one-liner:
+//
+//   describe('my suite', () => {
+//     useStoreIsolation({ file: 'auditLogs', memory: auditLogs });
+//     // ... tests that write to auditLogs
+//   });
+//
+// registers the before / beforeEach / after hooks in one call. `file`
+// is the store name (matches .procela-data/<name>.json); `memory` is
+// the in-memory array the route module exports — passing it lets the
+// helper wipe the array between tests so leaked pushes from an
+// earlier test don't influence a later one. Multiple stores can be
+// isolated in one call by listing them.
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
 
@@ -51,4 +66,43 @@ export function writeStore(name: string, data: unknown[]): void {
  *  (people, auditLogs, etc.) without re-importing the module. */
 export function replaceArray<T>(target: T[], items: T[]): void {
   target.splice(0, target.length, ...items);
+}
+
+export interface IsolatedStore {
+  /** Store name — matches .procela-data/<name>.json. */
+  file: string;
+  /** Optional in-memory array (usually a route module's export)
+   *  that the helper wipes on beforeEach so leftover pushes from a
+   *  prior test can't influence a later one. Omit when the suite
+   *  only cares about disk state (rare — most suites need both). */
+  memory?: unknown[];
+}
+
+/**
+ * Register the before / beforeEach / after hooks that isolate the
+ * listed stores from other suites. Call once at the top of a
+ * `describe` block; the helper handles snapshotting the file on disk
+ * before any tests run, wiping the in-memory array between tests, and
+ * restoring the original file contents when the suite finishes.
+ *
+ * Prefer this over hand-rolling snapshotStore + replaceArray +
+ * restoreStore in each suite — one call means the same behaviour
+ * everywhere.
+ */
+export function useStoreIsolation(...stores: IsolatedStore[]): void {
+  const snapshots: StoreSnapshot[] = [];
+  before(() => {
+    for (const s of stores) {
+      snapshots.push(snapshotStore(s.file));
+      if (s.memory) replaceArray(s.memory as unknown[], []);
+    }
+  });
+  beforeEach(() => {
+    for (const s of stores) {
+      if (s.memory) replaceArray(s.memory as unknown[], []);
+    }
+  });
+  after(() => {
+    for (const snap of snapshots) restoreStore(snap);
+  });
 }

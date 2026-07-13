@@ -13,7 +13,7 @@ import {
   type ReportDefinition,
 } from '../services/report-engine';
 
-import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
+import { useStoreIsolation } from './_helpers/store-isolation';
 
 const ORG = 'test-org-rpt';
 const OTHER_ORG = 'test-org-rpt-other';
@@ -47,42 +47,13 @@ function asset(id: string, name: string, extras: Partial<Record<string, unknown>
   } as any;
 }
 
-const snaps = {
-  people: snapshotStore('people'),
-  skills: snapshotStore('skills'),
-  nodes: snapshotStore('processNodes'),
-  assets: snapshotStore('dataAssets'),
-  systems: snapshotStore('systems'),
-};
-
-before(() => {
-  replaceArray(people, []);
-  replaceArray(skills, []);
-  replaceArray(processNodes, []);
-  replaceArray(dataAssets, []);
-  replaceArray(systems, []);
-});
-
-after(() => {
-  replaceArray(people, []);
-  replaceArray(skills, []);
-  replaceArray(processNodes, []);
-  replaceArray(dataAssets, []);
-  replaceArray(systems, []);
-  restoreStore(snaps.people);
-  restoreStore(snaps.skills);
-  restoreStore(snaps.nodes);
-  restoreStore(snaps.assets);
-  restoreStore(snaps.systems);
-});
-
-beforeEach(() => {
-  replaceArray(people, []);
-  replaceArray(skills, []);
-  replaceArray(processNodes, []);
-  replaceArray(dataAssets, []);
-  replaceArray(systems, []);
-});
+useStoreIsolation(
+  { file: 'people', memory: people },
+  { file: 'skills', memory: skills },
+  { file: 'processNodes', memory: processNodes },
+  { file: 'dataAssets', memory: dataAssets },
+  { file: 'systems', memory: systems },
+);
 
 describe('validateDefinition', () => {
   it('flags unknown entity', () => {

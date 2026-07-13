@@ -8,7 +8,7 @@ import {
   clearLockout,
   adminClearLockout,
 } from '../services/account-lockout';
-import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
+import { replaceArray, useStoreIsolation } from './_helpers/store-isolation';
 
 // Tests use a controlled `people` array (snapshot/restore around the
 // suite) so persistence side effects don't clobber developer data.
@@ -35,24 +35,13 @@ function makePerson(overrides: Partial<StoredPerson> = {}): StoredPerson {
 }
 
 describe('account-lockout', () => {
-  const snap = snapshotStore('people');
-
-  before(() => {
-    // Start every test with a known single-row people array. The
-    // mutating helpers in account-lockout call saveStore('people',
-    // people) — replaceArray ensures the persisted file only
-    // contains test fixtures, never real users.
-    replaceArray(people, []);
-  });
-
-  after(() => {
-    replaceArray(people, []);
-    restoreStore(snap);
-  });
-
-  beforeEach(() => {
-    replaceArray(people, [makePerson()]);
-  });
+  // Start every test with a known single-row people array. The
+  // mutating helpers in account-lockout call saveStore('people',
+  // people) — useStoreIsolation ensures the persisted file only
+  // contains test fixtures, never real users, and swaps the row in
+  // through beforeEach.
+  useStoreIsolation({ file: 'people', memory: people });
+  beforeEach(() => { replaceArray(people, [makePerson()]); });
 
   describe('checkLockout', () => {
     it('reports not-locked when lockedUntil is absent', () => {

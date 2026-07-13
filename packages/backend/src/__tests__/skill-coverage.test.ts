@@ -11,7 +11,7 @@ import {
   rankPeopleByRoleSkills,
   orgSkillGapReport,
 } from '../services/skill-coverage';
-import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
+import { useStoreIsolation } from './_helpers/store-isolation';
 
 const ORG = 'test-org-skills';
 const OTHER_ORG = 'test-org-other';
@@ -39,32 +39,11 @@ function node(id: string, name: string, opts: { responsiblePersonId?: string; re
   } as any;
 }
 
-const snaps = {
-  people: snapshotStore('people'),
-  skills: snapshotStore('skills'),
-  nodes: snapshotStore('processNodes'),
-};
-
-before(() => {
-  replaceArray(people, []);
-  replaceArray(skills, []);
-  replaceArray(processNodes, []);
-});
-
-after(() => {
-  replaceArray(people, []);
-  replaceArray(skills, []);
-  replaceArray(processNodes, []);
-  restoreStore(snaps.people);
-  restoreStore(snaps.skills);
-  restoreStore(snaps.nodes);
-});
-
-beforeEach(() => {
-  replaceArray(people, []);
-  replaceArray(skills, []);
-  replaceArray(processNodes, []);
-});
+useStoreIsolation(
+  { file: 'people', memory: people },
+  { file: 'skills', memory: skills },
+  { file: 'processNodes', memory: processNodes },
+);
 
 describe('personCoverage', () => {
   it('reports full coverage when the person has every required skill', () => {

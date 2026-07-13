@@ -6,7 +6,7 @@ import { upsertOidcProvider, removeOidcProvider, updateAuthConfig } from '../ser
 import { _clearAllForTesting as clearPendingFlows, peekFlow } from '../services/pending-oidc-flows';
 import { auditLogs } from '../services/audit.service';
 import { _resetRateLimitForTesting } from '../middleware/rate-limit';
-import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
+import { useStoreIsolation } from './_helpers/store-isolation';
 import { startAuthApp, type TestAppHandle } from './_helpers/test-app';
 import { startMockOidcIdp, type MockOidcIdpHandle } from './_helpers/mock-oidc-idp';
 
@@ -31,8 +31,10 @@ import { startMockOidcIdp, type MockOidcIdpHandle } from './_helpers/mock-oidc-i
 let idp: MockOidcIdpHandle;
 let app: TestAppHandle;
 
-const peopleSnap = snapshotStore('people');
-const auditSnap = snapshotStore('auditLogs');
+useStoreIsolation(
+  { file: 'people', memory: people },
+  { file: 'auditLogs', memory: auditLogs },
+);
 
 before(async () => {
   idp = await startMockOidcIdp();
@@ -52,14 +54,10 @@ after(async () => {
   updateAuthConfig({ provider: 'dev' });
   await app.close();
   await idp.close();
-  restoreStore(peopleSnap);
-  restoreStore(auditSnap);
 });
 
 beforeEach(() => {
   clearPendingFlows();
-  replaceArray(people, []);
-  replaceArray(auditLogs, []);
   // The auth router's /login route is throttled — 5/min and 20/hour
   // per (IP, email). Each test starts from a clean counter so a
   // long suite doesn't trip the limiter halfway through.

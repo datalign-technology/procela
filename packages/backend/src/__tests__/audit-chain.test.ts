@@ -2,7 +2,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 
 import { auditService, auditLogs, type AuditLogEntry } from '../services/audit.service';
-import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
+import { useStoreIsolation } from './_helpers/store-isolation';
 
 // Hash-chain integrity. Every entry the service writes carries a
 // prevHash + entryHash, and verifyChain() walks the list confirming
@@ -11,18 +11,7 @@ import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isol
 const ORG = 'test-org-1';
 
 describe('audit.service — hash chain', () => {
-  const snap = snapshotStore('auditLogs');
-
-  before(() => { replaceArray(auditLogs, []); });
-
-  after(() => {
-    replaceArray(auditLogs, []);
-    restoreStore(snap);
-  });
-
-  beforeEach(() => {
-    replaceArray(auditLogs, []);
-  });
+  useStoreIsolation({ file: 'auditLogs', memory: auditLogs });
 
   describe('log()', () => {
     it('writes an entry with prevHash="" and a fresh entryHash on the first call', () => {
