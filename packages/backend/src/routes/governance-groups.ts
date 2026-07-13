@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
@@ -74,6 +75,35 @@ export const governanceGroups: StoredGovernanceGroup[] = loadStore<StoredGoverna
 registerStore('governanceGroups', governanceGroups);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
+// Request-body schemas — Zod at the API boundary. Enum checks + type
+// guarantees fall out of the parse so downstream code can drop the
+// `.includes(x as any)` runtime checks and use the typed body directly.
+const createGroupBodySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  type: z.enum(GROUP_TYPES),
+  description: z.string().optional(),
+  charter: z.string().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  orgId: z.string().optional(),
+  parentId: z.string().nullable().optional(),
+});
+const updateGroupBodySchema = z.object({
+  name: z.string().optional(),
+  type: z.enum(GROUP_TYPES).optional(),
+  description: z.string().optional(),
+  charter: z.string().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  parentId: z.string().nullable().optional(),
+});
+const generateTemplateBodySchema = z.object({
+  orgId: z.string().optional(),
+});
+const addMemberBodySchema = z.object({
+  personId: z.string().nullable().optional(),
+  agentId: z.string().nullable().optional(),
+  groupRole: z.enum(GROUP_ROLES),
+});
+
 // Deduplicate on startup: keep the first occurrence of each name+orgId+type combo
 {
   const seen = new Set<string>();
@@ -111,17 +141,20 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 // ── Tree builder ──
 
-function buildTree(groups: StoredGovernanceGroup[]): any[] {
-  const map = new Map<string, any>();
-  const roots: any[] = [];
+type GroupTreeNode = StoredGovernanceGroup & { children: GroupTreeNode[] };
+
+function buildTree(groups: StoredGovernanceGroup[]): GroupTreeNode[] {
+  const map = new Map<string, GroupTreeNode>();
+  const roots: GroupTreeNode[] = [];
 
   for (const g of groups) {
     map.set(g.id, { ...g, children: [] });
   }
   for (const g of groups) {
     const node = map.get(g.id);
+    if (!node) continue;
     if (g.parentId && map.has(g.parentId)) {
-      map.get(g.parentId).children.push(node);
+      map.get(g.parentId)!.children.push(node);
     } else {
       roots.push(node);
     }
@@ -170,7 +203,13 @@ router.get('/', (req: Request, res: Response) => {
  * Must be registered BEFORE /:id to avoid route conflict.
  */
 router.post('/generate-template', (req: Request, res: Response) => {
-  const { orgId } = req.body;
+  const parsed = generateTemplateBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { orgId } = parsed.data;
   const targetOrgId = orgId || DEV_ORG_ID;
   const now = new Date().toISOString();
   const created: StoredGovernanceGroup[] = [];
@@ -322,12 +361,13 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
 
 /** POST /api/v1/governance-groups */
 router.post('/', (req: Request, res: Response) => {
-  const { name, type, description, charter, status, orgId, parentId } = req.body;
-  if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
-  if (!type || !GROUP_TYPES.includes(type as any)) {
-    res.status(400).json({ success: false, error: `Invalid type. Must be one of: ${GROUP_TYPES.join(', ')}` });
+  const parsed = createGroupBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
+  const { name, type, description, charter, status, orgId, parentId } = parsed.data;
 
   // Check parent-child relationship (soft warning, not a block)
   let warning: string | null = null;
@@ -367,16 +407,17 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
-  const before = { ...group };
-  const { name, type, description, charter, status, parentId } = req.body;
-  if (name !== undefined) group.name = name;
-  if (type !== undefined) {
-    if (!GROUP_TYPES.includes(type as any)) {
-      res.status(400).json({ success: false, error: `Invalid type. Must be one of: ${GROUP_TYPES.join(', ')}` });
-      return;
-    }
-    group.type = type;
+
+  const parsed = updateGroupBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
   }
+  const before = { ...group };
+  const { name, type, description, charter, status, parentId } = parsed.data;
+  if (name !== undefined) group.name = name;
+  if (type !== undefined) group.type = type;
   if (description !== undefined) group.description = description;
   if (charter !== undefined) group.charter = charter;
   if (status !== undefined) group.status = status;
@@ -406,14 +447,17 @@ router.delete('/:id', (req: Request, res: Response) => {
 router.post('/:id/members', (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
-  const { personId, agentId, groupRole } = req.body;
+
+  const parsed = addMemberBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { personId, agentId, groupRole } = parsed.data;
 
   if (!personId && !agentId) { res.status(400).json({ success: false, error: 'Either personId or agentId is required' }); return; }
   if (personId && agentId) { res.status(400).json({ success: false, error: 'Provide either personId or agentId, not both' }); return; }
-  if (!groupRole || !GROUP_ROLES.includes(groupRole as any)) {
-    res.status(400).json({ success: false, error: `Invalid groupRole. Must be one of: ${GROUP_ROLES.join(', ')}` });
-    return;
-  }
 
   // Accountability rule: agents can only sit in the advisor slot. The
   // voting / chairing / signing roles stay with humans (see
@@ -452,7 +496,7 @@ router.post('/:id/members', (req: Request, res: Response) => {
   const agent = agents.find((a) => a.id === agentId);
   if (!agent) { res.status(400).json({ success: false, error: 'Agent not found' }); return; }
   const now = new Date().toISOString();
-  group.members.push({ personId: null, agentId, groupRole, since: now });
+  group.members.push({ personId: null, agentId: agentId!, groupRole, since: now });
   group.updatedAt = now;
   saveStore('governanceGroups', governanceGroups);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { agentId, groupRole });

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { people } from './people';
@@ -47,6 +48,24 @@ export interface StoredComment {
 
 export const comments: StoredComment[] = loadStore<StoredComment>('comments');
 registerStore('comments', comments);
+
+// Request-body schemas — Zod at the API boundary. Shape checks fall out
+// of the parse so downstream code can use the typed body directly.
+const createCommentBodySchema = z.object({
+  entityType: z.string().min(1, 'entityType, entityId, and non-empty content are required'),
+  entityId: z.string().min(1, 'entityType, entityId, and non-empty content are required'),
+  content: z.string().refine((s) => s.trim().length > 0, {
+    message: 'entityType, entityId, and non-empty content are required',
+  }),
+  userName: z.string().optional(),
+  orgId: z.string().optional(),
+  parentId: z.string().nullable().optional(),
+  entityLabel: z.string().optional(),
+});
+const patchCommentBodySchema = z.object({
+  content: z.string().refine((s) => s.trim().length > 0, { message: 'content cannot be empty' }),
+  entityLabel: z.string().optional(),
+});
 
 // One-time migration of v0 comments that lack the new fields. Idempotent;
 // runs once per process boot.
@@ -140,16 +159,14 @@ router.get('/', (req: Request, res: Response) => {
 
 /** POST /api/v1/comments */
 router.post('/', (req: Request, res: Response) => {
-  const { entityType, entityId, content, userName, orgId, parentId, entityLabel } = req.body as {
-    entityType?: string; entityId?: string; content?: string;
-    userName?: string; orgId?: string; parentId?: string | null;
-    entityLabel?: string;
-  };
-
-  if (!entityType || !entityId || !content || !content.trim()) {
-    res.status(400).json({ success: false, error: 'entityType, entityId, and non-empty content are required' });
+  const parsed = createCommentBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
+  const { entityType, entityId, content, userName, orgId, parentId, entityLabel } = parsed.data;
+
   const effectiveOrgId = orgId || DEV_ORG_ID;
 
   // Threading: replies must point at an existing comment on the same
@@ -221,8 +238,13 @@ router.patch('/:id', (req: Request, res: Response) => {
   if (!c) { res.status(404).json({ success: false, error: 'Comment not found' }); return; }
   if (c.deletedAt) { res.status(409).json({ success: false, error: 'Comment is deleted' }); return; }
 
-  const { content, entityLabel } = req.body as { content?: string; entityLabel?: string };
-  if (!content || !content.trim()) { res.status(400).json({ success: false, error: 'content cannot be empty' }); return; }
+  const parsed = patchCommentBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { content, entityLabel } = parsed.data;
 
   const editorPersonId = (req as any).user?.sub || null;
   if (c.userId && editorPersonId && c.userId !== editorPersonId) {

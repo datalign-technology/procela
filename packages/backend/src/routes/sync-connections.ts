@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
@@ -81,6 +82,55 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 export const syncConnections: SyncConnection[] = loadStore<SyncConnection>('syncConnections');
 registerStore('syncConnections', syncConnections);
+
+// Request-body schemas — Zod at the API boundary. Enum checks + type
+// guarantees fall out of the parse so downstream code can use the
+// typed body directly.
+const syncConfigSchema = z.object({
+  dbType: z.enum(DB_TYPES).optional(),
+  host: z.string().optional(),
+  port: z.number().optional(),
+  database: z.string().optional(),
+  schema: z.string().optional(),
+  table: z.string().optional(),
+  query: z.string().optional(),
+  url: z.string().optional(),
+  authHeader: z.string().optional(),
+});
+const syncScheduleSchema = z.object({
+  enabled: z.boolean().optional(),
+  intervalMinutes: z.number().optional(),
+});
+const createSyncConnectionBodySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  targetEntity: z.enum(TARGET_ENTITIES, {
+    message: `targetEntity must be one of: ${TARGET_ENTITIES.join(', ')}`,
+  }),
+  sourceType: z.enum(SOURCE_TYPES, {
+    message: `sourceType must be one of: ${SOURCE_TYPES.join(', ')}`,
+  }),
+  matchKey: z.string().min(1, 'matchKey is required'),
+  config: syncConfigSchema.optional(),
+  fieldMapping: z.record(z.string(), z.string()).optional(),
+  schedule: syncScheduleSchema.optional(),
+  orgId: z.string().optional(),
+  connectionId: z.string().nullable().optional(),
+});
+const updateSyncConnectionBodySchema = z.object({
+  name: z.string().optional(),
+  targetEntity: z.enum(TARGET_ENTITIES, {
+    message: `targetEntity must be one of: ${TARGET_ENTITIES.join(', ')}`,
+  }).optional(),
+  sourceType: z.enum(SOURCE_TYPES, {
+    message: `sourceType must be one of: ${SOURCE_TYPES.join(', ')}`,
+  }).optional(),
+  matchKey: z.string().optional(),
+  config: syncConfigSchema.optional(),
+  fieldMapping: z.record(z.string(), z.string()).optional(),
+  schedule: syncScheduleSchema.optional(),
+  status: z.enum(['ACTIVE', 'PAUSED', 'ERROR']).optional(),
+  connectionId: z.string().nullable().optional(),
+});
 
 // Backfill connectionId on legacy rows so consumers can rely on the
 // field existing. null = inline (no saved-connection reference).
@@ -369,24 +419,14 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/sync-connections — create new sync connection */
 router.post('/', (req: Request, res: Response) => {
-  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId, connectionId } = req.body;
+  const parsed = createSyncConnectionBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, orgId, connectionId } = parsed.data;
 
-  if (!name) {
-    res.status(400).json({ success: false, error: 'Name is required' });
-    return;
-  }
-  if (!targetEntity || !TARGET_ENTITIES.includes(targetEntity)) {
-    res.status(400).json({ success: false, error: `targetEntity must be one of: ${TARGET_ENTITIES.join(', ')}` });
-    return;
-  }
-  if (!sourceType || !SOURCE_TYPES.includes(sourceType)) {
-    res.status(400).json({ success: false, error: `sourceType must be one of: ${SOURCE_TYPES.join(', ')}` });
-    return;
-  }
-  if (!matchKey) {
-    res.status(400).json({ success: false, error: 'matchKey is required' });
-    return;
-  }
   if (connectionId) {
     const conn = connections.find((c) => c.id === connectionId);
     if (!conn) {
@@ -438,23 +478,17 @@ router.put('/:id', (req: Request, res: Response) => {
     return;
   }
 
-  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, status, connectionId } = req.body;
+  const parsed = updateSyncConnectionBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { name, targetEntity, sourceType, config, fieldMapping, matchKey, schedule, status, connectionId } = parsed.data;
 
   if (name !== undefined) sc.name = name;
-  if (targetEntity !== undefined) {
-    if (!TARGET_ENTITIES.includes(targetEntity)) {
-      res.status(400).json({ success: false, error: `targetEntity must be one of: ${TARGET_ENTITIES.join(', ')}` });
-      return;
-    }
-    sc.targetEntity = targetEntity;
-  }
-  if (sourceType !== undefined) {
-    if (!SOURCE_TYPES.includes(sourceType)) {
-      res.status(400).json({ success: false, error: `sourceType must be one of: ${SOURCE_TYPES.join(', ')}` });
-      return;
-    }
-    sc.sourceType = sourceType;
-  }
+  if (targetEntity !== undefined) sc.targetEntity = targetEntity;
+  if (sourceType !== undefined) sc.sourceType = sourceType;
   if (connectionId !== undefined) {
     if (connectionId === null || connectionId === '') {
       sc.connectionId = null;
@@ -474,9 +508,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (config !== undefined) sc.config = { ...sc.config, ...config };
   if (fieldMapping !== undefined) sc.fieldMapping = fieldMapping;
   if (matchKey !== undefined) sc.matchKey = matchKey;
-  if (status !== undefined && ['ACTIVE', 'PAUSED', 'ERROR'].includes(status)) {
-    sc.status = status;
-  }
+  if (status !== undefined) sc.status = status;
   if (schedule !== undefined) {
     if (schedule.enabled !== undefined) sc.schedule.enabled = schedule.enabled;
     if (schedule.intervalMinutes !== undefined) sc.schedule.intervalMinutes = schedule.intervalMinutes;
