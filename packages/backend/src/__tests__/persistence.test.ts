@@ -101,4 +101,42 @@ describe('persistence', () => {
       assert.strictEqual(loaded.length, 0);
     });
   });
+
+  describe('atomic write', () => {
+    // A crash between the tmp write and the rename would leave a stray
+    // `.tmp` sibling. Loading a store that has one should clean it up
+    // and read the (still valid) real file — otherwise stray tmps
+    // accumulate on every restart after a bad shutdown.
+    it('removes a stale .tmp sibling on load and keeps the real file intact', () => {
+      const storeName = '__test_stale_tmp';
+      testFiles.push(storeName);
+
+      const realPath = path.join(DATA_DIR, `${storeName}.json`);
+      const tmpPath = path.join(DATA_DIR, `${storeName}.json.tmp`);
+      ensureDataDir();
+
+      // Real file: a valid, previously-committed store.
+      const real = [{ id: 'keep-me', value: 1 }];
+      fs.writeFileSync(realPath, JSON.stringify(real, null, 2));
+      // Stray tmp: half-written garbage from a "crash" mid-write.
+      fs.writeFileSync(tmpPath, '[{"id":"partial');
+
+      const loaded = loadStore<{ id: string; value: number }>(storeName);
+      assert.deepStrictEqual(loaded, real);
+      assert.strictEqual(fs.existsSync(tmpPath), false, 'stale tmp should be cleaned up');
+      assert.strictEqual(fs.existsSync(realPath), true, 'real file should survive');
+    });
+
+    // The atomic-write guarantee: after saveStore returns, no `.tmp`
+    // file remains — the rename was either successful (tmp gone, real
+    // updated) or failed loudly with cleanup.
+    it('leaves no .tmp file behind after a successful save', () => {
+      const storeName = '__test_atomic_success';
+      testFiles.push(storeName);
+
+      const tmpPath = path.join(DATA_DIR, `${storeName}.json.tmp`);
+      saveStore(storeName, [{ id: 'x', v: 1 }]);
+      assert.strictEqual(fs.existsSync(tmpPath), false);
+    });
+  });
 });
