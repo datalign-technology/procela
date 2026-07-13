@@ -155,7 +155,7 @@ export function syncDataQualityIssueForRule(rule: {
   }
 }
 
-interface StoredGovernanceIssue {
+export interface StoredGovernanceIssue {
   id: string;
   orgId: string;
   title: string;

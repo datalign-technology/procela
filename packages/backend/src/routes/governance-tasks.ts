@@ -44,7 +44,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
-interface StoredGovernanceTask {
+export interface StoredGovernanceTask {
   id: string;
   orgId: string;
   title: string;

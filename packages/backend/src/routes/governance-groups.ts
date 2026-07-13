@@ -46,7 +46,7 @@ const GROUP_ROLES = ['CHAIR', 'VICE_CHAIR', 'MEMBER', 'SECRETARY', 'ADVISOR'] as
 // quality monitoring, policy-gap surfacing) in the advisor capacity.
 const AGENT_ALLOWED_GROUP_ROLES = new Set<string>(['ADVISOR']);
 
-interface GroupMember {
+export interface GroupMember {
   // Exactly one of (personId, agentId) is set on any membership row.
   // Older records only have personId; the migration below backfills
   // agentId: null so the discriminator is always present.
@@ -56,7 +56,7 @@ interface GroupMember {
   since: string;
 }
 
-interface StoredGovernanceGroup {
+export interface StoredGovernanceGroup {
   id: string;
   orgId: string;
   parentId: string | null;
