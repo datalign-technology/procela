@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
+import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
@@ -165,14 +166,104 @@ function backfillOwnerPersonIds(): void {
 }
 setImmediate(backfillOwnerPersonIds);
 
-const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'];
-const VALID_DATA_TYPES = ['MASTER', 'REFERENCE', 'TRANSACTIONAL', 'ANALYTICAL', 'METADATA'];
+const VALID_TIERS = ['BRONZE', 'SILVER', 'GOLD'] as const;
+const VALID_DATA_TYPES = ['MASTER', 'REFERENCE', 'TRANSACTIONAL', 'ANALYTICAL', 'METADATA'] as const;
 const VALID_REFRESH_FREQUENCIES = [
   'REAL_TIME', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'MANUAL',
   'EVENT_DRIVEN', 'STREAMING', 'AD_HOC',
-];
-const VALID_RETENTION_UNITS = ['DAYS', 'MONTHS', 'YEARS'];
-const VALID_CLASSIFICATIONS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
+] as const;
+const VALID_RETENTION_UNITS = ['DAYS', 'MONTHS', 'YEARS'] as const;
+const VALID_CLASSIFICATIONS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'] as const;
+
+// Request-body schemas — Zod at the API boundary. Silent-fallback fields
+// (governanceTier, dataType, refreshFrequency, dataClassification,
+// retentionDuration) use `.catch(undefined)` so invalid values are
+// dropped rather than 400'd, matching the existing runtime fallback
+// semantics. `origin` on create rejects invalid values (mirrors the
+// existing pre-migration behaviour).
+const createDataAssetBodySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  systemId: z.string().optional(),
+  owner: z.string().optional(),
+  ownerPersonId: z.string().nullable().optional(),
+  stewardIds: z.array(z.string()).optional(),
+  governanceTier: z.enum(VALID_TIERS).optional().catch(undefined),
+  healthScore: z.number().optional(),
+  orgId: z.string().optional(),
+  sourceConnectionId: z.string().optional(),
+  sourceAsset: z.string().optional(),
+  sourceColumn: z.string().optional(),
+  dataClassification: z.enum(VALID_CLASSIFICATIONS).optional().catch(undefined),
+  dataType: z.enum(VALID_DATA_TYPES).optional().catch(undefined),
+  category: z.enum(['OPERATIONAL', 'GOVERNANCE', 'REFERENCE', 'ANALYTICAL', 'MASTER']).optional().catch(undefined),
+  retentionPolicy: z.string().optional(),
+  retentionDuration: z.object({
+    value: z.number().positive(),
+    unit: z.enum(VALID_RETENTION_UNITS),
+  }).optional().catch(undefined),
+  retentionReason: z.string().optional(),
+  refreshFrequency: z.enum(VALID_REFRESH_FREQUENCIES).optional().catch(undefined),
+  origin: z.enum(VALID_ORIGINS).optional(),
+});
+const updateDataAssetBodySchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  systemId: z.string().optional(),
+  owner: z.string().optional(),
+  ownerPersonId: z.string().nullable().optional(),
+  stewardIds: z.array(z.string()).optional(),
+  governanceTier: z.enum(VALID_TIERS).optional().catch(undefined),
+  healthScore: z.number().optional(),
+  sourceConnectionId: z.string().optional(),
+  sourceAsset: z.string().optional(),
+  sourceColumn: z.string().optional(),
+  dataClassification: z.enum(VALID_CLASSIFICATIONS).optional().catch(undefined),
+  dataType: z.enum(VALID_DATA_TYPES).optional().catch(undefined),
+  category: z.enum(['OPERATIONAL', 'GOVERNANCE', 'REFERENCE', 'ANALYTICAL', 'MASTER']).optional().catch(undefined),
+  retentionPolicy: z.string().optional(),
+  retentionDuration: z.object({
+    value: z.number().positive(),
+    unit: z.enum(VALID_RETENTION_UNITS),
+  }).optional().catch(undefined),
+  retentionReason: z.string().optional(),
+  refreshFrequency: z.enum(VALID_REFRESH_FREQUENCIES).optional().catch(undefined),
+});
+const createBindingBodySchema = z.object({
+  connectionId: z.string({
+    required_error: 'connectionId is required',
+    invalid_type_error: 'connectionId is required',
+  }).min(1, 'connectionId is required'),
+  sourceAsset: z.string({
+    required_error: 'sourceAsset is required (the table / file / endpoint name)',
+    invalid_type_error: 'sourceAsset is required (the table / file / endpoint name)',
+  }).min(1, 'sourceAsset is required (the table / file / endpoint name)'),
+  sourceColumn: z.string().optional(),
+  label: z.string().optional(),
+  isPrimary: z.boolean().optional(),
+});
+const updateBindingBodySchema = z.object({
+  sourceAsset: z.string().optional(),
+  sourceColumn: z.string().optional(),
+  label: z.string().optional(),
+  isPrimary: z.boolean().optional(),
+});
+const createColumnBodySchema = z.object({
+  columnName: z.string().min(1, 'columnName is required'),
+  dataType: z.string().optional(),
+  description: z.string().optional(),
+  sourceConnectionId: z.string().optional(),
+  sourceAsset: z.string().optional(),
+  sourceColumn: z.string().optional(),
+});
+const updateColumnBodySchema = z.object({
+  columnName: z.string().optional(),
+  dataType: z.string().optional(),
+  description: z.string().optional(),
+});
+const putSensitivityBodySchema = z.object({
+  tags: z.array(z.string()),
+});
 
 // ── Data Asset Bindings ──────────────────────────────────────────────────
 //
@@ -607,15 +698,13 @@ router.post('/:id/bindings', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
-  const { connectionId, sourceAsset, sourceColumn, label, isPrimary } = req.body;
-  if (!connectionId || typeof connectionId !== 'string') {
-    res.status(400).json({ success: false, error: 'connectionId is required' });
+  const parsed = createBindingBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
     return;
   }
-  if (!sourceAsset || typeof sourceAsset !== 'string') {
-    res.status(400).json({ success: false, error: 'sourceAsset is required (the table / file / endpoint name)' });
-    return;
-  }
+  const { connectionId, sourceAsset, sourceColumn, label, isPrimary } = parsed.data;
 
   // Look up the connection lazily so we don't create a static import cycle
   // with the connections route (which imports back into routes/data-assets
@@ -670,7 +759,13 @@ router.put('/:id/bindings/:bindingId', (req: Request, res: Response) => {
   const binding = dataAssetBindings.find((b) => b.id === req.params.bindingId && b.dataAssetId === asset.id);
   if (!binding) { res.status(404).json({ success: false, error: 'Binding not found' }); return; }
 
-  const { sourceAsset, sourceColumn, label, isPrimary } = req.body;
+  const parsed = updateBindingBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { sourceAsset, sourceColumn, label, isPrimary } = parsed.data;
   if (sourceAsset !== undefined) binding.sourceAsset = sourceAsset;
   if (sourceColumn !== undefined) binding.sourceColumn = sourceColumn || undefined;
   if (label !== undefined) binding.label = label || undefined;
@@ -726,16 +821,17 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-assets */
 router.post('/', (req: Request, res: Response) => {
+  const parsed = createDataAssetBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
   const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore, orgId,
     sourceConnectionId, sourceAsset, sourceColumn,
     dataClassification, dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
-    refreshFrequency, origin } = req.body;
-  if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
-  if (origin && !VALID_ORIGINS.includes(origin)) {
-    res.status(400).json({ success: false, error: `origin must be one of ${VALID_ORIGINS.join(', ')}` });
-    return;
-  }
+    refreshFrequency, origin } = parsed.data;
   // Ownership-level guard: data assets attach to one org, but only
   // at the company or division level. A department or team can't
   // be the owner — it inherits visibility from above. Skip when no
@@ -751,26 +847,16 @@ router.post('/', (req: Request, res: Response) => {
   const resolvedOrigin: StoredDataAsset['origin'] =
     origin || (sourceConnectionId || sourceAsset ? 'DISCOVERED' : 'MANUAL');
 
-  const tier = governanceTier && VALID_TIERS.includes(governanceTier) ? governanceTier : 'BRONZE';
+  const tier = governanceTier || 'BRONZE';
   const score = typeof healthScore === 'number' ? Math.max(0, Math.min(100, healthScore)) : 0;
   const now = new Date().toISOString();
 
   // Map legacy `category` to `dataType` if a new caller still sends only the
   // old field. Prefer an explicit `dataType` value when both are present.
   const resolvedDataType: StoredDataAsset['dataType'] | undefined =
-    (dataType && VALID_DATA_TYPES.includes(dataType)) ? dataType
-    : (category && CATEGORY_TO_DATA_TYPE[category]) ? CATEGORY_TO_DATA_TYPE[category]
-    : undefined;
-
-  const validatedClassification = (dataClassification && VALID_CLASSIFICATIONS.includes(dataClassification))
-    ? dataClassification : undefined;
-  const validatedRefresh = (refreshFrequency && VALID_REFRESH_FREQUENCIES.includes(refreshFrequency))
-    ? refreshFrequency : undefined;
-  const validatedRetentionDuration = (retentionDuration
-    && typeof retentionDuration.value === 'number' && retentionDuration.value > 0
-    && VALID_RETENTION_UNITS.includes(retentionDuration.unit))
-    ? { value: retentionDuration.value, unit: retentionDuration.unit }
-    : undefined;
+    dataType
+    || (category && CATEGORY_TO_DATA_TYPE[category])
+    || undefined;
 
   const asset: StoredDataAsset = {
     id: uuid(), orgId: orgId || DEV_ORG_ID, name,
@@ -785,13 +871,13 @@ router.post('/', (req: Request, res: Response) => {
     ...(sourceConnectionId ? { sourceConnectionId } : {}),
     ...(sourceAsset ? { sourceAsset } : {}),
     ...(sourceColumn ? { sourceColumn } : {}),
-    ...(validatedClassification ? { dataClassification: validatedClassification } : {}),
+    ...(dataClassification ? { dataClassification } : {}),
     ...(resolvedDataType ? { dataType: resolvedDataType } : {}),
     ...(category ? { category } : {}),
     ...(retentionPolicy ? { retentionPolicy } : {}),
-    ...(validatedRetentionDuration ? { retentionDuration: validatedRetentionDuration } : {}),
+    ...(retentionDuration ? { retentionDuration } : {}),
     ...(retentionReason ? { retentionReason } : {}),
-    ...(validatedRefresh ? { refreshFrequency: validatedRefresh } : {}),
+    ...(refreshFrequency ? { refreshFrequency } : {}),
     origin: resolvedOrigin,
     createdAt: now, updatedAt: now,
   };
@@ -806,11 +892,18 @@ router.put('/:id', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
+  const parsed = updateDataAssetBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const rawBody = req.body as Record<string, unknown> | undefined;
   const { name, description, systemId, owner, ownerPersonId, stewardIds, governanceTier, healthScore,
     sourceConnectionId, sourceAsset, sourceColumn,
     dataClassification, dataType, category,
     retentionPolicy, retentionDuration, retentionReason,
-    refreshFrequency } = req.body;
+    refreshFrequency } = parsed.data;
   const now = new Date().toISOString();
 
   if (name !== undefined) asset.name = name;
@@ -819,7 +912,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (owner !== undefined) asset.owner = owner;
   if (ownerPersonId !== undefined) asset.ownerPersonId = ownerPersonId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) asset.stewardIds = stewardIds;
-  if (governanceTier !== undefined && VALID_TIERS.includes(governanceTier)) asset.governanceTier = governanceTier;
+  if (governanceTier !== undefined) asset.governanceTier = governanceTier;
   if (healthScore !== undefined && typeof healthScore === 'number') {
     const clamped = Math.max(0, Math.min(100, healthScore));
     if (clamped !== asset.healthScore) {
@@ -830,29 +923,29 @@ router.put('/:id', (req: Request, res: Response) => {
   if (sourceConnectionId !== undefined) asset.sourceConnectionId = sourceConnectionId || undefined;
   if (sourceAsset !== undefined) asset.sourceAsset = sourceAsset || undefined;
   if (sourceColumn !== undefined) asset.sourceColumn = sourceColumn || undefined;
-  if (dataClassification !== undefined) {
-    asset.dataClassification = (dataClassification && VALID_CLASSIFICATIONS.includes(dataClassification))
-      ? dataClassification : undefined;
+  // Presence checks use the raw body: zod's `.catch(undefined)` collapses
+  // invalid values to `undefined`, which is indistinguishable from the
+  // field being omitted in the parsed body. The runtime semantics
+  // (`if (field !== undefined) { ... }`) required distinguishing
+  // "explicitly sent" from "omitted", so we consult the raw body for the
+  // presence bit while still using the parsed (validated) value.
+  if (rawBody && 'dataClassification' in rawBody) {
+    asset.dataClassification = dataClassification;
   }
-  if (dataType !== undefined) {
-    asset.dataType = (dataType && VALID_DATA_TYPES.includes(dataType)) ? dataType : undefined;
+  if (rawBody && 'dataType' in rawBody) {
+    asset.dataType = dataType;
   } else if (category !== undefined && CATEGORY_TO_DATA_TYPE[category]) {
     // Older callers may still send only the legacy `category`; carry over.
     asset.dataType = CATEGORY_TO_DATA_TYPE[category];
   }
   if (category !== undefined) asset.category = category || undefined;
   if (retentionPolicy !== undefined) asset.retentionPolicy = retentionPolicy || undefined;
-  if (retentionDuration !== undefined) {
-    asset.retentionDuration = (retentionDuration
-      && typeof retentionDuration.value === 'number' && retentionDuration.value > 0
-      && VALID_RETENTION_UNITS.includes(retentionDuration.unit))
-      ? { value: retentionDuration.value, unit: retentionDuration.unit }
-      : undefined;
+  if (rawBody && 'retentionDuration' in rawBody) {
+    asset.retentionDuration = retentionDuration;
   }
   if (retentionReason !== undefined) asset.retentionReason = retentionReason || undefined;
-  if (refreshFrequency !== undefined) {
-    asset.refreshFrequency = (refreshFrequency && VALID_REFRESH_FREQUENCIES.includes(refreshFrequency))
-      ? refreshFrequency : undefined;
+  if (rawBody && 'refreshFrequency' in rawBody) {
+    asset.refreshFrequency = refreshFrequency;
   }
   asset.updatedAt = now;
   saveStore('dataAssets', dataAssets);
@@ -926,8 +1019,13 @@ router.get('/:id/columns', (req: Request, res: Response) => {
 router.post('/:id/columns', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
-  const { columnName, dataType, description, sourceConnectionId, sourceAsset, sourceColumn } = req.body;
-  if (!columnName) { res.status(400).json({ success: false, error: 'columnName is required' }); return; }
+  const parsed = createColumnBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { columnName, dataType, description, sourceConnectionId, sourceAsset, sourceColumn } = parsed.data;
   const now = new Date().toISOString();
   const col: StoredDataAssetColumn = {
     id: uuid(), dataAssetId: asset.id, columnName,
@@ -946,7 +1044,13 @@ router.post('/:id/columns', (req: Request, res: Response) => {
 router.put('/:id/columns/:colId', (req: Request, res: Response) => {
   const col = dataAssetColumns.find((c) => c.id === req.params.colId && c.dataAssetId === req.params.id);
   if (!col) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
-  const { columnName, dataType, description } = req.body;
+  const parsed = updateColumnBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    res.status(400).json({ success: false, error: first?.message || 'Invalid request body', details: parsed.error.issues });
+    return;
+  }
+  const { columnName, dataType, description } = parsed.data;
   if (columnName !== undefined) col.columnName = columnName;
   if (dataType !== undefined) col.dataType = normalizeDataType(dataType);
   if (description !== undefined) col.description = description;
@@ -1341,11 +1445,12 @@ router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
 router.put('/:id/sensitivity', (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
-  const { tags } = req.body as { tags?: unknown };
-  if (!Array.isArray(tags)) {
+  const parsed = putSensitivityBodySchema.safeParse(req.body);
+  if (!parsed.success) {
     res.status(400).json({ success: false, error: 'tags must be an array of sensitivity tag strings.' });
     return;
   }
+  const { tags } = parsed.data;
   const validSet = new Set<string>(SENSITIVITY_TAGS);
   const clean: SensitivityTag[] = [];
   for (const t of tags) {
