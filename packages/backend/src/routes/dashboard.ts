@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { processNodes, flowRelationships, NODE_LEVELS, isGovernanceNode as isGovernanceProcess } from './process-catalog';
+import { processNodes, flowRelationships, NODE_LEVELS, isGovernanceNode as isGovernanceProcess, type ProcessNode } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { mappings } from './mappings';
 import { systems } from './systems';
@@ -8,6 +8,10 @@ import { people } from './people';
 import { dataDomains } from './data-domains';
 import { governanceGroups } from './governance-groups';
 import { damaRoles } from './dama-roles';
+import { governanceTasks, type StoredGovernanceTask } from './governance-tasks';
+import { governanceIssues, type StoredGovernanceIssue } from './governance-issues';
+import { calendarEvents, type StoredCalendarEvent } from './governance-calendar';
+import { governancePolicies, type StoredGovernancePolicy } from './governance-policies';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { OWNERSHIP_LEVELS, filterByOrgScope } from '../lib/org-scope';
@@ -40,7 +44,7 @@ router.get('/stats', (req: Request, res: Response) => {
   // Missing domain on a node is treated as OPERATIONAL (matches the
   // backfill and frontend `passesLens` convention) so legacy rows
   // never silently disappear when the user picks the Operational lens.
-  const nodeMatchesDomain = (n: any) => !dom || (n.domain || 'OPERATIONAL') === dom;
+  const nodeMatchesDomain = (n: ProcessNode) => !dom || (n.domain || 'OPERATIONAL') === dom;
 
   // filterByOrgScope walks both ancestors and descendants so a
   // division-scope dashboard includes company-level items rolled down
@@ -283,11 +287,11 @@ router.get('/scorecard', (req: Request, res: Response) => {
 });
 
 /** Check if node has a given ancestor */
-function hasAncestor(node: any, ancestorId: string, allNodes: any[]): boolean {
-  let current = node;
-  while (current.parentId) {
+function hasAncestor(node: ProcessNode, ancestorId: string, allNodes: ProcessNode[]): boolean {
+  let current: ProcessNode | undefined = node;
+  while (current?.parentId) {
     if (current.parentId === ancestorId) return true;
-    current = allNodes.find((n: any) => n.id === current.parentId);
+    current = allNodes.find((n) => n.id === current!.parentId);
     if (!current) break;
   }
   return false;
@@ -328,7 +332,7 @@ router.get('/raci', (req: Request, res: Response) => {
       level: n.level,
       parentId: n.parentId,
       parentName: n.parentId ? filteredNodes.find((p) => p.id === n.parentId)?.name || null : null,
-      ownerId: (n as any).ownerId || null,
+      ownerId: n.ownerId || null,
     }));
 
   // Build lookup sets for DAMA role types -> person IDs
@@ -476,7 +480,10 @@ router.get('/raci', (req: Request, res: Response) => {
             // surfaced on the group's own page instead, not in the
             // person-name matrix.
             if (!member.personId) continue;
-            const raciLetter = GROUP_ROLE_TO_RACI[member.groupRole] || GROUP_ROLE_TO_RACI[(member as any).role] || 'I';
+            // Some legacy group-member rows only carried `role`, not
+            // `groupRole`. Fall back to the legacy field.
+            const legacyRole = (member as { role?: string }).role;
+            const raciLetter = GROUP_ROLE_TO_RACI[member.groupRole] || (legacyRole ? GROUP_ROLE_TO_RACI[legacyRole] : undefined) || 'I';
             const personName = people.find((p) => p.id === member.personId)?.name || '';
             // Higher priority wins: A > R > C > I
             const priority: Record<string, number> = { A: 4, R: 3, C: 2, I: 1 };
@@ -682,9 +689,9 @@ router.post('/raci/override', (req: Request, res: Response) => {
 // instantly sees what they own, steward, belong to, and need to act on.
 // ──────────────────────────────────────────────────────────────────────────
 
-function flattenNodes(nodes: typeof processNodes): typeof processNodes {
-  const out: typeof processNodes = [];
-  function walk(n: any) {
+function flattenNodes(nodes: ProcessNode[]): ProcessNode[] {
+  const out: ProcessNode[] = [];
+  function walk(n: ProcessNode & { children?: ProcessNode[] }) {
     out.push(n);
     if (n.children) n.children.forEach(walk);
   }
@@ -736,9 +743,9 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
 
   // Governance group memberships.
   const myGroups = governanceGroups
-    .filter((g) => g.members?.some((m: any) => m.personId === person.id))
+    .filter((g) => g.members?.some((m) => m.personId === person.id))
     .map((g) => {
-      const membership = g.members?.find((m: any) => m.personId === person.id);
+      const membership = g.members?.find((m) => m.personId === person.id);
       return { id: g.id, name: g.name, type: g.type, groupRole: membership?.groupRole || 'MEMBER' };
     });
 
@@ -800,7 +807,7 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
   res.json({
     success: true,
     data: {
-      person: { id: person.id, name: person.name, email: person.email, role: person.role, title: (person as any).title || '' },
+      person: { id: person.id, name: person.name, email: person.email, role: person.role, title: person.title || '' },
       ownedProcesses,
       myAssets,
       myRoles,
@@ -818,16 +825,6 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
 // domains, upcoming events, and pending policy reviews into a single call
 // so the frontend can render a "My Dashboard" page in one fetch.
 // ──────────────────────────────────────────────────────────────────────────
-
-// Defensive imports — these stores may not exist yet in all deployments.
-let governanceTasks: any[] = [];
-let governanceIssues: any[] = [];
-let calendarEvents: any[] = [];
-let governancePolicies: any[] = [];
-try { governanceTasks = require('./governance-tasks').governanceTasks; } catch {}
-try { governanceIssues = require('./governance-issues').governanceIssues; } catch {}
-try { calendarEvents = require('./governance-calendar').calendarEvents; } catch {}
-try { governancePolicies = require('./governance-policies').governancePolicies; } catch {}
 
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
@@ -879,8 +876,8 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
   // ── Tasks assigned to me (not completed/cancelled) ──
   const CLOSED_TASK_STATUSES = new Set(['COMPLETED', 'CANCELLED']);
   const myTasks = governanceTasks
-    .filter((t: any) => t.assigneeId === person.id && !CLOSED_TASK_STATUSES.has(t.status))
-    .map((t: any) => ({
+    .filter((t: StoredGovernanceTask) => t.assigneeId === person.id && !CLOSED_TASK_STATUSES.has(t.status))
+    .map((t: StoredGovernanceTask) => ({
       id: t.id,
       title: t.title,
       status: t.status,
@@ -889,7 +886,7 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
       dueDate: t.dueDate || null,
       isOverdue: t.dueDate ? t.dueDate < todayStr : false,
     }))
-    .sort((a: any, b: any) => {
+    .sort((a, b) => {
       const pa = PRIORITY_ORDER[a.priority] ?? 99;
       const pb = PRIORITY_ORDER[b.priority] ?? 99;
       if (pa !== pb) return pa - pb;
@@ -903,8 +900,8 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
   // ── Issues assigned to me (not closed/resolved/wont_fix) ──
   const CLOSED_ISSUE_STATUSES = new Set(['CLOSED', 'RESOLVED', 'WONT_FIX']);
   const myIssues = governanceIssues
-    .filter((i: any) => i.assignedTo === person.id && !CLOSED_ISSUE_STATUSES.has(i.status))
-    .map((i: any) => {
+    .filter((i: StoredGovernanceIssue) => i.assignedTo === person.id && !CLOSED_ISSUE_STATUSES.has(i.status))
+    .map((i: StoredGovernanceIssue) => {
       const domain = i.domainId ? dataDomains.find((d) => d.id === i.domainId) : null;
       return {
         id: i.id,
@@ -915,7 +912,7 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
         domainName: domain?.name || null,
       };
     })
-    .sort((a: any, b: any) => {
+    .sort((a, b) => {
       const sa = SEVERITY_ORDER[a.severity] ?? 99;
       const sb = SEVERITY_ORDER[b.severity] ?? 99;
       return sa - sb;
@@ -940,7 +937,7 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
   // ── Upcoming calendar events (within 14 days, status ACTIVE) ──
   const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
   const upcomingEvents = calendarEvents
-    .filter((e: any) => {
+    .filter((e: StoredCalendarEvent) => {
       if (e.status !== 'ACTIVE') return false;
       if (!e.attendees || !e.attendees.includes(person.id)) return false;
       if (!e.nextOccurrence) return false;
@@ -948,8 +945,8 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
       const diffMs = occDate.getTime() - now.getTime();
       return diffMs >= 0 && diffMs <= fourteenDaysMs;
     })
-    .map((e: any) => {
-      const occDate = new Date(e.nextOccurrence);
+    .map((e: StoredCalendarEvent) => {
+      const occDate = new Date(e.nextOccurrence!);
       const daysAway = Math.ceil((occDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
       return {
         name: e.name,
@@ -958,12 +955,12 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
         daysAway: Math.max(0, daysAway),
       };
     })
-    .sort((a: any, b: any) => a.daysAway - b.daysAway);
+    .sort((a, b) => a.daysAway - b.daysAway);
 
   // ── Policies pending my review (I own them and nextReviewDate is within 30 days or overdue) ──
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
   const pendingReviews = governancePolicies
-    .filter((p: any) => {
+    .filter((p: StoredGovernancePolicy) => {
       if (p.ownerAssignmentId !== person.id) return false;
       if (!p.nextReviewDate) return false;
       const reviewDate = new Date(p.nextReviewDate);
@@ -971,7 +968,7 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
       // Overdue (past) or within 30 days (future)
       return diffMs <= thirtyDaysMs;
     })
-    .map((p: any) => ({
+    .map((p: StoredGovernancePolicy) => ({
       id: p.id,
       name: p.name,
       code: p.code,
@@ -980,8 +977,8 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
     }));
 
   // ── Summary counts ──
-  const overdueTasks = myTasks.filter((t: any) => t.isOverdue).length;
-  const criticalIssues = myIssues.filter((i: any) => i.severity === 'CRITICAL').length;
+  const overdueTasks = myTasks.filter((t) => t.isOverdue).length;
+  const criticalIssues = myIssues.filter((i) => i.severity === 'CRITICAL').length;
   const domainsOwned = myDomains.filter((d) => d.relation === 'owner').length;
   const domainsSteward = myDomains.filter((d) => d.relation === 'steward').length;
 
@@ -1004,7 +1001,7 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
         name: person.name,
         email: person.email,
         role: person.role,
-        title: (person as any).title || '',
+        title: person.title || '',
       },
       myTasks,
       myIssues,
