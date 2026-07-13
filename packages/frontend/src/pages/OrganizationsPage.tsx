@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 import Combobox from '../components/Combobox';
@@ -448,9 +449,9 @@ export default function OrganizationsPage() {
   };
 
   if (loading) return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+    <Card shadow="none">
       <SkeletonRows rows={6} columnWidths={[32, null, null, 90]} />
-    </div>
+    </Card>
   );
 
   return (
@@ -498,7 +499,7 @@ export default function OrganizationsPage() {
 
       {/* Import Org Panel */}
       {showImport && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
+        <Card marginBottom={12}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Organizations</h3>
@@ -520,12 +521,12 @@ export default function OrganizationsPage() {
             <button style={btnSecondary} onClick={() => { setShowImport(false); setImportText(''); }}>Cancel</button>
             <button style={{ ...btnPrimary, opacity: !importText.trim() ? 0.6 : 1, cursor: !importText.trim() ? 'not-allowed' : 'pointer' }} disabled={!importText.trim()} onClick={handleImport}>Import</button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Add/Edit Org Form — shown in detail panel when master-detail is active, or full-width when tree is empty */}
       {showOrgForm && tree.length === 0 && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
+        <Card marginBottom={12}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -577,7 +578,7 @@ export default function OrganizationsPage() {
               {editingOrgId ? 'Save' : 'Add'}
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Summary stats — counts by org type + total people, mirrors the
@@ -671,7 +672,7 @@ export default function OrganizationsPage() {
       {/* ══ MAIN BODY — master-detail: tree (left) + detail panel (right) ══ */}
       <div style={{ display: 'grid', gridTemplateColumns: tree.length > 0 ? '1fr 340px' : '1fr', gap: 16, alignItems: 'start' }}>
         {/* Left: Org Tree */}
-        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+        <Card padding={0} shadow="none">
         {/* Tree toolbar — select-all, expand/collapse */}
         <div style={{ display: 'flex', gap: 12, padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--color-text-secondary)' }}>
@@ -712,11 +713,11 @@ export default function OrganizationsPage() {
             ))
           )}
         </div>
-        </div>
+        </Card>
 
         {/* Right: Detail Panel */}
         {tree.length > 0 && (
-          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', position: 'sticky', top: 16 }}>
+          <Card padding={0} shadow="none" style={{ position: 'sticky', top: 16 }}>
             {showOrgForm ? (
               <div style={{ padding: 16 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingOrgId ? 'Edit Organization' : 'Add Organization'}</h3>
@@ -813,7 +814,7 @@ export default function OrganizationsPage() {
                 <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Click an organization name to see its details here.</p>
               </div>
             )}
-          </div>
+          </Card>
         )}
       </div>
 

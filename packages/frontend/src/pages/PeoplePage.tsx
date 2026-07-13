@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
@@ -913,9 +914,9 @@ export default function PeoplePage() {
   };
 
   if (loading) return (
-    <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden', padding: 8 }}>
+    <Card padding={8} shadow="none" style={{ overflow: 'hidden' }}>
       <SkeletonRows rows={6} columnWidths={[32, null, null, null, 70]} />
-    </div>
+    </Card>
   );
 
   return (
@@ -937,7 +938,7 @@ export default function PeoplePage() {
       {/* Side-by-side: Org tree (left) + People list (center) + Preview (right) */}
       <div style={{ display: 'grid', gridTemplateColumns: previewPersonId ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Org tree sidebar */}
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 10, position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+        <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>Organizations</div>
           <div
             onClick={() => applyOrgFilter('')}
@@ -960,7 +961,7 @@ export default function PeoplePage() {
               flatOrgs.map((o) => [o.id, people.filter((p) => p.orgIds.includes(o.id)).length]),
             )}
           />
-        </div>
+        </Card>
 
         {/* People list */}
         <div>
@@ -1194,7 +1195,7 @@ export default function PeoplePage() {
 
               {/* Add/Edit Person Form */}
               {showPersonForm && (
-                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 10, boxShadow: 'var(--shadow-sm)' }}>
+                <Card marginBottom={10}>
                   <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{editingPersonId ? 'Edit Person' : 'Add Person'}</h3>
                   <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 10 }}>
                     {editingPersonId
@@ -1258,12 +1259,12 @@ export default function PeoplePage() {
                       );
                     })()}
                   </div>
-                </div>
+                </Card>
               )}
 
               {/* Import People Panel */}
               {showPeopleImport && (
-                <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 10, boxShadow: 'var(--shadow-sm)' }}>
+                <Card marginBottom={10}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div>
                       <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import People</h3>
@@ -1294,11 +1295,11 @@ export default function PeoplePage() {
                       onClick={handlePeopleImport}
                     >Import</button>
                   </div>
-                </div>
+                </Card>
               )}
 
               {/* People Table */}
-              <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+              <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
                 {filteredPeople.length === 0 && !selectedOrgId ? (
                   <EmptyState
                     icon={renderNavIcon('/organizations')}
@@ -1440,17 +1441,13 @@ export default function PeoplePage() {
                     </tbody>
                   </table>
                 )}
-              </div>
+              </Card>
           </>
         </div>
 
         {/* Person Preview Sidebar */}
         {previewPersonId && (
-          <div style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)', position: 'sticky', top: 12,
-            maxHeight: 'calc(100vh - 120px)', overflowY: 'auto',
-          }}>
+          <Card padding={0} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}>
             {previewLoading ? (
               <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Loading...</div>
             ) : previewData ? (
@@ -1557,7 +1554,7 @@ export default function PeoplePage() {
             ) : (
               <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>Person not found.</div>
             )}
-          </div>
+          </Card>
         )}
       </div>
 

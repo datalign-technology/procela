@@ -4,6 +4,7 @@ import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -791,9 +792,9 @@ export default function GovernanceGroupsPage() {
 
   if (loading) return (
     <div>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+      <Card shadow="none">
         <SkeletonRows rows={5} columns={4} />
-      </div>
+      </Card>
     </div>
   );
 
@@ -934,7 +935,7 @@ export default function GovernanceGroupsPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
+        <Card marginBottom={12}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
             {editingId ? 'Edit Governance Group' : allowedTypes ? 'Add Child Group' : 'Add New Governance Group'}
           </h3>
@@ -988,7 +989,7 @@ export default function GovernanceGroupsPage() {
               {editingId ? 'Save Changes' : 'Add Group'}
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Bulk Action Bar */}
@@ -1016,7 +1017,7 @@ export default function GovernanceGroupsPage() {
           and caps at 640px so the detail pane keeps room to breathe. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(460px, 640px) 1fr', gap: 16 }}>
         {/* Left Panel — Tree View */}
-        <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', alignSelf: 'start' }}>
+        <Card padding={0} shadow="none" style={{ alignSelf: 'start' }}>
           {/* Tree toolbar */}
           <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)', alignItems: 'center' }}>
             <input type="checkbox" checked={flatGroups.length > 0 && checkedIds.size === flatGroups.length} onChange={toggleCheckAll} style={{ cursor: 'pointer' }} title="Select all" />
@@ -1043,12 +1044,12 @@ export default function GovernanceGroupsPage() {
               ))
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Right Panel — Detail */}
         <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
           {selectedGroupId && selectedGroupDetail ? (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, boxShadow: 'var(--shadow-sm)' }}>
+            <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1501,18 +1502,13 @@ export default function GovernanceGroupsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           ) : (
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: 32,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              minHeight: 200, color: 'var(--color-text-muted)', textAlign: 'center',
-            }}>
+            <Card padding={32} shadow="none" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200, color: 'var(--color-text-muted)', textAlign: 'center' }}>
               <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.4 }}>{'←'}</div>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Select a group</div>
               <div style={{ fontSize: 12 }}>Click on a governance group in the tree to view its members, roles, and recommendations.</div>
-            </div>
+            </Card>
           )}
         </div>
       </div>

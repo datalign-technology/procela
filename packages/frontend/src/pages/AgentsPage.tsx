@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import SecondaryButton from '../components/SecondaryButton';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
@@ -398,9 +399,9 @@ export default function AgentsPage() {
 
   if (loading) return (
     <div>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+      <Card shadow="none">
         <SkeletonRows rows={5} columns={4} />
-      </div>
+      </Card>
     </div>
   );
 
@@ -447,7 +448,7 @@ export default function AgentsPage() {
 
       {/* Import Panel */}
       {showImport && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 12, boxShadow: 'var(--shadow-sm)' }}>
+        <Card marginBottom={12}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Agents</h3>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -487,7 +488,7 @@ export default function AgentsPage() {
               onClick={handleImport}
             >Import</button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Filters (left-aligned, mirrors Data Assets) */}
@@ -524,7 +525,7 @@ export default function AgentsPage() {
 
       {/* Add / Edit form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+        <Card marginBottom={16}>
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{editingId ? 'Edit Agent' : 'Add Agent'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
@@ -626,7 +627,7 @@ export default function AgentsPage() {
               {editingId ? 'Save' : 'Add'}
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Bulk Action Bar */}
@@ -673,7 +674,7 @@ export default function AgentsPage() {
       />
 
       {/* Table */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+      <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
         {filtered.length === 0 ? (
           <EmptyState
             icon={renderNavIcon('/agents')}
@@ -836,7 +837,7 @@ export default function AgentsPage() {
             </tbody>
           </table>
         )}
-      </div>
+      </Card>
 
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onClick={() => setConfirmDelete(null)}>

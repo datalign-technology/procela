@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { INDUSTRIES } from '../types';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
@@ -423,7 +424,7 @@ export default function DataDomainsPage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+        <Card padding={20} marginBottom={16}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Data Domain' : 'Add New Data Domain'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Name *</label>
@@ -454,7 +455,7 @@ export default function DataDomainsPage() {
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
             <button style={{ ...btnPrimary, opacity: !form.name.trim() ? 0.6 : 1 }} disabled={!form.name.trim()} onClick={handleSave}>{editingId ? 'Save Changes' : 'Add Domain'}</button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Main content: dictionary layout */}
@@ -467,20 +468,14 @@ export default function DataDomainsPage() {
            miss anywhere else. Mirrors the ValueStreamWizard's
            spinner pattern so users get the same "AI is working,
            expect 10–30s" signal across both wizards. */
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-primary)',
-          borderRadius: 'var(--radius-md)',
-          padding: '3rem',
-          textAlign: 'center',
-        }}>
+        <Card padding="3rem" shadow="none" borderColor="var(--color-primary)" style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 12, animation: 'procelaDomainGenSpin 2s linear infinite' }}>⚙</div>
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: 'var(--color-primary)' }}>Generating data domains…</h2>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
             AI is suggesting domains based on your industry. This usually takes 10–30 seconds.
           </p>
           <style>{`@keyframes procelaDomainGenSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-        </div>
+        </Card>
       ) : domains.length === 0 && !showForm ? (
         <EmptyState icon={renderNavIcon('/data-domains')} title="No data domains defined yet"
           description="Data domains group related data assets under a single governance umbrella — owner, stewards, policies."
@@ -489,7 +484,7 @@ export default function DataDomainsPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Left: Domain index */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
+          <Card padding={0} shadow="none" style={{ overflow: 'hidden', position: 'sticky', top: 12, maxHeight: 'calc(100vh - 160px)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--color-border)' }}>
               <input style={{ ...inputStyle, fontSize: 12, padding: '6px 10px' }} placeholder="Search domains..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               {canWrite && filteredDomains.length > 0 && (
@@ -576,10 +571,10 @@ export default function DataDomainsPage() {
             <div style={{ padding: '8px 12px', borderTop: '1px solid var(--color-border)', fontSize: 11, color: 'var(--color-text-muted)', background: 'var(--color-bg)' }}>
               {filteredDomains.length} of {domains.length} domains
             </div>
-          </div>
+          </Card>
 
           {/* Right: Domain detail (or bulk edit panel) */}
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', minHeight: 400 }}>
+          <Card padding={0} shadow="none" style={{ minHeight: 400 }}>
             {bulkSelectedIds.size > 0 ? (
               <div style={{ padding: '24px 28px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
@@ -734,7 +729,7 @@ export default function DataDomainsPage() {
                 <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Select a domain from the list to view and edit its governance details.</p>
               </div>
             )}
-          </div>
+          </Card>
         </div>
       )}
 

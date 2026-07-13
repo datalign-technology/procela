@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -531,7 +532,7 @@ export default function BusinessGlossaryPage() {
 
       {/* Import Panel */}
       {showImport && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+        <Card marginBottom={16}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600 }}>Import Glossary Terms</h3>
@@ -569,7 +570,7 @@ export default function BusinessGlossaryPage() {
               Import
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       {showSync && (
@@ -587,16 +588,7 @@ export default function BusinessGlossaryPage() {
       {/* Two-column layout: Categories sidebar + content */}
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
         {/* Categories Sidebar */}
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 10,
-          position: 'sticky',
-          top: 12,
-          maxHeight: 'calc(100vh - 180px)',
-          overflowY: 'auto',
-        }}>
+        <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
             Categories
           </div>
@@ -640,7 +632,7 @@ export default function BusinessGlossaryPage() {
               </div>
             );
           })}
-        </div>
+        </Card>
 
         {/* Content area */}
         <div>
@@ -693,7 +685,7 @@ export default function BusinessGlossaryPage() {
 
           {/* Add/Edit Form */}
           {showForm && (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+            <Card padding={20} marginBottom={16}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>{editingId ? 'Edit Term' : 'Add New Term'}</h3>
               {(() => {
                 const trimmed = form.term.trim().toLowerCase();
@@ -780,12 +772,12 @@ export default function BusinessGlossaryPage() {
                 </>
                 );
               })()}
-            </div>
+            </Card>
           )}
 
           {/* Generate Preview */}
           {showGeneratePreview && (
-            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 16, boxShadow: 'var(--shadow-sm)' }}>
+            <Card padding={20} marginBottom={16}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <div>
                   <h3 style={{ fontSize: 15, fontWeight: 600 }}>Generate Industry Terms</h3>
@@ -822,7 +814,7 @@ export default function BusinessGlossaryPage() {
                   Add {generatedTerms.filter((t) => t.selected).length} Terms
                 </button>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Bulk Action Bar */}
@@ -877,7 +869,7 @@ export default function BusinessGlossaryPage() {
           )}
 
           {/* Table */}
-          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+          <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
             {loading ? (
               <SkeletonRows rows={5} columns={6} />
             ) : loadError && terms.length === 0 ? (
@@ -1018,7 +1010,7 @@ export default function BusinessGlossaryPage() {
                 </tbody>
               </table>
             )}
-          </div>
+          </Card>
         </div>
       </div>
     </div>
