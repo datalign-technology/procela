@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomBytes } from 'crypto';
 import logger from './logger';
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
@@ -9,12 +10,20 @@ export function ensureDataDir() {
 }
 
 /**
- * Persist a store to disk atomically. Writes to a sibling `.tmp` file
- * first, then renames over the real file — POSIX rename is atomic, so
- * a crash mid-write leaves either the old file or the fully-written
- * new file, never a truncated / half-serialized one. A prior direct
- * `writeFileSync` could produce a zero-byte JSON on power loss which
- * would then load as `[]` on next boot and silently wipe the store.
+ * Persist a store to disk atomically. Writes to a unique per-writer
+ * `.tmp` file first, then renames over the real file — POSIX rename is
+ * atomic, so a crash mid-write leaves either the old file or the
+ * fully-written new file, never a truncated / half-serialized one. A
+ * prior direct `writeFileSync` could produce a zero-byte JSON on power
+ * loss which would then load as `[]` on next boot and silently wipe
+ * the store.
+ *
+ * The tmp filename embeds `process.pid` + 6 random hex bytes so two
+ * writers targeting the same store (parallel test workers under
+ * `tsx --test`, a route handler that also autoWrites, etc.) don't
+ * clobber each other's tmp — a fixed `.json.tmp` path caused a race
+ * where writer A's rename raced writer B's write and one side threw
+ * ENOENT.
  *
  * The write itself stays synchronous — Node's fs.rename is atomic on
  * the same filesystem (which .procela-data always is), and the sync
@@ -25,7 +34,10 @@ export function ensureDataDir() {
 export function saveStore(name: string, data: any[]) {
   ensureDataDir();
   const finalPath = path.join(DATA_DIR, `${name}.json`);
-  const tmpPath = path.join(DATA_DIR, `${name}.json.tmp`);
+  const tmpPath = path.join(
+    DATA_DIR,
+    `${name}.json.${process.pid}-${randomBytes(6).toString('hex')}.tmp`,
+  );
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
   try {
     fs.renameSync(tmpPath, finalPath);
@@ -37,15 +49,25 @@ export function saveStore(name: string, data: any[]) {
 
 export function loadStore<T>(name: string): T[] {
   const filePath = path.join(DATA_DIR, `${name}.json`);
-  // A stale `.tmp` sibling means a crash occurred between the tmp
-  // write and the rename. The real file is either the old good copy
-  // (rename never fired) or the new one (rename succeeded and a
-  // subsequent write raced). Either way, discard the stray tmp
-  // rather than leaving it to grow across restarts.
-  const tmpPath = path.join(DATA_DIR, `${name}.json.tmp`);
-  if (fs.existsSync(tmpPath)) {
-    try { fs.unlinkSync(tmpPath); }
-    catch { /* best-effort */ }
+  // Stale `.tmp` siblings mean a crash occurred between the tmp
+  // write and the rename. Sweep them so they don't accumulate — but
+  // only tmps older than the STALE_TMP threshold, so a concurrent
+  // writer mid-way through its writeFileSync + renameSync doesn't
+  // have its in-flight file deleted out from under it. In practice a
+  // JSON write finishes in single-digit ms; anything older than a
+  // minute is definitely orphaned.
+  const tmpPrefix = `${name}.json.`;
+  const tmpSuffix = '.tmp';
+  const STALE_MS = 60_000;
+  const cutoff = Date.now() - STALE_MS;
+  if (fs.existsSync(DATA_DIR)) {
+    for (const entry of fs.readdirSync(DATA_DIR)) {
+      if (!entry.startsWith(tmpPrefix) || !entry.endsWith(tmpSuffix)) continue;
+      const p = path.join(DATA_DIR, entry);
+      try {
+        if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p);
+      } catch { /* best-effort — file gone or unreadable */ }
+    }
   }
   if (!fs.existsSync(filePath)) return [];
   try {

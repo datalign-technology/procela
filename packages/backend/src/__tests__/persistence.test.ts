@@ -107,24 +107,58 @@ describe('persistence', () => {
     // `.tmp` sibling. Loading a store that has one should clean it up
     // and read the (still valid) real file — otherwise stray tmps
     // accumulate on every restart after a bad shutdown.
-    it('removes a stale .tmp sibling on load and keeps the real file intact', () => {
+    // Tmp shape: `<name>.json.<pid>-<random>.tmp` — the writer now
+     // uses a unique per-writer suffix so parallel workers don't
+     // clobber each other's mid-write file.
+    const hasAnyTmp = (storeName: string) =>
+      fs.readdirSync(DATA_DIR).some(
+        (e) => e.startsWith(`${storeName}.json.`) && e.endsWith('.tmp'),
+      );
+
+    it('removes stale .tmp siblings on load and keeps the real file intact', () => {
       const storeName = '__test_stale_tmp';
       testFiles.push(storeName);
 
       const realPath = path.join(DATA_DIR, `${storeName}.json`);
-      const tmpPath = path.join(DATA_DIR, `${storeName}.json.tmp`);
+      const straySuffix = `.${process.pid}-abc123.tmp`;
+      const tmpPath = path.join(DATA_DIR, `${storeName}.json${straySuffix}`);
       ensureDataDir();
 
       // Real file: a valid, previously-committed store.
       const real = [{ id: 'keep-me', value: 1 }];
       fs.writeFileSync(realPath, JSON.stringify(real, null, 2));
-      // Stray tmp: half-written garbage from a "crash" mid-write.
+      // Stray tmp: half-written garbage from a "crash" mid-write. Age
+      // it past the 60s stale threshold so the sweep picks it up.
       fs.writeFileSync(tmpPath, '[{"id":"partial');
+      const past = (Date.now() - 120_000) / 1000;
+      fs.utimesSync(tmpPath, past, past);
 
       const loaded = loadStore<{ id: string; value: number }>(storeName);
       assert.deepStrictEqual(loaded, real);
-      assert.strictEqual(fs.existsSync(tmpPath), false, 'stale tmp should be cleaned up');
+      assert.strictEqual(hasAnyTmp(storeName), false, 'stale tmp should be cleaned up');
       assert.strictEqual(fs.existsSync(realPath), true, 'real file should survive');
+    });
+
+    // Guardrail: a fresh tmp (mtime < 60s) belongs to an in-flight
+    // writer. loadStore MUST NOT unlink it, or we'd race a concurrent
+    // saveStore's rename and leave the store empty.
+    it('leaves an in-flight .tmp alone (younger than the stale threshold)', () => {
+      const storeName = '__test_fresh_tmp';
+      testFiles.push(storeName);
+
+      const realPath = path.join(DATA_DIR, `${storeName}.json`);
+      const freshSuffix = `.${process.pid}-fresh1.tmp`;
+      const tmpPath = path.join(DATA_DIR, `${storeName}.json${freshSuffix}`);
+      ensureDataDir();
+      fs.writeFileSync(realPath, JSON.stringify([{ id: 'k' }]));
+      fs.writeFileSync(tmpPath, '[]');
+
+      loadStore(storeName);
+      assert.strictEqual(fs.existsSync(tmpPath), true, 'in-flight tmp should survive load');
+
+      // Cleanup — the file isn't part of a routed store, so nothing
+      // else will remove it.
+      fs.unlinkSync(tmpPath);
     });
 
     // The atomic-write guarantee: after saveStore returns, no `.tmp`
@@ -134,9 +168,8 @@ describe('persistence', () => {
       const storeName = '__test_atomic_success';
       testFiles.push(storeName);
 
-      const tmpPath = path.join(DATA_DIR, `${storeName}.json.tmp`);
       saveStore(storeName, [{ id: 'x', v: 1 }]);
-      assert.strictEqual(fs.existsSync(tmpPath), false);
+      assert.strictEqual(hasAnyTmp(storeName), false);
     });
   });
 });
