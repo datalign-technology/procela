@@ -355,7 +355,7 @@ export default function SettingsPage() {
       />
 
       {/* Branding — quick link to the dedicated theming page */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={sectionTitleStyle}>Branding</h2>
@@ -370,7 +370,7 @@ export default function SettingsPage() {
             Customize branding
           </button>
         </div>
-      </div>
+      </Card>
 
       {/* Process & Asset Lifecycle — org-level workflow shape.
           Drives the status dropdowns on the Process Catalog, Data
@@ -379,7 +379,7 @@ export default function SettingsPage() {
           is right for most orgs; Advanced adds Proposed / Under
           Review / Approved gates between Draft and Active for
           highly-regulated environments. */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={sectionTitleStyle}>Process & Asset Lifecycle</h2>
@@ -421,7 +421,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={!!confirmLifecycle}
@@ -443,7 +443,7 @@ export default function SettingsPage() {
           company-level org — divisions inherit the parent's brand at
           the sign-in card. Kept text-only in v1 (emoji glyph +
           display name + button label + primary hex). */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Sign-in branding</h2>
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
           Customises the sign-in card for users landing at your tenant URL — <code>/login?tenant=&lt;slug&gt;</code> or your subdomain — so the login page reads as <strong>{branding.brandDisplayName || activeOrgName || 'your company'}</strong> rather than generic Procela. Fields below stay optional; empty ones fall back to platform defaults.
@@ -546,10 +546,10 @@ export default function SettingsPage() {
             <div style={{ fontSize: 9, color: 'var(--color-text-muted)', textAlign: 'center', marginTop: 8 }}>Powered by Procela</div>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Authentication Section */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Authentication</h2>
 
         {authLoading ? (
@@ -708,13 +708,13 @@ export default function SettingsPage() {
             </div>
           </>
         )}
-      </div>
+      </Card>
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
       {/* Two-step verification (MFA / TOTP) */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Two-step verification</h2>
         <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
           Use an authenticator app (Google Authenticator, 1Password, Authy)
@@ -722,13 +722,13 @@ export default function SettingsPage() {
           password alone won't be enough to sign in.
         </p>
         <MfaPanel />
-      </div>
+      </Card>
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
       {/* Active sessions */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Active sessions</h2>
         <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
           Every device or browser you're signed in from has its own refresh
@@ -736,14 +736,14 @@ export default function SettingsPage() {
           device, or want to force a fresh login from somewhere.
         </p>
         <ActiveSessionsPanel />
-      </div>
+      </Card>
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
       {/* API Configuration */}
       {/* API Configuration */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>API Configuration</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>Anthropic API Key:</span>
@@ -758,13 +758,13 @@ export default function SettingsPage() {
         <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 8 }}>
           Set ANTHROPIC_API_KEY in your .env file to enable AI features (template generation, suggestions, chat).
         </p>
-      </div>
+      </Card>
 
       {/* Spacer */}
       <div style={{ height: '1.5rem' }} />
 
       {/* Backup & Restore */}
-      <div style={sectionStyle}>
+      <Card padding="1.5rem">
         <h2 style={sectionTitleStyle}>Backup & Restore</h2>
 
         {/* Export */}
@@ -863,7 +863,7 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={importConfirmOpen}

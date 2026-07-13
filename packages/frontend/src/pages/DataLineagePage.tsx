@@ -2,6 +2,7 @@ import { SkeletonRows } from '../components/Skeleton';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import TruncatedText from '../components/TruncatedText';
 import SecondaryButton from '../components/SecondaryButton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -461,9 +462,9 @@ export default function DataLineagePage() {
   if (loading) {
     return (
       <div>
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 16 }}>
+        <Card>
           <SkeletonRows rows={5} columns={4} />
-        </div>
+        </Card>
       </div>
     );
   }
@@ -472,10 +473,7 @@ export default function DataLineagePage() {
     return (
       <div>
         <PageHeader title="Data Lineage" />
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
-        }}>
+        <Card padding={24} style={{ textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><AlertTriangle size={32} strokeWidth={1.8} /></div>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Couldn't load data lineage</div>
           <div style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>{loadError}</div>
@@ -485,7 +483,7 @@ export default function DataLineagePage() {
           >
             Retry
           </button>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -525,14 +523,7 @@ export default function DataLineagePage() {
 
       {/* Add/Edit Form */}
       {showForm && (
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 20,
-          marginBottom: 20,
-          boxShadow: 'var(--shadow-sm)',
-        }}>
+        <Card padding={20} marginBottom={20}>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
             {editingId ? 'Edit Lineage Flow' : 'Add New Lineage Flow'}
           </h3>
@@ -601,7 +592,7 @@ export default function DataLineagePage() {
               {editingId ? 'Save Changes' : 'Add Flow'}
             </button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Confirm dialogs */}
@@ -660,13 +651,7 @@ export default function DataLineagePage() {
               action={{ label: '+ Add Flow', onClick: openAdd }}
             />
           ) : (
-            <div style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              overflow: 'auto',
-              boxShadow: 'var(--shadow-sm)',
-            }}>
+            <Card padding={0} style={{ overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--color-bg)' }}>
@@ -735,7 +720,7 @@ export default function DataLineagePage() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
 
           {/* Asset-level lineage edges (auto-derived from dbt manifest
@@ -786,7 +771,7 @@ export default function DataLineagePage() {
                 <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 12 }}>
                   Auto-derived from imported source manifests (dbt). Re-importing the same manifest updates these in place. Edges not re-seen in {staleAfterDays} days are flagged stale.
                 </p>
-                <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <Card padding={0} shadow="none">
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: 'var(--color-bg)' }}>
@@ -816,7 +801,7 @@ export default function DataLineagePage() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </Card>
               </div>
             );
           })()}
@@ -993,7 +978,7 @@ function DbtCloudConnectionsPanel({
       <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 0, marginBottom: 8 }}>
         Each refresh pulls the manifest from the most recent successful run of the configured job and reconciles it like the manual upload would.
       </p>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+      <Card padding={0} shadow="none">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
@@ -1052,7 +1037,7 @@ function DbtCloudConnectionsPanel({
             ))}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -1321,17 +1306,10 @@ function FileDropZone({ onFile, disabled }: { onFile: (f: File) => void; disable
 function LineageVisualization({ nodes, links }: { nodes: VisNode[]; links: VisLink[] }) {
   if (nodes.length === 0) {
     return (
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 40,
-        textAlign: 'center',
-        color: 'var(--color-text-muted)',
-      }}>
+      <Card padding={40} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
         <div style={{ fontSize: 32, marginBottom: 8 }}>{'\u21C4'}</div>
         <div>No lineage data to visualize. Add some flows first.</div>
-      </div>
+      </Card>
     );
   }
 
@@ -1356,13 +1334,7 @@ function LineageVisualization({ nodes, links }: { nodes: VisNode[]; links: VisLi
   });
 
   return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      overflow: 'auto',
-      boxShadow: 'var(--shadow-sm)',
-    }}>
+    <Card padding={0} style={{ overflow: 'auto' }}>
       <svg width={svgW} height={svgH} style={{ display: 'block' }}>
         <defs>
           {Object.entries(FLOW_ARROW_COLORS).map(([type, color]) => (
@@ -1498,7 +1470,7 @@ function LineageVisualization({ nodes, links }: { nodes: VisNode[]; links: VisLi
           );
         })}
       </svg>
-    </div>
+    </Card>
   );
 }
 
@@ -1521,16 +1493,10 @@ interface AssetVizNode {
 function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) {
   if (edges.length === 0) {
     return (
-      <div style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        padding: 40, textAlign: 'center',
-        color: 'var(--color-text-muted)',
-      }}>
+      <Card padding={40} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--color-text-muted)' }}><ArrowLeftRight size={32} strokeWidth={1.8} /></div>
         <div>No asset-level lineage yet. Import a dbt manifest to populate this view.</div>
-      </div>
+      </Card>
     );
   }
 
@@ -1578,13 +1544,7 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
     source === 'dbt' ? '#0ea5e9' : source === 'manual' ? '#22c55e' : '#94a3b8';
 
   return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      overflow: 'auto',
-      boxShadow: 'var(--shadow-sm)',
-    }}>
+    <Card padding={0} style={{ overflow: 'auto' }}>
       <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-muted)', padding: '8px 12px', borderBottom: '1px solid var(--color-border)' }}>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#0ea5e9', borderRadius: 2, marginRight: 4 }} />dbt</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#22c55e', borderRadius: 2, marginRight: 4 }} />manual</span>
@@ -1650,6 +1610,6 @@ function AssetLineageVisualization({ edges }: { edges: AssetLineageEdgeRow[] }) 
           );
         })}
       </svg>
-    </div>
+    </Card>
   );
 }
