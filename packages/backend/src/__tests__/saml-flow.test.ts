@@ -6,7 +6,7 @@ import { updateAuthConfig } from '../services/auth-providers';
 import { auditLogs } from '../services/audit.service';
 import { _setSamlProviderForTesting } from '../services/saml.service';
 import { _resetRateLimitForTesting } from '../middleware/rate-limit';
-import { snapshotStore, restoreStore, replaceArray } from './_helpers/store-isolation';
+import { useStoreIsolation } from './_helpers/store-isolation';
 import { startAuthApp, type TestAppHandle } from './_helpers/test-app';
 import { startMockSamlIdp, type MockSamlIdpHandle } from './_helpers/mock-saml-idp';
 
@@ -31,8 +31,10 @@ import { startMockSamlIdp, type MockSamlIdpHandle } from './_helpers/mock-saml-i
 let idp: MockSamlIdpHandle;
 let app: TestAppHandle;
 
-const peopleSnap = snapshotStore('people');
-const auditSnap = snapshotStore('auditLogs');
+useStoreIsolation(
+  { file: 'people', memory: people },
+  { file: 'auditLogs', memory: auditLogs },
+);
 
 // SAML config constants — the mock IdP and SP use these to validate
 // audience / issuer / recipient.
@@ -56,13 +58,9 @@ after(async () => {
   _setSamlProviderForTesting(null);
   updateAuthConfig({ provider: 'dev' });
   await app.close();
-  restoreStore(peopleSnap);
-  restoreStore(auditSnap);
 });
 
 beforeEach(() => {
-  replaceArray(people, []);
-  replaceArray(auditLogs, []);
   _resetRateLimitForTesting();
 });
 
