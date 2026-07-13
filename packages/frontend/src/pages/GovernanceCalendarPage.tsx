@@ -9,6 +9,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import SectionCard from '../components/SectionCard';
 import { SkeletonRows } from '../components/Skeleton';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
@@ -714,7 +715,7 @@ export default function GovernanceCalendarPage() {
 
       {viewMode === 'calendar' ? (
         /* ── Calendar Grid View ── */
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+        <Card padding={0} shadow="none" style={{ overflow: 'hidden' }}>
           {/* Month navigation */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
             <button onClick={prevMonth} style={{ ...btnSecondary, padding: '4px 12px', fontSize: 12 }}>&larr;</button>
@@ -782,15 +783,12 @@ export default function GovernanceCalendarPage() {
               );
             })}
           </div>
-        </div>
+        </Card>
       ) : (
         /* ── List View (original two-column layout) ── */
         <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Upcoming panel */}
-          <div style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)', padding: 16,
-          }}>
+          <Card>
             <h3 style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase',
               letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: 12 }}>
               Upcoming (next 30 days)
@@ -827,13 +825,10 @@ export default function GovernanceCalendarPage() {
                 ))}
               </ul>
             )}
-          </div>
+          </Card>
 
           {/* All events table */}
-          <div style={{
-            background: 'var(--color-surface)', borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-border)', overflow: 'auto',
-          }}>
+          <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
               <SkeletonRows rows={5} columns={6} />
             ) : events.length === 0 && !showForm ? (
@@ -931,7 +926,7 @@ export default function GovernanceCalendarPage() {
                 </tbody>
               </table>
             )}
-          </div>
+          </Card>
         </div>
       )}
     </div>

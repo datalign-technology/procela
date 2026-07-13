@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { useValueStreamScope } from '../hooks/useValueStreamScope';
 import { useOrgNameLookup } from '../hooks/useOrgNameLookup';
@@ -1499,7 +1500,7 @@ export default function ProcessCatalogPage() {
       )}
 
       {/* Tree */}
-      <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'hidden', minHeight: 300 }}>
+      <Card padding={0} shadow="none" style={{ overflow: 'hidden', minHeight: 300 }}>
         {loading ? (
           <SkeletonRows rows={5} columns={4} />
         ) : tree.length === 0 && addingTo !== '__root__' ? (
@@ -1609,7 +1610,7 @@ export default function ProcessCatalogPage() {
               onDeleteSchedule={handleDeleteSchedule} />
           ))
         )}
-      </div>
+      </Card>
 
       {/* Add child form */}
       {addingTo && addingTo !== '__root__' && (() => {

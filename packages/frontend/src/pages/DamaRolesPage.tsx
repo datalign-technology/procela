@@ -10,6 +10,7 @@ import IconButton from '../components/IconButton';
 import { useToastStore } from '../stores/toastStore';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import SectionCard from '../components/SectionCard';
 import PersonPicker from '../components/PersonPicker';
 import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/useFormValidation';
@@ -723,15 +724,7 @@ export default function DamaRolesPage() {
        *  Entity-attached) and shows a fill summary per section so
        *  staffing coverage is visible at a glance. */}
       <div style={{ display: 'grid', gridTemplateColumns: previewRoleType ? '260px 1fr 340px' : '260px 1fr', gap: 16, alignItems: 'start' }}>
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 10,
-          position: 'sticky', top: 12,
-          maxHeight: 'calc(100vh - 180px)',
-          overflowY: 'auto',
-        }}>
+        <Card padding={10} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6, padding: '0 4px' }}>
             Roles
           </div>
@@ -800,10 +793,10 @@ export default function DamaRolesPage() {
               </SidebarCategory>
             );
           })}
-        </div>
+        </Card>
 
         <div>
-          <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', overflow: 'auto' }}>
+          <Card padding={0} shadow="none" style={{ overflow: 'auto' }}>
             {loading ? (
               <SkeletonRows rows={6} columns={4} />
             ) : (
@@ -821,7 +814,7 @@ export default function DamaRolesPage() {
                 programInUse={roles.length > 0}
               />
             )}
-          </div>
+          </Card>
         </div>
 
         {previewRoleType && (
@@ -1401,14 +1394,7 @@ function RolePreviewPane({
   const required = REQUIRED_ROLE_TYPES.has(roleType);
 
   return (
-    <div style={{
-      background: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-md)',
-      position: 'sticky', top: 12,
-      maxHeight: 'calc(100vh - 180px)',
-      overflowY: 'auto',
-    }}>
+    <Card padding={0} shadow="none" style={{ position: 'sticky', top: 12, maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
       <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <button
           type="button"
@@ -1492,6 +1478,6 @@ function RolePreviewPane({
           + Assign
         </button>
       </div>
-    </div>
+    </Card>
   );
 }

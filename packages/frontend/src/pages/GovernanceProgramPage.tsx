@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
+import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import HelpPopover from '../components/HelpPopover';
@@ -684,24 +685,16 @@ export default function GovernanceProgramPage() {
       </PageHeader>
 
       {loading && (
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
-          color: 'var(--color-text-muted)', fontSize: 13,
-        }}>
+        <Card padding={24} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
           Loading governance program...
-        </div>
+        </Card>
       )}
 
       {!loading && (
         <>
           {/* Next actions — above phase cards */}
           {recs.length > 0 && (
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20,
-              boxShadow: 'var(--shadow-sm)',
-            }}>
+            <Card padding={20} marginBottom={20}>
               <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Next Actions</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {recs.map((r, idx) => {
@@ -733,7 +726,7 @@ export default function GovernanceProgramPage() {
                   );
                 })}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Phase cards — fixed 4-column grid with arrow connectors */}
@@ -1137,13 +1130,9 @@ export default function GovernanceProgramPage() {
           )}
 
           {!program && !loading && (
-            <div style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: 24, textAlign: 'center',
-              color: 'var(--color-text-muted)', fontSize: 13,
-            }}>
+            <Card padding={24} shadow="none" style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
               No governance program found for this organization.
-            </div>
+            </Card>
           )}
         </>
       )}
