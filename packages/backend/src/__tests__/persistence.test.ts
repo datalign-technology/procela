@@ -6,6 +6,7 @@ import path from 'path';
 // We test the persistence functions directly by importing them.
 // The module resolves DATA_DIR from process.cwd(), so we use a temp dir approach.
 import { saveStore, loadStore, ensureDataDir } from '../lib/persistence';
+import { z } from 'zod';
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
 
@@ -170,6 +171,70 @@ describe('persistence', () => {
 
       saveStore(storeName, [{ id: 'x', v: 1 }]);
       assert.strictEqual(hasAnyTmp(storeName), false);
+    });
+  });
+
+  describe('schema validation on load', () => {
+    // A Zod schema passed to loadStore should keep valid rows, drop
+    // malformed ones, and never crash the boot. Tests the concrete
+    // guarantees the tech-debt sweep asked for.
+    const schema = z.object({
+      id: z.string(),
+      name: z.string(),
+      score: z.number(),
+    });
+
+    it('returns valid rows unchanged when every row parses', () => {
+      const storeName = '__test_schema_ok';
+      testFiles.push(storeName);
+      const rows = [
+        { id: 'a', name: 'Alpha', score: 1 },
+        { id: 'b', name: 'Beta', score: 2 },
+      ];
+      saveStore(storeName, rows);
+      const loaded = loadStore(storeName, schema);
+      assert.deepStrictEqual(loaded, rows);
+    });
+
+    it('quarantines rows that fail the schema and keeps the good ones', () => {
+      const storeName = '__test_schema_mixed';
+      testFiles.push(storeName);
+      // Two good rows, one missing `score`, one with a non-string id.
+      saveStore(storeName, [
+        { id: 'good-1', name: 'Alpha', score: 1 },
+        { id: 'no-score', name: 'Broken' },
+        { id: 42, name: 'BadId', score: 3 },
+        { id: 'good-2', name: 'Delta', score: 4 },
+      ]);
+      const loaded = loadStore(storeName, schema);
+      assert.strictEqual(loaded.length, 2);
+      assert.deepStrictEqual(loaded.map((r) => r.id), ['good-1', 'good-2']);
+    });
+
+    it('returns [] when the file root is not an array (post-drift corruption)', () => {
+      const storeName = '__test_schema_wrong_root';
+      testFiles.push(storeName);
+      ensureDataDir();
+      // A migration bug wrote an object instead of an array. Load
+      // should refuse it rather than propagate the wrong shape.
+      fs.writeFileSync(
+        path.join(DATA_DIR, `${storeName}.json`),
+        JSON.stringify({ rows: [{ id: 'a' }] }),
+      );
+      const loaded = loadStore(storeName, schema);
+      assert.deepStrictEqual(loaded, []);
+    });
+
+    it('is a no-op when no schema is passed — legacy call sites unchanged', () => {
+      const storeName = '__test_schema_optional';
+      testFiles.push(storeName);
+      // Rows with completely mismatched shapes go through when the
+      // caller doesn't opt into validation. This preserves every
+      // existing call site's behaviour.
+      const rows = [{ id: 'x', totally: 'different', shape: true }];
+      saveStore(storeName, rows);
+      const loaded = loadStore(storeName);
+      assert.deepStrictEqual(loaded, rows);
     });
   });
 });
