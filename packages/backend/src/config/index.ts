@@ -22,13 +22,15 @@ export const config = {
   // Anthropic model used for every server-side Claude call (process
   // template generation, data-domain suggestions, asset suggestions,
   // governance activity runs, chat). Override with ANTHROPIC_MODEL
-  // when bumping to a new model release without a code change.
-  // Default is the currently-shipping Claude 5-family Sonnet. Bump
-  // in step with new releases (or override via env without touching
-  // code). The value ships to the Anthropic SDK verbatim, so a
-  // typo here shows up as the "AI response could not be parsed"
-  // error at generate time — that's how we found `claude-sonnet-4-6`,
-  // which was never a real model.
+  // env or Settings → AI (in-app admin override; wins over env).
+  // Default is Claude 5-family Sonnet — the current best cost /
+  // capability trade for most Procela calls. Bump in step with new
+  // releases. The value ships to the Anthropic SDK verbatim, so a
+  // typo here shows up as an invalid-model error on first call;
+  // the boot-time probe in index.ts catches this at startup, and
+  // FAIL_FAST_ON_AI_PROBE=1 promotes it to a hard exit for
+  // deployment-gated rollouts. Supported ids as of this release:
+  //   claude-sonnet-5, claude-opus-4-8, claude-haiku-4-5-20251001
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
 
   // Storage
