@@ -33,6 +33,7 @@ import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
+import { enforceAiBudget } from './middleware/ai-budget';
 import processCatalogRouter from './routes/process-catalog';
 import systemsRouter from './routes/systems';
 import dataAssetsRouter from './routes/data-assets';
@@ -195,8 +196,8 @@ app.use('/api/v1/data-assets', authenticateToken, dataAssetsRouter);
 app.use('/api/v1/systems', authenticateToken, systemsRouter);
 app.use('/api/v1/mappings', authenticateToken, mappingsRouter);
 app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
-app.use('/api/v1/ai', authenticateToken, aiRouter);
-app.use('/api/v1/chat', authenticateToken, chatRouter);
+app.use('/api/v1/ai', authenticateToken, enforceAiBudget, aiRouter);
+app.use('/api/v1/chat', authenticateToken, enforceAiBudget, chatRouter);
 app.use('/api/v1/audit', authenticateToken, auditRouter);
 // Connectors router handles its own auth — admin endpoints take a
 // user JWT, agent endpoints take a connector token (pct_…) — so it
