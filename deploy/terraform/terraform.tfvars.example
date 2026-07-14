@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars and fill in the values. terraform.tfvars is
+# .gitignored in this repo — never commit real ARNs / secrets.
+
+region       = "us-east-1"
+project_name = "procela"
+environment  = "dev"
+
+# Backend container image. Push the image (see packages/backend/Dockerfile)
+# to your own ECR repo and paste the ref here.
+app_image = "123456789012.dkr.ecr.us-east-1.amazonaws.com/procela-backend:latest"
+
+# ACM cert for the ALB listener. Must be issued in var.region.
+alb_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+
+# Public hostname CloudFront serves. Create the Route 53 alias yourself.
+domain_name = "procela.example.com"
+
+# ACM cert for CloudFront. MUST live in us-east-1. Leave null to fall back
+# to the default *.cloudfront.net cert (useful for a first-plan smoke test).
+cloudfront_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/11111111-1111-1111-1111-111111111111"
+
+# Sizing knobs — reference defaults are fine for a demo.
+db_instance_class = "db.t3.small"
+desired_count     = 1
