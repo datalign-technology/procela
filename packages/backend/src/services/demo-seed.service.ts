@@ -18,7 +18,7 @@ import { systems } from '../routes/systems';
 import { agents } from '../routes/agents';
 import { dataDomains } from '../routes/data-domains';
 import { dataAssets } from '../routes/data-assets';
-import { processNodes } from '../routes/process-catalog';
+import { processNodes, flowRelationships } from '../routes/process-catalog';
 import { mappings } from '../routes/mappings';
 import { governanceTasks } from '../routes/governance-tasks';
 import { governanceIssues } from '../routes/governance-issues';
@@ -47,6 +47,7 @@ function sweep(): void {
     [dataDomains, 'dataDomains'],
     [dataAssets, 'dataAssets'],
     [processNodes, 'processNodes'],
+    [flowRelationships, 'flowRelationships'],
     [mappings, 'mappings'],
     [governanceTasks, 'governanceTasks'],
     [governanceIssues, 'governanceIssues'],
@@ -139,6 +140,10 @@ export function seedDemoData(): DemoSeedReport {
   const phillip = { id: P + 'person-phillip', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Phillip Rosenberg', email: 'phillip.rosenberg@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Compliance Evidence', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const samira = { id: P + 'person-samira', orgIds: [orgCustomerElectric.id], accessibleOrgIds: [orgCustomerElectric.id], name: 'Samira Farooq', email: 'samira.farooq@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Contact Center', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const isabella = { id: P + 'person-isabella', orgIds: [orgRegulatory.id], accessibleOrgIds: [orgRegulatory.id], name: 'Isabella Rossi', email: 'isabella.rossi@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Compliance', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
+  // Referenced by the training guide (Module 4.1 override-owner example
+  // + Module 4.3 domain steward table). Kept separate from the water
+  // block because Deborah is on the electric generation side.
+  const deborah = { id: P + 'person-deborah', orgIds: [orgTd.id], accessibleOrgIds: [orgTd.id, orgElectric.id], name: 'Deborah Kwon', email: 'deborah.kwon@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Generation', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   // Water division staff — mirrors the Electric footprint (division-
   // level Data Owner, an Ops director and two operators, plus a
   // customer-side steward + billing manager).
@@ -149,7 +154,7 @@ export function seedDemoData(): DemoSeedReport {
   const priya = { id: P + 'person-priya', orgIds: [orgWaterOps.id], accessibleOrgIds: [orgWaterOps.id], name: 'Priya Sharma', email: 'priya.sharma@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Distribution Control', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const kaia = { id: P + 'person-kaia', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Kaia Nakamura', email: 'kaia.nakamura@tidewater-utilities.com', role: 'CONTRIBUTOR', title: 'Data Steward Water Customer Data', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
   const diego = { id: P + 'person-diego', orgIds: [orgWaterCustomer.id], accessibleOrgIds: [orgWaterCustomer.id], name: 'Diego Alvarez', email: 'diego.alvarez@tidewater-utilities.com', role: 'EDITOR', title: 'Manager Water Billing', skillIds: [], active: true, createdAt: ts, updatedAt: ts };
-  people.push(susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella, nadia, marcus, sophie, rafael, priya, kaia, diego);
+  people.push(susan, marisol, devon, jennifer, brandon, melissa, harold, natalie, andre, kwame, amara, tobias, lorraine, phillip, samira, isabella, deborah, nadia, marcus, sophie, rafael, priya, kaia, diego);
   saveStore('people', people);
 
   // ── Systems ──
@@ -177,7 +182,7 @@ export function seedDemoData(): DemoSeedReport {
 
   // ── Data Domains ──
   const domCustomer = { id: P + 'domain-customer', orgId: orgTidewater.id, name: 'Customer Data', description: 'Customer accounts, addresses, service history, billing.', ownerId: susan.id, stewardIds: [natalie.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
-  const domOps = { id: P + 'domain-ops', orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
+  const domOps = { id: P + 'domain-ops', orgId: orgTidewater.id, name: 'Operational Data', description: 'Grid, generation, metering — the real-time and near-real-time operational feeds.', ownerId: jennifer.id, stewardIds: [brandon.id, deborah.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   const domRegulatory = { id: P + 'domain-regulatory', orgId: orgTidewater.id, name: 'Regulatory Data', description: 'Compliance evidence, filings, rate case data, NERC CIP + EPA SDWA.', ownerId: lorraine.id, stewardIds: [phillip.id], dataAssetIds: [] as string[], status: 'ACTIVE', createdAt: ts, updatedAt: ts };
   dataDomains.push(domCustomer, domOps, domRegulatory);
 
@@ -185,7 +190,7 @@ export function seedDemoData(): DemoSeedReport {
   const assetOutageLogs = { id: P + 'asset-outage-logs', orgId: orgElectric.id, name: 'Outage Logs', description: 'Per-event SCADA records of distribution outages.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 62, createdAt: ts, updatedAt: ts };
   const assetCustomerMaster = { id: P + 'asset-customer-master', orgId: orgTidewater.id, name: 'Customer Master', description: 'Service addresses, account status, billing terms.', systemId: sysCIS.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 88, sensitivityTags: ['PII' as const], createdAt: ts, updatedAt: ts };
   const assetMeterReads = { id: P + 'asset-meter-reads', orgId: orgTidewater.id, name: 'Meter Reads', description: 'AMI 15-minute interval consumption.', systemId: sysAMI.id, owner: '', ownerPersonId: andre.id, stewardIds: [] as string[], governanceTier: 'SILVER' as const, healthScore: 91, createdAt: ts, updatedAt: ts };
-  const assetGeneration = { id: P + 'asset-generation-output', orgId: orgElectric.id, name: 'Generation Output', description: 'Plant-level MWh by hour.', systemId: sysSCADA.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 55, createdAt: ts, updatedAt: ts };
+  const assetGeneration = { id: P + 'asset-generation-output', orgId: orgElectric.id, name: 'Generation Output', description: 'Plant-level MWh by hour.', systemId: sysSCADA.id, owner: '', ownerPersonId: deborah.id, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 55, createdAt: ts, updatedAt: ts };
   // Planted orphans — obviously-named so Ask AI's "which data assets
   // have no process using them?" produces a quotable answer.
   const orphanLegacyBilling = { id: P + 'asset-legacy-billing', orgId: orgTidewater.id, name: 'Legacy Billing Extract', description: 'Nightly dump from the retired billing system. Kept as a fallback but no process references it.', systemId: sysWarehouse.id, owner: '', ownerPersonId: null, stewardIds: [] as string[], governanceTier: 'BRONZE' as const, healthScore: 0, createdAt: ts, updatedAt: ts };
@@ -214,10 +219,23 @@ export function seedDemoData(): DemoSeedReport {
   const procDetect = { id: P + 'node-proc-detect', parentId: vs.id, level: 'PROCESS' as const, name: 'Detect & Assess', description: 'Detect outages via SCADA + customer channel, triage severity.', activityId: 'PRO-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const procRestore = { id: P + 'node-proc-restore', parentId: vs.id, level: 'PROCESS' as const, name: 'Restore & Communicate', description: 'Dispatch crews, restore service, notify customers.', activityId: 'PRO-DEMO-2', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const spTriage = { id: P + 'node-sp-triage', parentId: procDetect.id, level: 'SUBPROCESS' as const, name: 'Outage Triage', description: 'Sort outages by criticality, allocate crews.', activityId: 'SP-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  const actTriage = { id: P + 'node-act-triage', parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages', slaTarget: 'P95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  // actSignal sits upstream of actTriage so the Dependencies panel on
+  // the seeded Outage triage shows a real predecessor — matches
+  // playbook beat 3's promise.
+  const actSignal = { id: P + 'node-act-signal', parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'SCADA anomaly detected', description: 'Grid telemetry flags a probable outage — voltage sag, breaker open, or historian gap.', activityId: 'ACT-DEMO-0', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
+  const actTriage = { id: P + 'node-act-triage', parentId: spTriage.id, level: 'ACTIVITY' as const, name: 'Outage triage', description: 'Classify incoming outages, dispatch first responders.', activityId: 'ACT-DEMO-1', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'System Operator Lead', responsiblePersonId: melissa.id, systemIds: [sysSCADA.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, successMeasure: 'Field crew on site within 30 minutes for Tier 1 outages', slaTarget: 'P95 30 min from detection', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actDispatch = { id: P + 'node-act-dispatch', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Crew dispatch', description: 'Assign crews to outages by location + skill.', activityId: 'ACT-DEMO-2', status: 'ACTIVE', orderIndex: 0, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: harold.id, responsibleRole: 'Line Superintendent', systemIds: [sysGIS.id, sysOMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 4, version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   const actNotify = { id: P + 'node-act-notify', parentId: procRestore.id, level: 'ACTIVITY' as const, name: 'Customer notification sent', description: 'SMS/email/voice notifications to affected customers.', activityId: 'ACT-DEMO-3', status: 'ACTIVE', orderIndex: 1, orgId: orgElectric.id, orgIds: [orgElectric.id], ownerId: samira.id, responsibleRole: 'Manager Contact Center', responsiblePersonId: samira.id, systemIds: [sysCIS.id], requiredSkillIds: [] as string[], version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
-  processNodes.push(vs, procDetect, procRestore, spTriage, actTriage, actDispatch, actNotify);
+  processNodes.push(vs, procDetect, procRestore, spTriage, actSignal, actTriage, actDispatch, actNotify);
+
+  // Flow relationships wiring the Electric activity chain. Feeds the
+  // Dependencies panel: Outage triage sees actSignal as predecessor
+  // and actDispatch as successor; actDispatch fans into actNotify.
+  flowRelationships.push(
+    { id: P + 'flow-1', fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, condition: null, label: 'anomaly confirmed', createdAt: ts },
+    { id: P + 'flow-2', fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, condition: null, label: 'crew required', createdAt: ts },
+    { id: P + 'flow-3', fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, condition: null, label: 'ETA available', createdAt: ts },
+  );
 
   // ── Process hierarchy (Tidewater Water) ──
   // Mirrors the Electric shape: one value stream, two processes, one
@@ -233,6 +251,13 @@ export function seedDemoData(): DemoSeedReport {
   const actWaterQualityTest = { id: P + 'node-act-quality-test', parentId: procTreatment.id, level: 'ACTIVITY' as const, name: 'Water quality sample test', description: 'Draw + analyse the shift sample; log turbidity, chlorine residual, coliform.', activityId: 'ACT-DEMO-W3', status: 'ACTIVE' as const, orderIndex: 0, orgId: orgWater.id, orgIds: [orgWater.id], ownerId: rafael.id, responsibleRole: 'Data Steward Water Operations', responsiblePersonId: sophie.id, systemIds: [sysLIMS.id], requiredSkillIds: [] as string[], criticalityTier: 'TIER_1' as const, rtoHours: 2, successMeasure: 'Every shift sample logged within 4 hours', version: 1, domain: 'OPERATIONAL' as const, createdAt: ts, updatedAt: ts };
   processNodes.push(vsW, procMainBreak, procTreatment, spBreakTriage, actDetectBreak, actDispatchWater, actWaterQualityTest);
   saveStore('processNodes', processNodes);
+
+  // Water-side flow — Detect main break → Dispatch repair crew.
+  // Mirrors the electric predecessor/successor story.
+  flowRelationships.push(
+    { id: P + 'flow-w1', fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, condition: null, label: 'break confirmed', createdAt: ts },
+  );
+  saveStore('flowRelationships', flowRelationships);
 
   // ── Mappings ──
   mappings.push(
@@ -585,12 +610,12 @@ export function seedDemoData(): DemoSeedReport {
 
   return {
     organizations: 10,
-    people: 23,
+    people: 24,
     systems: 8,
     agents: 5,
     dataDomains: 3,
     dataAssets: 9,
-    processNodes: 14,
+    processNodes: 15,
     mappings: 7,
     governanceTasks: 3,
     governanceIssues: 1,

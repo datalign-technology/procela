@@ -148,12 +148,12 @@ describe('demo-seed endpoint', () => {
 
     const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
     assert.strictEqual(demoCount(organizations), 10, 'orgs');
-    assert.strictEqual(demoCount(people), 23, 'people');
+    assert.strictEqual(demoCount(people), 24, 'people');
     assert.strictEqual(demoCount(systems), 8, 'systems');
     assert.strictEqual(demoCount(agents), 5, 'agents');
     assert.strictEqual(demoCount(dataDomains), 3, 'domains');
     assert.strictEqual(demoCount(dataAssets), 9, 'assets');
-    assert.strictEqual(demoCount(processNodes), 14, 'process nodes');
+    assert.strictEqual(demoCount(processNodes), 15, 'process nodes');
     assert.strictEqual(demoCount(mappings), 7, 'mappings');
     assert.strictEqual(demoCount(governanceTasks), 3, 'tasks');
     assert.strictEqual(demoCount(governanceIssues), 1, 'issues');
@@ -169,7 +169,7 @@ describe('demo-seed endpoint', () => {
     const demoCount = (arr: any[]) => arr.filter((r) => r?.id?.startsWith('demo-')).length;
     // Counts should match the single-seed expectations.
     assert.strictEqual(demoCount(organizations), 10);
-    assert.strictEqual(demoCount(people), 23);
+    assert.strictEqual(demoCount(people), 24);
     assert.strictEqual(demoCount(dataAssets), 9);
   });
 

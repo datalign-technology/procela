@@ -42,9 +42,15 @@ describe('gdpr.service — erasePersonReferences', () => {
   beforeEach(() => {
     // Wipe the test dir back to empty between cases. The audit log
     // in-memory state is also cleaned so the cascade's redactPerson
-    // pass starts fresh.
+    // pass starts fresh. Tolerate ENOENT on unlink: with parallel
+    // test workers a peer's saveStore may finish and delete its own
+    // `.tmp` file between our readdirSync + unlinkSync — a race the
+    // atomic-write fix in #100 introduced by design.
     for (const f of fs.readdirSync(DATA_DIR)) {
-      fs.unlinkSync(path.join(DATA_DIR, f));
+      try { fs.unlinkSync(path.join(DATA_DIR, f)); }
+      catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
     }
     replaceArray(auditLogs, []);
   });
