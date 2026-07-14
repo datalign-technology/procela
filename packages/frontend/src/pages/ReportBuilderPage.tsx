@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import Page from '../components/Page';
@@ -257,8 +258,9 @@ export default function ReportBuilderPage() {
         addToast('success', `Created "${res.data.name}".`);
         navigate(`/reports/builder/${res.data.id}`, { replace: true });
       }
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Save failed.');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Save failed.'));
     } finally {
       setSaving(false);
     }

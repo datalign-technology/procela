@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
@@ -364,8 +365,9 @@ export default function OrganizationsPage() {
       setDeleteOrgImpact(null);
       fetchData();
       triggerRefresh();
-    } catch (e: any) {
-      addToast('error', e?.response?.data?.error || e?.message || 'Cannot delete');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Cannot delete'));
     } finally {
       setDeleteOrgBusy(false);
     }

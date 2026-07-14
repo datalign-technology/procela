@@ -567,12 +567,12 @@ export default function ProcessCatalogPage() {
       setValidChildrenMap(catalogRes.validChildren || {});
       setFlows(flowsRes.data || []);
       setAllTags(tagsRes.data || []);
-      setPeopleList((peopleRes.data || []).map((p: any) => ({ id: p.id, name: p.name })));
-      setAssetsList((assetsRes.data || []).map((a: any) => ({ id: a.id, name: a.name, orgId: a.orgId })));
-      setPoliciesList((policiesRes.data || []).map((p: any) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
-      setSystemsList((systemsRes.data || []).map((s: any) => ({ id: s.id, name: s.name, systemType: s.systemType })));
-      setControlsList((controlsRes.data || []).map((c: any) => ({ id: c.id, code: c.code, name: c.name, policyId: c.policyId })));
-      setRoleAssignments((rolesRes.data || []).map((r: any) => ({ personId: r.personId, roleType: r.roleType })));
+      setPeopleList((peopleRes.data || []).map((p) => ({ id: p.id, name: p.name })));
+      setAssetsList((assetsRes.data || []).map((a) => ({ id: a.id, name: a.name, orgId: a.orgId })));
+      setPoliciesList((policiesRes.data || []).map((p) => ({ id: p.id, name: p.name, code: p.code, documentType: p.documentType, orgId: p.orgId })));
+      setSystemsList((systemsRes.data || []).map((s) => ({ id: s.id, name: s.name, systemType: s.systemType })));
+      setControlsList((controlsRes.data || []).map((c) => ({ id: c.id, code: c.code, name: c.name, policyId: c.policyId })));
+      setRoleAssignments((rolesRes.data || []).map((r) => ({ personId: r.personId, roleType: r.roleType })));
       // Fetch agent executions, DAMA roles, and schedules for agent-assigned activities
       try {
         const [execsRes, rolesRes, schedRes] = await Promise.all([
@@ -594,7 +594,7 @@ export default function ProcessCatalogPage() {
           }
         }
         setAgentExecByActivity(byActivity);
-        setDamaAgentRoles((rolesRes.data || []).filter((r: any) => r.agentId).map((r: any) => ({ agentId: r.agentId, agentName: r.agentName, roleType: r.roleType })));
+        setDamaAgentRoles((rolesRes.data || []).filter((r) => r.agentId).map((r) => ({ agentId: r.agentId!, agentName: r.agentName, roleType: r.roleType })));
       } catch { /* agent execution data is optional */ }
       // Resolve org's statusMode
       if (activeOrgId) {
@@ -639,8 +639,9 @@ export default function ProcessCatalogPage() {
       await apiClient.put(`/process-catalog/nodes/${id}`, payload);
       addToast('success', 'Saved');
       fetchData();
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
+    } catch (err) {
+      const e = err as { response?: { status?: number } };
+      if (e?.response?.status === 409) {
         addToast('error', 'Modified by another user — refreshing');
         fetchData();
       } else {
@@ -972,8 +973,9 @@ export default function ProcessCatalogPage() {
         }),
       ]);
       fetchData();
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
+    } catch (err) {
+      const e = err as { response?: { status?: number } };
+      if (e?.response?.status === 409) {
         alert('This item was modified by another user. The page will refresh.');
         fetchData();
       } else {
@@ -1478,8 +1480,8 @@ export default function ProcessCatalogPage() {
 
       {/* Ownership gap warning */}
       {tree.length > 0 && (() => {
-        const countAll = (nodes: any[]): number => nodes.reduce((s: number, n: any) => s + 1 + countAll(n.children || []), 0);
-        const countOwnerless = (nodes: any[]): number => nodes.reduce((s: number, n: any) => s + (!n.ownerId && ['VALUE_STREAM', 'PROCESS'].includes(n.level) ? 1 : 0) + countOwnerless(n.children || []), 0);
+        const countAll = (nodes: ProcessNode[]): number => nodes.reduce((s: number, n) => s + 1 + countAll(n.children || []), 0);
+        const countOwnerless = (nodes: ProcessNode[]): number => nodes.reduce((s: number, n) => s + (!n.ownerId && ['VALUE_STREAM', 'PROCESS'].includes(n.level) ? 1 : 0) + countOwnerless(n.children || []), 0);
         const ownerless = countOwnerless(tree);
         if (ownerless === 0) return null;
         return (

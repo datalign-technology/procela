@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import StatusBadge from '../components/StatusBadge';
@@ -252,8 +253,9 @@ export default function GovernancePoliciesPage() {
         addToast('success', `${typeLabel} created`);
       }
       closeForm(); fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to save document');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save document'));
     }
   };
 
@@ -265,7 +267,9 @@ export default function GovernancePoliciesPage() {
       addToast('success', `${typeLabel} deleted`);
       if (expandedPolicyId === id) setExpandedPolicyId(null);
       fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete document'); }
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete document')); }
   };
 
   // ── Control CRUD ──
@@ -292,8 +296,9 @@ export default function GovernancePoliciesPage() {
         addToast('success', 'Control created');
       }
       closeControlForm(); fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to save control');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save control'));
     }
   };
 
@@ -301,7 +306,9 @@ export default function GovernancePoliciesPage() {
     try {
       await apiClient.delete(`/governance-controls/${id}`);
       addToast('success', 'Control deleted'); fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete control'); }
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete control')); }
   };
 
   const toggleSelect = (id: string) => setSelectedIds((prev) => {

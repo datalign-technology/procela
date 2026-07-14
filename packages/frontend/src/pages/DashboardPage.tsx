@@ -277,15 +277,15 @@ function MyDashboard() {
           to="/governance-work?tab=tasks"
           label="Open Tasks"
           value={s.openTasks || 0}
-          valueColor={s.overdueTasks > 0 ? '#dc2626' : 'var(--color-text)'}
-          sub={s.overdueTasks > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
+          valueColor={(s.overdueTasks || 0) > 0 ? '#dc2626' : 'var(--color-text)'}
+          sub={(s.overdueTasks || 0) > 0 ? { text: `${s.overdueTasks} overdue`, color: 'var(--color-error)' } : null}
         />
         <MyDashboardTile
           to="/governance-work?tab=issues"
           label="Open Issues"
           value={s.openIssues || 0}
-          valueColor={s.criticalIssues > 0 ? '#dc2626' : 'var(--color-text)'}
-          sub={s.criticalIssues > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
+          valueColor={(s.criticalIssues || 0) > 0 ? '#dc2626' : 'var(--color-text)'}
+          sub={(s.criticalIssues || 0) > 0 ? { text: `${s.criticalIssues} critical`, color: 'var(--color-error)' } : null}
         />
         <MyDashboardTile
           to="/data-domains"
@@ -386,7 +386,7 @@ function MyDashboard() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Tasks</span>
-            <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks.length}</Link>
+            <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks?.length ?? 0}</Link>
           </div>
           <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
             {(data.myTasks || []).slice(0, 5).map((t, i) => (
@@ -406,7 +406,7 @@ function MyDashboard() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>My Issues</span>
-            <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues.length}</Link>
+            <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues?.length ?? 0}</Link>
           </div>
           <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
             {(data.myIssues || []).slice(0, 5).map((issue, i) => (

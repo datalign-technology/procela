@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
@@ -269,8 +270,9 @@ export default function GovernanceIssuesPage() {
       }
       closeForm();
       fetchData();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to save issue';
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to save issue');
       addToast('error', msg);
     }
   };
@@ -280,8 +282,9 @@ export default function GovernanceIssuesPage() {
       await apiClient.delete(`/governance-issues/${id}`);
       addToast('success', 'Issue deleted');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to delete issue');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete issue'));
     }
   };
 

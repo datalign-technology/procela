@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
@@ -344,8 +345,9 @@ function ConnectPickerModal({
       await apiClient.post(`/connections/${conn.id}/systems`, { systemId: sys.id });
       addToast('success', `Linked "${conn.name || conn.id}" to ${sys.name}`);
       onAttached();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to attach connection');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to attach connection'));
     } finally {
       setBusy(null);
     }

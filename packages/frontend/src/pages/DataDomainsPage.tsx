@@ -8,7 +8,7 @@ import { useRoleDrawerStore } from '../stores/roleDrawerStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
-import { errorToast } from '../lib/errorToast';
+import { errorMessage, errorToast } from '../lib/errorToast';
 import { getStatusColor } from '../lib/statusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -222,7 +222,10 @@ export default function DataDomainsPage() {
         }
       }
       closeForm(); fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || err?.message || 'Failed to save domain'); }
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save domain'));
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -254,8 +257,9 @@ export default function DataDomainsPage() {
       addToast('success', `Updated ${res.updated} domain${res.updated !== 1 ? 's' : ''}${skippedCount ? ` (skipped ${skippedCount})` : ''}`);
       clearBulkSelection();
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Bulk update failed');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Bulk update failed'));
     } finally {
       setApplyingBulk(false);
     }
@@ -271,8 +275,9 @@ export default function DataDomainsPage() {
       if (selectedDomainId && ids.includes(selectedDomainId)) setSelectedDomainId(null);
       clearBulkSelection();
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Bulk delete failed');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Bulk delete failed'));
     } finally {
       setApplyingBulk(false);
       setConfirmBulkDelete(false);
@@ -283,7 +288,9 @@ export default function DataDomainsPage() {
     try {
       await apiClient.put(`/data-domains/${domainId}`, { status: newStatus });
       addToast('success', `Status changed to ${newStatus.replace('_', ' ')}`); fetchData();
-    } catch (e: any) { addToast('error', e?.response?.data?.error || 'Failed to update status'); }
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to update status')); }
   };
 
   // Walk the active org and its ancestors to find the first non-empty

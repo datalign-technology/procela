@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
@@ -517,8 +518,9 @@ export default function GovernanceProgramPage() {
         setStatus(statusRes.data || null);
         setRecs(recsRes.data || []);
       } catch { /* */ }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to save program';
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to save program');
       addToast('error', msg);
     } finally {
       setSaving(false);
@@ -617,8 +619,9 @@ export default function GovernanceProgramPage() {
           setRecs(recsRes.data || []);
         } catch { /* */ }
       }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to assign role';
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to assign role');
       addToast('error', msg);
     } finally {
       setAssigningRole(null);
@@ -641,8 +644,9 @@ export default function GovernanceProgramPage() {
           setRecs(recsRes.data || []);
         } catch { /* */ }
       }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to remove role';
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to remove role');
       addToast('error', msg);
     }
   };
