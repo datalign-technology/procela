@@ -54,12 +54,48 @@ registerStore('auditLogs', auditLogs);
 // Cheap (single sequential pass), idempotent (entries that
 // already have a hash are left alone — they get rehashed only if a
 // later edit breaks the chain).
-(function bootstrapHashChain() {
+export interface BootstrapOptions {
+  /** When true, mimic production semantics — throw if the log has
+   *  un-hashed entries and `allowBootstrap` is false. Defaults to
+   *  the process's NODE_ENV so the module-init call does the right
+   *  thing without extra plumbing. */
+  isProduction?: boolean;
+  /** Explicit opt-in from the operator (env AUDIT_ALLOW_BOOTSTRAP=1
+   *  by default). Required in production. */
+  allowBootstrap?: boolean;
+  /** Timestamp for the marker entry — accepts an override so tests
+   *  can produce stable output. */
+  now?: string;
+}
+
+export interface BootstrapResult {
+  /** Whether any entries were re-hashed. false → the chain was
+   *  already intact and no marker was appended. */
+  mutated: boolean;
+  /** Index of the first entry that needed a re-hash. -1 when no
+   *  mutation happened. */
+  firstBootstrappedIndex: number;
+  /** The marker entry that was appended (or null when nothing
+   *  mutated). Caller is responsible for persisting the mutated
+   *  entries + marker via saveStore. */
+  marker: AuditLogEntry | null;
+}
+
+/**
+ * Pure bootstrap function — walks an entries array, re-computes
+ * missing / broken hashes, and appends a chain-boundary marker.
+ * Mutates the array in place (matches how the top-level IIFE
+ * treated the auditLogs export) but does NOT touch disk — callers
+ * decide when to persist. Extracted so tests can drive the
+ * behaviour without racing the shared .procela-data/auditLogs.json
+ * file that parallel test workers use.
+ */
+export function bootstrapHashChain(entries: AuditLogEntry[], opts: BootstrapOptions = {}): BootstrapResult {
   let prev = '';
   let mutated = false;
   let firstBootstrappedIndex = -1;
-  for (let i = 0; i < auditLogs.length; i++) {
-    const e = auditLogs[i];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
     if (e.entryHash && e.prevHash !== undefined && e.prevHash === prev) {
       prev = e.entryHash;
       continue;
@@ -70,22 +106,14 @@ registerStore('auditLogs', auditLogs);
     prev = e.entryHash;
     mutated = true;
   }
-  if (!mutated) return;
-  const isProduction = process.env.NODE_ENV === 'production';
-  const allowBootstrap = process.env.AUDIT_ALLOW_BOOTSTRAP === '1';
+  if (!mutated) return { mutated: false, firstBootstrappedIndex: -1, marker: null };
+  const isProduction = opts.isProduction ?? (process.env.NODE_ENV === 'production');
+  const allowBootstrap = opts.allowBootstrap ?? (process.env.AUDIT_ALLOW_BOOTSTRAP === '1');
   if (isProduction && !allowBootstrap) {
-    // Fail fast — the operator needs to see this and decide. Throwing
-    // from top-level module init aborts server startup, which is the
-    // desired behaviour: a tampered audit row is a bigger operational
-    // signal than a running server.
-    const msg = `Audit chain has ${auditLogs.length - firstBootstrappedIndex} un-hashed / broken entries starting at index ${firstBootstrappedIndex}. Refusing to auto-bootstrap in production. Set AUDIT_ALLOW_BOOTSTRAP=1 after investigating to acknowledge the boundary.`;
-    logger.error({ firstBootstrappedIndex, total: auditLogs.length }, msg);
+    const msg = `Audit chain has ${entries.length - firstBootstrappedIndex} un-hashed / broken entries starting at index ${firstBootstrappedIndex}. Refusing to auto-bootstrap in production. Set AUDIT_ALLOW_BOOTSTRAP=1 after investigating to acknowledge the boundary.`;
     throw new Error(msg);
   }
-  // Append an explicit marker entry so the trust boundary shows up
-  // in the log itself, not just in an operator's memory. The marker
-  // is itself part of the chain going forward.
-  const markerTs = new Date().toISOString();
+  const markerTs = opts.now ?? new Date().toISOString();
   const marker: AuditLogEntry = {
     id: `bootstrap-${markerTs}`,
     orgId: 'system',
@@ -96,8 +124,8 @@ registerStore('auditLogs', auditLogs);
     before: null,
     after: {
       firstBootstrappedIndex,
-      bootstrappedCount: auditLogs.length - firstBootstrappedIndex,
-      totalEntriesAtBootstrap: auditLogs.length,
+      bootstrappedCount: entries.length - firstBootstrappedIndex,
+      totalEntriesAtBootstrap: entries.length,
       note: 'Entries before this marker were re-hashed at boot; treat as trusted from this point forward.',
     },
     timestamp: markerTs,
@@ -105,13 +133,24 @@ registerStore('auditLogs', auditLogs);
     entryHash: '',
   };
   marker.entryHash = computeEntryHashStandalone(prev, marker);
-  auditLogs.push(marker);
-  saveStore('auditLogs', auditLogs);
-  logger.warn({
-    firstBootstrappedIndex,
-    bootstrappedCount: auditLogs.length - 1 - firstBootstrappedIndex,
-    markerId: marker.id,
-  }, 'Audit log hash chain bootstrapped — chain marker appended');
+  entries.push(marker);
+  return { mutated: true, firstBootstrappedIndex, marker };
+}
+
+(function runBootstrapAtBoot() {
+  try {
+    const result = bootstrapHashChain(auditLogs);
+    if (!result.mutated) return;
+    saveStore('auditLogs', auditLogs);
+    logger.warn({
+      firstBootstrappedIndex: result.firstBootstrappedIndex,
+      bootstrappedCount: auditLogs.length - 1 - result.firstBootstrappedIndex,
+      markerId: result.marker!.id,
+    }, 'Audit log hash chain bootstrapped — chain marker appended');
+  } catch (err) {
+    logger.error({ err }, 'Audit log hash chain bootstrap refused; aborting startup.');
+    throw err;
+  }
 })();
 
 // Standalone variant of computeEntryHash that takes the entry
