@@ -60,15 +60,38 @@ before(async () => {
   app = await startApp();
 });
 
+// Recursive rm of DATA_DIR can race a parallel test worker whose
+// saveStore drops a fresh `.tmp` file in between rimraf's readdir
+// and rmdir — the atomic-write path in #100 introduced this by
+// design. Retry a few times on ENOTEMPTY; anything else re-throws.
+function rmDataDirWithRetry(): void {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); return; }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOTEMPTY') throw err;
+    }
+  }
+  // Give up quietly — a leftover file at worst upsets a later test's
+  // fresh mkdir, and mkdir({recursive: true}) tolerates that.
+}
+
 after(async () => {
   await app.close();
-  if (fs.existsSync(DATA_DIR)) fs.rmSync(DATA_DIR, { recursive: true, force: true });
+  if (fs.existsSync(DATA_DIR)) rmDataDirWithRetry();
   if (fs.existsSync(BACKUP_DIR)) fs.renameSync(BACKUP_DIR, DATA_DIR);
 });
 
 beforeEach(() => {
   // Re-seed fixtures so each test starts from a known state.
-  for (const f of fs.readdirSync(DATA_DIR)) fs.unlinkSync(path.join(DATA_DIR, f));
+  // Same ENOENT-race as PR #113: a peer worker's saveStore may
+  // unlink its `.tmp` between our readdirSync + unlinkSync. Swallow
+  // it and keep going — the missing file is the peer's problem.
+  for (const f of fs.readdirSync(DATA_DIR)) {
+    try { fs.unlinkSync(path.join(DATA_DIR, f)); }
+    catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+  }
   fs.writeFileSync(path.join(DATA_DIR, 'reset-test-people.json'), JSON.stringify([{ id: 'p1' }, { id: 'p2' }]));
   fs.writeFileSync(path.join(DATA_DIR, 'reset-test-processes.json'), JSON.stringify([{ id: 'pr1' }]));
   fs.writeFileSync(path.join(DATA_DIR, 'someUnknownStore.json'), JSON.stringify([{ id: 'x1' }, { id: 'x2' }, { id: 'x3' }]));
