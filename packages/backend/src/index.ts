@@ -382,8 +382,27 @@ const server = app.listen(PORT, () => {
 // configured API key. Would have caught the past three model-ID
 // drifts (claude-sonnet-4-6, claude-sonnet-5,
 // claude-3-7-sonnet-latest) at boot instead of at first user
-// click. Fire-and-forget — no blocking, no throwing.
+// click.
+//
+// Default is fire-and-forget with a loud logger.error on failure so
+// operators see the problem in Kibana / CloudWatch / stdout without
+// crashing the container (a broken AI key shouldn't take down the
+// non-AI parts of the app). Set FAIL_FAST_ON_AI_PROBE=1 to promote
+// the failure into a hard exit — useful in a health-check-gated
+// deployment where you'd rather roll back than serve traffic with a
+// dead AI backend. Enabled by default in production when the API
+// key is configured.
 import { getConfiguredModel } from './services/ai.service';
+// Known-good Anthropic model IDs surfaced in the error message so an
+// operator hitting an invalid-model error has an immediately-runnable
+// fix to try. Kept short + current — bump alongside real model
+// releases, or override in-app via Settings → AI. See the model-drift
+// history in the pingAiModel comment above.
+const SUGGESTED_MODEL_IDS = [
+  'claude-sonnet-5',
+  'claude-opus-4-8',
+  'claude-haiku-4-5-20251001',
+] as const;
 async function pingAiModel(): Promise<void> {
   const apiKey = config.anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) {
@@ -391,6 +410,15 @@ async function pingAiModel(): Promise<void> {
     return;
   }
   const model = getConfiguredModel();
+  const failFast = process.env.FAIL_FAST_ON_AI_PROBE === '1'
+    || (config.nodeEnv === 'production' && process.env.FAIL_FAST_ON_AI_PROBE !== '0');
+  const bail = (msg: string, ctx: Record<string, unknown>): void => {
+    if (failFast) {
+      logger.error({ ...ctx, tryOneOf: SUGGESTED_MODEL_IDS }, `${msg} — exiting (set FAIL_FAST_ON_AI_PROBE=0 to skip)`);
+      process.exit(1);
+    }
+    logger.error({ ...ctx, tryOneOf: SUGGESTED_MODEL_IDS }, `${msg} — set ANTHROPIC_MODEL to a supported id or configure via Settings → AI`);
+  };
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -406,10 +434,9 @@ async function pingAiModel(): Promise<void> {
       return;
     }
     const text = await res.text().catch(() => '');
-    logger.warn({ model, status: res.status, response: text.slice(0, 300) },
-      'AI: startup probe failed — the configured model may not be available to this API key. Fix at Settings → AI or in ANTHROPIC_MODEL.');
+    bail('AI: startup probe failed', { model, status: res.status, response: text.slice(0, 300) });
   } catch (err) {
-    logger.warn({ err, model }, 'AI: startup probe threw (network error)');
+    bail('AI: startup probe threw (network error)', { err, model });
   }
 }
 
