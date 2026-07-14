@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
+import TruncatedText from '../components/TruncatedText';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
@@ -1801,12 +1802,17 @@ export default function DataAssetsPage() {
                     {isVisible('description') && (
                       <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }} title={inherited ? inheritedHint : undefined}>
                         {canWrite && !inherited ? (
-                          <InlineCellEdit
-                            value={asset.description || ''}
-                            onSave={(v) => inlineSaveField(asset.id, 'description', v)}
-                          />
+                          <div
+                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={asset.description || undefined}
+                          >
+                            <InlineCellEdit
+                              value={asset.description || ''}
+                              onSave={(v) => inlineSaveField(asset.id, 'description', v)}
+                            />
+                          </div>
                         ) : (
-                          asset.description || '--'
+                          <TruncatedText text={asset.description} emptyPlaceholder="--" />
                         )}
                       </td>
                     )}
