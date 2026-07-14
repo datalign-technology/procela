@@ -456,8 +456,17 @@ function warnOnMissingProdConfig(): void {
   if (!config.smtpHost || !config.smtpUser || !config.smtpPass || !config.mailFrom || !config.appUrl) {
     missing.push({ name: 'SMTP_HOST / SMTP_USER / SMTP_PASS / MAIL_FROM / APP_URL', impact: 'password-reset emails fall back to logging the token in the audit feed (not delivered to the user)' });
   }
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret-change-in-production') {
-    missing.push({ name: 'JWT_SECRET', impact: 'sessions are signed with the development default — anyone with the source can forge tokens' });
+  // JWT signing: RS256 (private + public PEM) is preferred; HS256 is
+  // acceptable for a single-node install but the shared secret must
+  // not be the dev default. Warn on either the dev-default secret or
+  // on HS256 in production without an explicit acknowledgement.
+  const hasRsa = !!process.env.JWT_PRIVATE_KEY && !!process.env.JWT_PUBLIC_KEY;
+  if (!hasRsa) {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-secret-change-in-production') {
+      missing.push({ name: 'JWT_SECRET', impact: 'sessions are signed with the development default — anyone with the source can forge tokens' });
+    } else {
+      missing.push({ name: 'JWT_PRIVATE_KEY / JWT_PUBLIC_KEY', impact: 'signing with HS256 (symmetric secret). Anyone with the secret can forge tokens; downstream services cannot verify without sharing it. Set both RSA PEMs to sign with RS256 and publish a JWKS at /api/v1/auth/jwks.json' });
+    }
   }
   if (!config.anthropicApiKey) {
     missing.push({ name: 'ANTHROPIC_API_KEY', impact: 'AI features (template generation, suggestions, assistant) will fail when invoked' });

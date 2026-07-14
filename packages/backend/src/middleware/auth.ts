@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import config from '../config';
+import { verify as verifyJwt } from '../services/jwt-signer';
 import { AppError } from './errorHandler';
 import { TokenPayload } from '../types';
 
@@ -11,6 +10,11 @@ export interface AuthenticatedRequest extends Request {
 /**
  * Middleware that extracts and validates the Bearer token from the
  * Authorization header, then attaches the decoded user to the request.
+ *
+ * Verification goes through services/jwt-signer, which picks RS256
+ * or HS256 based on the JWT_* config at boot. Downstream services
+ * (an edge proxy, a data-lake gate) can verify the same tokens by
+ * fetching the JWKS at /api/v1/auth/jwks.json when RS256 is active.
  */
 export function authenticateToken(
   req: AuthenticatedRequest,
@@ -25,9 +29,7 @@ export function authenticateToken(
   }
 
   try {
-    // In production this would verify against Cognito JWKS or the configured provider.
-    // For development we fall back to a simple JWT secret verification.
-    const decoded = jwt.verify(token, config.jwtSecret) as TokenPayload;
+    const decoded = verifyJwt<TokenPayload>(token);
     req.user = decoded;
     next();
   } catch {
