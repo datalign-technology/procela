@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { sign as signJwt, verify as verifyJwt, getJwks, currentAlgorithm } from '../services/jwt-signer';
 import { v4 as uuid } from 'uuid';
 import config from '../config';
 import { AuthenticatedRequest, authenticateToken, authorize } from '../middleware/auth';
@@ -117,7 +117,7 @@ export function createAccessToken(user: {
     type: 'access',
     ...(user.sessionJti ? { sjti: user.sessionJti } : {}),
   };
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: ACCESS_TOKEN_EXPIRY });
+  return signJwt(payload, { expiresIn: ACCESS_TOKEN_EXPIRY });
 }
 
 /** Capture the IP + User-Agent fingerprint from a request — fed
@@ -133,7 +133,7 @@ export function fingerprintFromRequest(req: Request): { ip?: string; userAgent?:
 export function createRefreshToken(sub: string, context: RefreshTokenContext = {}): { token: string; jti: string } {
   const jti = uuid();
   const payload: RefreshTokenPayload = { sub, type: 'refresh', jti };
-  const token = jwt.sign(payload, config.jwtSecret, { expiresIn: REFRESH_TOKEN_EXPIRY });
+  const token = signJwt(payload, { expiresIn: REFRESH_TOKEN_EXPIRY });
   const now = new Date().toISOString();
   validRefreshTokens.set(jti, {
     personId: sub,
@@ -849,7 +849,7 @@ router.post('/refresh', (req: Request, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, config.jwtSecret) as RefreshTokenPayload;
+    const decoded = verifyJwt<RefreshTokenPayload>(refreshToken);
 
     if (decoded.type !== 'refresh') {
       res.status(401).json({ success: false, error: 'Invalid token type' });
@@ -953,7 +953,7 @@ router.post('/logout', async (req: Request, res: Response) => {
   }
 
   try {
-    const decoded = jwt.verify(refreshToken, config.jwtSecret) as RefreshTokenPayload;
+    const decoded = verifyJwt<RefreshTokenPayload>(refreshToken);
 
     if (decoded.type !== 'refresh') {
       res.status(400).json({ success: false, error: 'Invalid token type' });
@@ -1112,6 +1112,29 @@ router.get('/providers', (req: Request, res: Response) => {
       ],
     },
   });
+});
+
+/**
+ * GET /api/v1/auth/jwks.json — public JWKS for the current signing
+ * key. Returned when the backend runs with RS256; when HS256 is
+ * active there's no public key to publish and the endpoint 404s.
+ *
+ * Consumers (an edge proxy, a data-lake token gate, a downstream
+ * microservice) fetch this document to verify Procela-issued JWTs
+ * without needing the private key. Standard JWKS format per RFC 7517
+ * — an object with a `keys` array of JWK entries carrying `kid`,
+ * `alg`, `use`, and the RSA key material.
+ */
+router.get('/jwks.json', (_req: Request, res: Response) => {
+  const jwks = getJwks();
+  if (!jwks) {
+    res.status(404).json({ success: false, error: `JWKS not available — server signs with ${currentAlgorithm()} (no public key to publish). Set JWT_PRIVATE_KEY + JWT_PUBLIC_KEY to enable RS256.` });
+    return;
+  }
+  // Cache for an hour — key rotations flip JWT_KID and callers
+  // observe the new id in the JWT header, then re-fetch.
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.json(jwks);
 });
 
 /**
