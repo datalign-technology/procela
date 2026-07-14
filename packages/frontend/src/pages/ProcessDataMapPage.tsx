@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
@@ -95,8 +96,8 @@ export default function ProcessDataMapPage() {
         `/process-catalog/data-graph${qs.toString() ? `?${qs}` : ''}`,
       );
       setData(res.data);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load process-data map');
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to load process-data map'));
     }
   }, [activeOrgId, includeGov, refreshKey]);
 

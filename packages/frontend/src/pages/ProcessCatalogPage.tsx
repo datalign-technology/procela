@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
@@ -785,8 +786,8 @@ export default function ProcessCatalogPage() {
         addToast('success', `${agentRole.agentName || 'Agent'} produced a draft — review it below`);
       }
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Execution failed');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Execution failed'));
     } finally {
       setRunningActivity(null);
     }
@@ -798,8 +799,8 @@ export default function ProcessCatalogPage() {
       await apiClient.patch(`/agent-executions/${executionId}/review`, { reviewStatus, reviewedBy: currentUser?.name });
       addToast('success', reviewStatus === 'PENDING' ? 'Review reset' : `Draft ${reviewStatus.toLowerCase()}`);
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to update review');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to update review'));
     }
   };
 
@@ -821,8 +822,8 @@ export default function ProcessCatalogPage() {
       addToast('success', 'Draft promoted to Governance Document');
       fetchData();
       return true;
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to promote draft');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to promote draft'));
       return false;
     }
   };
@@ -846,8 +847,8 @@ export default function ProcessCatalogPage() {
       addToast('success', payload.frequency === 'ONCE' ? 'One-time schedule created' : `${payload.frequency.toLowerCase()} schedule created`);
       fetchData();
       return true;
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to create schedule');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to create schedule'));
       return false;
     }
   };
@@ -856,8 +857,8 @@ export default function ProcessCatalogPage() {
       await apiClient.patch(`/agent-schedules/${scheduleId}`, { status: nextStatus });
       addToast('success', nextStatus === 'PAUSED' ? 'Schedule paused' : 'Schedule resumed');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to update schedule');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to update schedule'));
     }
   };
   const handleDeleteSchedule = async (scheduleId: string): Promise<void> => {
@@ -865,8 +866,8 @@ export default function ProcessCatalogPage() {
       await apiClient.delete(`/agent-schedules/${scheduleId}`);
       addToast('success', 'Schedule removed');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to remove schedule');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to remove schedule'));
     }
   };
 

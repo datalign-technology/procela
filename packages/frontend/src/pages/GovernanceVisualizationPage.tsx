@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 
 // ── Types ──
@@ -332,8 +333,8 @@ export default function GovernanceVisualizationPage() {
       }>(`/governance-groups${qp}`);
       const enriched = await enrichTree(res.tree || [], apiClient);
       setTree(enriched);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load governance data');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load governance data'));
     } finally {
       setLoading(false);
     }

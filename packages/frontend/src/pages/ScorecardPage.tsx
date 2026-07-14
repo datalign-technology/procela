@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
@@ -392,8 +393,8 @@ export default function ScorecardPage() {
       const res = await apiClient.get<{ success: boolean; data: ScorecardData }>(`/dashboard/scorecard${query}`);
       setData(res.data);
       return res.data;
-    } catch (err: any) {
-      setError(err.message || 'Failed to load scorecard');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load scorecard'));
       return null;
     } finally {
       setLoading(false);

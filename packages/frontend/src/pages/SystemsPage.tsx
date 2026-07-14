@@ -475,7 +475,7 @@ export default function SystemsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
-  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
+  const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [connectingSystem, setConnectingSystem] = useState<SystemEntity | null>(null);

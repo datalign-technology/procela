@@ -4,6 +4,7 @@ import {
 } from '@simplewebauthn/browser';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import Page from '../components/Page';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -231,8 +232,8 @@ export default function SettingsPage() {
       setCurrentClientId(isOidc ? formClientId.trim() : '');
       setAuthSuccess(true);
       setTimeout(() => setAuthSuccess(false), 3000);
-    } catch (err: any) {
-      setAuthError(err.message || 'Failed to save authentication configuration');
+    } catch (err) {
+      setAuthError(errorMessage(err, 'Failed to save authentication configuration'));
     } finally {
       setAuthSaving(false);
     }
@@ -1177,8 +1178,8 @@ function MfaPanel() {
         '/auth/mfa/start', {});
       setEnrolling(res.data);
       setCode('');
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to start enrollment');
+    } catch (e) {
+      setErr(errorMessage(e, 'Failed to start enrollment'));
     } finally { setBusy(false); }
   };
 
@@ -1193,8 +1194,8 @@ function MfaPanel() {
       setEnrolled(true);
       setEnrolling(null);
       setCode('');
-    } catch (e: any) {
-      setErr(e?.message || 'Invalid code');
+    } catch (e) {
+      setErr(errorMessage(e, 'Invalid code'));
     } finally { setBusy(false); }
   };
 
@@ -1208,8 +1209,8 @@ function MfaPanel() {
       setDisablingOpen(false);
       setDisablePassword('');
       setDisableCode('');
-    } catch (e: any) {
-      setErr(e?.message || 'Could not disable two-step verification');
+    } catch (e) {
+      setErr(errorMessage(e, 'Could not disable two-step verification'));
     } finally { setBusy(false); }
   };
 
@@ -1224,8 +1225,8 @@ function MfaPanel() {
       setRegenOpen(false);
       setRegenCode('');
       await refresh();
-    } catch (e: any) {
-      setErr(e?.message || 'Could not regenerate backup codes');
+    } catch (e) {
+      setErr(errorMessage(e, 'Could not regenerate backup codes'));
     } finally { setBusy(false); }
   };
 
@@ -1257,8 +1258,8 @@ function MfaPanel() {
     try {
       await apiClient.delete(`/auth/mfa/webauthn/credentials/${credId}`);
       await refresh();
-    } catch (e: any) {
-      setErr(e?.message || 'Could not remove security key');
+    } catch (e) {
+      setErr(errorMessage(e, 'Could not remove security key'));
     } finally { setBusy(false); }
   };
 

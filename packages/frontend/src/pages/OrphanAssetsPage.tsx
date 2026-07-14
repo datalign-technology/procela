@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import EmptyState from '../components/EmptyState';
@@ -49,8 +50,8 @@ export default function OrphanAssetsPage() {
         `/data-assets/orphans${activeOrgId ? `?orgId=${activeOrgId}` : ''}`,
       );
       setRows(res.data || []);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load orphan assets');
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to load orphan assets'));
       setRows([]);
     }
   }, [activeOrgId, refreshKey]);

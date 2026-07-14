@@ -74,9 +74,9 @@ export default function HelpTrainingPage() {
           <strong>Couldn't load the training guide.</strong>
           <div style={{ marginTop: 6 }}>{error}</div>
           <div style={{ marginTop: 10, fontSize: 12 }}>
-            The guide lives at <code>test-data/utility/TRAINING.md</code> in the repo and is served by
+            The guide lives at <code>docs/TRAINING.md</code> in the repo and is served by
             <code> GET /api/v1/docs/training</code>. Check that the backend is running and that the
-            <code>test-data</code> directory is accessible from its working directory.
+            <code>docs</code> directory is accessible from its working directory.
           </div>
         </div>
       )}

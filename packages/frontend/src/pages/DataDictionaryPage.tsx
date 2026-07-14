@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import TruncatedText from '../components/TruncatedText';
@@ -170,8 +171,8 @@ export default function DataDictionaryPage() {
       setDomains(domainsRes.data || []);
       setSystems(systemsRes.data || []);
       setPeople(peopleRes.data || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load data dictionary');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load data dictionary'));
     } finally {
       setLoading(false);
     }

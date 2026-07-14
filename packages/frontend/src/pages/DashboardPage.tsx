@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { X, ArrowLeftRight, ListTree, Database, CheckCircle2, Users, TrendingUp } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import ActivityFeed from '../components/ActivityFeed';
 import { SkeletonRows } from '../components/Skeleton';
@@ -210,16 +211,34 @@ function GettingStartedCard({ stats }: { stats: DashboardStats }) {
 // user owns, stewards, and may need to act on.
 // ──────────────────────────────────────────────────────────────────────────
 
+interface MyTask { id: string; title: string; isOverdue?: boolean; priority: string; dueDate?: string; status: string; }
+interface MyIssue { id: string; title: string; severity: string; status: string; domainName?: string; }
+interface MyReview { id: string; name: string; isOverdue?: boolean; }
+interface MyEvent { name: string; daysAway: number; }
+interface MyDomain { id: string; name: string; relation: string; assetCount: number; totalAssets: number; healthyAssets: number; }
+interface MyDashboardData {
+  person?: { name: string };
+  summary?: {
+    openTasks?: number; overdueTasks?: number; openIssues?: number; criticalIssues?: number;
+    domainsOwned?: number; domainsSteward?: number; upcomingEventsCount?: number;
+  };
+  myTasks?: MyTask[];
+  myIssues?: MyIssue[];
+  pendingReviews?: MyReview[];
+  upcomingEvents?: MyEvent[];
+  myDomains?: MyDomain[];
+}
+
 function MyDashboard() {
   const { user } = useAuthStore();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<MyDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.email) { setLoading(false); return; }
     (async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any }>('/dashboard/my-dashboard');
+        const res = await apiClient.get<{ success: boolean; data: MyDashboardData }>('/dashboard/my-dashboard');
         setData(res.data);
       } catch { /* */ }
       finally { setLoading(false); }
@@ -287,25 +306,25 @@ function MyDashboard() {
           <div style={{ fontSize: 11, fontWeight: 600, color: '#92400e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Needs My Attention
           </div>
-          {(data.myTasks || []).filter((t: any) => t.isOverdue).length === 0 &&
-           (data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').length === 0 &&
+          {(data.myTasks || []).filter((t) => t.isOverdue).length === 0 &&
+           (data.myIssues || []).filter((i) => i.severity === 'CRITICAL').length === 0 &&
            (data.pendingReviews || []).length === 0 ? (
             <div style={{ color: 'var(--color-success)', fontSize: 13 }}>All clear — no urgent items.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data.myTasks || []).filter((t: any) => t.isOverdue).slice(0, 3).map((t: any) => (
+              {(data.myTasks || []).filter((t) => t.isOverdue).slice(0, 3).map((t) => (
                 <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Overdue: {t.title}</span>
                   <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
-              {(data.myIssues || []).filter((i: any) => i.severity === 'CRITICAL').slice(0, 3).map((i: any) => (
+              {(data.myIssues || []).filter((i) => i.severity === 'CRITICAL').slice(0, 3).map((i) => (
                 <div key={i.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--color-error)' }}>Critical: {i.title}</span>
                   <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
                 </div>
               ))}
-              {(data.pendingReviews || []).slice(0, 3).map((r: any) => (
+              {(data.pendingReviews || []).slice(0, 3).map((r) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12, color: r.isOverdue ? '#dc2626' : '#92400e' }}>{r.isOverdue ? 'Overdue review' : 'Review due'}: {r.name}</span>
                   <Link to="/governance-policies" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View</Link>
@@ -324,7 +343,7 @@ function MyDashboard() {
             <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>No upcoming events in the next 14 days.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data.upcomingEvents || []).slice(0, 5).map((e: any, i: number) => (
+              {(data.upcomingEvents || []).slice(0, 5).map((e, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12 }}>{e.name}</span>
                   <span style={{ fontSize: 10, color: e.daysAway === 0 ? '#dc2626' : 'var(--color-text-muted)', fontWeight: e.daysAway === 0 ? 600 : 400 }}>
@@ -343,7 +362,7 @@ function MyDashboard() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>My Domains</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
-            {(data.myDomains || []).map((d: any) => {
+            {(data.myDomains || []).map((d) => {
               const healthPct = d.totalAssets > 0 ? Math.round((d.healthyAssets / d.totalAssets) * 100) : 0;
               return (
                 <Link key={d.id} to="/data-domains" style={{ ...cardStyle, padding: '10px 14px', textDecoration: 'none', color: 'var(--color-text)' }}>
@@ -370,7 +389,7 @@ function MyDashboard() {
             <Link to="/governance-work?tab=tasks" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myTasks.length}</Link>
           </div>
           <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
-            {(data.myTasks || []).slice(0, 5).map((t: any, i: number) => (
+            {(data.myTasks || []).slice(0, 5).map((t, i) => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
                 <span style={priorityBadge(t.priority)}>{t.priority}</span>
                 <span style={{ flex: 1 }}>{t.title}</span>
@@ -390,7 +409,7 @@ function MyDashboard() {
             <Link to="/governance-work?tab=issues" style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none' }}>View all {data.myIssues.length}</Link>
           </div>
           <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
-            {(data.myIssues || []).slice(0, 5).map((issue: any, i: number) => (
+            {(data.myIssues || []).slice(0, 5).map((issue, i) => (
               <div key={issue.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderTop: i > 0 ? '1px solid var(--color-border)' : 'none', fontSize: 12 }}>
                 <span style={priorityBadge(issue.severity)}>{issue.severity}</span>
                 <span style={{ flex: 1 }}>{issue.title}</span>
@@ -792,21 +811,24 @@ function RecentActivity() {
   );
 }
 
+interface ProgramStatus { currentPhase: number; overallProgress: number; }
+interface ProgramRecommendation { action: string; link: string; priority: string; }
+
 function ProgramMaturity() {
   const { activeOrgId } = useOrgContext();
-  const [status, setStatus] = useState<any>(null);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [status, setStatus] = useState<ProgramStatus | null>(null);
+  const [recommendations, setRecommendations] = useState<ProgramRecommendation[]>([]);
 
   useEffect(() => {
     if (!activeOrgId) { setStatus(null); setRecommendations([]); return; }
     (async () => {
       try {
-        const progRes = await apiClient.get<any>(`/governance-program?orgId=${activeOrgId}`);
+        const progRes = await apiClient.get<{ data: { id?: string } | null }>(`/governance-program?orgId=${activeOrgId}`);
         const prog = progRes.data;
         if (!prog?.id) return;
         const [statusRes, recRes] = await Promise.all([
-          apiClient.get<any>(`/governance-program/${prog.id}/status`),
-          apiClient.get<any>(`/governance-program/${prog.id}/recommendations`),
+          apiClient.get<{ data: ProgramStatus }>(`/governance-program/${prog.id}/status`),
+          apiClient.get<{ data: ProgramRecommendation[] }>(`/governance-program/${prog.id}/recommendations`),
         ]);
         setStatus(statusRes.data);
         setRecommendations(recRes.data || []);
@@ -843,7 +865,7 @@ function ProgramMaturity() {
         {recommendations.length > 0 && (
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Next steps to advance</div>
-            {recommendations.slice(0, 3).map((r: any, i: number) => (
+            {recommendations.slice(0, 3).map((r, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 12 }}>
                 <span style={{ color: r.priority === 'HIGH' ? '#dc2626' : '#d97706', fontSize: 8 }}>●</span>
                 <span style={{ flex: 1 }}>{r.action}</span>
@@ -868,11 +890,12 @@ function StewardOnboarding() {
     if (!activeOrgId) { setData(null); return; }
     (async () => {
       try {
-        const tasksRes = await apiClient.get<{ success: boolean; data: any[] }>(`/governance-tasks?orgId=${activeOrgId}&taskType=STEWARDSHIP`);
+        interface StewardTask { linkedObjectType?: string; status?: string; dueDate?: string }
+        const tasksRes = await apiClient.get<{ success: boolean; data: StewardTask[] }>(`/governance-tasks?orgId=${activeOrgId}&taskType=STEWARDSHIP`);
         const tasks = tasksRes.data || [];
-        const onboarding = tasks.filter((t: any) => t.linkedObjectType === 'DamaRole');
-        const completed = onboarding.filter((t: any) => t.status === 'COMPLETED').length;
-        const overdue = onboarding.filter((t: any) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) < new Date()).length;
+        const onboarding = tasks.filter((t) => t.linkedObjectType === 'DamaRole');
+        const completed = onboarding.filter((t) => t.status === 'COMPLETED').length;
+        const overdue = onboarding.filter((t) => t.status !== 'COMPLETED' && t.status !== 'CANCELLED' && t.dueDate && new Date(t.dueDate) < new Date()).length;
         setData({ total: onboarding.length, completed, overdue });
       } catch { /* */ }
     })();
@@ -958,8 +981,8 @@ export default function DashboardPage() {
       const domainQS = dashboardLens === 'ALL' ? '' : `&domain=${dashboardLens}`;
       const res = await apiClient.get<{ success: boolean; data: DashboardStats }>(`/dashboard/stats?orgId=${activeOrgId}${domainQS}`);
       setStats(res.data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load dashboard');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load dashboard'));
     }
   }, [activeOrgId, dashboardLens]);
 

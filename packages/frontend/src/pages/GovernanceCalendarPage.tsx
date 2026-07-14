@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useOrgContext } from '../stores/orgContext';
 import { usePermissions } from '../hooks/usePermissions';
@@ -262,8 +263,8 @@ export default function GovernanceCalendarPage() {
       }
       closeForm();
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to save event');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to save event'));
     }
   };
 
@@ -272,8 +273,8 @@ export default function GovernanceCalendarPage() {
       await apiClient.delete(`/governance-calendar/${id}`);
       addToast('success', 'Event deleted');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to delete event');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to delete event'));
     }
   };
 
@@ -291,8 +292,8 @@ export default function GovernanceCalendarPage() {
           : 'Occurrence recorded',
       );
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to mark occurrence');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to mark occurrence'));
     }
   };
 
@@ -335,8 +336,8 @@ export default function GovernanceCalendarPage() {
       const createdCount = res.data?.created?.length || 0;
       addToast('success', `Seeded ${createdCount} standard event${createdCount === 1 ? '' : 's'}`);
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to seed events');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to seed events'));
     }
   };
 

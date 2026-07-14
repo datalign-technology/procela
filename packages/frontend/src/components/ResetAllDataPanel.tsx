@@ -73,8 +73,8 @@ export default function ResetAllDataPanel({ onExportFirst }: ResetAllDataPanelPr
         signOutLocal();
         window.location.href = '/login';
       }, 1500);
-    } catch (err: any) {
-      errorToast(err?.message || 'Could not reset data');
+    } catch (err) {
+      errorToast(err, 'Could not reset data');
       setBusy(false);
     }
   };

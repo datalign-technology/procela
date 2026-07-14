@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { useToastStore } from '../stores/toastStore';
 import ExportMenu from '../components/ExportMenu';
@@ -99,8 +100,8 @@ export default function RaciMatrixPage() {
         // Auto-expand value streams
         const vsIds = new Set((res.data?.rows || []).filter((r) => r.level === 'VALUE_STREAM').map((r) => r.id));
         setExpanded(vsIds);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load RACI matrix');
+      } catch (err) {
+      setError(errorMessage(err, 'Failed to load RACI matrix'));
       } finally {
         setLoading(false);
       }

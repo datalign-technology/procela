@@ -7,6 +7,7 @@ import TruncatedText from '../components/TruncatedText';
 import SecondaryButton from '../components/SecondaryButton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
@@ -313,8 +314,8 @@ export default function DataLineagePage() {
       setDbtImportSummary(res.summary);
       // Refresh the catalog so new assets and edges show up.
       await fetchData();
-    } catch (e: any) {
-      setDbtImportError(e?.message || 'Import failed');
+    } catch (e) {
+      setDbtImportError(errorMessage(e, 'Import failed'));
     } finally {
       setDbtImporting(false);
     }
@@ -1116,8 +1117,8 @@ function DbtCloudConnectionForm({
         await apiClient.post('/dbt-cloud-connections', body);
       }
       onSaved();
-    } catch (e: any) {
-      setError(e?.message || 'Save failed');
+    } catch (e) {
+      setError(errorMessage(e, 'Save failed'));
     } finally {
       setSaving(false);
     }

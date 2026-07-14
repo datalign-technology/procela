@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -148,8 +149,8 @@ export default function OrgVisualizationPage() {
         for (const oid of p.orgIds || []) counts[oid] = (counts[oid] || 0) + 1;
       }
       setPeopleCounts(counts);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load organization hierarchy');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load organization hierarchy'));
     } finally {
       setLoading(false);
     }

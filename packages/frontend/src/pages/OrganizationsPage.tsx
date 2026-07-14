@@ -244,7 +244,7 @@ export default function OrganizationsPage() {
   const [showOrgForm, setShowOrgForm] = useState(false);
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [orgForm, setOrgForm] = useState<OrgFormData>(emptyOrgForm);
-  const orgValidation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
+  const orgValidation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [importText, setImportText] = useState('');

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/api/client';
+import { errorMessage } from '@/lib/errorToast';
 import { useAuthStore } from '@/stores/authStore';
 import CaptchaPrompt from '@/components/CaptchaPrompt';
 
@@ -315,8 +316,8 @@ export default function LoginPage() {
       } else {
         setError('Failed to start SSO sign-in');
       }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to start SSO sign-in');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to start SSO sign-in'));
     } finally {
       setLoading(false);
     }
@@ -678,8 +679,8 @@ function ForcedChangeModal({ currentPassword, onDone }: {
     try {
       await apiClient.post('/auth/password', { currentPassword, newPassword });
       onDone();
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to set a new password');
+    } catch (e) {
+      setErr(errorMessage(e, 'Failed to set a new password'));
     } finally {
       setBusy(false);
     }
@@ -1008,8 +1009,8 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
         : { mfaToken: currentToken, code: code.replace(/\D/g, '') };
       const res = await apiClient.post<LoginResponse>('/auth/mfa/login-verify', body);
       onSuccess(res.data);
-    } catch (e: any) {
-      setErr(e?.message || 'Invalid code');
+    } catch (e) {
+      setErr(errorMessage(e, 'Invalid code'));
     } finally { setBusy(false); }
   };
 

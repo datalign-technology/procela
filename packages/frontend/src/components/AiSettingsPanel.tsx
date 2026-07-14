@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import Combobox from './Combobox';
 
 // Settings → AI panel. Two responsibilities:
@@ -59,8 +60,8 @@ export default function AiSettingsPanel({ sectionStyle, sectionTitleStyle }: {
       const res = await apiClient.get<{ success: boolean; data: Settings }>('/ai/settings');
       setSettings(res.data);
       setDraftModel(res.data.overrideModel || '');
-    } catch (e: any) {
-      setSaveError(e?.message || 'Could not load AI settings.');
+    } catch (e) {
+      setSaveError(errorMessage(e, 'Could not load AI settings.'));
     }
   }, []);
 
@@ -70,8 +71,8 @@ export default function AiSettingsPanel({ sectionStyle, sectionTitleStyle }: {
     try {
       const res = await apiClient.get<{ success: boolean; data: AnthropicModel[] }>('/ai/models');
       setModels(res.data || []);
-    } catch (e: any) {
-      setModelsError(e?.message || 'Could not fetch the model list from Anthropic.');
+    } catch (e) {
+      setModelsError(errorMessage(e, 'Could not fetch the model list from Anthropic.'));
     } finally {
       setLoadingModels(false);
     }
@@ -86,8 +87,8 @@ export default function AiSettingsPanel({ sectionStyle, sectionTitleStyle }: {
     try {
       await apiClient.put('/ai/settings', { model: draftModel.trim() });
       await loadSettings();
-    } catch (e: any) {
-      setSaveError(e?.message || 'Save failed.');
+    } catch (e) {
+      setSaveError(errorMessage(e, 'Save failed.'));
     } finally {
       setSaving(false);
     }

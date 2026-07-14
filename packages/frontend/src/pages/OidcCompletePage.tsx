@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { errorMessage } from '@/lib/errorToast';
 
 // API base — matches the one apiClient builds. Kept here as a single
 // reference so a future env change doesn't require touching this file.
@@ -74,8 +75,8 @@ export default function OidcCompletePage() {
           expiresIn,
         );
         navigate(returnTo, { replace: true });
-      } catch (err: any) {
-        setError(err?.message || 'Failed to complete sign-in');
+      } catch (err) {
+      setError(errorMessage(err, 'Failed to complete sign-in'));
       }
     })();
   }, [login, navigate]);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import ConfirmDialog from './ConfirmDialog';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -66,8 +67,8 @@ export default function ActiveSessionsPanel() {
     try {
       const res = await apiClient.get<{ data: SessionRow[] }>('/auth/sessions');
       setSessions(res.data || []);
-    } catch (e: any) {
-      setErr(e?.message || 'Could not load sessions');
+    } catch (e) {
+      setErr(errorMessage(e, 'Could not load sessions'));
       setSessions([]);
     }
   }, []);
@@ -80,8 +81,8 @@ export default function ActiveSessionsPanel() {
     try {
       await apiClient.delete(`/auth/sessions/${jti}`);
       await load();
-    } catch (e: any) {
-      setErr(e?.message || 'Could not revoke session');
+    } catch (e) {
+      setErr(errorMessage(e, 'Could not revoke session'));
     } finally { setBusy(false); }
   };
 
@@ -94,8 +95,8 @@ export default function ActiveSessionsPanel() {
       // the interceptor will bounce the user to /login. Reload anyway so
       // the panel reflects reality if for any reason the user lingers.
       window.location.href = '/login';
-    } catch (e: any) {
-      setErr(e?.message || 'Could not sign out everywhere');
+    } catch (e) {
+      setErr(errorMessage(e, 'Could not sign out everywhere'));
       setBusy(false);
     }
   };

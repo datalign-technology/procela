@@ -9,7 +9,7 @@ export class ApiError extends Error {
     // Parsed JSON error body when the server returned one. Lets callers
     // read structured fields (validation details, requiresConfirmation,
     // etc.) instead of only the flattened message string.
-    public body?: any,
+    public body?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -113,10 +113,12 @@ async function request<T>(
   if (!response.ok) {
     const errorBody = await response.text();
     let message: string;
-    let parsedBody: any;
+    let parsedBody: unknown;
     try {
       parsedBody = JSON.parse(errorBody);
-      message = parsedBody.message ?? parsedBody.error ?? errorBody;
+      const b = parsedBody as { message?: unknown; error?: unknown };
+      const candidate = typeof b.message === 'string' ? b.message : typeof b.error === 'string' ? b.error : null;
+      message = candidate ?? errorBody;
     } catch {
       message = errorBody || response.statusText;
     }
@@ -153,10 +155,12 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
   if (!response.ok) {
     const errorBody = await response.text();
     let message: string;
-    let parsedBody: any;
+    let parsedBody: unknown;
     try {
       parsedBody = JSON.parse(errorBody);
-      message = parsedBody.message ?? parsedBody.error ?? errorBody;
+      const b = parsedBody as { message?: unknown; error?: unknown };
+      const candidate = typeof b.message === 'string' ? b.message : typeof b.error === 'string' ? b.error : null;
+      message = candidate ?? errorBody;
     } catch {
       message = errorBody || response.statusText;
     }

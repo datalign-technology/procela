@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -374,8 +375,8 @@ export default function DamaRolesPage() {
       setShowForm(false);
       setForm(emptyForm);
       fetchData();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to assign role');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to assign role'));
     }
   };
 

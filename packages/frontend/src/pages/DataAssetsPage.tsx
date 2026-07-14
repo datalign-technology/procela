@@ -32,7 +32,7 @@ import PersonPicker from '../components/PersonPicker';
 import BulkSelectHint from '../components/BulkSelectHint';
 import { useSortedList } from '../hooks/useSortedList';
 import { useToastStore } from '../stores/toastStore';
-import { errorToast } from '../lib/errorToast';
+import { errorMessage, errorToast } from '../lib/errorToast';
 import { clickable } from '../lib/a11y';
 // Lazy: only renders when the user clicks "Link to connection" on a row.
 const LinkConnectionModal = lazy(() => import('../components/LinkConnectionModal'));
@@ -465,8 +465,8 @@ export default function DataAssetsPage() {
     try {
       const res = await apiClient.get<{ success: boolean; data: typeof suggestions }>(`/data-assets/${asset.id}/suggest-source`);
       setSuggestions(res.data || []);
-    } catch (err: any) {
-      addToast('error', err?.message || 'Could not load suggestions');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Could not load suggestions'));
     } finally {
       setSuggestLoading(false);
     }
@@ -486,8 +486,8 @@ export default function DataAssetsPage() {
       addToast('success', `Bound "${suggestAsset.name}" to ${s.sourceAsset}${s.sourceColumn ? '.' + s.sourceColumn : ''}`);
       setSuggestAsset(null);
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Could not create binding');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Could not create binding'));
     } finally {
       setSuggestBusyId(null);
     }

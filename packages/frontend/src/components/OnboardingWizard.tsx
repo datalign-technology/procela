@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { INDUSTRIES } from '../types';
 
@@ -58,8 +59,8 @@ export default function OnboardingWizard({ onComplete, mode = 'first-run' }: Onb
       setActiveOrg(org.id, org.name, org.type);
       triggerRefresh();
       setStep(2);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to create organization. Please try again.');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to create organization. Please try again.'));
     } finally { setSaving(false); }
   };
 
