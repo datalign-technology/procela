@@ -1,4 +1,7 @@
 import { Router, Request, Response } from 'express';
+import type { AuthenticatedRequest } from '../middleware/auth';
+import { currentUsage } from '../middleware/ai-budget';
+import { isEnabled as aiUsageEnabled, getConfiguredLimits } from '../services/ai-usage';
 import { aiService, getConfiguredModel, setModelOverride } from '../services/ai.service';
 // INDUSTRIES / Industry no longer imported — validation is
 // free-form; the enum lives only on the frontend combobox as
@@ -360,6 +363,24 @@ router.post('/test', async (_req: Request, res: Response) => {
     const msg = (err as { message?: string })?.message || 'unknown error';
     res.json({ success: true, data: { ok: false, model, message: `Network error: ${msg}` } });
   }
+});
+
+/** GET /api/v1/ai/usage — the caller's org's current per-hour and
+ *  per-day AI call counts against the configured ceiling. Cheap
+ *  observability so an operator can see "how much AI budget did we
+ *  burn today?" without instrumenting the log stream. */
+router.get('/usage', (req: AuthenticatedRequest, res: Response) => {
+  const status = currentUsage(req);
+  const limits = getConfiguredLimits();
+  res.json({
+    success: true,
+    data: {
+      enabled: aiUsageEnabled(),
+      orgId: req.user?.orgId ?? null,
+      status,
+      limits,
+    },
+  });
 });
 
 export default router;

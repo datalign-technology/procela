@@ -34,27 +34,84 @@ registerStore('auditLogs', auditLogs);
 // log would report broken until enough new entries push the legacy
 // ones out. Walk the existing log on startup, compute hashes
 // deterministically from the content already there, and write them
-// back. Cheap (single sequential pass), idempotent (entries that
+// back.
+//
+// Two knobs make the trust boundary explicit rather than implicit:
+//
+//   1. In production, refuse to auto-bootstrap unless the operator
+//      opts in with AUDIT_ALLOW_BOOTSTRAP=1. The default fails
+//      fast — if entries lack hashes at prod boot, either the
+//      chain was legitimately reset (operator sets the flag) or
+//      something's wrong (operator investigates). Silently
+//      re-hashing pre-chain entries lets a tampered row look
+//      legitimate to the verifier.
+//
+//   2. When bootstrap does run and mutates the log, we also
+//      append a AUDIT_CHAIN_BOOTSTRAPPED marker entry so a future
+//      audit reviewer can point to a definitive "trusted chain
+//      begins here" boundary rather than guessing.
+//
+// Cheap (single sequential pass), idempotent (entries that
 // already have a hash are left alone — they get rehashed only if a
 // later edit breaks the chain).
 (function bootstrapHashChain() {
   let prev = '';
   let mutated = false;
+  let firstBootstrappedIndex = -1;
   for (let i = 0; i < auditLogs.length; i++) {
     const e = auditLogs[i];
     if (e.entryHash && e.prevHash !== undefined && e.prevHash === prev) {
       prev = e.entryHash;
       continue;
     }
+    if (firstBootstrappedIndex === -1) firstBootstrappedIndex = i;
     e.prevHash = prev;
     e.entryHash = computeEntryHashStandalone(prev, e);
     prev = e.entryHash;
     mutated = true;
   }
-  if (mutated) {
-    saveStore('auditLogs', auditLogs);
-    logger.info({ count: auditLogs.length }, 'Audit log hash chain bootstrapped on existing entries');
+  if (!mutated) return;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const allowBootstrap = process.env.AUDIT_ALLOW_BOOTSTRAP === '1';
+  if (isProduction && !allowBootstrap) {
+    // Fail fast — the operator needs to see this and decide. Throwing
+    // from top-level module init aborts server startup, which is the
+    // desired behaviour: a tampered audit row is a bigger operational
+    // signal than a running server.
+    const msg = `Audit chain has ${auditLogs.length - firstBootstrappedIndex} un-hashed / broken entries starting at index ${firstBootstrappedIndex}. Refusing to auto-bootstrap in production. Set AUDIT_ALLOW_BOOTSTRAP=1 after investigating to acknowledge the boundary.`;
+    logger.error({ firstBootstrappedIndex, total: auditLogs.length }, msg);
+    throw new Error(msg);
   }
+  // Append an explicit marker entry so the trust boundary shows up
+  // in the log itself, not just in an operator's memory. The marker
+  // is itself part of the chain going forward.
+  const markerTs = new Date().toISOString();
+  const marker: AuditLogEntry = {
+    id: `bootstrap-${markerTs}`,
+    orgId: 'system',
+    userId: null,
+    entityType: 'Audit',
+    entityId: 'chain',
+    action: 'AUDIT_CHAIN_BOOTSTRAPPED',
+    before: null,
+    after: {
+      firstBootstrappedIndex,
+      bootstrappedCount: auditLogs.length - firstBootstrappedIndex,
+      totalEntriesAtBootstrap: auditLogs.length,
+      note: 'Entries before this marker were re-hashed at boot; treat as trusted from this point forward.',
+    },
+    timestamp: markerTs,
+    prevHash: prev,
+    entryHash: '',
+  };
+  marker.entryHash = computeEntryHashStandalone(prev, marker);
+  auditLogs.push(marker);
+  saveStore('auditLogs', auditLogs);
+  logger.warn({
+    firstBootstrappedIndex,
+    bootstrappedCount: auditLogs.length - 1 - firstBootstrappedIndex,
+    markerId: marker.id,
+  }, 'Audit log hash chain bootstrapped — chain marker appended');
 })();
 
 // Standalone variant of computeEntryHash that takes the entry
