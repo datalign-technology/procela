@@ -49,3 +49,13 @@ storage/
 
 # Procela JSON persistence
 .procela-data/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+# Real variable values — deploy/terraform/terraform.tfvars.example is committed.
+deploy/terraform/terraform.tfvars
+deploy/terraform/*.auto.tfvars
