@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { saveStore } from '../lib/persistence';
+import { filterByOrgScope, isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/org-scope';
 import logger from '../lib/logger';
 import {
   unqualifiedSummaryByPerson,
@@ -87,10 +88,13 @@ const SEED_SKILLS: Array<{ name: string; category: SkillCategory; description: s
   { name: 'Executive Reporting', category: 'COMMUNICATION', description: 'Prepare executive-level summaries and presentations on data governance outcomes.' },
 ];
 
-/** GET /api/v1/skills — list all skills, optionally filtered by ?orgId= */
+/** GET /api/v1/skills — list skills visible from ?orgId=. Uses
+ *  filterByOrgScope so a division-scoped view sees company-level
+ *  skills rolling down and team-level skills rolling up, matching the
+ *  visibility pattern for data assets, systems, and process nodes. */
 router.get('/', (req: Request, res: Response) => {
-  const { orgId } = req.query;
-  const filtered = orgId ? skills.filter((s) => s.orgId === orgId) : skills;
+  const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
+  const filtered = filterByOrgScope(skills, orgId);
   res.json({
     success: true,
     data: filtered,
@@ -105,17 +109,28 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json({ success: true, data: skill });
 });
 
-/** POST /api/v1/skills — create a skill */
+/** POST /api/v1/skills — create a skill. Enforces:
+ *   - orgId must be a company or division (departments and teams
+ *     inherit their parent's catalog; owning at a sub-level would
+ *     silo the skill).
+ *   - Name is unique in the visible scope (own org + ancestors +
+ *     descendants) so a division can't shadow a company-level
+ *     "Data Profiling" with a subtly different one. */
 router.post('/', (req: Request, res: Response) => {
   const { orgId, name, category, description } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  if (!isOwnershipLevel(orgId)) {
+    res.status(400).json({ success: false, error: `Skills can only be owned at ${OWNERSHIP_LEVELS.join(' or ')} level; sub-levels inherit them.` });
+    return;
+  }
   if (typeof name !== 'string' || !name.trim()) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const trimmedName = name.trim();
-  // Uniqueness — one skill per name per org. The seed endpoint
-  // already dedupes; this closes the same door on the direct-create
-  // path so a script can't produce two "Data Profiling" rows. Case-
-  // insensitive so "Data Profiling" and "data profiling" collide.
-  const clash = skills.find((s) => s.orgId === orgId && s.name.toLowerCase() === trimmedName.toLowerCase());
+  // Uniqueness across the visible scope (ancestors + descendants).
+  // Case-insensitive so "Data Profiling" and "data profiling"
+  // collide, and an inherited "Data Profiling" from the company
+  // level blocks a division from creating another.
+  const visibleScope = getVisibleOrgScope(orgId);
+  const clash = skills.find((s) => (visibleScope?.has(s.orgId) ?? s.orgId === orgId) && s.name.toLowerCase() === trimmedName.toLowerCase());
   if (clash) {
     res.status(409).json({ success: false, error: `A skill named "${clash.name}" already exists in this organization.` });
     return;
@@ -140,11 +155,18 @@ router.post('/', (req: Request, res: Response) => {
 router.post('/seed', (req: Request, res: Response) => {
   const { orgId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
+  if (!isOwnershipLevel(orgId)) {
+    res.status(400).json({ success: false, error: `Skills can only be owned at ${OWNERSHIP_LEVELS.join(' or ')} level; sub-levels inherit them.` });
+    return;
+  }
+  // Seed dedup respects roll-down too — if the parent already seeded
+  // "Data Profiling" at the company level, don't create a division-
+  // level duplicate the frontend would badge as inherited anyway.
+  const visibleScope = getVisibleOrgScope(orgId);
   const now = new Date().toISOString();
   const created: StoredSkill[] = [];
   for (const seed of SEED_SKILLS) {
-    // Skip if a skill with the same name already exists for this org
-    if (skills.find((s) => s.orgId === orgId && s.name === seed.name)) continue;
+    if (skills.find((s) => (visibleScope?.has(s.orgId) ?? s.orgId === orgId) && s.name === seed.name)) continue;
     const skill: StoredSkill = {
       id: uuid(),
       orgId,
@@ -174,9 +196,11 @@ router.put('/:id', (req: Request, res: Response) => {
     }
     const trimmedName = name.trim();
     // Same uniqueness check as POST — a rename that collides with
-    // another skill in the same org gets 409. Own-row match is fine
-    // (a no-op rename or a case change).
-    const clash = skills.find((s) => s.id !== skill.id && s.orgId === skill.orgId && s.name.toLowerCase() === trimmedName.toLowerCase());
+    // another skill visible from the owning org (self, ancestors,
+    // descendants) gets 409. Own-row match is fine (a no-op rename
+    // or a case change).
+    const visibleScope = getVisibleOrgScope(skill.orgId);
+    const clash = skills.find((s) => s.id !== skill.id && (visibleScope?.has(s.orgId) ?? s.orgId === skill.orgId) && s.name.toLowerCase() === trimmedName.toLowerCase());
     if (clash) {
       res.status(409).json({ success: false, error: `A skill named "${clash.name}" already exists in this organization.` });
       return;

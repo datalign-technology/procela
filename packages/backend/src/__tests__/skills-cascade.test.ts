@@ -23,6 +23,8 @@ const { people } = require('../routes/people');
 const { agents } = require('../routes/agents');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { processNodes } = require('../routes/process-catalog');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { organizations } = require('../routes/organizations');
 
 function request(port: number, method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
@@ -76,6 +78,7 @@ describe('skills — uniqueness + delete cascade', () => {
     sweep(people, (p: any) => p.id === personId);
     sweep(agents, (a: any) => a.id === agentId);
     sweep(processNodes, (n: any) => n.id === nodeId);
+    sweep(organizations, (o: any) => o.id === orgA || o.id === orgB);
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -87,6 +90,16 @@ describe('skills — uniqueness + delete cascade', () => {
     sweep(people, (p: any) => p.id === personId);
     sweep(agents, (a: any) => a.id === agentId);
     sweep(processNodes, (n: any) => n.id === nodeId);
+    sweep(organizations, (o: any) => o.id === orgA || o.id === orgB);
+    // Skills can only be owned at company / division level, and the
+    // two test orgs must be in separate hierarchies so filterByOrgScope
+    // doesn't pull orgA's skills into orgB's visibility (that would
+    // break the "same name in a DIFFERENT org" case).
+    const now = new Date().toISOString();
+    organizations.push(
+      { id: orgA, parentId: null, name: 'Test Org A', type: 'company', industry: '', description: '', headCount: 0, createdAt: now, updatedAt: now },
+      { id: orgB, parentId: null, name: 'Test Org B', type: 'company', industry: '', description: '', headCount: 0, createdAt: now, updatedAt: now },
+    );
   });
 
   describe('POST /skills — name uniqueness', () => {

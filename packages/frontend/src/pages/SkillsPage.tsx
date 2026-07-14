@@ -87,7 +87,8 @@ function formatCategory(cat: string): string {
 }
 
 export default function SkillsPage() {
-  const { activeOrgId } = useOrgContext();
+  const { activeOrgId, orgs } = useOrgContext();
+  const orgNameById = new Map(orgs.map((o) => [o.id, o.name]));
   const { addToast } = useToastStore();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -415,14 +416,37 @@ export default function SkillsPage() {
               {sorted.map((s) => {
                 const cb = CATEGORY_BADGES[s.category] || CATEGORY_BADGES.GOVERNANCE;
                 const isSelected = selectedIds.has(s.id);
+                // A row is inherited (not editable here) when it's
+                // owned by an org OTHER than the active one. The
+                // filterByOrgScope backend endpoint rolls ancestor
+                // and descendant skills into the visible list; we
+                // badge them so a user can tell "why is this in my
+                // catalog?" and switch scope to edit.
+                const isInherited = !!s.orgId && !!activeOrgId && s.orgId !== activeOrgId;
+                const ownerName = isInherited ? (orgNameById.get(s.orgId) || 'another org') : null;
                 return (
                   <tr key={s.id} style={{ transition: 'background 0.1s', background: isSelected ? '#f0f9ff' : '' }}
                     onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--color-bg)'; }}
                     onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ''; }}>
                     <td style={{ ...tdStyle, textAlign: 'center', width: 32 }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(s.id)} />
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(s.id)} disabled={isInherited} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>{s.name}</td>
+                    <td style={{ ...tdStyle, fontWeight: 500 }}>
+                      {s.name}
+                      {isInherited && (
+                        <span
+                          title={`Switch the Working in… scope to ${ownerName} to edit`}
+                          style={{
+                            display: 'inline-block', marginLeft: 8, padding: '1px 6px',
+                            borderRadius: 3, fontSize: 10, fontWeight: 600,
+                            background: 'var(--color-bg)', color: 'var(--color-text-muted)',
+                            border: '1px solid var(--color-border)',
+                          }}
+                        >
+                          Owned by {ownerName}
+                        </span>
+                      )}
+                    </td>
                     <td style={tdStyle}>
                       <span style={{ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: cb.bg, color: cb.color }}>
                         {formatCategory(s.category)}
@@ -433,8 +457,8 @@ export default function SkillsPage() {
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                        <IconButton size="sm" icon="edit" label="Edit" onClick={() => openEdit(s)} />
-                        <IconButton size="sm" icon="trash" label="Delete" variant="danger" onClick={() => setConfirmDelete(s.id)} />
+                        <IconButton size="sm" icon="edit" label={isInherited ? `Switch scope to ${ownerName} to edit` : 'Edit'} onClick={() => openEdit(s)} disabled={isInherited} />
+                        <IconButton size="sm" icon="trash" label={isInherited ? `Switch scope to ${ownerName} to delete` : 'Delete'} variant="danger" onClick={() => setConfirmDelete(s.id)} disabled={isInherited} />
                       </div>
                     </td>
                   </tr>
