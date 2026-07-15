@@ -369,13 +369,15 @@ model System {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DataDomain {
-  id          String   @id @default(uuid()) @db.Uuid
-  orgId       String   @db.Uuid
-  name        String
-  description String?  @db.Text
-  ownerId     String?  @db.Uuid
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(uuid()) @db.Uuid
+  orgId           String   @db.Uuid
+  name            String
+  description     String?  @db.Text
+  ownerId         String?  @db.Uuid
+  scopeDefinition String?  @db.Text
+  status          String   @default("DRAFT")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   owner        Person?      @relation("DataDomainOwner", fields: [ownerId], references: [id], onDelete: SetNull)
