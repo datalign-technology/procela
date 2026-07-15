@@ -9,7 +9,7 @@ import { dataAssets } from './data-assets';
 import { connections, connectionSystemLinks, connectionsForSystem } from './connections';
 import { mappings } from './mappings';
 
-interface SystemIntegration {
+export interface SystemIntegration {
   id: string;
   /** Target System in the catalog this integration points at. Empty
    *  string only on rows migrated from the legacy flat fields, until
@@ -25,7 +25,7 @@ interface SystemIntegration {
   direction: 'INBOUND' | 'OUTBOUND' | 'BIDIRECTIONAL';
 }
 
-interface StoredSystem {
+export interface StoredSystem {
   id: string;
   orgId: string;
   name: string;
