@@ -120,18 +120,51 @@ Then in the route file:
 
 ## What's left
 
-Every entity beyond `Organization` is still on JSON only. The
-migration order that makes the fewest downstream ripples:
+Repository-mapped so far:
 
-1. **Organization** (done — reference).
-2. **Person** (foundational; every ownership pointer joins here).
-3. **System / DataDomain / DataAsset** (the data-catalog trio).
-4. **ProcessNode** (the biggest entity by field count; do it after
+- **Organization** (reference — `db/organizations.repo.ts`).
+- **DataDomain** (`db/data-domains.repo.ts`, includes the M2M
+  stewardIds join-table rewrite pattern — see the update() method
+  for the delete-all + createMany idiom).
+
+Still on JSON only. Suggested next order:
+
+1. **Person** (foundational; every ownership pointer joins here.
+   Complex because the JSON row carries auth-heavy fields
+   (passwordHash, mfaSecret, webauthnCredentials) that need the
+   schema expanded to match — plan on an extra half-day for that).
+2. **System / DataAsset** (the rest of the data-catalog trio;
+   simpler than Person). Note: System has schema drift too — the
+   JSON row carries businessCriticality, vendor, and an
+   integrations array not yet in the schema.
+3. **ProcessNode** (the biggest entity by field count; do it after
    the smaller ones so any adapter-pattern refinements settle first).
-5. **Mapping** (needs ProcessNode + DataAsset in place first).
-6. **AuditLog** (has the hash-chain quirk — test carefully).
-7. Notification, GovernanceTask, GovernanceIssue, etc.
+4. **Mapping** (needs ProcessNode + DataAsset in place first).
+5. **AuditLog** (has the hash-chain quirk — test carefully).
+6. Notification, GovernanceTask, GovernanceIssue, etc.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
 would touch every route file at once.
+
+## Handling schema drift
+
+Every entity discovered so far has some drift between the JSON row
+and the initial Prisma model — the JSON stores kept evolving after
+the schema was scaffolded. When migrating an entity, expect to:
+
+1. Read the `Stored<Entity>` interface from the route file (or
+   `stores/*.ts`). This is the ground truth for what fields exist.
+2. Diff against the current model in `schema.prisma`. Add any
+   missing fields to the model, keep the same names.
+3. Run `npx prisma format && npx prisma validate` (from
+   `packages/backend/`) to confirm the schema still parses.
+4. When you're ready to actually run against Postgres, generate the
+   migration with `npx prisma migrate dev --name migrate_<entity>`.
+   Until then the schema is source-of-truth documentation.
+
+For array fields (`stewardIds: string[]`, `orgIds: string[]`), the
+Prisma model has an explicit join table already. Match the JSON
+shape one-for-one in the mapper — flatten the join rows to a plain
+`string[]` on read, delete-all + createMany on write. See
+`data-domains.repo.ts` for the reference pattern.
