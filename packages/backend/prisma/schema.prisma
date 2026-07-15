@@ -1,3 +1,16 @@
+// =============================================================================
+// Procela Prisma schema
+// -----------------------------------------------------------------------------
+// Migration target for the JSON-store persistence in
+// packages/backend/src/lib/persistence.ts. Field names and enum values match
+// the current TypeScript types verbatim so a straightforward
+// loadStore -> INSERT migration will work on first pass.
+//
+// Multi-tenancy: every table carries `orgId` (indexed). Every mutable row
+// carries `createdAt` / `updatedAt`. Audit trails cross-reference by id +
+// entityType rather than dedicated FKs so any future entity is coverable.
+// =============================================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,26 +20,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Enums
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
-enum UserRole {
-  SUPER_ADMIN
-  ORG_ADMIN
-  PROCESS_OWNER
-  DATA_STEWARD
-  CONTRIBUTOR
-  VIEWER
+enum OrgType {
+  COMPANY
+  DIVISION
+  DEPARTMENT
+  TEAM
+  UNIT
 }
 
-enum EntityStatus {
-  DRAFT
-  PROPOSED
-  UNDER_REVIEW
-  APPROVED
-  ACTIVE
-  DEPRECATED
+enum StatusMode {
+  SIMPLE
+  REVIEW
+  ADVANCED
+}
+
+enum NodeLevel {
+  VALUE_STREAM
+  DOMAIN
+  CAPABILITY
+  PROCESS
+  SUBPROCESS
+  ACTIVITY
+  TASK
+  EXECUTION
+}
+
+enum NodeDomain {
+  OPERATIONAL
+  GOVERNANCE
+}
+
+enum CriticalityTier {
+  TIER_1
+  TIER_2
+  TIER_3
+  TIER_4
+}
+
+enum FlowType {
+  SEQUENCE
+  CONDITIONAL
+  LOOP
 }
 
 enum GovernanceTier {
@@ -35,178 +73,274 @@ enum GovernanceTier {
   GOLD
 }
 
-// ──────────────────────────────────────────
+enum DamaScopeType {
+  ORG
+  DOMAIN
+  SYSTEM
+  ASSET
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ACTION
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  PENDING_APPROVAL
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IssueSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
+}
+
+enum IssueSource {
+  MANUAL
+  DQ_RULE
+  AGENT_OWNER_MISSING
+}
+
+enum PolicyType {
+  CHARTER
+  POLICY
+  STANDARD
+  CONTROL
+}
+
+enum ControlType {
+  PREVENTIVE
+  DETECTIVE
+  CORRECTIVE
+}
+
+enum AutomationMode {
+  HUMAN
+  AGENT
+  HYBRID
+}
+
+enum GroupLevel {
+  COUNCIL
+  OFFICE
+  COMMITTEE
+  STEWARDSHIP_TEAM
+  WORKING_GROUP
+  COMMUNITY_OF_PRACTICE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Organization
-// ──────────────────────────────────────────
+// Self-referencing tree (Tidewater Utilities -> Tidewater Electric -> Power
+// Generation). One row per node; hierarchy is walked via parentId.
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Organization {
-  id                     String   @id @default(uuid()) @db.Uuid
+  id                     String     @id @default(uuid()) @db.Uuid
+  parentId               String?    @db.Uuid
   name                   String
+  type                   OrgType    @default(COMPANY)
   industry               String?
+  statusMode             StatusMode @default(SIMPLE)
+  branding               Json? // brandDisplayName / brandGlyph / ssoButtonLabel / brandPrimaryColor / tenantSlug
   identityProviderConfig Json?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
 
-  users          User[]
-  valueStreams   ValueStream[]
-  processes      Process[]
-  subProcesses   SubProcess[]
-  processSteps   ProcessStep[]
-  systems        SystemEntity[]
-  dataAssets     DataAsset[]
-  processDataLinks ProcessDataLink[]
-  auditLogs      AuditLog[]
+  parent   Organization?  @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Organization[] @relation("OrgHierarchy")
 
+  personLinks        PersonOrg[]
+  processNodes       ProcessNode[]       @relation("ProcessNodeCanonicalOrg")
+  processNodeOrgs    ProcessNodeOrg[]
+  systems            System[]
+  dataDomains        DataDomain[]
+  dataAssets         DataAsset[]
+  dataAssetBindings  DataAssetBinding[]
+  mappings           Mapping[]
+  skills             Skill[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  governanceTasks    GovernanceTask[]
+  governanceIssues   GovernanceIssue[]
+  governancePolicies GovernancePolicy[]
+  governanceControls GovernanceControl[]
+  governanceGroups   GovernanceGroup[]
+  comments           Comment[]
+  flowRelationships  FlowRelationship[]
+
+  @@index([parentId])
   @@map("organizations")
 }
 
-// ──────────────────────────────────────────
-// User
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Person
+// A person can be attached to multiple organisations (many-to-many via
+// PersonOrg). Ownership references from other tables point at Person.id.
+// ─────────────────────────────────────────────────────────────────────────────
 
-model User {
+model Person {
   id         String   @id @default(uuid()) @db.Uuid
-  orgId      String   @db.Uuid
-  externalId String?
   name       String
-  email      String
-  role       UserRole @default(VIEWER)
+  email      String   @unique
   department String?
+  externalId String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id])
+  orgLinks            PersonOrg[]
+  personSkills        PersonSkill[]
+  damaRoles           DamaRole[]
+  comments            Comment[]
+  ownedNodes          ProcessNode[]       @relation("ProcessNodeOwner")
+  responsibleForNodes ProcessNode[]       @relation("ProcessNodeResponsible")
+  ownedSystems        System[]            @relation("SystemOwner")
+  stewardSystems      System[]            @relation("SystemSteward")
+  ownedDomains        DataDomain[]        @relation("DataDomainOwner")
+  domainStewards      DataDomainSteward[]
+  ownedAssets         DataAsset[]         @relation("DataAssetOwner")
+  stewardAssets       DataAsset[]         @relation("DataAssetSteward")
+  assignedTasks       GovernanceTask[]    @relation("GovernanceTaskAssignee")
+  assignedIssues      GovernanceIssue[]   @relation("GovernanceIssueAssignee")
 
-  ownedValueStreams ValueStream[] @relation("ValueStreamOwner")
-  ownedProcesses    Process[]     @relation("ProcessOwner")
-  ownedSubProcesses SubProcess[]  @relation("SubProcessOwner")
-  ownedProcessSteps ProcessStep[] @relation("ProcessStepOwner")
-  ownedSystems      SystemEntity[] @relation("SystemOwner")
-  stewardedSystems  SystemEntity[] @relation("SystemSteward")
-  ownedDataAssets   DataAsset[]   @relation("DataAssetOwner")
-  stewardedDataAssets DataAsset[] @relation("DataAssetSteward")
-  auditLogs         AuditLog[]
-
-  @@unique([orgId, email])
-  @@index([orgId])
   @@index([externalId])
-  @@map("users")
+  @@map("people")
 }
 
-// ──────────────────────────────────────────
-// Value Stream
-// ──────────────────────────────────────────
+model PersonOrg {
+  personId String @db.Uuid
+  orgId    String @db.Uuid
 
-model ValueStream {
-  id          String       @id @default(uuid()) @db.Uuid
-  orgId       String       @db.Uuid
-  name        String
-  description String?      @db.Text
-  ownerId     String?      @db.Uuid
-  status      EntityStatus @default(DRAFT)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  createdBy   String?      @db.Uuid
-  updatedBy   String?      @db.Uuid
+  person Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  owner        User?        @relation("ValueStreamOwner", fields: [ownerId], references: [id])
-  processes    Process[]
+  @@id([personId, orgId])
+  @@index([orgId])
+  @@map("person_orgs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ProcessNode
+// Unified table replacing the split VS/Process/SubProcess/Step. Level is an
+// enum; hierarchy is a self-referencing parent/child tree. Sequence between
+// activities lives in FlowRelationship, not here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProcessNode {
+  id                  String           @id @default(uuid()) @db.Uuid
+  parentId            String?          @db.Uuid
+  level               NodeLevel
+  name                String
+  description         String?          @db.Text
+  orgId               String           @db.Uuid
+  ownerId             String?          @db.Uuid
+  status              String           @default("DRAFT")
+  orderIndex          Int              @default(0)
+  activityId          String?          @db.Uuid
+  responsiblePersonId String?          @db.Uuid
+  criticalityTier     CriticalityTier?
+  rtoHours            Int?
+  successMeasure      String?          @db.Text
+  slaTarget           String?
+  domain              NodeDomain       @default(OPERATIONAL)
+  version             Int              @default(1)
+  submittedBy         String?          @db.Uuid
+  submittedAt         DateTime?
+  reviewedBy          String?          @db.Uuid
+  reviewedAt          DateTime?
+  reviewComment       String?          @db.Text
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  organization      Organization  @relation("ProcessNodeCanonicalOrg", fields: [orgId], references: [id], onDelete: Cascade)
+  parent            ProcessNode?  @relation("NodeHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children          ProcessNode[] @relation("NodeHierarchy")
+  owner             Person?       @relation("ProcessNodeOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  responsiblePerson Person?       @relation("ProcessNodeResponsible", fields: [responsiblePersonId], references: [id], onDelete: SetNull)
+
+  orgLinks       ProcessNodeOrg[]
+  controls       ProcessNodeControl[]
+  requiredSkills ProcessNodeSkill[]
+  systems        ProcessNodeSystem[]
+  mappings       Mapping[]
+  flowsFrom      FlowRelationship[]   @relation("FlowFromNode")
+  flowsTo        FlowRelationship[]   @relation("FlowToNode")
 
   @@index([orgId])
-  @@index([orgId, status])
-  @@map("value_streams")
+  @@index([orgId, parentId])
+  @@index([orgId, level])
+  @@map("process_nodes")
 }
 
-// ──────────────────────────────────────────
-// Process
-// ──────────────────────────────────────────
+model ProcessNodeOrg {
+  processNodeId String @db.Uuid
+  orgId         String @db.Uuid
 
-model Process {
-  id            String       @id @default(uuid()) @db.Uuid
-  orgId         String       @db.Uuid
-  valueStreamId String       @db.Uuid
-  name          String
-  description   String?      @db.Text
-  ownerId       String?      @db.Uuid
-  status        EntityStatus @default(DRAFT)
-  orderIndex    Int          @default(0)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  createdBy     String?      @db.Uuid
-  updatedBy     String?      @db.Uuid
+  processNode ProcessNode  @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  valueStream  ValueStream  @relation(fields: [valueStreamId], references: [id])
-  owner        User?        @relation("ProcessOwner", fields: [ownerId], references: [id])
-  subProcesses SubProcess[]
-
+  @@id([processNodeId, orgId])
   @@index([orgId])
-  @@index([orgId, valueStreamId])
-  @@map("processes")
+  @@map("process_node_orgs")
 }
 
-// ──────────────────────────────────────────
-// SubProcess
-// ──────────────────────────────────────────
+model ProcessNodeControl {
+  processNodeId String @db.Uuid
+  controlId     String @db.Uuid
 
-model SubProcess {
-  id          String       @id @default(uuid()) @db.Uuid
-  orgId       String       @db.Uuid
-  processId   String       @db.Uuid
-  name        String
-  description String?      @db.Text
-  ownerId     String?      @db.Uuid
-  status      EntityStatus @default(DRAFT)
-  orderIndex  Int          @default(0)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  createdBy   String?      @db.Uuid
-  updatedBy   String?      @db.Uuid
+  processNode ProcessNode       @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  control     GovernanceControl @relation(fields: [controlId], references: [id], onDelete: Cascade)
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  process      Process      @relation(fields: [processId], references: [id])
-  owner        User?        @relation("SubProcessOwner", fields: [ownerId], references: [id])
-  processSteps ProcessStep[]
-
-  @@index([orgId])
-  @@index([orgId, processId])
-  @@map("sub_processes")
+  @@id([processNodeId, controlId])
+  @@index([controlId])
+  @@map("process_node_controls")
 }
 
-// ──────────────────────────────────────────
-// ProcessStep
-// ──────────────────────────────────────────
+model ProcessNodeSkill {
+  processNodeId String @db.Uuid
+  skillId       String @db.Uuid
 
-model ProcessStep {
-  id            String       @id @default(uuid()) @db.Uuid
-  orgId         String       @db.Uuid
-  subProcessId  String       @db.Uuid
-  name          String
-  description   String?      @db.Text
-  ownerId       String?      @db.Uuid
-  status        EntityStatus @default(DRAFT)
-  orderIndex    Int          @default(0)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  createdBy     String?      @db.Uuid
-  updatedBy     String?      @db.Uuid
+  processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  skill       Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
-  organization     Organization      @relation(fields: [orgId], references: [id])
-  subProcess       SubProcess        @relation(fields: [subProcessId], references: [id])
-  owner            User?             @relation("ProcessStepOwner", fields: [ownerId], references: [id])
-  processDataLinks ProcessDataLink[]
-
-  @@index([orgId])
-  @@index([orgId, subProcessId])
-  @@map("process_steps")
+  @@id([processNodeId, skillId])
+  @@index([skillId])
+  @@map("process_node_skills")
 }
 
-// ──────────────────────────────────────────
-// SystemEntity (avoids "System" reserved word)
-// ──────────────────────────────────────────
+model ProcessNodeSystem {
+  processNodeId String @db.Uuid
+  systemId      String @db.Uuid
 
-model SystemEntity {
+  processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  system      System      @relation(fields: [systemId], references: [id], onDelete: Cascade)
+
+  @@id([processNodeId, systemId])
+  @@index([systemId])
+  @@map("process_node_systems")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// System
+// ─────────────────────────────────────────────────────────────────────────────
+
+model System {
   id          String   @id @default(uuid()) @db.Uuid
   orgId       String   @db.Uuid
   name        String
@@ -216,54 +350,123 @@ model SystemEntity {
   stewardId   String?  @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  createdBy   String?  @db.Uuid
-  updatedBy   String?  @db.Uuid
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  owner        User?        @relation("SystemOwner", fields: [ownerId], references: [id])
-  steward      User?        @relation("SystemSteward", fields: [stewardId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner        Person?      @relation("SystemOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  steward      Person?      @relation("SystemSteward", fields: [stewardId], references: [id], onDelete: SetNull)
+
   dataAssets   DataAsset[]
+  processNodes ProcessNodeSystem[]
 
   @@index([orgId])
+  @@index([orgId, systemType])
   @@map("systems")
 }
 
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DataDomain — logical grouping of related data assets under one accountable
+// owner. Stewards are M2M so a domain can have several.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DataDomain {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  description String?  @db.Text
+  ownerId     String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner        Person?      @relation("DataDomainOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  stewards   DataDomainSteward[]
+  dataAssets DataAsset[]
+
+  @@index([orgId])
+  @@map("data_domains")
+}
+
+model DataDomainSteward {
+  dataDomainId String @db.Uuid
+  personId     String @db.Uuid
+
+  dataDomain DataDomain @relation(fields: [dataDomainId], references: [id], onDelete: Cascade)
+  person     Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@id([dataDomainId, personId])
+  @@index([personId])
+  @@map("data_domain_stewards")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DataAsset
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 model DataAsset {
-  id             String         @id @default(uuid()) @db.Uuid
-  orgId          String         @db.Uuid
-  name           String
-  description    String?        @db.Text
-  systemId       String?        @db.Uuid
-  ownerId        String?        @db.Uuid
-  stewardId      String?        @db.Uuid
-  governanceTier GovernanceTier @default(BRONZE)
-  healthScore    Float          @default(0)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  createdBy      String?        @db.Uuid
-  updatedBy      String?        @db.Uuid
+  id                      String         @id @default(uuid()) @db.Uuid
+  orgId                   String         @db.Uuid
+  name                    String
+  description             String?        @db.Text
+  systemId                String?        @db.Uuid
+  ownerId                 String?        @db.Uuid
+  stewardId               String?        @db.Uuid
+  dataDomainId            String?        @db.Uuid
+  governanceTier          GovernanceTier @default(BRONZE)
+  healthScore             Float          @default(0)
+  sensitivityTags         String[]       @default([])
+  rejectedSensitivityTags String[]       @default([])
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
-  organization     Organization      @relation(fields: [orgId], references: [id])
-  system           SystemEntity?     @relation(fields: [systemId], references: [id])
-  owner            User?             @relation("DataAssetOwner", fields: [ownerId], references: [id])
-  steward          User?             @relation("DataAssetSteward", fields: [stewardId], references: [id])
-  processDataLinks ProcessDataLink[]
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  system       System?      @relation(fields: [systemId], references: [id], onDelete: SetNull)
+  owner        Person?      @relation("DataAssetOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  steward      Person?      @relation("DataAssetSteward", fields: [stewardId], references: [id], onDelete: SetNull)
+  dataDomain   DataDomain?  @relation(fields: [dataDomainId], references: [id], onDelete: SetNull)
+
+  bindings DataAssetBinding[]
+  mappings Mapping[]
 
   @@index([orgId])
   @@index([orgId, systemId])
+  @@index([orgId, dataDomainId])
   @@index([orgId, governanceTier])
   @@map("data_assets")
 }
 
-// ──────────────────────────────────────────
-// ProcessDataLink (mapping between steps and data)
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DataAssetBinding — physical source(s) an asset resolves to via a connection
+// profile. One asset can have many (dev/staging/prod, primary/failover).
+// ─────────────────────────────────────────────────────────────────────────────
 
-model ProcessDataLink {
+model DataAssetBinding {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @db.Uuid
+  dataAssetId  String   @db.Uuid
+  connectionId String   @db.Uuid
+  sourceAsset  String
+  sourceColumn String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  dataAsset    DataAsset    @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
+  // connectionId is intentionally an unresolved reference — the Connection
+  // model lives in the secondary-store batch and will be added when those
+  // land. Cascade rules on delete are handled application-side today.
+
+  @@index([orgId])
+  @@index([orgId, dataAssetId])
+  @@index([connectionId])
+  @@map("data_asset_bindings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mapping (process step ↔ data asset)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Mapping {
   id             String   @id @default(uuid()) @db.Uuid
   orgId          String   @db.Uuid
   processStepId  String   @db.Uuid
@@ -275,19 +478,80 @@ model ProcessDataLink {
   createdBy      String?  @db.Uuid
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  processStep  ProcessStep  @relation(fields: [processStepId], references: [id])
-  dataAsset    DataAsset    @relation(fields: [dataAssetId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  processStep  ProcessNode  @relation(fields: [processStepId], references: [id], onDelete: Cascade)
+  dataAsset    DataAsset    @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([orgId, processStepId])
   @@index([orgId, dataAssetId])
-  @@map("process_data_links")
+  @@map("mappings")
 }
 
-// ──────────────────────────────────────────
-// AuditLog
-// ──────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Skill + PersonSkill
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Skill {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  description String?  @db.Text
+  category    String
+  damaRoleId  String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  damaRole     DamaRole?    @relation(fields: [damaRoleId], references: [id], onDelete: SetNull)
+
+  personSkills PersonSkill[]
+  processNodes ProcessNodeSkill[]
+
+  @@index([orgId])
+  @@index([orgId, category])
+  @@map("skills")
+}
+
+model PersonSkill {
+  id       String  @id @default(uuid()) @db.Uuid
+  personId String  @db.Uuid
+  skillId  String  @db.Uuid
+  level    String?
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([personId, skillId])
+  @@index([skillId])
+  @@map("person_skills")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAMA roles — a person holds a DAMA-aligned role scoped to an org, domain,
+// system, or asset. scopeType decides which entity scopeId resolves to.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DamaRole {
+  id        String        @id @default(uuid()) @db.Uuid
+  personId  String        @db.Uuid
+  roleType  String
+  scopeType DamaScopeType
+  scopeId   String        @db.Uuid
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  person Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  skills Skill[]
+
+  @@index([personId])
+  @@index([scopeType, scopeId])
+  @@map("dama_roles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuditLog — append-only hash-chained record of every write.
+// ─────────────────────────────────────────────────────────────────────────────
 
 model AuditLog {
   id         String   @id @default(uuid()) @db.Uuid
@@ -299,12 +563,203 @@ model AuditLog {
   before     Json?
   after      Json?
   timestamp  DateTime @default(now())
+  prevHash   String?
+  entryHash  String?
 
-  organization Organization @relation(fields: [orgId], references: [id])
-  user         User?        @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([orgId, entityType, entityId])
   @@index([orgId, timestamp])
   @@map("audit_logs")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notification
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  orgId     String           @db.Uuid
+  userId    String?          @db.Uuid
+  type      NotificationType @default(INFO)
+  title     String
+  message   String           @db.Text
+  link      String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([orgId, userId, read])
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Governance — Tasks, Issues, Policies, Controls, Groups
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GovernanceTask {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @db.Uuid
+  title       String
+  description String?      @db.Text
+  assigneeId  String?      @db.Uuid
+  dueDate     DateTime?
+  status      TaskStatus   @default(OPEN)
+  priority    TaskPriority @default(MEDIUM)
+  createdBy   String?      @db.Uuid
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignee     Person?      @relation("GovernanceTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([orgId, assigneeId])
+  @@map("governance_tasks")
+}
+
+model GovernanceIssue {
+  id          String        @id @default(uuid()) @db.Uuid
+  orgId       String        @db.Uuid
+  title       String
+  description String?       @db.Text
+  severity    IssueSeverity @default(MEDIUM)
+  status      IssueStatus   @default(OPEN)
+  assigneeId  String?       @db.Uuid
+  source      IssueSource   @default(MANUAL)
+  sourceRef   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignee     Person?      @relation("GovernanceIssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@map("governance_issues")
+}
+
+model GovernancePolicy {
+  id            String     @id @default(uuid()) @db.Uuid
+  orgId         String     @db.Uuid
+  docId         String // e.g. "POL-001", "CHA-002"
+  name          String
+  description   String?    @db.Text
+  type          PolicyType @default(POLICY)
+  content       String     @db.Text
+  version       Int        @default(1)
+  effectiveDate DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  controls GovernanceControl[]
+
+  @@unique([orgId, docId])
+  @@index([orgId])
+  @@map("governance_policies")
+}
+
+model GovernanceControl {
+  id             String         @id @default(uuid()) @db.Uuid
+  orgId          String         @db.Uuid
+  policyId       String         @db.Uuid
+  name           String
+  description    String?        @db.Text
+  controlType    ControlType    @default(PREVENTIVE)
+  automationMode AutomationMode @default(HUMAN)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  policy       GovernancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  processNodes ProcessNodeControl[]
+
+  @@index([orgId])
+  @@index([orgId, policyId])
+  @@map("governance_controls")
+}
+
+model GovernanceGroup {
+  id            String     @id @default(uuid()) @db.Uuid
+  orgId         String     @db.Uuid
+  name          String
+  level         GroupLevel
+  parentGroupId String?    @db.Uuid
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parentGroup  GovernanceGroup?  @relation("GovernanceGroupTree", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups  GovernanceGroup[] @relation("GovernanceGroupTree")
+
+  @@index([orgId])
+  @@index([parentGroupId])
+  @@map("governance_groups")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comment — entity-agnostic thread hanging off (entityType, entityId).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Comment {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @db.Uuid
+  entityType String
+  entityId   String   @db.Uuid
+  authorId   String   @db.Uuid
+  body       String   @db.Text
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  author       Person       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([orgId, entityType, entityId])
+  @@map("comments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FlowRelationship — sequence between activity-level ProcessNodes. Structural
+// containment is parentId on ProcessNode; execution order lives here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FlowRelationship {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @db.Uuid
+  fromNodeId String   @db.Uuid
+  toNodeId   String   @db.Uuid
+  flowType   FlowType @default(SEQUENCE)
+  notes      String?  @db.Text
+  createdBy  String?  @db.Uuid
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  fromNode     ProcessNode  @relation("FlowFromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode       ProcessNode  @relation("FlowToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([orgId, fromNodeId])
+  @@index([orgId, toNodeId])
+  @@map("flow_relationships")
+}
+
+// =============================================================================
+// PENDING — secondary stores not yet modelled
+// -----------------------------------------------------------------------------
+// The following stores from lib/persistence.ts still live as JSON. They are
+// out of scope for this first migration and will land in follow-up work:
+//   agents, agentExecutions, agentSchedules, analysisReports, attachments,
+//   businessGlossary, chatSessions, connections, connectionSystemLinks,
+//   connectors, dataLineage, dataModels, dataQualityRules, dbtCloudConnections,
+//   decisionRights, digestSubscriptions, enterpriseViews, exportsQueue,
+//   gapDetectionRules, governanceCalendar, maturityTrends, operationsManuals,
+//   processVersions, savedViews, schedulerState, scimTokens, sensitivityTags,
+//   sopDocs, suggestionDismissals, syncConnections, tags, trends.
+// =============================================================================
