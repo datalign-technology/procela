@@ -31,7 +31,36 @@ export function ensureDataDir() {
  * path keeps the existing call-site shape. If the rename fails the
  * temp file is best-effort deleted so we don't accumulate garbage on
  * repeated retries.
+ *
+ * Windows-specific: `fs.renameSync` can throw EPERM / EBUSY when the
+ * antivirus or search indexer holds a transient handle on the target
+ * file. Retry a handful of times with a tiny backoff before giving up
+ * — this is Windows-only noise; POSIX renames don't hit it.
  */
+const RENAME_RETRY_ERRNOS = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_MAX_ATTEMPTS = 5;
+
+function renameWithRetry(tmpPath: string, finalPath: string): void {
+  let lastErr: NodeJS.ErrnoException | null = null;
+  for (let attempt = 0; attempt < RENAME_MAX_ATTEMPTS; attempt++) {
+    try {
+      fs.renameSync(tmpPath, finalPath);
+      return;
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (!e.code || !RENAME_RETRY_ERRNOS.has(e.code)) throw err;
+      lastErr = e;
+      // Busy-wait a few ms before retrying. Sync sleep is fine — we're
+      // already inside a sync write path and the retry window is short
+      // enough that yielding to the event loop doesn't help (whatever
+      // holds the file handle is another process, not this one).
+      const until = Date.now() + 10 * (attempt + 1);
+      while (Date.now() < until) { /* spin */ }
+    }
+  }
+  throw lastErr;
+}
+
 export function saveStore(name: string, data: any[]) {
   ensureDataDir();
   const finalPath = path.join(DATA_DIR, `${name}.json`);
@@ -41,7 +70,7 @@ export function saveStore(name: string, data: any[]) {
   );
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
   try {
-    fs.renameSync(tmpPath, finalPath);
+    renameWithRetry(tmpPath, finalPath);
   } catch (err) {
     try { fs.unlinkSync(tmpPath); } catch { /* ignore — tmp already gone */ }
     throw err;
