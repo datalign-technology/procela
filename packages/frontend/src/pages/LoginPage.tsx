@@ -131,18 +131,19 @@ export default function LoginPage() {
   // backend fall back to the Host-header subdomain in production.
   // Silent failure → the sign-in card just renders the platform
   // default, which is fine.
-  const [tenantBrand, setTenantBrand] = useState<{
+  type TenantBrand = {
     tenantSlug: string | null;
     displayName: string;
     glyph: string;
     ssoButtonLabel: string;
     primaryColor: string;
     isTenantBrand: boolean;
-  } | null>(null);
+  };
+  const [tenantBrand, setTenantBrand] = useState<TenantBrand | null>(null);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('tenant');
     const path = q ? `/branding/tenant/${encodeURIComponent(q)}` : '/branding/tenant';
-    apiClient.get<{ success: boolean; data: any }>(path)
+    apiClient.get<{ success: boolean; data: TenantBrand }>(path)
       .then((r) => setTenantBrand(r.data))
       .catch(() => { /* leave default */ });
   }, []);
@@ -212,10 +213,11 @@ export default function LoginPage() {
       // an opaque mfaToken instead of a session. Hold the password
       // (for forced-change after MFA clears) and show the code prompt.
       if (res.data.mfaRequired && res.data.mfaToken) {
+        const dataWithFactors = res.data as typeof res.data & { availableFactors?: { totp: boolean; webauthn: boolean } };
         setMfaPending({
           token: res.data.mfaToken,
           currentPassword: loginPassword,
-          availableFactors: (res.data as any).availableFactors,
+          availableFactors: dataWithFactors.availableFactors,
         });
         return;
       }
@@ -223,19 +225,20 @@ export default function LoginPage() {
       setCaptchaRequired(false);
       setCaptchaToken('');
       completeLogin(res.data, loginPassword);
-    } catch (err: any) {
+    } catch (err) {
       // 401 / 428 may include challengeRequired — the user needs to
       // solve a CAPTCHA before the next attempt will be processed.
       // captchaSiteKey lets us know whether the backend is wired to
       // hCaptcha (non-empty) or running in dev mode (empty, accept
       // any non-empty token).
-      const responseBody = err?.body || {};
+      const e = err as { body?: { challengeRequired?: boolean; captchaSiteKey?: string }; message?: string };
+      const responseBody = e.body || {};
       if (responseBody.challengeRequired) {
         setCaptchaRequired(true);
         setCaptchaSiteKey(responseBody.captchaSiteKey || '');
         setCaptchaToken('');
       }
-      setError(err.message || 'Login failed');
+      setError(e.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -269,17 +272,21 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { startAuthentication } = await import('@simplewebauthn/browser');
-      const startRes = await apiClient.post<{ data: any }>('/auth/webauthn/discoverable/login-start', {});
+      // WebAuthn options are an opaque browser-standard shape; the
+      // library re-serialises them and we only pass them through.
+      const startRes = await apiClient.post<{ data: Parameters<typeof startAuthentication>[0]['optionsJSON'] }>(
+        '/auth/webauthn/discoverable/login-start', {});
       const assertion = await startAuthentication({ optionsJSON: startRes.data });
       const finishRes = await apiClient.post<LoginResponse>(
         '/auth/webauthn/discoverable/login-finish', { response: assertion });
       completeLogin(finishRes.data);
-    } catch (err: any) {
-      if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') {
+    } catch (err) {
+      const e = err as { name?: string; message?: string };
+      if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
         // User dismissed the browser prompt — silent.
         return;
       }
-      setError(err?.message || 'Could not sign in with a security key');
+      setError(e.message || 'Could not sign in with a security key');
     } finally {
       setLoading(false);
     }
@@ -1022,7 +1029,8 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
       // login bundle for users / browsers that never reach this
       // branch.
       const { startAuthentication } = await import('@simplewebauthn/browser');
-      const startRes = await apiClient.post<{ data: { options: any; mfaToken: string } }>(
+      type WebauthnOptions = Parameters<typeof startAuthentication>[0]['optionsJSON'];
+      const startRes = await apiClient.post<{ data: { options: WebauthnOptions; mfaToken: string } }>(
         '/auth/mfa/webauthn/login-start', { mfaToken: currentToken });
       // Update the token immediately so a fall-through to TOTP after
       // a user-cancel still has a valid handle.
@@ -1032,13 +1040,14 @@ function MfaPromptModal({ mfaToken, availableFactors, onSuccess, onCancel }: {
         '/auth/mfa/webauthn/login-finish',
         { mfaToken: startRes.data.mfaToken, response: assertion });
       onSuccess(finishRes.data);
-    } catch (e: any) {
+    } catch (err) {
       // Browser cancel / user-dismissed-prompt — present a soft
       // fallback rather than an error banner.
-      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+      const e = err as { name?: string; message?: string };
+      if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
         setErr('No response from the security key — try again, or use your authenticator code.');
       } else {
-        setErr(e?.message || 'Could not verify security key');
+        setErr(e.message || 'Could not verify security key');
       }
     } finally { setBusy(false); }
   };
