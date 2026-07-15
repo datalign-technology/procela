@@ -245,6 +245,8 @@ model Person {
   responsibleForNodes ProcessNode[]       @relation("ProcessNodeResponsible")
   ownedSystems        System[]            @relation("SystemOwner")
   stewardSystems      System[]            @relation("SystemSteward")
+  deputySystems       System[]            @relation("SystemDeputyOwner")
+  custodianSystems    SystemCustodian[]   @relation("SystemCustodianM2M")
   ownedDomains        DataDomain[]        @relation("DataDomainOwner")
   domainStewards      DataDomainSteward[]
   ownedAssets         DataAsset[]         @relation("DataAssetOwner")
@@ -374,26 +376,65 @@ model ProcessNodeSystem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model System {
-  id          String   @id @default(uuid()) @db.Uuid
-  orgId       String   @db.Uuid
-  name        String
-  description String?  @db.Text
-  systemType  String?
-  ownerId     String?  @db.Uuid
-  stewardId   String?  @db.Uuid
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                   String   @id @default(uuid()) @db.Uuid
+  orgId                String   @db.Uuid
+  name                 String
+  description          String?  @db.Text
+  systemType           String?
+  // String rather than enum so a customer can extend the vocabulary
+  // (HIGH/MEDIUM/LOW today) on their side without a schema
+  // migration. Same pattern DataAsset's classifiers use.
+  businessCriticality  String?
+  vendor               String?
+  // Free-text notes about integration — paired with the structured
+  // `integrations` JSONB below. Retained because it captures nuance
+  // (informal handshakes, cross-team conventions) that structured
+  // rows can't.
+  integrationPoints    String?  @db.Text
+  // Structured integrations — array of { id, targetSystemId,
+  // interfaceType, frequency?, direction }. JSONB keeps the shape
+  // without a join-per-integration table; future queryability can
+  // promote to a table when the need shows up.
+  integrations         Json?
+  // INTEGRATED | MANUAL | EXTERNAL. Drives gap-detection so a
+  // manual/external system isn't penalised for lacking a Connection.
+  connectivity         String?
+  // Renamed from `ownerId` → `ownerPersonId` to match the JSON row.
+  ownerPersonId        String?  @db.Uuid
+  // Deputy owner: same authority when the primary is unavailable,
+  // never both at once. Captures coverage / succession without
+  // breaking the "one accountable person" property.
+  deputyOwnerId        String?  @db.Uuid
+  // Legacy single-steward slot — kept but the code has moved on to
+  // custodianIds M2M for the "technical caretakers" set.
+  stewardId            String?  @db.Uuid
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  owner        Person?      @relation("SystemOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner        Person?      @relation("SystemOwner", fields: [ownerPersonId], references: [id], onDelete: SetNull)
   steward      Person?      @relation("SystemSteward", fields: [stewardId], references: [id], onDelete: SetNull)
+  deputyOwner  Person?      @relation("SystemDeputyOwner", fields: [deputyOwnerId], references: [id], onDelete: SetNull)
 
-  dataAssets   DataAsset[]
+  custodians SystemCustodian[]
+  dataAssets DataAsset[]
   processNodes ProcessNodeSystem[]
 
   @@index([orgId])
   @@index([orgId, systemType])
   @@map("systems")
+}
+
+model SystemCustodian {
+  systemId String @db.Uuid
+  personId String @db.Uuid
+
+  system System @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  person Person @relation("SystemCustodianM2M", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@id([systemId, personId])
+  @@index([personId])
+  @@map("system_custodians")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

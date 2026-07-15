@@ -141,16 +141,18 @@ Repository-mapped so far:
   payloads for orgRoles and webauthnCredentials. Native String[] for
   mfaBackupCodes + accessibleOrgIds. Sensitive-field passthrough for
   passwordHash / mfaSecret — column-level KMS is a schema follow-up).
+- **System** (`db/systems.repo.ts`, three named Person FK slots on
+  one row — ownerPersonId, deputyOwnerId, stewardId — each with its
+  own Prisma relation name. JSONB integrations alongside a free-text
+  integrationPoints. custodianIds M2M via a new SystemCustodian join
+  table).
 
 Still on JSON only. Suggested next order:
 
-1. **System** (JSON row has businessCriticality, vendor, an
-   integrations JSONB array, and a custodianIds M2M — schema drift
-   is bigger than DataAsset's).
-2. **ProcessNode** (the biggest entity by field count; do it after
+1. **ProcessNode** (the biggest entity by field count; do it after
    the smaller ones so any adapter-pattern refinements settle first).
-3. **AuditLog** (has the hash-chain quirk — test carefully).
-4. Notification, GovernanceTask, GovernanceIssue, etc.
+2. **AuditLog** (has the hash-chain quirk — test carefully).
+3. Notification, GovernanceTask, GovernanceIssue, etc.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
