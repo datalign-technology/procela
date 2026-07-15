@@ -146,13 +146,19 @@ Repository-mapped so far:
   own Prisma relation name. JSONB integrations alongside a free-text
   integrationPoints. custodianIds M2M via a new SystemCustodian join
   table).
+- **ProcessNode** (`db/process-nodes.repo.ts`, the field-heaviest
+  and M2M-heaviest entity — 30+ scalar fields including rich docs
+  (purpose, businessOutcome, stakeholders, inputsOutputs), BCM
+  (criticalityTier, rtoHours, successMeasure, slaTarget), the
+  change-management review workflow fields, and **four M2M join
+  tables** rewritten on update: orgIds, controlIds, requiredSkillIds,
+  systemIds. The `rewriteJoin()` helper collapses the four rewrites
+  into one shared code path).
 
 Still on JSON only. Suggested next order:
 
-1. **ProcessNode** (the biggest entity by field count; do it after
-   the smaller ones so any adapter-pattern refinements settle first).
-2. **AuditLog** (has the hash-chain quirk — test carefully).
-3. Notification, GovernanceTask, GovernanceIssue, etc.
+1. **AuditLog** (has the hash-chain quirk — test carefully).
+2. Notification, GovernanceTask, GovernanceIssue, etc.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that

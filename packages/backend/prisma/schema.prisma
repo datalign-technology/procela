@@ -288,7 +288,21 @@ model ProcessNode {
   status              String           @default("DRAFT")
   orderIndex          Int              @default(0)
   activityId          String?          @db.Uuid
+  responsibleRole     String?
   responsiblePersonId String?          @db.Uuid
+  // Rich documentation fields — kept nullable text so the UI's
+  // "you don't have to fill this in" contract holds and the row
+  // migrates cleanly from the JSON store without a forced backfill.
+  purpose             String?          @db.Text
+  businessOutcome     String?          @db.Text
+  stakeholders        String?          @db.Text
+  inputsOutputs       String?          @db.Text
+  complianceTags      String[]         @default([])
+  statusJustification String?          @db.Text
+  frequency           String?
+  riskLevel           String?
+  automationLevel     String?
+  estimatedDuration   String?
   criticalityTier     CriticalityTier?
   rtoHours            Int?
   successMeasure      String?          @db.Text
