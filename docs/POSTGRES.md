@@ -135,20 +135,22 @@ Repository-mapped so far:
   multiple optional FK slots — dataAssetId / policyId / attachmentId,
   exactly one set at a time. Attachment isn't in the schema yet so
   attachmentId is a bare uuid; the other two are proper FKs).
+- **Person** (`db/people.repo.ts`, the field-heaviest entity so
+  far. Two M2M joins on one entity — orgIds via PersonOrg + skillIds
+  via PersonSkill — both rewritten via delete-all + createMany. JSONB
+  payloads for orgRoles and webauthnCredentials. Native String[] for
+  mfaBackupCodes + accessibleOrgIds. Sensitive-field passthrough for
+  passwordHash / mfaSecret — column-level KMS is a schema follow-up).
 
 Still on JSON only. Suggested next order:
 
-1. **Person** (foundational; every ownership pointer joins here.
-   Complex because the JSON row carries auth-heavy fields
-   (passwordHash, mfaSecret, webauthnCredentials) that need the
-   schema expanded to match — plan on an extra half-day for that).
-2. **System** (JSON row has businessCriticality, vendor, an
+1. **System** (JSON row has businessCriticality, vendor, an
    integrations JSONB array, and a custodianIds M2M — schema drift
    is bigger than DataAsset's).
-3. **ProcessNode** (the biggest entity by field count; do it after
+2. **ProcessNode** (the biggest entity by field count; do it after
    the smaller ones so any adapter-pattern refinements settle first).
-4. **AuditLog** (has the hash-chain quirk — test carefully).
-5. Notification, GovernanceTask, GovernanceIssue, etc.
+3. **AuditLog** (has the hash-chain quirk — test carefully).
+4. Notification, GovernanceTask, GovernanceIssue, etc.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
