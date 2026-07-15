@@ -131,6 +131,10 @@ Repository-mapped so far:
   retentionDuration, and multiple string-enum fields that keep
   the storage layer permissive while the code enforces the
   vocabulary in validation).
+- **Mapping** (`db/mappings.repo.ts`, scalar-only shape with
+  multiple optional FK slots — dataAssetId / policyId / attachmentId,
+  exactly one set at a time. Attachment isn't in the schema yet so
+  attachmentId is a bare uuid; the other two are proper FKs).
 
 Still on JSON only. Suggested next order:
 
@@ -143,9 +147,8 @@ Still on JSON only. Suggested next order:
    is bigger than DataAsset's).
 3. **ProcessNode** (the biggest entity by field count; do it after
    the smaller ones so any adapter-pattern refinements settle first).
-4. **Mapping** (needs ProcessNode + DataAsset in place first).
-5. **AuditLog** (has the hash-chain quirk — test carefully).
-6. Notification, GovernanceTask, GovernanceIssue, etc.
+4. **AuditLog** (has the hash-chain quirk — test carefully).
+5. Notification, GovernanceTask, GovernanceIssue, etc.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
