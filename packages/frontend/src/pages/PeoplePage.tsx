@@ -880,9 +880,9 @@ export default function PeoplePage() {
     const orgId = peopleImportOrgId || selectedOrgId || activeOrgId;
     if (!peopleImportText.trim() || !orgId) return;
     try {
-      const body: any = { orgId };
+      const body: { orgId: string; csv?: string; people?: unknown } = { orgId };
       if (peopleImportFormat === 'csv') body.csv = peopleImportText; else body.people = JSON.parse(peopleImportText);
-      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; skippedEmails?: string[]; warnings?: string[]; data?: any[] }>('/people/import', body);
+      const result = await apiClient.post<{ success: boolean; message?: string; skipped?: number; skippedEmails?: string[]; warnings?: string[]; data?: unknown[] }>('/people/import', body);
       const count = result.data?.length || 0;
       const skipped = result.skipped || 0;
       const skippedEmails = result.skippedEmails || [];

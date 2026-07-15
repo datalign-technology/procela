@@ -728,7 +728,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     activityId: generateNodeId(level as string) || null,
     status: status || 'DRAFT',
     orderIndex: siblings.length,
-    orgId: DEV_ORG_ID,
+    orgId: (orgIds && orgIds.length > 0) ? orgIds[0] : DEV_ORG_ID,
     orgIds: orgIds || [DEV_ORG_ID],
     ownerId: ownerId || null,
     version: 1,
