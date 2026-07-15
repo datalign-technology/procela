@@ -126,6 +126,11 @@ Repository-mapped so far:
 - **DataDomain** (`db/data-domains.repo.ts`, includes the M2M
   stewardIds join-table rewrite pattern — see the update() method
   for the delete-all + createMany idiom).
+- **DataAsset** (`db/data-assets.repo.ts`, adds native Postgres
+  `String[]` for sensitivity tags, JSONB payloads for
+  retentionDuration, and multiple string-enum fields that keep
+  the storage layer permissive while the code enforces the
+  vocabulary in validation).
 
 Still on JSON only. Suggested next order:
 
@@ -133,10 +138,9 @@ Still on JSON only. Suggested next order:
    Complex because the JSON row carries auth-heavy fields
    (passwordHash, mfaSecret, webauthnCredentials) that need the
    schema expanded to match — plan on an extra half-day for that).
-2. **System / DataAsset** (the rest of the data-catalog trio;
-   simpler than Person). Note: System has schema drift too — the
-   JSON row carries businessCriticality, vendor, and an
-   integrations array not yet in the schema.
+2. **System** (JSON row has businessCriticality, vendor, an
+   integrations JSONB array, and a custodianIds M2M — schema drift
+   is bigger than DataAsset's).
 3. **ProcessNode** (the biggest entity by field count; do it after
    the smaller ones so any adapter-pattern refinements settle first).
 4. **Mapping** (needs ProcessNode + DataAsset in place first).

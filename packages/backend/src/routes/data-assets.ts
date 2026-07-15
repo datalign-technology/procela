@@ -12,7 +12,7 @@ import { mappings } from './mappings';
 import { people } from './people';
 import { processNodes } from './process-catalog';
 
-interface StoredDataAsset {
+export interface StoredDataAsset {
   id: string;
   orgId: string;
   name: string;

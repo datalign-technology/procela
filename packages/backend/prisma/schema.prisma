@@ -215,7 +215,7 @@ model Person {
   ownedDomains        DataDomain[]        @relation("DataDomainOwner")
   domainStewards      DataDomainSteward[]
   ownedAssets         DataAsset[]         @relation("DataAssetOwner")
-  stewardAssets       DataAsset[]         @relation("DataAssetSteward")
+  dataAssetStewards   DataAssetSteward[]  @relation("DataAssetStewardM2M")
   assignedTasks       GovernanceTask[]    @relation("GovernanceTaskAssignee")
   assignedIssues      GovernanceIssue[]   @relation("GovernanceIssueAssignee")
 
@@ -411,22 +411,38 @@ model DataAsset {
   name                    String
   description             String?        @db.Text
   systemId                String?        @db.Uuid
-  ownerId                 String?        @db.Uuid
-  stewardId               String?        @db.Uuid
+  // Named ownerPersonId to match the JSON store; the single-owner
+  // ownerId slot was superseded by ownerPersonId in the code.
+  ownerPersonId           String?        @db.Uuid
   dataDomainId            String?        @db.Uuid
   governanceTier          GovernanceTier @default(BRONZE)
   healthScore             Float          @default(0)
+  healthScoreAt           DateTime?
   sensitivityTags         String[]       @default([])
   rejectedSensitivityTags String[]       @default([])
+  // String-typed classifiers rather than enums so a customer can
+  // extend the taxonomy on their side without a schema migration.
+  // The current codebase uses fixed vocabularies but treating them
+  // as strings keeps the door open.
+  dataClassification      String?
+  dataType                String?
+  refreshFrequency        String?
+  origin                  String?
+  // Retention policy captured as JSONB — currently { value, unit }
+  // in the JSON store, kept structured for future queryability.
+  retentionDuration       Json?
+  retentionReason         String?        @db.Text
+  lastSyncedByConnectorId String?        @db.Uuid
+  lastSyncedAt            DateTime?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   system       System?      @relation(fields: [systemId], references: [id], onDelete: SetNull)
-  owner        Person?      @relation("DataAssetOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  steward      Person?      @relation("DataAssetSteward", fields: [stewardId], references: [id], onDelete: SetNull)
+  owner        Person?      @relation("DataAssetOwner", fields: [ownerPersonId], references: [id], onDelete: SetNull)
   dataDomain   DataDomain?  @relation(fields: [dataDomainId], references: [id], onDelete: SetNull)
 
+  stewards DataAssetSteward[]
   bindings DataAssetBinding[]
   mappings Mapping[]
 
@@ -435,6 +451,18 @@ model DataAsset {
   @@index([orgId, dataDomainId])
   @@index([orgId, governanceTier])
   @@map("data_assets")
+}
+
+model DataAssetSteward {
+  dataAssetId String @db.Uuid
+  personId    String @db.Uuid
+
+  dataAsset DataAsset @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
+  person    Person    @relation("DataAssetStewardM2M", fields: [personId], references: [id], onDelete: Cascade)
+
+  @@id([dataAssetId, personId])
+  @@index([personId])
+  @@map("data_asset_stewards")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
