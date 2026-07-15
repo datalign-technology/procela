@@ -1,7 +1,13 @@
-# Procela Training Guide — Tidewater Utilities
+# Procela Training Guide
 
-A hands-on walkthrough of Procela using the fictional **Tidewater
-Utilities** test data. By the end you will have:
+A hands-on walkthrough of Procela. The exercises below use the
+fictional **Tidewater Utilities** demo fixture that ships with the
+platform — a mid-size investor-owned utility with electric, water,
+and shared-services divisions. Every module works the same way
+against your own organization once it's loaded: same pages, same
+buttons, same expected behaviours. Swap the sample names for yours.
+
+By the end you will have:
 
 - A populated environment with two utility divisions (electric + water)
   and shared services
@@ -1103,6 +1109,6 @@ via the **RACI Matrix**.
 
 - `CLAUDE.md` (repo root) — the product brief; what Procela is for
 - `test-data/utility/README.md` — companion to this guide; the data
-  reference
+  reference for the Tidewater Utilities demo fixture
 - In-app **Help** page — feature-by-feature reference (this guide is
   a workflow walkthrough; Help is a manual)

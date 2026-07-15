@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
 import { useToastStore } from '../stores/toastStore';
@@ -99,8 +100,8 @@ export default function SavedViewsMenu({ pageKey, currentFilters, onApply, activ
       setOpen(false);
       addToast('success', `Saved view "${draftName.trim()}"`);
       await refresh();
-    } catch (e: any) {
-      addToast('error', e?.message || 'Failed to save view');
+    } catch (e) {
+      addToast('error', errorMessage(e, 'Failed to save view'));
     }
   };
 
@@ -115,8 +116,8 @@ export default function SavedViewsMenu({ pageKey, currentFilters, onApply, activ
       await apiClient.delete(`/saved-views/${v.id}`);
       await refresh();
       addToast('success', `Deleted view "${v.name}"`);
-    } catch (e: any) {
-      addToast('error', e?.message || 'Failed to delete view');
+    } catch (e) {
+      addToast('error', errorMessage(e, 'Failed to delete view'));
     }
   };
 

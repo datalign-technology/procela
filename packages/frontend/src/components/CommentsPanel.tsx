@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
 import { useToastStore } from '../stores/toastStore';
@@ -125,8 +126,8 @@ export default function CommentsPanel({ entityType, entityId, entityLabel, onCou
       setDraft('');
       setReplyTo(null);
       await refresh();
-    } catch (e: any) {
-      addToast('error', e?.message || 'Failed to post comment');
+    } catch (e) {
+      addToast('error', errorMessage(e, 'Failed to post comment'));
     } finally {
       setSubmitting(false);
     }

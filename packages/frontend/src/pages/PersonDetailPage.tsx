@@ -4,7 +4,7 @@ import { apiClient } from '../api/client';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useRoleDrawerStore } from '../stores/roleDrawerStore';
-import { errorToast, successToast } from '../lib/errorToast';
+import { errorMessage, errorToast, successToast } from '../lib/errorToast';
 import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
@@ -154,8 +154,8 @@ export default function PersonDetailPage() {
       ]);
       setData(personRes.data);
       setAllOrgs(orgsRes.data || []);
-    } catch (err: any) {
-      setError(err?.message || 'Could not load person');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not load person'));
     } finally {
       setLoading(false);
     }

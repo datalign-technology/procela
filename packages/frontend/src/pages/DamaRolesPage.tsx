@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
@@ -248,10 +249,10 @@ export default function DamaRolesPage() {
   const [form, setForm] = useState<FormData>(emptyForm);
   // The required-id field switches with assigneeType — validate whichever
   // one applies. Falls back to a single combined message if neither is set.
-  const roleValidation = useFormValidation({
-    personId: (v: any, form: any) => (form?.assigneeType !== 'agent' && !v) ? 'Select a person to assign the role to.' : null,
-    agentId: (v: any, form: any) => (form?.assigneeType === 'agent' && !v) ? 'Select an agent to assign the role to.' : null,
-    scopeId: (v: any) => !v ? 'Select an organization.' : null,
+  const roleValidation = useFormValidation<FormData>({
+    personId: (v, form) => (form?.assigneeType !== 'agent' && !v) ? 'Select a person to assign the role to.' : null,
+    agentId: (v, form) => (form?.assigneeType === 'agent' && !v) ? 'Select an agent to assign the role to.' : null,
+    scopeId: (v) => !v ? 'Select an organization.' : null,
   });
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -281,8 +282,8 @@ export default function DamaRolesPage() {
         apiClient.get<{ success: boolean; data: AgentOption[] }>(`/agents${query}`),
         apiClient.get<{ success: boolean; data: OrgOption[] }>('/organizations'),
         apiClient.get<{ success: boolean; data: DomainOption[] }>(`/data-domains${query}`),
-        apiClient.get<{ success: boolean; data: SystemOption[] }>(`/systems${query}`).catch(() => ({ data: [] } as any)),
-        apiClient.get<{ success: boolean; data: AssetOption[] }>(`/data-assets${query}`).catch(() => ({ data: [] } as any)),
+        apiClient.get<{ success: boolean; data: SystemOption[] }>(`/systems${query}`).catch(() => ({ success: true, data: [] as SystemOption[] })),
+        apiClient.get<{ success: boolean; data: AssetOption[] }>(`/data-assets${query}`).catch(() => ({ success: true, data: [] as AssetOption[] })),
       ]);
       setRoles(rolesRes.data || []);
       setRoleTypes(rolesRes.roleTypes || []);
@@ -374,8 +375,8 @@ export default function DamaRolesPage() {
       setShowForm(false);
       setForm(emptyForm);
       fetchData();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to assign role');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to assign role'));
     }
   };
 

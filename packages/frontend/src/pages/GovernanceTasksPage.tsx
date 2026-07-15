@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
@@ -272,8 +273,9 @@ export default function GovernanceTasksPage() {
       }
       closeForm();
       fetchData();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to save task';
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to save task');
       addToast('error', msg);
     }
   };
@@ -283,8 +285,9 @@ export default function GovernanceTasksPage() {
       await apiClient.delete(`/governance-tasks/${id}`);
       addToast('success', 'Task deleted');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to delete task');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete task'));
     }
   };
 
@@ -293,8 +296,9 @@ export default function GovernanceTasksPage() {
       await apiClient.put(`/governance-tasks/${taskId}`, { status: newStatus });
       addToast('success', `Task status changed to ${newStatus.replace(/_/g, ' ')}`);
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to update status');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to update status'));
     }
   };
 

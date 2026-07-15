@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle as sharedTdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
@@ -377,8 +378,8 @@ export default function DecisionRightsPage() {
       }
       closeForm();
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to save decision right');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to save decision right'));
     }
   };
 
@@ -387,8 +388,8 @@ export default function DecisionRightsPage() {
       await apiClient.delete(`/decision-rights/${id}`);
       addToast('success', 'Decision right deleted');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to delete decision right');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to delete decision right'));
     }
   };
 
@@ -404,8 +405,8 @@ export default function DecisionRightsPage() {
       }>('/decision-rights/seed', { orgId: activeOrgId });
       addToast('success', `Seeded ${res.created} standard decisions${res.skipped ? ` (${res.skipped} already existed)` : ''}`);
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to seed decisions');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Failed to seed decisions'));
     } finally {
       setSeeding(false);
     }

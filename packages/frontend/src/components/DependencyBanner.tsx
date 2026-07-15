@@ -64,12 +64,15 @@ export function useDependencyChecks() {
     if (!activeOrgId) return;
     (async () => {
       try {
+        interface ProgResp { data: { scope?: { inScope?: string }; principles?: { principles?: unknown[] } } | null }
+        interface Group { type?: string }
+        interface Role { roleType?: string }
         const [progRes, domRes, groupRes, roleRes, polRes] = await Promise.all([
-          apiClient.get<any>(`/governance-program?orgId=${activeOrgId}`),
-          apiClient.get<any>(`/data-domains?orgId=${activeOrgId}`),
-          apiClient.get<any>(`/governance-groups?orgId=${activeOrgId}`),
-          apiClient.get<any>(`/dama-roles?orgId=${activeOrgId}`),
-          apiClient.get<any>(`/governance-policies?orgId=${activeOrgId}`).catch(() => ({ data: [] })),
+          apiClient.get<ProgResp>(`/governance-program?orgId=${activeOrgId}`),
+          apiClient.get<{ data: unknown[] }>(`/data-domains?orgId=${activeOrgId}`),
+          apiClient.get<{ data: Group[] }>(`/governance-groups?orgId=${activeOrgId}`),
+          apiClient.get<{ data: Role[] }>(`/dama-roles?orgId=${activeOrgId}`),
+          apiClient.get<{ data: unknown[] }>(`/governance-policies?orgId=${activeOrgId}`).catch(() => ({ data: [] as unknown[] })),
         ]);
         const prog = progRes.data;
         const domains = domRes.data || [];
@@ -77,14 +80,14 @@ export function useDependencyChecks() {
         const roles = roleRes.data || [];
         const policies = polRes.data || [];
         setChecks({
-          hasScope: prog?.scope?.inScope?.trim().length > 0,
-          hasPrinciples: prog?.principles?.principles?.length > 0,
+          hasScope: !!(prog?.scope?.inScope?.trim().length),
+          hasPrinciples: (prog?.principles?.principles?.length ?? 0) > 0,
           hasDomains: domains.length > 0,
           hasGroups: groups.length > 0,
-          hasCouncil: groups.some((g: any) => g.type === 'COUNCIL'),
-          hasCommittee: groups.some((g: any) => g.type === 'COMMITTEE'),
+          hasCouncil: groups.some((g) => g.type === 'COUNCIL'),
+          hasCommittee: groups.some((g) => g.type === 'COMMITTEE'),
           hasRoles: roles.length > 0,
-          hasStewards: roles.some((r: any) => r.roleType === 'BUSINESS_DATA_STEWARD' || r.roleType === 'TECHNICAL_DATA_STEWARD'),
+          hasStewards: roles.some((r) => r.roleType === 'BUSINESS_DATA_STEWARD' || r.roleType === 'TECHNICAL_DATA_STEWARD'),
           hasPolicies: policies.length > 0,
         });
       } catch { /* */ }

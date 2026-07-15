@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
 import { useOrgContext } from '../stores/orgContext';
@@ -244,7 +245,7 @@ export default function OrganizationsPage() {
   const [showOrgForm, setShowOrgForm] = useState(false);
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [orgForm, setOrgForm] = useState<OrgFormData>(emptyOrgForm);
-  const orgValidation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
+  const orgValidation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [showImport, setShowImport] = useState(false);
   const [showSync, setShowSync] = useState(false);
   const [importText, setImportText] = useState('');
@@ -364,8 +365,9 @@ export default function OrganizationsPage() {
       setDeleteOrgImpact(null);
       fetchData();
       triggerRefresh();
-    } catch (e: any) {
-      addToast('error', e?.response?.data?.error || e?.message || 'Cannot delete');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Cannot delete'));
     } finally {
       setDeleteOrgBusy(false);
     }

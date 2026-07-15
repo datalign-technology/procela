@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -247,8 +248,8 @@ export default function BusinessGlossaryPage() {
       setShowImport(false);
       setImportText('');
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || 'Import failed');
+    } catch (err) {
+      addToast('error', errorMessage(err, 'Import failed'));
     }
   };
 
@@ -351,8 +352,9 @@ export default function BusinessGlossaryPage() {
         addToast('success', 'Term added');
       }
       closeForm(); fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || err?.response?.data?.error || 'Failed to save term');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', errorMessage(err, e?.response?.data?.error || 'Failed to save term'));
     }
   };
 
@@ -362,8 +364,9 @@ export default function BusinessGlossaryPage() {
     try {
       await apiClient.put(`/business-glossary/${id}`, { [field]: value });
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.message || err?.response?.data?.error || `Failed to update ${field}`);
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', errorMessage(err, e?.response?.data?.error || `Failed to update ${field}`));
     }
   };
 
@@ -385,8 +388,9 @@ export default function BusinessGlossaryPage() {
       addToast('success', `Updated ${res.updated} term${res.updated !== 1 ? 's' : ''}${res.skipped?.length ? ` (skipped ${res.skipped.length})` : ''}`);
       clearBulkSelection();
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Bulk update failed');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Bulk update failed'));
     } finally {
       setApplyingBulk(false);
     }
@@ -401,8 +405,9 @@ export default function BusinessGlossaryPage() {
       addToast('success', `Deleted ${res.deleted} term${res.deleted !== 1 ? 's' : ''}`);
       clearBulkSelection();
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Bulk delete failed');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Bulk delete failed'));
     } finally {
       setApplyingBulk(false);
       setConfirmBulkDelete(false);
@@ -414,7 +419,7 @@ export default function BusinessGlossaryPage() {
       await apiClient.delete(`/business-glossary/${id}`);
       addToast('success', 'Term deleted');
       fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to delete term'); }
+    } catch (err) { const e = err as { response?: { data?: { error?: string } } }; addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to delete term')); }
   };
 
   const handleGenerate = async () => {
@@ -427,7 +432,7 @@ export default function BusinessGlossaryPage() {
       setGeneratedTerms(t);
       setDetectedIndustry(res.industry || null);
       setShowGeneratePreview(true);
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to generate terms'); }
+    } catch (err) { const e = err as { response?: { data?: { error?: string } } }; addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to generate terms')); }
     finally { setGenerating(false); }
   };
 
@@ -438,7 +443,7 @@ export default function BusinessGlossaryPage() {
       await apiClient.post('/business-glossary/seed', { orgId: activeOrgId, selectedTerms: selected });
       addToast('success', `Added ${selected.length} glossary term${selected.length !== 1 ? 's' : ''}`);
       setShowGeneratePreview(false); setGeneratedTerms([]); fetchData();
-    } catch (err: any) { addToast('error', err?.response?.data?.error || 'Failed to create terms'); }
+    } catch (err) { const e = err as { response?: { data?: { error?: string } } }; addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to create terms')); }
   };
 
   const handleExportHtml = () => {

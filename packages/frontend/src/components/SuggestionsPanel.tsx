@@ -12,6 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 
 export type SuggestionKind = 'asset' | 'system' | 'person';
 
@@ -87,8 +88,8 @@ export default function SuggestionsPanel({
     try {
       const res = await apiClient.get<{ success: boolean; data: any[] }>(endpoint);
       setRows((res.data || []).map(normalize));
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load suggestions');
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to load suggestions'));
       setRows([]);
     } finally {
       setLoading(false);

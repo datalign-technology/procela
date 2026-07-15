@@ -218,7 +218,7 @@ export default function ConnectionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
-  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
+  const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   // Local-file upload staging — the File is attached to the form but not sent
   // until Save (we need the connection id the POST/PUT returns).
   const [pendingFile, setPendingFile] = useState<File | null>(null);

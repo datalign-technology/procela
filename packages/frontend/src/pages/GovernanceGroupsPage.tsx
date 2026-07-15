@@ -426,7 +426,7 @@ export default function GovernanceGroupsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<GroupFormData>(emptyForm);
-  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
+  const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   // When adding a child, restrict the type dropdown to valid child types
   const [allowedTypes, setAllowedTypes] = useState<string[] | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);

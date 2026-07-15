@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useOrgContext } from '../stores/orgContext';
 import Page from '../components/Page';
 
@@ -487,8 +488,8 @@ export default function ProcessVisualizationPage() {
       ]);
       setTree(catalogRes.tree || []);
       setFlows(flowsRes.data || []);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load process data');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load process data'));
     } finally {
       setLoading(false);
     }

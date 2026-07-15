@@ -150,7 +150,11 @@ describe('ResetAllDataPanel — submit', () => {
     fireEvent.click(screen.getByRole('button', { name: /reset everything/i }));
 
     await waitFor(() => {
-      expect(mockErrorToast).toHaveBeenCalledWith('server exploded');
+      // errorToast(err, fallback) — extracts .message internally.
+      const [errArg, fallback] = mockErrorToast.mock.calls[0] || [];
+      expect(errArg).toBeInstanceOf(Error);
+      expect((errArg as Error).message).toBe('server exploded');
+      expect(fallback).toMatch(/could not reset/i);
     });
     // User stays signed in.
     expect(useAuthStore.getState().isAuthenticated).toBe(true);

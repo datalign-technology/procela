@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { useToastStore } from '../stores/toastStore';
 import { useOrgContext } from '../stores/orgContext';
 import WizardProgress from './WizardProgress';
@@ -288,8 +289,9 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
 
       onCreated();
       onClose();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Failed to create sync connection';
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      const msg = e?.response?.data?.error || errorMessage(err, 'Failed to create sync connection');
       addToast('error', msg);
     } finally {
       setCreating(false);

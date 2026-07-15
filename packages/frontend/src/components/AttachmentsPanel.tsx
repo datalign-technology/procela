@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import Modal from './Modal';
 
 interface Attachment {
@@ -71,8 +72,8 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
     try {
       await apiClient.delete(`/attachments/${id}`);
       load();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to delete');
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to delete'));
     }
   };
 
@@ -90,8 +91,8 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
       await apiClient.upload(`/attachments/upload?${params.toString()}`, file);
       setShowModal(false);
       load();
-    } catch (e: any) {
-      setError(e?.message || 'Upload failed');
+    } catch (e) {
+      setError(errorMessage(e, 'Upload failed'));
     } finally {
       setUploading(false);
     }
@@ -107,8 +108,8 @@ export default function AttachmentsPanel({ entityType, entityId, orgId, disabled
       });
       setShowModal(false);
       load();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to save link');
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to save link'));
     } finally {
       setUploading(false);
     }

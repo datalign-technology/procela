@@ -72,7 +72,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
       await apiClient.post(`/people/${person.id}/deactivate`, {});
       successToast('Account deactivated');
       onChanged();
-    } catch (err: any) { errorToast(err?.message || 'Could not deactivate'); }
+    } catch (err) { errorToast(err, 'Could not deactivate'); }
     finally { setBusy(false); setConfirm(null); }
   };
   const reactivate = async () => {
@@ -81,7 +81,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
       await apiClient.post(`/people/${person.id}/reactivate`, {});
       successToast('Account reactivated');
       onChanged();
-    } catch (err: any) { errorToast(err?.message || 'Could not reactivate'); }
+    } catch (err) { errorToast(err, 'Could not reactivate'); }
     finally { setBusy(false); setConfirm(null); }
   };
   const resetMfa = async () => {
@@ -90,7 +90,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
       await apiClient.post('/auth/mfa/admin-reset', { personId: person.id });
       successToast('Two-step verification reset');
       onChanged();
-    } catch (err: any) { errorToast(err?.message || 'Could not reset MFA'); }
+    } catch (err) { errorToast(err, 'Could not reset MFA'); }
     finally { setBusy(false); setConfirm(null); }
   };
   const resetWebauthn = async () => {
@@ -99,7 +99,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
       await apiClient.post('/auth/mfa/webauthn/admin-reset', { personId: person.id });
       successToast('Security keys cleared');
       onChanged();
-    } catch (err: any) { errorToast(err?.message || 'Could not clear security keys'); }
+    } catch (err) { errorToast(err, 'Could not clear security keys'); }
     finally { setBusy(false); setConfirm(null); }
   };
   const clearLockout = async () => {
@@ -108,7 +108,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
       await apiClient.post('/auth/lockout/admin-clear', { personId: person.id });
       successToast('Account unlocked');
       onChanged();
-    } catch (err: any) { errorToast(err?.message || 'Could not clear lockout'); }
+    } catch (err) { errorToast(err, 'Could not clear lockout'); }
     finally { setBusy(false); setConfirm(null); }
   };
   const forgetPerson = async () => {
@@ -124,7 +124,7 @@ export default function SecurityCard({ person, onChanged }: SecurityCardProps) {
       const r = res.data.cascadeReport;
       successToast(`Erased. ${r.storesModified} stores changed, ${r.rowsRemoved + r.rowsModified} rows touched, ${r.auditEntriesRedacted} audit entries redacted.`);
       navigate('/people');
-    } catch (err: any) { errorToast(err?.message || 'Could not erase person'); }
+    } catch (err) { errorToast(err, 'Could not erase person'); }
     finally { setBusy(false); setConfirm(null); setForgetPhrase(''); }
   };
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
@@ -201,8 +202,9 @@ export default function SopsPage() {
       }
       setShowForm(false); setEditingId(null); setForm(emptyForm);
       fetchData();
-    } catch (err: any) {
-      addToast('error', err?.response?.data?.error || 'Failed to save SOP');
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      addToast('error', e?.response?.data?.error || errorMessage(err, 'Failed to save SOP'));
     }
   };
 

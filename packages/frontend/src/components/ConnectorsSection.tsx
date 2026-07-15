@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import ConfirmDialog from './ConfirmDialog';
 
 // Settings → Connectors panel. Lists every paired on-prem connector
@@ -160,8 +161,8 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
     try {
       const res = await apiClient.get<{ success: boolean; data: ConnectorRow[] }>('/connectors');
       setRows(res.data || []);
-    } catch (e: any) {
-      setError(e?.message || 'failed to load connectors');
+    } catch (e) {
+      setError(errorMessage(e, 'failed to load connectors'));
     } finally {
       setLoading(false);
     }
@@ -207,8 +208,8 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
       } else {
         setError(res.error || 'could not start pairing');
       }
-    } catch (e: any) {
-      setError(e?.message || 'could not start pairing');
+    } catch (e) {
+      setError(errorMessage(e, 'could not start pairing'));
     } finally {
       setAdding(false);
     }
@@ -218,8 +219,8 @@ export default function ConnectorsSection({ sectionStyle, sectionTitleStyle }: {
     try {
       await apiClient.delete(`/connectors/${row.id}`);
       await load();
-    } catch (e: any) {
-      setError(e?.message || 'revoke failed');
+    } catch (e) {
+      setError(errorMessage(e, 'revoke failed'));
     } finally {
       setRevokeTarget(null);
     }
@@ -445,8 +446,8 @@ function ConnectorDetailDrawer({ row, systems, onClose, onSaved }: {
       await apiClient.patch(`/connectors/${row.id}`, { name: name.trim(), systemIds });
       await onSaved();
       onClose();
-    } catch (e: any) {
-      setSaveError(e?.message || 'save failed');
+    } catch (e) {
+      setSaveError(errorMessage(e, 'save failed'));
     } finally {
       setSaving(false);
     }

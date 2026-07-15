@@ -95,7 +95,7 @@ export default function SkillsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm);
-  const validation = useFormValidation({ name: (v) => !v?.trim() ? 'Name is required' : null });
+  const validation = useFormValidation({ name: (v) => !(v as string)?.trim() ? 'Name is required' : null });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);

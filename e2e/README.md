@@ -42,6 +42,8 @@ prefix means updating one place (`SMOKE_NAME_PREFIXES` in
 
 ## What the suite covers
 
+### `smoke.spec.ts` — build shippability
+
 | Test | Validates |
 |---|---|
 | `Eleanor can sign in and lands on the dashboard` | Auth flow + Layout shell |
@@ -49,6 +51,22 @@ prefix means updating one place (`SMOKE_NAME_PREFIXES` in
 | `creating a person through the API surfaces on the People page` | List page + active-org filter |
 | `assigning a CDO surfaces on the Governance Roles page` | DAMA assignment + table render |
 | `the assign-role form opens and lists the org's people` | PersonPicker integration |
+| `Process ↔ Data map renders the bipartite graph for a mapped activity` | Phase 3 visualization |
+| `Orphan Assets page lists an unmapped asset` | Reverse-view orphan surface |
+
+### `demo-path.spec.ts` — the sales demo playbook
+
+Full-flow coverage of the tractable beats from `docs/demo-playbook.html`.
+Beats that require live AI calls, the on-prem connector, or scheduler
+ticks live in unit tests instead.
+
+| Beat | Validates |
+|---|---|
+| 1: populated org renders KPI tiles | Dashboard aggregation query |
+| 3: activity carries operational weight | Catalog + Data Map render together for a mapped activity |
+| 4: Ask AI opens with starter prompts | Top-bar chat entry point + empty-state render |
+| 6: change-management pending review is reachable | Org review-mode toggle + PENDING_REVIEW status transition |
+| 9: coherence — seeded coverage shows on Gap Detection | Unmapped-activity detection cross-page |
 
 ## What it is *not*
 

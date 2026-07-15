@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { errorMessage } from '../lib/errorToast';
 import PageHeader from '../components/PageHeader';
 import { useOrgContext } from '../stores/orgContext';
 import { useAuthStore } from '../stores/authStore';
@@ -127,8 +128,8 @@ export default function ExecutiveReportPage() {
       setAuditEntries(auditRes.data || []);
       setGovGroups(govRes.data || []);
       setDataDomains(domainRes.data || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load report data');
+    } catch (err) {
+      setError(errorMessage(err, 'Failed to load report data'));
     } finally {
       setLoading(false);
     }
