@@ -196,13 +196,46 @@ model Organization {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Person {
-  id         String   @id @default(uuid()) @db.Uuid
-  name       String
-  email      String   @unique
-  department String?
-  externalId String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                  String    @id @default(uuid()) @db.Uuid
+  name                String
+  email               String    @unique
+  department          String?
+  externalId          String?
+  title               String?
+  jobRole             String?
+  // Default / fallback role when the active org has no per-org override.
+  role                String    @default("VIEWER")
+  // Per-org role overrides. Stored as JSONB — an array of
+  // { orgId, role } tuples the JSON store carries verbatim; a
+  // future migration can promote this into a PersonOrgRole join
+  // table once the queryability need shows up.
+  orgRoles            Json?
+  // Auth-heavy fields — see StoredPerson interface in
+  // routes/people.ts for authoritative docstrings. In production
+  // these should be encrypted at rest (mfaSecret) or hashed
+  // (passwordHash, mfaBackupCodes); Prisma's column-level KMS
+  // wrapper is the intended solution when it lands.
+  passwordHash        String?
+  passwordUpdatedAt   DateTime?
+  passwordMustChange  Boolean?
+  failedLoginCount    Int?
+  failedLoginFirstAt  DateTime?
+  lockedUntil         DateTime?
+  mfaSecret           String?
+  mfaEnrolled         Boolean?
+  mfaBackupCodes      String[]  @default([])
+  // WebAuthn credentials — array of { id, credentialID, publicKey,
+  // counter, transports?, label, createdAt }. JSONB keeps the whole
+  // shape without a join table since the row is only ever read as
+  // a set (not queried by inner fields).
+  webauthnCredentials Json?
+  // Explicit access grants beyond a person's home orgs. Native
+  // Postgres String[] — mirrors the JSON shape one-for-one.
+  accessibleOrgIds    String[]  @default([])
+  active              Boolean?
+  deactivatedAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   orgLinks            PersonOrg[]
   personSkills        PersonSkill[]
