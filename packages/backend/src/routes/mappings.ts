@@ -20,7 +20,7 @@ import { attachments } from './attachments';
 // policyId / attachmentId must be set; the others are undefined.
 // Existing rows in storage only carry dataAssetId — they keep
 // working unchanged.
-interface StoredMapping {
+export interface StoredMapping {
   id: string;
   orgId: string;
   processStepId: string;

@@ -497,24 +497,39 @@ model DataAssetBinding {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Mapping {
-  id             String   @id @default(uuid()) @db.Uuid
-  orgId          String   @db.Uuid
-  processStepId  String   @db.Uuid
-  dataAssetId    String   @db.Uuid
-  linkType       String?
-  notes          String?  @db.Text
-  aiSuggested    Boolean  @default(false)
-  userOverridden Boolean  @default(false)
-  createdBy      String?  @db.Uuid
-  createdAt      DateTime @default(now())
+  id                 String   @id @default(uuid()) @db.Uuid
+  orgId              String   @db.Uuid
+  processStepId      String   @db.Uuid
+  // One of dataAssetId / policyId / attachmentId is set; the mapping
+  // is the tri-target join between a process step and any of these
+  // three artefacts. Attachment isn't modelled in the schema yet, so
+  // attachmentId is a plain uuid with no FK — cascade rules on
+  // attachment delete are handled application-side today.
+  dataAssetId        String?  @db.Uuid
+  policyId           String?  @db.Uuid
+  attachmentId       String?  @db.Uuid
+  linkType           String?
+  notes              String?  @db.Text
+  aiSuggested        Boolean  @default(false)
+  userOverridden     Boolean  @default(false)
+  criticality        String? // REQUIRED | OPTIONAL (String so vocab can extend)
+  dataFormat         String?
+  sla                String?
+  qualityRequirement String?  @db.Text
+  fulfillsExpected   String?
+  createdBy          String?  @db.Uuid
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  processStep  ProcessNode  @relation(fields: [processStepId], references: [id], onDelete: Cascade)
-  dataAsset    DataAsset    @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  processStep  ProcessNode       @relation(fields: [processStepId], references: [id], onDelete: Cascade)
+  dataAsset    DataAsset?        @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
+  policy       GovernancePolicy? @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([orgId, processStepId])
   @@index([orgId, dataAssetId])
+  @@index([orgId, policyId])
   @@map("mappings")
 }
 
@@ -689,6 +704,7 @@ model GovernancePolicy {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   controls GovernanceControl[]
+  mappings Mapping[]
 
   @@unique([orgId, docId])
   @@index([orgId])
