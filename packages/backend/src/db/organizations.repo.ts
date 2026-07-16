@@ -79,7 +79,7 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     industry: r.industry ?? '',
     description: r.description ?? '',
     headCount: r.headCount,
-    ...(r.statusMode ? { statusMode: r.statusMode as StoredOrg['statusMode'] } : {}),
+    ...(r.statusMode ? { statusMode: r.statusMode.toLowerCase() as StoredOrg['statusMode'] } : {}),
     ...(r.tenantSlug ? { tenantSlug: r.tenantSlug } : {}),
     ...(r.brandDisplayName ? { brandDisplayName: r.brandDisplayName } : {}),
     ...(r.brandGlyph ? { brandGlyph: r.brandGlyph } : {}),
@@ -111,7 +111,9 @@ function toPrismaData(row: StoredOrg): Record<string, unknown> {
     industry: row.industry || null,
     description: row.description || null,
     headCount: row.headCount,
-    statusMode: row.statusMode ?? null,
+    // statusMode: same case dance as type — Prisma enum wants
+    // upper-case (SIMPLE / REVIEW / ADVANCED), JSON stores lower.
+    ...(row.statusMode ? { statusMode: row.statusMode.toUpperCase() } : {}),
     tenantSlug: row.tenantSlug ?? null,
     brandDisplayName: row.brandDisplayName ?? null,
     brandGlyph: row.brandGlyph ?? null,
