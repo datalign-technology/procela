@@ -175,7 +175,6 @@ model Organization {
   dataAssetBindings  DataAssetBinding[]
   mappings           Mapping[]
   skills             Skill[]
-  auditLogs          AuditLog[]
   notifications      Notification[]
   governanceTasks    GovernanceTask[]
   governanceIssues   GovernanceIssue[]
@@ -688,18 +687,26 @@ model DamaRole {
 
 model AuditLog {
   id         String   @id @default(uuid()) @db.Uuid
-  orgId      String   @db.Uuid
-  userId     String?  @db.Uuid
+  // orgId is String (not Uuid) because the hash-chain bootstrap
+  // marker uses the sentinel value "system" — an audit log is a
+  // ledger, not a scoped resource, and the bootstrap boundary
+  // marker isn't owned by any real org. That also breaks the FK
+  // to Organization: model the relation as optional and let the
+  // application enforce the sentinel isn't used elsewhere.
+  orgId      String
+  userId     String?
   entityType String
-  entityId   String   @db.Uuid
+  // entityId is arbitrary — the auditService.log() surface accepts
+  // any string. It's a UUID for most rows (Person id, Asset id,
+  // …) but also carries values like "chain", "password", "migrate",
+  // or "*" (bulk-delete markers).
+  entityId   String
   action     String
   before     Json?
   after      Json?
   timestamp  DateTime @default(now())
   prevHash   String?
   entryHash  String?
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([orgId, entityType, entityId])
