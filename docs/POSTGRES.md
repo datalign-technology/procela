@@ -161,16 +161,45 @@ Repository-mapped so far:
   computation stays in auditService; the repo just persists whatever
   prevHash / entryHash the service supplied — a round-trip preserving
   the fields byte-for-byte is the key contract).
+- **Notification, GovernanceTask, GovernanceIssue, GovernancePolicy,
+  GovernanceControl, GovernanceGroup, Comment, FlowRelationship,
+  Skill, DamaRole** — the remaining 10 core entities, migrated in
+  one batch (`db/<entity>.repo.ts`). Two new patterns worth noting:
+  - **FlowRelationship** and **DamaRole** have no top-level `orgId`
+    column. FlowRelationship's Prisma path filters via the join on
+    `fromNode.orgId` (mirrors Person's post-map filter approach).
+    DamaRole's ORG/DOMAIN scope resolves through `dataDomains` which
+    is out-of-repo, so the `orgId` filter is a no-op on the repo
+    side — callers filter in the route.
+  - Every governance status / priority / tier is now `String` (not
+    Prisma enum) so a customer can extend the vocabulary without a
+    schema migration. Ten Prisma enums (TaskStatus, TaskPriority,
+    IssueSeverity/Status/Source, PolicyType, ControlType,
+    AutomationMode, GroupLevel, FlowType, DamaScopeType) were
+    dropped when the fuller Stored* types landed.
 
-Still on JSON only. Suggested next order:
+**All 18 core entities are now on the repository pattern.** The
+schema is source-of-truth against the JSON row shape; the repos are
+wired up but unused (routes still touch the in-memory arrays
+directly).
 
-1. Notification, GovernanceTask, GovernanceIssue (three small
-   governance-adjacent scalars — could batch in one PR).
-2. GovernancePolicy, GovernanceControl, GovernanceGroup.
-3. Comment, FlowRelationship, Skill, DamaRole.
-4. The ~30 secondary stores (attachments, connectors, savedViews,
-   scheduler state, tags, etc.) as their route reads/writes need
-   the async surface.
+Still on JSON only — the ~30 secondary stores:
+
+- **Data catalog adjuncts**: DataAssetBinding, DataAssetColumn,
+  ProcessVersion, GlossaryTerm, DataQualityRule, DbtAssetMapping,
+  DbtTestMapping, DbtCloudConnection, DataLineageLink,
+  AssetLineageEdge.
+- **Integration + connectors**: Connection, Connector,
+  ConnectorEvent, ConnectionSystemLink, SyncConnection, Agent,
+  AgentSchedule, AgentExecution.
+- **Governance ops**: SavedView, Report, AnalysisReport,
+  OperationsManual, SOP, CalendarEvent, DecisionRight,
+  RaciOverride, GapSnapshot, MaturitySnapshot,
+  SuggestionDismissal, Tag.
+- **Auth + system**: SchemaGroup, AiSettings, AiTemplateCache,
+  Branding, SchedulerState.
+
+These land in the schema + get a repo as their route needs them.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
