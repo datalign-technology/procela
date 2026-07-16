@@ -154,11 +154,23 @@ Repository-mapped so far:
   tables** rewritten on update: orgIds, controlIds, requiredSkillIds,
   systemIds. The `rewriteJoin()` helper collapses the four rewrites
   into one shared code path).
+- **AuditLog** (`db/audit-logs.repo.ts`, scalar-only with the
+  hash-chain quirk. Schema loosened to accept the "system" sentinel
+  orgId used by the bootstrap chain marker + arbitrary-string
+  entityIds like "chain" / "password" / "*". The hash-chain
+  computation stays in auditService; the repo just persists whatever
+  prevHash / entryHash the service supplied — a round-trip preserving
+  the fields byte-for-byte is the key contract).
 
 Still on JSON only. Suggested next order:
 
-1. **AuditLog** (has the hash-chain quirk — test carefully).
-2. Notification, GovernanceTask, GovernanceIssue, etc.
+1. Notification, GovernanceTask, GovernanceIssue (three small
+   governance-adjacent scalars — could batch in one PR).
+2. GovernancePolicy, GovernanceControl, GovernanceGroup.
+3. Comment, FlowRelationship, Skill, DamaRole.
+4. The ~30 secondary stores (attachments, connectors, savedViews,
+   scheduler state, tags, etc.) as their route reads/writes need
+   the async surface.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
