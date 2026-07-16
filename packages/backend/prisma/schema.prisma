@@ -61,23 +61,10 @@ enum CriticalityTier {
   TIER_4
 }
 
-enum FlowType {
-  SEQUENCE
-  CONDITIONAL
-  LOOP
-}
-
 enum GovernanceTier {
   BRONZE
   SILVER
   GOLD
-}
-
-enum DamaScopeType {
-  ORG
-  DOMAIN
-  SYSTEM
-  ASSET
 }
 
 enum NotificationType {
@@ -86,64 +73,15 @@ enum NotificationType {
   ACTION
 }
 
-enum TaskStatus {
-  OPEN
-  IN_PROGRESS
-  DONE
-  PENDING_APPROVAL
-}
-
-enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum IssueSeverity {
-  LOW
-  MEDIUM
-  HIGH
-}
-
-enum IssueStatus {
-  OPEN
-  RESOLVED
-}
-
-enum IssueSource {
-  MANUAL
-  DQ_RULE
-  AGENT_OWNER_MISSING
-}
-
-enum PolicyType {
-  CHARTER
-  POLICY
-  STANDARD
-  CONTROL
-}
-
-enum ControlType {
-  PREVENTIVE
-  DETECTIVE
-  CORRECTIVE
-}
-
-enum AutomationMode {
-  HUMAN
-  AGENT
-  HYBRID
-}
-
-enum GroupLevel {
-  COUNCIL
-  OFFICE
-  COMMITTEE
-  STEWARDSHIP_TEAM
-  WORKING_GROUP
-  COMMUNITY_OF_PRACTICE
-}
+// Governance status / severity / classifier fields are all typed as
+// `String` on the entity models below rather than as Prisma enums, so
+// customers can extend the vocabulary (add a new task status, a new
+// document type, a new group tier) without a schema migration. Same
+// pattern DataAsset's classifiers use. The former enums
+// (TaskStatus / TaskPriority / IssueSeverity / IssueStatus /
+// IssueSource / PolicyType / ControlType / AutomationMode /
+// GroupLevel / FlowType / DamaScopeType) were dropped in the
+// batch-2 repo migration when the fuller Stored* types landed.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Organization
@@ -182,7 +120,8 @@ model Organization {
   governanceControls GovernanceControl[]
   governanceGroups   GovernanceGroup[]
   comments           Comment[]
-  flowRelationships  FlowRelationship[]
+  // FlowRelationship no longer carries an orgId — see the comment on
+  // that model. Its org scope resolves via its fromNode / toNode.
 
   @@index([parentId])
   @@map("organizations")
@@ -239,7 +178,6 @@ model Person {
   orgLinks            PersonOrg[]
   personSkills        PersonSkill[]
   damaRoles           DamaRole[]
-  comments            Comment[]
   ownedNodes          ProcessNode[]       @relation("ProcessNodeOwner")
   responsibleForNodes ProcessNode[]       @relation("ProcessNodeResponsible")
   ownedSystems        System[]            @relation("SystemOwner")
@@ -389,48 +327,48 @@ model ProcessNodeSystem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model System {
-  id                   String   @id @default(uuid()) @db.Uuid
-  orgId                String   @db.Uuid
-  name                 String
-  description          String?  @db.Text
-  systemType           String?
+  id                  String   @id @default(uuid()) @db.Uuid
+  orgId               String   @db.Uuid
+  name                String
+  description         String?  @db.Text
+  systemType          String?
   // String rather than enum so a customer can extend the vocabulary
   // (HIGH/MEDIUM/LOW today) on their side without a schema
   // migration. Same pattern DataAsset's classifiers use.
-  businessCriticality  String?
-  vendor               String?
+  businessCriticality String?
+  vendor              String?
   // Free-text notes about integration — paired with the structured
   // `integrations` JSONB below. Retained because it captures nuance
   // (informal handshakes, cross-team conventions) that structured
   // rows can't.
-  integrationPoints    String?  @db.Text
+  integrationPoints   String?  @db.Text
   // Structured integrations — array of { id, targetSystemId,
   // interfaceType, frequency?, direction }. JSONB keeps the shape
   // without a join-per-integration table; future queryability can
   // promote to a table when the need shows up.
-  integrations         Json?
+  integrations        Json?
   // INTEGRATED | MANUAL | EXTERNAL. Drives gap-detection so a
   // manual/external system isn't penalised for lacking a Connection.
-  connectivity         String?
+  connectivity        String?
   // Renamed from `ownerId` → `ownerPersonId` to match the JSON row.
-  ownerPersonId        String?  @db.Uuid
+  ownerPersonId       String?  @db.Uuid
   // Deputy owner: same authority when the primary is unavailable,
   // never both at once. Captures coverage / succession without
   // breaking the "one accountable person" property.
-  deputyOwnerId        String?  @db.Uuid
+  deputyOwnerId       String?  @db.Uuid
   // Legacy single-steward slot — kept but the code has moved on to
   // custodianIds M2M for the "technical caretakers" set.
-  stewardId            String?  @db.Uuid
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  stewardId           String?  @db.Uuid
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   owner        Person?      @relation("SystemOwner", fields: [ownerPersonId], references: [id], onDelete: SetNull)
   steward      Person?      @relation("SystemSteward", fields: [stewardId], references: [id], onDelete: SetNull)
   deputyOwner  Person?      @relation("SystemDeputyOwner", fields: [deputyOwnerId], references: [id], onDelete: SetNull)
 
-  custodians SystemCustodian[]
-  dataAssets DataAsset[]
+  custodians   SystemCustodian[]
+  dataAssets   DataAsset[]
   processNodes ProcessNodeSystem[]
 
   @@index([orgId])
@@ -665,15 +603,26 @@ model PersonSkill {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model DamaRole {
-  id        String        @id @default(uuid()) @db.Uuid
-  personId  String        @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  // Exactly one of (personId, agentId) is set per row. Both nullable
+  // so a person-only or agent-only role assignment can be created; the
+  // route validator enforces exclusivity.
+  personId  String?  @db.Uuid
+  agentId   String?  @db.Uuid
+  // Snapshot of the agent name at assignment time — kept so a later
+  // rename / deletion of the agent doesn't wipe the historical label
+  // off the assignment ledger.
+  agentName String?
   roleType  String
-  scopeType DamaScopeType
-  scopeId   String        @db.Uuid
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  // String rather than a Prisma enum — the JSON store today only uses
+  // ORG / DOMAIN but is expected to grow (SYSTEM / ASSET are the
+  // planned next tiers). Same vocabulary-extension pattern.
+  scopeType String
+  scopeId   String   @db.Uuid
+  since     String
+  createdAt DateTime @default(now())
 
-  person Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+  person Person? @relation(fields: [personId], references: [id], onDelete: Cascade)
   skills Skill[]
 
   @@index([personId])
@@ -741,17 +690,35 @@ model Notification {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model GovernanceTask {
-  id          String       @id @default(uuid()) @db.Uuid
-  orgId       String       @db.Uuid
-  title       String
-  description String?      @db.Text
-  assigneeId  String?      @db.Uuid
-  dueDate     DateTime?
-  status      TaskStatus   @default(OPEN)
-  priority    TaskPriority @default(MEDIUM)
-  createdBy   String?      @db.Uuid
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id                String    @id @default(uuid()) @db.Uuid
+  orgId             String    @db.Uuid
+  title             String
+  description       String    @db.Text
+  // taskType / status / priority / automationMode are String rather
+  // than Prisma enums so a customer can extend the vocabulary (add a
+  // new task kind, an extra review state, a HYBRID+HUMAN blend) on
+  // their side without a schema migration. Same pattern DataAsset's
+  // classifiers use.
+  taskType          String    @default("GENERAL")
+  status            String    @default("OPEN")
+  priority          String    @default("MEDIUM")
+  automationMode    String    @default("HUMAN")
+  assigneeId        String?   @db.Uuid
+  dueDate           DateTime?
+  // Free-form back-reference to whatever spawned this task (a
+  // DamaRole onboarding, an issue remediation, etc.). Not modelled
+  // as an FK because the target could be any entity type.
+  linkedObjectType  String?
+  linkedObjectId    String?
+  resolution        String?   @db.Text
+  createdBy         String?   @db.Uuid
+  completedAt       DateTime?
+  // Overdue-notified dedupe marker — see routes/governance-tasks
+  // `sweepOverdueTasks()`. Cleared on completion / cancel / due-date
+  // change so a reopened task can re-fire.
+  overdueNotifiedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   assignee     Person?      @relation("GovernanceTaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
@@ -763,20 +730,33 @@ model GovernanceTask {
 }
 
 model GovernanceIssue {
-  id          String        @id @default(uuid()) @db.Uuid
-  orgId       String        @db.Uuid
-  title       String
-  description String?       @db.Text
-  severity    IssueSeverity @default(MEDIUM)
-  status      IssueStatus   @default(OPEN)
-  assigneeId  String?       @db.Uuid
-  source      IssueSource   @default(MANUAL)
-  sourceRef   String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                String    @id @default(uuid()) @db.Uuid
+  orgId             String    @db.Uuid
+  title             String
+  description       String    @db.Text
+  // String classifiers rather than Prisma enums — see the
+  // vocabulary-extension rationale on GovernanceTask.
+  issueType         String    @default("METADATA")
+  severity          String    @default("MEDIUM")
+  status            String    @default("OPEN")
+  domainId          String?   @db.Uuid
+  dataAssetId       String?   @db.Uuid
+  systemId          String?   @db.Uuid
+  reportedBy        String?   @db.Uuid
+  assignedTo        String?   @db.Uuid
+  resolutionSummary String?   @db.Text
+  closedAt          DateTime?
+  // Back-references used by the auto-issue sync helpers so a second
+  // run reopens / closes the same row instead of piling up
+  // duplicates. Non-FK because the referenced entities live in
+  // different subsystems (DQ rules, agents).
+  linkedRuleId      String?
+  linkedAgentId     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  assignee     Person?      @relation("GovernanceIssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee     Person?      @relation("GovernanceIssueAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
 
   @@index([orgId])
   @@index([orgId, status])
@@ -784,41 +764,65 @@ model GovernanceIssue {
 }
 
 model GovernancePolicy {
-  id            String     @id @default(uuid()) @db.Uuid
-  orgId         String     @db.Uuid
-  docId         String // e.g. "POL-001", "CHA-002"
-  name          String
-  description   String?    @db.Text
-  type          PolicyType @default(POLICY)
-  content       String     @db.Text
-  version       Int        @default(1)
-  effectiveDate DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @db.Uuid
+  // Human-facing code with per-documentType prefix (POL-001, CHA-002,
+  // FRW-003, STD-004). Generated by routes/governance-policies.
+  code              String
+  name              String
+  description       String   @db.Text
+  // String classifiers rather than Prisma enums — see the
+  // vocabulary-extension rationale on GovernanceTask.
+  documentType      String   @default("POLICY")
+  status            String   @default("DRAFT")
+  ownerAssignmentId String?  @db.Uuid
+  category          String   @default("GENERAL")
+  reviewFrequency   String   @default("ANNUAL")
+  // Date-only strings (yyyy-mm-dd) kept as String? to match the Stored
+  // shape one-for-one; a future migration can promote to DATE columns
+  // when queryability shows up.
+  lastReviewDate    String?
+  nextReviewDate    String?
+  effectiveDate     String?
+  content           String   @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  controls GovernanceControl[]
+  // GovernanceControl.policyId is intentionally an untyped soft
+  // reference (see comment on that model) so no back-relation here.
   mappings Mapping[]
 
-  @@unique([orgId, docId])
+  @@unique([orgId, code])
   @@index([orgId])
   @@map("governance_policies")
 }
 
 model GovernanceControl {
-  id             String         @id @default(uuid()) @db.Uuid
-  orgId          String         @db.Uuid
-  policyId       String         @db.Uuid
-  name           String
-  description    String?        @db.Text
-  controlType    ControlType    @default(PREVENTIVE)
-  automationMode AutomationMode @default(HUMAN)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @db.Uuid
+  // policyId can be blank when the policy that owned this control was
+  // deleted — the routes' cascade sets policyId to '' instead of
+  // dropping the control, so the FK is intentionally soft (no
+  // relation) here.
+  policyId          String
+  code              String
+  name              String
+  description       String   @db.Text
+  // String classifiers rather than Prisma enums — see the
+  // vocabulary-extension rationale on GovernanceTask.
+  controlType       String   @default("DETECTIVE")
+  automationMode    String   @default("HUMAN")
+  status            String   @default("DRAFT")
+  ownerAssignmentId String?  @db.Uuid
+  evidenceRequired  Boolean  @default(false)
+  linkedDomainId    String?  @db.Uuid
+  linkedSystemId    String?  @db.Uuid
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  policy       GovernancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   processNodes ProcessNodeControl[]
 
@@ -828,20 +832,29 @@ model GovernanceControl {
 }
 
 model GovernanceGroup {
-  id            String     @id @default(uuid()) @db.Uuid
-  orgId         String     @db.Uuid
-  name          String
-  level         GroupLevel
-  parentGroupId String?    @db.Uuid
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  parentId    String?  @db.Uuid
+  name        String
+  // String rather than a Prisma enum so a customer can add a tier
+  // (e.g. a REGIONAL_COUNCIL) without a schema migration.
+  type        String
+  description String   @db.Text
+  charter     String   @db.Text
+  status      String   @default("ACTIVE")
+  // Members are (personId | agentId, groupRole, since) tuples kept
+  // as JSONB — the same shape the JSON store uses. Rows are only ever
+  // read as a set, so no join-table is needed today.
+  members     Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  parentGroup  GovernanceGroup?  @relation("GovernanceGroupTree", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  parentGroup  GovernanceGroup?  @relation("GovernanceGroupTree", fields: [parentId], references: [id], onDelete: SetNull)
   childGroups  GovernanceGroup[] @relation("GovernanceGroupTree")
 
   @@index([orgId])
-  @@index([parentGroupId])
+  @@index([parentId])
   @@map("governance_groups")
 }
 
@@ -850,16 +863,32 @@ model GovernanceGroup {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Comment {
-  id         String   @id @default(uuid()) @db.Uuid
-  orgId      String   @db.Uuid
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @db.Uuid
   entityType String
-  entityId   String   @db.Uuid
-  authorId   String   @db.Uuid
-  body       String   @db.Text
-  createdAt  DateTime @default(now())
+  // entityId is String rather than @db.Uuid because comments hang off
+  // any entity — some ids are non-UUID (e.g. system-generated /
+  // composite keys). Kept untyped here for the same reason
+  // AuditLog.entityId is.
+  entityId   String
+  // Threading is one level deep: replies point at a top-level comment
+  // id. See routes/comments for the reply-collapse rule.
+  parentId   String?   @db.Uuid
+  // userId is nullable and untyped (no FK) — a synthetic / system
+  // comment may have a null author, and imported comments may
+  // reference a personId that no longer exists.
+  userId     String?
+  userName   String
+  content    String    @db.Text
+  // Resolved personIds extracted from @mentions at write time.
+  mentions   String[]  @default([])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now())
+  // Soft delete: content is blanked in the API response but the row
+  // is preserved so child replies aren't orphaned in the UI.
+  deletedAt  DateTime?
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  author       Person       @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([orgId, entityType, entityId])
@@ -873,21 +902,25 @@ model Comment {
 
 model FlowRelationship {
   id         String   @id @default(uuid()) @db.Uuid
-  orgId      String   @db.Uuid
   fromNodeId String   @db.Uuid
   toNodeId   String   @db.Uuid
-  flowType   FlowType @default(SEQUENCE)
-  notes      String?  @db.Text
-  createdBy  String?  @db.Uuid
+  // String rather than a Prisma enum — the JSON store uses SEQUENCE /
+  // PARALLEL / CONDITIONAL / LOOP today and can grow. Same
+  // vocabulary-extension pattern the governance rows use.
+  type       String   @default("SEQUENCE")
+  condition  String?
+  label      String?
   createdAt  DateTime @default(now())
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  fromNode     ProcessNode  @relation("FlowFromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
-  toNode       ProcessNode  @relation("FlowToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
+  // No top-level orgId column — the Stored FlowRelationship TS type
+  // (routes/process-catalog) has never carried one; scope is derived
+  // via fromNode / toNode which both belong to a ProcessNode with an
+  // orgId. See people.repo.ts for the same "post-map filter" pattern.
+  fromNode ProcessNode @relation("FlowFromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   ProcessNode @relation("FlowToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
 
-  @@index([orgId])
-  @@index([orgId, fromNodeId])
-  @@index([orgId, toNodeId])
+  @@index([fromNodeId])
+  @@index([toNodeId])
   @@map("flow_relationships")
 }
 
