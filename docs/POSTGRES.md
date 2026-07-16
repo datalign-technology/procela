@@ -111,12 +111,18 @@ Then in the route file:
   a live database. See `src/__tests__/repository.test.ts` for the
   pattern. This is enough to catch mapping bugs (StoredOrg ↔ Prisma
   row) and interface drift.
-- **Live DB tests** — not yet in CI. When the reference migration is
-  proven end-to-end against a real Postgres, add a Docker Compose
-  service to the E2E job that spins up Postgres, sets `DATABASE_URL`,
-  runs migrations, and re-runs a targeted subset of the existing route
-  tests through the Postgres path. Until then, live-DB validation is
-  a manual step on the developer machine.
+- **Live-DB tests** — `src/__tests__/live-db.test.ts` exercises each
+  repository's Prisma path against a real Postgres. The file is a
+  no-op when `DATABASE_URL` is unset, so `npm test` locally stays
+  fast; the `test-backend-live-db` CI job sets the env var and
+  spins up a Postgres 16 service container. Any schema drift or
+  mapping bug that the stubbed unit tests can't see (unknown column,
+  missing FK, wrong Postgres type) fails there.
+- **Adding a live-DB case for a new entity**: import the
+  `prisma<Entity>Repository` factory, seed any FK prereqs via
+  `loadPrisma()`, run a create → get → update → delete cycle.
+  `truncateAll()` runs before each test so state doesn't leak.
+  Add the entity's table to that helper's list too.
 
 ## What's left
 

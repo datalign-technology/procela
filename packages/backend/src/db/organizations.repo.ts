@@ -72,11 +72,14 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
     id: r.id,
     parentId: r.parentId,
     name: r.name,
-    type: r.type,
+    // JSON store uses lowercase org types ("company", "division", …);
+    // the Prisma OrgType enum stores them upper-case. Translate on
+    // the way out so downstream code sees the shape it expects.
+    type: r.type.toLowerCase(),
     industry: r.industry ?? '',
     description: r.description ?? '',
     headCount: r.headCount,
-    ...(r.statusMode ? { statusMode: r.statusMode as StoredOrg['statusMode'] } : {}),
+    ...(r.statusMode ? { statusMode: r.statusMode.toLowerCase() as StoredOrg['statusMode'] } : {}),
     ...(r.tenantSlug ? { tenantSlug: r.tenantSlug } : {}),
     ...(r.brandDisplayName ? { brandDisplayName: r.brandDisplayName } : {}),
     ...(r.brandGlyph ? { brandGlyph: r.brandGlyph } : {}),
@@ -90,13 +93,27 @@ function fromPrisma(r: PrismaOrgRow): StoredOrg {
 function toPrismaData(row: StoredOrg): Record<string, unknown> {
   return {
     id: row.id,
-    parentId: row.parentId,
+    // Prisma models the parent link through the `parent` relation
+    // rather than exposing the scalar `parentId` directly on the
+    // create/update input. When we have a parent id, connect it;
+    // when null, omit the field entirely so Prisma leaves the FK
+    // at NULL. Setting `parent: { disconnect: true }` would be the
+    // idiomatic "clear the link" on update; we don't use that here
+    // because organizations are never re-parented in practice.
+    ...(row.parentId ? { parent: { connect: { id: row.parentId } } } : {}),
     name: row.name,
-    type: row.type,
+    // Mirror of the case translation in fromPrisma() — Prisma's
+    // OrgType enum accepts only the upper-case variants, but the
+    // JSON store uses lower-case throughout. Upshift on write.
+    // Guarded because update() passes a partial patch that may not
+    // include `type` at all.
+    ...(row.type ? { type: row.type.toUpperCase() } : {}),
     industry: row.industry || null,
     description: row.description || null,
     headCount: row.headCount,
-    statusMode: row.statusMode ?? null,
+    // statusMode: same case dance as type — Prisma enum wants
+    // upper-case (SIMPLE / REVIEW / ADVANCED), JSON stores lower.
+    ...(row.statusMode ? { statusMode: row.statusMode.toUpperCase() } : {}),
     tenantSlug: row.tenantSlug ?? null,
     brandDisplayName: row.brandDisplayName ?? null,
     brandGlyph: row.brandGlyph ?? null,

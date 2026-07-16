@@ -95,8 +95,16 @@ model Organization {
   name                   String
   type                   OrgType    @default(COMPANY)
   industry               String?
+  description            String?    @db.Text
+  headCount              Int        @default(0)
   statusMode             StatusMode @default(SIMPLE)
-  branding               Json? // brandDisplayName / brandGlyph / ssoButtonLabel / brandPrimaryColor / tenantSlug
+  // Branding fields kept flat rather than under a `branding Json?`
+  // blob so tenantSlug can be uniquely indexed for tenant lookup.
+  tenantSlug             String?    @unique
+  brandDisplayName       String?
+  brandGlyph             String?
+  ssoButtonLabel         String?
+  brandPrimaryColor      String?
   identityProviderConfig Json?
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt

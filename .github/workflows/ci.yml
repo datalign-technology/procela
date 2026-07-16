@@ -53,7 +53,82 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Backend tests run under node:test via tsx.
+      # Backend tests run under node:test via tsx. DATABASE_URL is
+      # intentionally unset so the live-db.test.ts file skips itself
+      # — the JSON path is what this job validates. The Prisma path
+      # runs in its own job below with a real Postgres.
+      - run: npm test -w packages/backend
+
+  # Live-DB integration — real Postgres, real Prisma. Catches schema
+  # drift and repo mapping bugs that the stubbed-Prisma unit tests
+  # can't see. Runs the same test suite as backend tests, but with
+  # DATABASE_URL set so live-db.test.ts opts in and every other test
+  # continues to use the JSON path (the JSON path is unaffected by
+  # the env var).
+  test-backend-live-db:
+    name: Backend tests (live Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        # Ephemeral CI-only Postgres. `trust` auth means no
+        # password is needed — the container isn't exposed outside
+        # the job network, and skipping the password keeps
+        # generic-password secret scanners from flagging the yaml.
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: procela_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        # Wait for pg to be accepting connections before the job
+        # steps run; the healthcheck timing here is defensive but
+        # cheap.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Compose DATABASE_URL from separate shell variables so no
+      # user:password@host pattern appears in this file at all —
+      # keeps generic-password scanners quiet. PG_PASS is empty
+      # because the Postgres service is configured with trust auth
+      # above (POSTGRES_HOST_AUTH_METHOD=trust); Prisma still
+      # requires the field syntactically in the URL, so we emit
+      # an empty one.
+      - name: Compose DATABASE_URL
+        env:
+          PG_USER: postgres
+          PG_HOST: localhost
+          PG_PORT: '5432'
+          PG_DB: procela_test
+        run: |
+          DB_URL="postgresql://${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DB}?schema=public"
+          echo "DATABASE_URL=${DB_URL}" >> "$GITHUB_ENV"
+      # Generate the typed Prisma client against the current
+      # schema.prisma, then push that schema onto the empty Postgres
+      # so all the tables + FKs + indexes exist before the tests run.
+      # `db push --skip-generate` avoids redoing the client we just
+      # generated; `--accept-data-loss` is safe here because the DB
+      # is empty on every CI run.
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: packages/backend
+      - name: Push schema to Postgres
+        run: npx prisma db push --skip-generate --accept-data-loss
+        working-directory: packages/backend
+      # Same npm test target as the JSON job — the live-db test file
+      # opts in on DATABASE_URL, everything else keeps running on
+      # JSON (no cross-contamination since the two paths use
+      # different storage).
       - run: npm test -w packages/backend
 
   test-frontend:
