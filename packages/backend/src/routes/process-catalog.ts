@@ -6,6 +6,7 @@ import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
 import { getProcessVersionsRepository } from '../db/process-versions.repo';
 import { getSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 import { getVisibleOrgScope, getAncestorOrgIds } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { rankSuggestions } from '../services/asset-suggestion.service';
@@ -253,6 +254,15 @@ const processNodesRepo = getProcessNodesRepository(processNodes);
 const flowRelationshipsRepo = getFlowRelationshipsRepository(flowRelationships);
 const processVersionsRepo = getProcessVersionsRepository(processVersions);
 const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
+
+// Cached lazily so we don't have to import the governance-policies
+// route eagerly (that would drag its own module-load side effects into
+// this file's boot). Used only by /apply-governance-template.
+function getGovernancePoliciesRepo() {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { governancePolicies } = require('./governance-policies');
+  return getGovernancePoliciesRepository(governancePolicies);
+}
 
 function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['kind']): Set<string> {
   const out = new Set<string>();
@@ -1584,7 +1594,7 @@ router.delete('/flows/:id', async (req: Request, res: Response) => {
 // ── TEMPLATE APPLICATION ──
 
 /** POST /apply-template — create hierarchy from AI-generated template */
-router.post('/apply-template', (req: Request, res: Response) => {
+router.post('/apply-template', async (req: Request, res: Response) => {
   try {
     const { industry, valueStreams: templateStreams, orgId: requestOrgId } = req.body;
     const templateOrgId = requestOrgId || DEV_ORG_ID;
@@ -1609,7 +1619,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
         ...(tvs.businessOutcome ? { businessOutcome: tvs.businessOutcome } : {}),
         createdAt: now, updatedAt: now,
       };
-      processNodes.push(vsNode);
+      await processNodesRepo.create(vsNode);
       created.push(vsNode);
 
       // Create Process nodes with Activities
@@ -1624,7 +1634,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
           ...(proc.purpose ? { purpose: proc.purpose } : {}),
           createdAt: now, updatedAt: now,
         };
-        processNodes.push(procNode);
+        await processNodesRepo.create(procNode);
         created.push(procNode);
 
         // Handle both formats: new (activities) and legacy (subProcesses > steps)
@@ -1642,7 +1652,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
               version: 1, domain: 'OPERATIONAL',
               createdAt: now, updatedAt: now,
             };
-            processNodes.push(spNode);
+            await processNodesRepo.create(spNode);
             created.push(spNode);
 
             for (const st of (sp.steps || sp.activities || [])) {
@@ -1669,14 +1679,14 @@ router.post('/apply-template', (req: Request, res: Response) => {
             version: 1, domain: 'OPERATIONAL',
             createdAt: now, updatedAt: now,
           };
-          processNodes.push(actNode);
+          await processNodesRepo.create(actNode);
           created.push(actNode);
 
           // Create sequence flow from previous activity within same parent
           if (prevActivities.length > 0) {
             const prevAct = prevActivities[prevActivities.length - 1];
             if (prevAct.parentId === actNode.parentId) {
-              flowRelationships.push({
+              await flowRelationshipsRepo.create({
                 id: uuid(), fromNodeId: prevAct.id, toNodeId: actNode.id,
                 type: 'SEQUENCE', condition: null, label: null, createdAt: now,
               });
@@ -1687,8 +1697,6 @@ router.post('/apply-template', (req: Request, res: Response) => {
       }
     }
 
-    saveStore('processNodes', processNodes);
-    saveStore('flowRelationships', flowRelationships);
     logger.info({ count: created.length, industry }, 'Applied template with universal hierarchy');
     res.status(201).json({ success: true, data: created, tree: buildTree(processNodes) });
   } catch (err) {
@@ -1703,7 +1711,7 @@ router.post('/apply-template', (req: Request, res: Response) => {
  * and AI-generated), governance processes are universal and use a static
  * template. Idempotent — skips if governance value streams already exist.
  */
-router.post('/apply-governance-template', (req: Request, res: Response) => {
+router.post('/apply-governance-template', async (req: Request, res: Response) => {
   const { orgId: requestOrgId } = req.body;
 
   // Always create governance processes at the company level — governance
@@ -1824,7 +1832,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
       purpose: tvs.purpose, businessOutcome: tvs.businessOutcome,
       createdAt: now, updatedAt: now,
     };
-    processNodes.push(vsNode);
+    await processNodesRepo.create(vsNode);
     created.push(vsNode);
 
     for (let pIdx = 0; pIdx < tvs.processes.length; pIdx++) {
@@ -1837,7 +1845,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
         version: 1, domain: 'GOVERNANCE', purpose: proc.purpose,
         createdAt: now, updatedAt: now,
       };
-      processNodes.push(procNode);
+      await processNodesRepo.create(procNode);
       created.push(procNode);
 
       const prevActivities: ProcessNode[] = [];
@@ -1853,12 +1861,12 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
           ...((act as any).inputsOutputs ? { inputsOutputs: (act as any).inputsOutputs } : {}),
           createdAt: now, updatedAt: now,
         };
-        processNodes.push(actNode);
+        await processNodesRepo.create(actNode);
         created.push(actNode);
 
         if (prevActivities.length > 0) {
           const prev = prevActivities[prevActivities.length - 1];
-          flowRelationships.push({
+          await flowRelationshipsRepo.create({
             id: uuid(), fromNodeId: prev.id, toNodeId: actNode.id,
             type: 'SEQUENCE', condition: null, label: null, createdAt: now,
           });
@@ -1867,9 +1875,6 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
       }
     }
   }
-
-  saveStore('processNodes', processNodes);
-  saveStore('flowRelationships', flowRelationships);
 
   // ── Seed governance documents (Charter, Policies, Standards, ACL) ──
   // The old governance template created 15 "Data Assets" as
@@ -1894,6 +1899,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
   // template.
   try {
     const { governancePolicies } = require('./governance-policies');
+    const policiesRepo = getGovernancePoliciesRepo();
 
     const docDefs: Array<{ name: string; description: string; documentType: 'CHARTER' | 'FRAMEWORK' | 'STANDARD' | 'POLICY'; category: string }> = [
       { name: 'Data Governance Charter', description: 'Mission, vision, principles, decision rights, and scope of the governance program', documentType: 'CHARTER', category: 'GOVERNANCE' },
@@ -1908,7 +1914,7 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
     for (const def of docDefs) {
       if (existingByName.has(def.name.toLowerCase())) continue;
       const seq = governancePolicies.filter((p: any) => p.documentType === def.documentType).length + 1;
-      governancePolicies.push({
+      await policiesRepo.create({
         id: uuid(),
         orgId: templateOrgId,
         code: `${codePrefix[def.documentType]}-${String(seq).padStart(3, '0')}`,
@@ -1925,10 +1931,9 @@ router.post('/apply-governance-template', (req: Request, res: Response) => {
         content: '',
         createdAt: now,
         updatedAt: now,
-      });
+      } as any);
       createdDocs++;
     }
-    if (createdDocs > 0) saveStore('governancePolicies', governancePolicies);
     logger.info({ docs: createdDocs }, 'Seeded governance documents (Charter / Policies / Standards / ACL) under templateOrgId');
   } catch (err) {
     logger.error({ err }, 'Failed to seed governance documents (non-fatal)');

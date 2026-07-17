@@ -634,7 +634,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * Pair with a server restart in production — in-memory store copies
  * in route modules don't pick up the on-disk scrub until reload.
  */
-router.post('/:id/forget', (req: Request, res: Response) => {
+router.post('/:id/forget', async (req: Request, res: Response) => {
   const idx = people.findIndex((p) => p.id === String(req.params.id));
   if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   const person = people[idx];
@@ -653,8 +653,7 @@ router.post('/:id/forget', (req: Request, res: Response) => {
   // every other scrubbed store. Order matters: cascade runs after
   // the people file is rewritten so the reload-from-disk pass at
   // the end of the cascade sees a consistent snapshot.
-  people.splice(idx, 1);
-  saveStore('people', people);
+  await peopleRepo.delete(person.id);
 
   // Lazy import to break the route ↔ service circular dependency.
   // The gdpr service imports auditService which doesn't depend on
@@ -771,7 +770,7 @@ router.put('/:id/org-role', async (req: Request, res: Response) => {
  * Backward-compatible: 4-column CSVs without an Org column still
  * work — every row falls back to the dialog's orgId.
  */
-router.post('/import', (req: Request, res: Response) => {
+router.post('/import', async (req: Request, res: Response) => {
   try {
     const { orgId, people: peopleList, csv } = req.body;
 
@@ -895,11 +894,10 @@ router.post('/import', (req: Request, res: Response) => {
         skillIds: [],
         createdAt: now, updatedAt: now,
       };
-      people.push(person);
+      await peopleRepo.create(person);
       created.push(person);
     }
 
-    saveStore('people', people);
     logger.info({ created: created.length, skipped: skipped.length, warnings: warnings.length, defaultOrg: org.name }, 'Imported people');
     const parts: string[] = [`Imported ${created.length}`];
     if (skipped.length > 0) parts.push(`skipped ${skipped.length} duplicate${skipped.length === 1 ? '' : 's'}`);

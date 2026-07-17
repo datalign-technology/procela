@@ -7,6 +7,7 @@ import { systems } from './systems';
 import { dataAssets } from './data-assets';
 import { dataQualityRules } from './data-quality';
 import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
+import { getAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
 
 export interface DataLineageLink {
   id: string;
@@ -56,6 +57,8 @@ export interface AssetLineageEdge {
 export const assetLineageEdges: AssetLineageEdge[] =
   loadStore<AssetLineageEdge>('assetLineageEdges');
 registerStore('assetLineageEdges', assetLineageEdges);
+
+const assetLineageEdgesRepo = getAssetLineageEdgesRepository(assetLineageEdges);
 
 // ── dbt asset mapping ────────────────────────────────────────────────────
 // Maps a dbt unique_id (the manifest key) to the Procela DataAsset id it
@@ -396,11 +399,11 @@ export interface DbtImportSummary {
  *  Throws on a structurally-invalid manifest; otherwise returns a
  *  summary the caller can surface as a toast or persist as an
  *  audit trail. */
-export function reconcileDbtManifest(
+export async function reconcileDbtManifest(
   manifest: DbtManifest,
   orgIdInput: string | undefined,
   actorUserId: string | null,
-): DbtImportSummary {
+): Promise<DbtImportSummary> {
   const effectiveOrgId = orgIdInput || DEV_ORG_ID;
 
   if (!manifest || typeof manifest !== 'object') {
@@ -410,10 +413,10 @@ export function reconcileDbtManifest(
   return reconcileManifestInner(manifest, effectiveOrgId, actorUserId);
 }
 
-router.post('/import-dbt', (req: Request, res: Response) => {
+router.post('/import-dbt', async (req: Request, res: Response) => {
   const { orgId, manifest } = req.body as { orgId?: string; manifest?: DbtManifest };
   try {
-    const summary = reconcileDbtManifest(
+    const summary = await reconcileDbtManifest(
       manifest as DbtManifest,
       orgId,
       (req as any).user?.sub || null,
@@ -424,11 +427,11 @@ router.post('/import-dbt', (req: Request, res: Response) => {
   }
 });
 
-function reconcileManifestInner(
+async function reconcileManifestInner(
   manifest: DbtManifest,
   effectiveOrgId: string,
   actorUserId: string | null,
-): DbtImportSummary {
+): Promise<DbtImportSummary> {
   // Flat list of all asset-bearing dbt nodes from both nodes and sources.
   const flat: DbtNode[] = [];
   for (const m of [manifest.nodes, manifest.sources]) {
@@ -538,9 +541,10 @@ function reconcileManifestInner(
         // Repair if the dbt mapping moved the endpoint to a different asset.
         existing.sourceAssetId = sourceAssetId;
         existing.targetAssetId = targetAssetId;
+        await assetLineageEdgesRepo.update(existing.id, existing);
         edgesTouched++;
       } else {
-        assetLineageEdges.push({
+        const edge: AssetLineageEdge = {
           id: uuid(),
           orgId: effectiveOrgId,
           sourceAssetId,
@@ -549,7 +553,8 @@ function reconcileManifestInner(
           sourceRef: key,
           lastSeenAt: now,
           createdAt: now,
-        });
+        };
+        await assetLineageEdgesRepo.create(edge);
         edgesCreated++;
       }
     }
@@ -558,14 +563,21 @@ function reconcileManifestInner(
   // Drop prior dbt edges that no longer appear in this manifest, scoped
   // to the same org. Manual edges are untouched.
   let edgesRemoved = 0;
-  for (let i = assetLineageEdges.length - 1; i >= 0; i--) {
-    const e = assetLineageEdges[i];
+  // Snapshot the ids to delete first — iterating backwards over the
+  // shared array while awaiting each delete is safe on the JSON path
+  // (delete splices in place) but relying on that would make future
+  // Postgres divergence surprising. Materialise up front.
+  const edgesToDelete: string[] = [];
+  for (const e of assetLineageEdges) {
     if (e.orgId !== effectiveOrgId) continue;
     if (e.source !== 'dbt') continue;
     if (!e.sourceRef || !declaredKeys.has(e.sourceRef)) {
-      assetLineageEdges.splice(i, 1);
-      edgesRemoved++;
+      edgesToDelete.push(e.id);
     }
+  }
+  for (const id of edgesToDelete) {
+    await assetLineageEdgesRepo.delete(id);
+    edgesRemoved++;
   }
 
   // ── 3. Reconcile dbt tests as Data Quality rules ─────────────────────
@@ -661,7 +673,7 @@ function reconcileManifestInner(
 
   saveStore('dataAssets', dataAssets);
   saveStore('dbtAssetMappings', dbtAssetMappings);
-  saveStore('assetLineageEdges', assetLineageEdges);
+  // assetLineageEdges is written per-mutation via assetLineageEdgesRepo.
   saveStore('dataQualityRules', dataQualityRules);
   saveStore('dbtTestMappings', dbtTestMappings);
 

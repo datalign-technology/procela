@@ -242,7 +242,7 @@ async function performRefresh(
     }
     const manifest = await manifestRes.json() as Parameters<typeof reconcileDbtManifest>[0];
 
-    const summary = reconcileDbtManifest(manifest, conn.orgId, actorUserId);
+    const summary = await reconcileDbtManifest(manifest, conn.orgId, actorUserId);
     const now = new Date();
     conn.lastRunAt = now.toISOString();
     conn.lastStatus = 'SUCCESS';

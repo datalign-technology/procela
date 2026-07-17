@@ -729,7 +729,11 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
   if (shouldBePrimary) {
     // Demote any previously primary binding so there's only one active.
     for (const b of existing) {
-      if (b.isPrimary) { b.isPrimary = false; b.updatedAt = new Date().toISOString(); }
+      if (b.isPrimary) {
+        b.isPrimary = false;
+        b.updatedAt = new Date().toISOString();
+        await dataAssetBindingsRepo.update(b.id, b);
+      }
     }
   }
 
@@ -746,8 +750,7 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  dataAssetBindings.push(binding);
-  saveStore('dataAssetBindings', dataAssetBindings);
+  await dataAssetBindingsRepo.create(binding);
   auditService.log(asset.orgId, null, 'DataAssetBinding', binding.id, 'CREATE', null, binding);
   res.status(201).json({ success: true, data: binding });
 });
@@ -780,12 +783,13 @@ router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
     for (const b of dataAssetBindings) {
       if (b.dataAssetId === asset.id && b !== binding && b.isPrimary) {
         b.isPrimary = false; b.updatedAt = new Date().toISOString();
+        await dataAssetBindingsRepo.update(b.id, b);
       }
     }
     binding.isPrimary = true;
   }
   binding.updatedAt = new Date().toISOString();
-  saveStore('dataAssetBindings', dataAssetBindings);
+  await dataAssetBindingsRepo.update(binding.id, binding);
   auditService.log(asset.orgId, null, 'DataAssetBinding', binding.id, 'UPDATE', null, binding);
   res.json({ success: true, data: binding });
 });
@@ -803,7 +807,7 @@ router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) =>
   const idx = dataAssetBindings.findIndex((b) => b.id === req.params.bindingId && b.dataAssetId === asset.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Binding not found' }); return; }
   const removed = dataAssetBindings[idx];
-  dataAssetBindings.splice(idx, 1);
+  await dataAssetBindingsRepo.delete(removed.id);
 
   // Promote a successor so there's still one primary when any bindings remain.
   if (removed.isPrimary) {
@@ -812,9 +816,9 @@ router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) =>
       const next = remaining.sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
       next.isPrimary = true;
       next.updatedAt = new Date().toISOString();
+      await dataAssetBindingsRepo.update(next.id, next);
     }
   }
-  saveStore('dataAssetBindings', dataAssetBindings);
   auditService.log(asset.orgId, null, 'DataAssetBinding', removed.id, 'DELETE', removed, null);
   res.status(204).send();
 });
