@@ -37,6 +37,36 @@ import { prismaCommentsRepository } from '../db/comments.repo';
 import { prismaFlowRelationshipsRepository } from '../db/flow-relationships.repo';
 import { prismaSkillsRepository } from '../db/skills.repo';
 import { prismaDamaRolesRepository } from '../db/dama-roles.repo';
+// Secondary-store repos — batch-3 migration.
+import { prismaAttachmentsRepository } from '../db/attachments.repo';
+import { prismaTagsRepository } from '../db/tags.repo';
+import { prismaSavedViewsRepository } from '../db/saved-views.repo';
+import { prismaReportsRepository } from '../db/reports.repo';
+import { prismaSopsRepository } from '../db/sops.repo';
+import { prismaGlossaryTermsRepository } from '../db/glossary-terms.repo';
+import { prismaOperationsManualsRepository } from '../db/operations-manuals.repo';
+import { prismaCalendarEventsRepository } from '../db/calendar-events.repo';
+import { prismaAnalysisReportsRepository } from '../db/analysis-reports.repo';
+import { prismaGovernanceProgramsRepository } from '../db/governance-programs.repo';
+import { prismaDecisionRightsRepository } from '../db/decision-rights.repo';
+import { prismaSyncConnectionsRepository } from '../db/sync-connections.repo';
+import { prismaConnectionsRepository } from '../db/connections.repo';
+import { prismaConnectorsRepository } from '../db/connectors.repo';
+import { prismaConnectorEventsRepository } from '../db/connector-events.repo';
+import { prismaMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
+import { prismaDataLineageLinksRepository } from '../db/data-lineage-links.repo';
+import { prismaDataQualityRulesRepository } from '../db/data-quality-rules.repo';
+import { prismaDbtCloudConnectionsRepository } from '../db/dbt-cloud-connections.repo';
+import { prismaAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
+import { prismaDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
+import { prismaDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { prismaAgentsRepository } from '../db/agents.repo';
+import { prismaAgentSchedulesRepository } from '../db/agent-schedules.repo';
+import { prismaAgentExecutionsRepository } from '../db/agent-executions.repo';
+import { prismaConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
+import { prismaGapSnapshotsRepository } from '../db/gap-snapshots.repo';
+import { prismaProcessVersionsRepository } from '../db/process-versions.repo';
+import { prismaSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
 
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
@@ -59,19 +89,29 @@ async function truncateAll(): Promise<void> {
   const tables = [
     'mappings',
     'process_node_orgs', 'process_node_controls', 'process_node_skills', 'process_node_systems',
-    'flow_relationships', 'process_nodes',
-    'data_asset_bindings', 'data_asset_stewards', 'data_assets',
+    'flow_relationships', 'process_versions', 'process_nodes',
+    'data_asset_columns', 'data_asset_bindings', 'data_asset_stewards', 'data_assets',
     'data_domain_stewards', 'data_domains',
+    'data_quality_rules', 'data_lineage_links', 'asset_lineage_edges',
     'system_custodians', 'systems',
     'audit_logs',
     'notifications',
     'governance_tasks', 'governance_issues',
     'governance_controls', 'governance_policies',
-    'governance_groups',
+    'governance_groups', 'governance_programs',
     'comments',
     'dama_roles',
     'person_skills', 'skills',
     'person_orgs', 'people',
+    // Secondary stores — batch-3 migration.
+    'attachments', 'tags', 'saved_views', 'reports', 'analysis_reports',
+    'sops', 'glossary_terms', 'operations_manuals', 'calendar_events',
+    'decision_rights',
+    'sync_connections', 'connection_system_links', 'connections',
+    'connector_events', 'connectors',
+    'dbt_cloud_connections',
+    'agent_executions', 'agent_schedules', 'agents',
+    'maturity_snapshots', 'gap_snapshots', 'suggestion_dismissals',
     'organizations',
   ];
   for (const table of tables) {
@@ -401,5 +441,343 @@ suite('live-db repository round-trips', () => {
     assert.strictEqual((await dama.list()).length, 1);
     assert.strictEqual((await mapping.list({ orgId })).length, 1);
     assert.strictEqual((await group.list({ orgId })).length, 1);
+  });
+
+  // ── Secondary stores (batch-3 migration) ──────────────────────────────
+  // Compact create+list cycles per entity. Catches schema drift, JSON
+  // column round-trips, and native String[] column shapes. Grouped by
+  // FK-independence so a single seedFixture() covers the majority.
+
+  it('Attachment / Tag / SavedView / Report / AnalysisReport: create + list', async () => {
+    const { orgId, personId } = await seedFixture();
+    const now = new Date().toISOString();
+    const attachment = prismaAttachmentsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaAttachmentsRepository>[0] extends () => infer C ? C : never);
+    const tag = prismaTagsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaTagsRepository>[0] extends () => infer C ? C : never);
+    const view = prismaSavedViewsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaSavedViewsRepository>[0] extends () => infer C ? C : never);
+    const report = prismaReportsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaReportsRepository>[0] extends () => infer C ? C : never);
+    const analysis = prismaAnalysisReportsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaAnalysisReportsRepository>[0] extends () => infer C ? C : never);
+
+    await attachment.create({
+      id: randomUUID(), orgId, entityType: 'ProcessNode', entityId: randomUUID(),
+      type: 'URL', name: 'ref', description: '', url: 'https://x',
+      uploadedBy: personId, createdAt: now, updatedAt: now,
+    });
+    await tag.create({ id: randomUUID(), orgId, entityType: 'DataAsset', entityId: randomUUID(), tag: 'PII', createdAt: now });
+    await view.create({
+      id: randomUUID(), orgId, pageKey: 'data-assets', name: 'v1',
+      ownerId: personId, ownerName: 'Bob', isShared: true,
+      filters: { status: 'ACTIVE' }, createdAt: now, updatedAt: now,
+    });
+    await report.create({
+      id: randomUUID(), orgId, name: 'r1', description: '',
+      ownerId: personId, visibility: 'org',
+      definition: { entity: 'ProcessNode', columns: [], filters: [] } as unknown as import('../services/report-engine').ReportDefinition,
+      createdAt: now, updatedAt: now,
+    });
+    await analysis.create({
+      id: randomUUID(), orgId, name: 'a1', description: null,
+      ownerId: personId, ownerName: 'Bob',
+      config: { rowDim: 'status' }, createdAt: now, updatedAt: now,
+    });
+
+    assert.strictEqual((await attachment.list({ orgId })).length, 1);
+    assert.strictEqual((await tag.list({ orgId })).length, 1);
+    assert.strictEqual((await view.list({ orgId })).length, 1);
+    assert.strictEqual((await report.list({ orgId })).length, 1);
+    assert.strictEqual((await analysis.list({ orgId })).length, 1);
+  });
+
+  it('Sop / GlossaryTerm / OperationsManual / CalendarEvent: String[] + JSON round-trip', async () => {
+    const { orgId, personId } = await seedFixture();
+    const now = new Date().toISOString();
+    const sop = prismaSopsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaSopsRepository>[0] extends () => infer C ? C : never);
+    const glossary = prismaGlossaryTermsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaGlossaryTermsRepository>[0] extends () => infer C ? C : never);
+    const opm = prismaOperationsManualsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaOperationsManualsRepository>[0] extends () => infer C ? C : never);
+    const cal = prismaCalendarEventsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaCalendarEventsRepository>[0] extends () => infer C ? C : never);
+
+    const sopId = randomUUID();
+    await sop.create({
+      id: sopId, orgId, code: 'SOP-1', title: 'Access request',
+      purpose: 'grant access', category: 'ACCESS',
+      applicableRoles: ['CDO', 'DATA_STEWARD'],
+      triggerEvent: 'ticket', steps: [{ order: 1, title: 'Verify', description: '', estimatedMinutes: 5 }],
+      status: 'ACTIVE', version: 1,
+      ownerPersonId: personId, lastReviewedAt: null,
+      createdAt: now, updatedAt: now,
+    });
+    const gotSop = await sop.get(sopId);
+    assert.deepStrictEqual(gotSop?.applicableRoles, ['CDO', 'DATA_STEWARD']);
+    assert.strictEqual(gotSop?.steps[0]?.title, 'Verify');
+
+    await glossary.create({
+      id: randomUUID(), orgId, term: 'Meter Read', definition: 'A reading',
+      context: '', synonyms: ['reading'], relatedTerms: ['Consumption'],
+      domainId: null, ownerPersonId: personId,
+      status: 'APPROVED', category: 'BUSINESS',
+      exampleValues: '', businessRules: '', sourceOfTruth: '',
+      createdAt: now, updatedAt: now,
+    });
+    await opm.create({
+      id: randomUUID(), orgId, roleType: 'CDO', label: 'CDO',
+      purpose: 'strategy',
+      daily: ['review alerts'], weekly: ['check reports'], monthly: [], quarterly: [], escalation: [],
+      customContent: '', isCustom: false,
+      createdAt: now, updatedAt: now,
+    });
+    await cal.create({
+      id: randomUUID(), orgId, name: 'DG Council',
+      description: 'monthly council', eventType: 'COUNCIL_MEETING',
+      cadence: 'MONTHLY', dayOfMonth: 15, dayOfWeek: null,
+      timeOfDay: '10:00', durationMinutes: 60,
+      attendees: [personId], agendaTemplate: '',
+      nextOccurrence: null, lastOccurrence: null,
+      autoCreateTasks: false, status: 'ACTIVE',
+      createdAt: now, updatedAt: now,
+    });
+    assert.strictEqual((await glossary.list({ orgId })).length, 1);
+    assert.strictEqual((await opm.list({ orgId })).length, 1);
+    assert.strictEqual((await cal.list({ orgId })).length, 1);
+  });
+
+  it('GovernanceProgram / DecisionRight: scope+principles JSON + recommends String[]', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const program = prismaGovernanceProgramsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaGovernanceProgramsRepository>[0] extends () => infer C ? C : never);
+    const dr = prismaDecisionRightsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaDecisionRightsRepository>[0] extends () => infer C ? C : never);
+    await program.create({
+      id: randomUUID(), orgId, name: 'Enterprise DG',
+      scope: { inScope: 'utilities', outOfScope: '', boundaries: '', constraints: '' },
+      principles: { vision: 'v', principles: ['p1'], decisionRights: '', operatingModel: 'HYBRID' },
+      targetStartDate: null, targetLaunchDate: null, status: 'PLANNING',
+      createdAt: now, updatedAt: now,
+    });
+    await dr.create({
+      id: randomUUID(), orgId, decision: 'Retire dataset',
+      category: 'POLICY', description: 'retire critical',
+      decider: 'CDO', deciderType: 'ROLE',
+      recommends: ['DATA_STEWARD'], approves: ['CDO'], informed: ['CIO'],
+      escalationPath: 'CDO → CIO',
+      createdAt: now, updatedAt: now,
+    });
+    const progs = await program.list({ orgId });
+    assert.strictEqual(progs[0].principles.operatingModel, 'HYBRID');
+    const drs = await dr.list({ orgId });
+    assert.deepStrictEqual(drs[0].recommends, ['DATA_STEWARD']);
+  });
+
+  it('Connection / ConnectionSystemLink / Connector / ConnectorEvent / SyncConnection: JSON + String[]', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const connection = prismaConnectionsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaConnectionsRepository>[0] extends () => infer C ? C : never);
+    const csLink = prismaConnectionSystemLinksRepository(() => loadPrisma() as unknown as Parameters<typeof prismaConnectionSystemLinksRepository>[0] extends () => infer C ? C : never);
+    const connector = prismaConnectorsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaConnectorsRepository>[0] extends () => infer C ? C : never);
+    const connectorEvent = prismaConnectorEventsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaConnectorEventsRepository>[0] extends () => infer C ? C : never);
+    const sync = prismaSyncConnectionsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaSyncConnectionsRepository>[0] extends () => infer C ? C : never);
+
+    const connId = randomUUID();
+    await connection.create({
+      id: connId, orgId, name: 'Primary Postgres', connectionType: 'DATABASE',
+      config: { dbType: 'POSTGRESQL', host: 'localhost', port: 5432, database: 'app' },
+      credentials: { username: 'u', password: 'p' },
+      status: 'CONNECTED', lastTestedAt: null, lastTestResult: null,
+      createdAt: now, updatedAt: now,
+    });
+    await csLink.create({
+      id: randomUUID(), orgId, connectionId: connId, systemId: randomUUID(),
+      createdAt: now,
+    });
+    const cnctorId = randomUUID();
+    await connector.create({
+      id: cnctorId, orgId, name: 'On-prem agent',
+      tokenHash: null, pairingCode: null, pairingCodeExpiresAt: null,
+      systemIds: [randomUUID()], lastHeartbeatAt: null, agentVersion: null,
+      status: 'PAIRED', createdAt: now, updatedAt: now,
+    });
+    await connectorEvent.create({
+      id: randomUUID(), connectorId: cnctorId, orgId,
+      type: 'HEARTBEAT', ts: now, data: { latency: 42 },
+    });
+    await sync.create({
+      id: randomUUID(), orgId, name: 'HR sync', targetEntity: 'people',
+      sourceType: 'DATABASE', connectionId: connId,
+      config: { table: 'employees' }, fieldMapping: { name: 'full_name' },
+      matchKey: 'email',
+      schedule: { enabled: true, intervalMinutes: 60, lastRunAt: null, nextRunAt: null },
+      status: 'ACTIVE', lastSyncResult: null,
+      createdAt: now, updatedAt: now,
+    });
+    assert.strictEqual((await connection.list({ orgId })).length, 1);
+    assert.strictEqual((await csLink.list({ orgId })).length, 1);
+    assert.deepStrictEqual((await connector.list({ orgId }))[0].systemIds.length, 1);
+    assert.strictEqual((await connectorEvent.list({ orgId })).length, 1);
+    assert.strictEqual((await sync.list({ orgId })).length, 1);
+  });
+
+  it('DataQualityRule / DbtCloudConnection / AssetLineageEdge / DataLineageLink: mixed JSON + scalar', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const client = loadPrisma() as unknown as {
+      dataAsset: { create(a: unknown): Promise<{ id: string }> };
+      system: { create(a: unknown): Promise<{ id: string }> };
+    };
+    const asset1 = await client.dataAsset.create({ data: { id: randomUUID(), orgId, name: 'A1' } });
+    const asset2 = await client.dataAsset.create({ data: { id: randomUUID(), orgId, name: 'A2' } });
+    const sys1 = await client.system.create({ data: { id: randomUUID(), orgId, name: 'S1' } });
+    const sys2 = await client.system.create({ data: { id: randomUUID(), orgId, name: 'S2' } });
+
+    const dqRule = prismaDataQualityRulesRepository(() => loadPrisma() as unknown as Parameters<typeof prismaDataQualityRulesRepository>[0] extends () => infer C ? C : never);
+    const dbtCloud = prismaDbtCloudConnectionsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaDbtCloudConnectionsRepository>[0] extends () => infer C ? C : never);
+    const assetEdge = prismaAssetLineageEdgesRepository(() => loadPrisma() as unknown as Parameters<typeof prismaAssetLineageEdgesRepository>[0] extends () => infer C ? C : never);
+    const lineage = prismaDataLineageLinksRepository(() => loadPrisma() as unknown as Parameters<typeof prismaDataLineageLinksRepository>[0] extends () => infer C ? C : never);
+
+    await dqRule.create({
+      id: randomUUID(), orgId, dataAssetId: asset1.id,
+      dimension: 'COMPLETENESS', name: 'not null email', description: '',
+      threshold: 100, currentScore: 95, weight: 1,
+      status: 'PASSING', lastMeasured: now,
+      ruleType: 'NOT_NULL', parameters: {},
+      createdAt: now, updatedAt: now,
+    });
+    await dbtCloud.create({
+      id: randomUUID(), orgId, name: 'prod dbt',
+      host: 'cloud.getdbt.com', accountId: 'acc-1', jobId: 'job-1',
+      token: 'tok', lastRunAt: null, lastStatus: 'NEVER',
+      lastError: null, lastSummary: null,
+      pollFrequency: 'NEVER', nextPollAt: null,
+      createdAt: now, updatedAt: now,
+    });
+    await assetEdge.create({
+      id: randomUUID(), orgId,
+      sourceAssetId: asset1.id, targetAssetId: asset2.id,
+      source: 'dbt', sourceRef: 'model.x->model.y',
+      lastSeenAt: now, createdAt: now,
+    });
+    await lineage.create({
+      id: randomUUID(), orgId,
+      sourceSystemId: sys1.id, targetSystemId: sys2.id,
+      dataAssetId: null, description: '',
+      flowType: 'ETL', frequency: 'DAILY', status: 'ACTIVE',
+      createdAt: now, updatedAt: now,
+    });
+    assert.strictEqual((await dqRule.list({ orgId })).length, 1);
+    assert.strictEqual((await dbtCloud.list({ orgId })).length, 1);
+    assert.strictEqual((await assetEdge.list({ orgId })).length, 1);
+    assert.strictEqual((await lineage.list({ orgId })).length, 1);
+  });
+
+  it('DataAssetBinding / DataAssetColumn: bindings label + isPrimary; column no orgId', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const client = loadPrisma() as unknown as {
+      dataAsset: { create(a: unknown): Promise<{ id: string }> };
+    };
+    const asset = await client.dataAsset.create({ data: { id: randomUUID(), orgId, name: 'A' } });
+    const binding = prismaDataAssetBindingsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaDataAssetBindingsRepository>[0] extends () => infer C ? C : never);
+    const column = prismaDataAssetColumnsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaDataAssetColumnsRepository>[0] extends () => infer C ? C : never);
+    await binding.create({
+      id: randomUUID(), orgId, dataAssetId: asset.id,
+      connectionId: randomUUID(),
+      sourceAsset: 'public.customers', sourceColumn: undefined,
+      label: 'prod', isPrimary: true,
+      createdAt: now, updatedAt: now,
+    });
+    await column.create({
+      id: randomUUID(), dataAssetId: asset.id,
+      columnName: 'email', dataType: 'String',
+      createdAt: now, updatedAt: now,
+    });
+    const bs = await binding.list({ orgId });
+    assert.strictEqual(bs[0].isPrimary, true);
+    assert.strictEqual(bs[0].label, 'prod');
+    const cs = await column.list();
+    assert.strictEqual(cs.length, 1);
+  });
+
+  it('Agent / AgentSchedule / AgentExecution: orgIds native String[] + activity FKs', async () => {
+    const { orgId, personId } = await seedFixture();
+    const now = new Date().toISOString();
+    const client = loadPrisma() as unknown as {
+      processNode: { create(a: unknown): Promise<{ id: string }> };
+    };
+    const activity = await client.processNode.create({
+      data: { id: randomUUID(), name: 'Data Governance Activity', level: 'ACTIVITY', orgId, domain: 'GOVERNANCE' },
+    });
+    const agent = prismaAgentsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaAgentsRepository>[0] extends () => infer C ? C : never);
+    const sched = prismaAgentSchedulesRepository(() => loadPrisma() as unknown as Parameters<typeof prismaAgentSchedulesRepository>[0] extends () => infer C ? C : never);
+    const exec = prismaAgentExecutionsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaAgentExecutionsRepository>[0] extends () => infer C ? C : never);
+
+    const agentId = randomUUID();
+    await agent.create({
+      id: agentId, orgIds: [orgId], name: 'Claude Steward',
+      agentType: 'AI', description: '', provider: 'Anthropic',
+      status: 'ACTIVE', ownerPersonId: personId,
+      skillIds: [], instructions: 'do the thing',
+      createdAt: now, updatedAt: now,
+    });
+    await sched.create({
+      id: randomUUID(), orgId, agentId, agentName: 'Claude Steward',
+      activityId: activity.id, activityName: 'Data Governance Activity',
+      roleType: 'DATA_STEWARD', frequency: 'DAILY', status: 'ACTIVE',
+      startAt: now, nextRunAt: now, lastRunAt: null, runCount: 0,
+      createdBy: personId, createdAt: now, updatedAt: now,
+    });
+    await exec.create({
+      id: randomUUID(), orgId, agentId, agentName: 'Claude Steward',
+      activityId: activity.id, activityName: 'Data Governance Activity',
+      roleType: 'DATA_STEWARD', status: 'SUCCESS',
+      startedAt: now, completedAt: now, output: 'draft output',
+      error: null, durationMs: 1234,
+      reviewStatus: 'PENDING', reviewedBy: null, reviewedAt: null,
+      promotedDocumentId: null, createdAt: now,
+    });
+    const agentsInOrg = await agent.list({ orgId });
+    assert.strictEqual(agentsInOrg.length, 1);
+    assert.deepStrictEqual(agentsInOrg[0].orgIds, [orgId]);
+    assert.strictEqual((await sched.list({ orgId })).length, 1);
+    assert.strictEqual((await exec.list({ orgId })).length, 1);
+  });
+
+  it('MaturitySnapshot / GapSnapshot / ProcessVersion / SuggestionDismissal: no updatedAt entities', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+    const client = loadPrisma() as unknown as {
+      processNode: { create(a: unknown): Promise<{ id: string }> };
+    };
+    const node = await client.processNode.create({
+      data: { id: randomUUID(), name: 'N', level: 'ACTIVITY', orgId, domain: 'OPERATIONAL' },
+    });
+    const maturity = prismaMaturitySnapshotsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaMaturitySnapshotsRepository>[0] extends () => infer C ? C : never);
+    const gap = prismaGapSnapshotsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaGapSnapshotsRepository>[0] extends () => infer C ? C : never);
+    const pv = prismaProcessVersionsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaProcessVersionsRepository>[0] extends () => infer C ? C : never);
+    const dismiss = prismaSuggestionDismissalsRepository(() => loadPrisma() as unknown as Parameters<typeof prismaSuggestionDismissalsRepository>[0] extends () => infer C ? C : never);
+
+    await maturity.create({
+      id: randomUUID(), orgId, timestamp: now, overall: 72,
+      dimensions: [{ name: 'Governance', score: 80 }, { name: 'Quality', score: 64 }],
+    });
+    await gap.create({
+      id: randomUUID(), orgId, takenAt: now,
+      metrics: { activities: 10, mappedActivities: 6, coveragePct: 60, orphanAssets: 2, ungovernedAssets: 3, ownerlessItems: 4 },
+    });
+    await pv.create({
+      id: randomUUID(), nodeId: node.id, version: 2,
+      snapshot: {
+        id: node.id, parentId: null, level: 'ACTIVITY', name: 'N',
+        description: '', activityId: null, status: 'DRAFT', orderIndex: 0,
+        orgId, orgIds: [orgId], ownerId: null, version: 2,
+        createdAt: now, updatedAt: now,
+      },
+      changedBy: null, changedAt: now, status: 'DRAFT', note: '',
+    });
+    await dismiss.create({
+      id: randomUUID(), orgId, nodeId: node.id,
+      kind: 'asset', targetId: randomUUID(),
+      dismissedBy: null, dismissedAt: now,
+    });
+    assert.strictEqual((await maturity.list({ orgId })).length, 1);
+    const gaps = await gap.list({ orgId });
+    assert.strictEqual(gaps[0].metrics.coveragePct, 60);
+    assert.strictEqual((await pv.list()).length, 1);
+    assert.strictEqual((await dismiss.list({ orgId })).length, 1);
   });
 });

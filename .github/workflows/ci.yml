@@ -122,8 +122,11 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
         working-directory: packages/backend
-      - name: Push schema to Postgres
-        run: npx prisma db push --skip-generate --accept-data-loss
+      # Apply the versioned migrations in prisma/migrations/*. Same
+      # command production would use (vs. `db push`, which is a dev
+      # convenience that skips migration bookkeeping).
+      - name: Apply migrations
+        run: npx prisma migrate deploy
         working-directory: packages/backend
       # Same npm test target as the JSON job — the live-db test file
       # opts in on DATABASE_URL, everything else keeps running on

@@ -5,6 +5,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { getOrganizationsRepository } from '../db/organizations.repo';
 // Lazy-required inside handlers to avoid the circular import with
 // `routes/people` (which imports the `organizations` array from this file).
 // Using `require` at call-time ensures both modules are fully initialised
@@ -103,6 +104,13 @@ const organizationRowSchema = z.object({
 export const organizations: StoredOrg[] = loadStore<StoredOrg>('organizations', organizationRowSchema);
 registerStore('organizations', organizations);
 
+// Repository handle — reads/writes route through here when the
+// route is on the async path. Reference conversion (GET /) below;
+// remaining handlers still touch the shared `organizations` array
+// directly. See docs/POSTGRES.md for the pattern used to convert
+// individual handlers.
+const orgRepo = getOrganizationsRepository(organizations);
+
 // ── Helpers ──
 
 function buildTree(orgs: StoredOrg[]): any[] {
@@ -147,17 +155,25 @@ router.delete('/all', (req: AuthenticatedRequest, res: Response) => {
  * `?scopeOrgId=<id>`. The frontend passes its active "Working In" context
  * as `scopeOrgId` so the user only sees the org they're currently working in
  * and its descendants.
+ *
+ * REFERENCE async handler for the route → repository conversion. Every
+ * read that used to touch the exported `organizations` array now goes
+ * through `orgRepo.list()`. On the JSON path that returns a fresh copy
+ * of the same in-memory array; on the Postgres path (DATABASE_URL set)
+ * the same call queries the database. Both paths satisfy the same
+ * assertions.
  */
-router.get('/', (req: AuthenticatedRequest, res: Response) => {
+router.get('/', async (req: AuthenticatedRequest, res: Response) => {
   const { getVisibleOrgIds, getDescendantOrgIds } = accessHelpers();
   const visible = getVisibleOrgIds(req.user);
+  const all = await orgRepo.list();
   let scoped = visible === null
-    ? organizations
-    : organizations.filter((o) => visible.has(o.id));
+    ? all
+    : all.filter((o) => visible.has(o.id));
 
   const scopeOrgId = typeof req.query.scopeOrgId === 'string' ? req.query.scopeOrgId : null;
   if (scopeOrgId) {
-    const scopeRoot = organizations.find((o) => o.id === scopeOrgId);
+    const scopeRoot = all.find((o) => o.id === scopeOrgId);
     if (!scopeRoot) {
       res.status(404).json({ success: false, error: 'Scope organization not found' });
       return;

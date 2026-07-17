@@ -14,7 +14,7 @@ import logger from '../lib/logger';
 // Types
 // ---------------------------------------------------------------------------
 
-interface SyncConnection {
+export interface SyncConnection {
   id: string;
   orgId: string;
   name: string;
