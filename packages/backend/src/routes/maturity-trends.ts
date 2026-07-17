@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { getMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
 
 const router = Router();
 
@@ -26,6 +27,8 @@ export interface ScorecardSnapshot {
 export const maturitySnapshots: ScorecardSnapshot[] = loadStore<ScorecardSnapshot>('maturitySnapshots');
 registerStore('maturitySnapshots', maturitySnapshots);
 
+const maturitySnapshotsRepo = getMaturitySnapshotsRepository(maturitySnapshots);
+
 function persist() {
   saveStore('maturitySnapshots', maturitySnapshots);
 }
@@ -35,7 +38,7 @@ function persist() {
 // ---------------------------------------------------------------------------
 
 /** GET /api/v1/maturity-trends — list snapshots for an org, sorted by timestamp */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
@@ -50,7 +53,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/maturity-trends/snapshot — save a scorecard snapshot */
-router.post('/snapshot', (req: Request, res: Response) => {
+router.post('/snapshot', async (req: Request, res: Response) => {
   const { orgId, overall, dimensions } = req.body;
 
   if (!orgId || overall === undefined || !Array.isArray(dimensions)) {
@@ -71,14 +74,15 @@ router.post('/snapshot', (req: Request, res: Response) => {
     })),
   };
 
-  maturitySnapshots.push(snapshot);
-  persist();
+  await maturitySnapshotsRepo.create(snapshot);
 
   res.status(201).json({ success: true, data: snapshot });
 });
 
-/** DELETE /api/v1/maturity-trends/all — clear all snapshots */
-router.delete('/all', (req: Request, res: Response) => {
+/** DELETE /api/v1/maturity-trends/all — clear all snapshots. Bulk write —
+ *  the array is mutated in place then persisted once at the end rather
+ *  than issuing N repo.delete() calls. */
+router.delete('/all', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 

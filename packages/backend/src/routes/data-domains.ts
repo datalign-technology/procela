@@ -8,6 +8,7 @@ import { people } from './people';
 import { dataAssets } from './data-assets';
 import { organizations } from './organizations';
 import { aiService } from '../services/ai.service';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
 
 export interface StoredDataDomain {
   id: string;
@@ -25,6 +26,8 @@ export interface StoredDataDomain {
 
 export const dataDomains: StoredDataDomain[] = loadStore<StoredDataDomain>('dataDomains');
 registerStore('dataDomains', dataDomains);
+
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
 
 // Migrate legacy statuses to DRAFT
 {
@@ -127,7 +130,7 @@ router.post('/generate', async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = dataDomains.length;
   dataDomains.splice(0, dataDomains.length);
   saveStore('dataDomains', dataDomains);
@@ -137,7 +140,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-domains — list all (support ?orgId= filter) */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(dataDomains, orgId as string | undefined);
   const enriched = filtered.map(enrichDomain);
@@ -145,7 +148,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-domains/summary — coverage stats */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(dataDomains, orgId as string | undefined);
 
@@ -161,14 +164,14 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-domains/:id — single domain with enriched data */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const domain = dataDomains.find((d) => d.id === req.params.id);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
   res.json({ success: true, data: enrichDomain(domain) });
 });
 
 /** POST /api/v1/data-domains — create */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { name, description, orgId, status, scopeDefinition } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
@@ -195,13 +198,12 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  dataDomains.push(domain);
-  saveStore('dataDomains', dataDomains);
+  await dataDomainsRepo.create(domain);
   res.status(201).json({ success: true, data: enrichDomain(domain) });
 });
 
 /** PUT /api/v1/data-domains/:id — update fields */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const domain = dataDomains.find((d) => d.id === req.params.id);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
@@ -242,13 +244,13 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   domain.updatedAt = new Date().toISOString();
-  saveStore('dataDomains', dataDomains);
+  await dataDomainsRepo.update(domain.id, domain);
 
   res.json({ success: true, data: enrichDomain(domain) });
 });
 
 /** GET /api/v1/data-domains/:id/impact — preview what would be affected by deleting this domain */
-router.get('/:id/impact', (req: Request, res: Response) => {
+router.get('/:id/impact', async (req: Request, res: Response) => {
   const domain = dataDomains.find((d) => d.id === req.params.id);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
@@ -262,11 +264,10 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/data-domains/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = dataDomains.findIndex((d) => d.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
-  dataDomains.splice(idx, 1);
-  saveStore('dataDomains', dataDomains);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = dataDomains.find((d) => d.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+  await dataDomainsRepo.delete(removed.id);
   res.status(204).send();
 });
 
@@ -280,7 +281,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  * (per-id reasons returned in the response). Locked-status edits to other
  * fields are also skipped to mirror the single-update endpoint's rules.
  */
-router.patch('/bulk', (req: Request, res: Response) => {
+router.patch('/bulk', async (req: Request, res: Response) => {
   const { ids, updates } = req.body || {};
   if (!Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
@@ -335,7 +336,7 @@ router.patch('/bulk', (req: Request, res: Response) => {
  *
  * Body: { ids: string[] }
  */
-router.post('/bulk-delete', (req: Request, res: Response) => {
+router.post('/bulk-delete', async (req: Request, res: Response) => {
   const { ids } = req.body || {};
   if (!Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ success: false, error: 'ids must be a non-empty array' });

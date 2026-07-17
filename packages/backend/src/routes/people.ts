@@ -355,10 +355,10 @@ if (skillBackfilled > 0) {
 const router = Router();
 
 /** DELETE /api/v1/people/all — delete all people */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = people.length;
-  people.splice(0, people.length);
-  saveStore('people', people);
+  const ids = people.map((p) => p.id);
+  for (const id of ids) await peopleRepo.delete(id);
   logger.info({ count }, 'Deleted all people');
   res.json({ success: true, deleted: count });
 });
@@ -585,10 +585,10 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/people/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = people.findIndex((p) => p.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const personId = people[idx].id;
+router.delete('/:id', async (req: Request, res: Response) => {
+  const person = people.find((p) => p.id === req.params.id);
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
+  const personId = person.id;
 
   // Cascade: any ACTIVE agent that lists this person as its
   // responsible party is auto-paused, and an ownership issue opens.
@@ -603,8 +603,7 @@ router.delete('/:id', (req: Request, res: Response) => {
     { clearOwnerReference: true },
   );
 
-  people.splice(idx, 1);
-  saveStore('people', people);
+  await peopleRepo.delete(personId);
 
   // 204 has no body, so switch to 200 when the cascade produced work
   // the caller needs to know about (frontend uses this to render a
@@ -684,7 +683,7 @@ router.post('/:id/forget', (req: Request, res: Response) => {
  *  authored comments, role-assignment history) but can't sign in and
  *  doesn't appear in the default People list. Reverse with the
  *  /reactivate endpoint below. */
-router.post('/:id/deactivate', (req: Request, res: Response) => {
+router.post('/:id/deactivate', async (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   if (person.active === false) {
@@ -694,7 +693,7 @@ router.post('/:id/deactivate', (req: Request, res: Response) => {
   person.active = false;
   person.deactivatedAt = new Date().toISOString();
   person.updatedAt = person.deactivatedAt;
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
 
   // Cascade: a deactivated person is no longer a valid responsible
   // party. Any ACTIVE agent they own auto-pauses (owner reference is
@@ -712,7 +711,7 @@ router.post('/:id/deactivate', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/people/:id/reactivate */
-router.post('/:id/reactivate', (req: Request, res: Response) => {
+router.post('/:id/reactivate', async (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   if (person.active !== false) {
@@ -722,7 +721,7 @@ router.post('/:id/reactivate', (req: Request, res: Response) => {
   person.active = true;
   person.deactivatedAt = undefined;
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   res.json({ success: true, data: publicPerson(person) });
 });
 
@@ -737,7 +736,7 @@ router.post('/:id/reactivate', (req: Request, res: Response) => {
  * person can't act in. The login flow and /auth/switch-org consult
  * orgRoles via getRoleForOrg() at token-mint time.
  */
-router.put('/:id/org-role', (req: Request, res: Response) => {
+router.put('/:id/org-role', async (req: Request, res: Response) => {
   const person = people.find((p) => p.id === String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   const { orgId, role } = req.body || {};
@@ -752,7 +751,7 @@ router.put('/:id/org-role', (req: Request, res: Response) => {
   }
   person.orgRoles = next;
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   res.json({ success: true, data: publicPerson(person) });
 });
 

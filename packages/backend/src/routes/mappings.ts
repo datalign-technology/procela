@@ -9,6 +9,7 @@ import { dataAssets } from './data-assets';
 import { people } from './people';
 import { governancePolicies } from './governance-policies';
 import { attachments } from './attachments';
+import { getMappingsRepository } from '../db/mappings.repo';
 
 // ── Types ──
 
@@ -50,6 +51,9 @@ export interface StoredMapping {
 
 export const mappings: StoredMapping[] = loadStore<StoredMapping>('mappings');
 registerStore('mappings', mappings);
+
+const mappingsRepo = getMappingsRepository(mappings);
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_LINK_TYPES = ['consumes', 'produces', 'transforms', 'references'];
@@ -140,8 +144,10 @@ function enrichMapping(m: StoredMapping) {
 
 const router = Router();
 
-/** DELETE /api/v1/mappings/all — delete all mappings */
-router.delete('/all', (_req: Request, res: Response) => {
+/** DELETE /api/v1/mappings/all — delete all mappings. Bulk write —
+ *  the array is truncated in place then persisted once at the end
+ *  rather than issuing N repo.delete() calls. */
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = mappings.length;
   mappings.splice(0, mappings.length);
   saveStore('mappings', mappings);
@@ -151,7 +157,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 });
 
 /** GET /api/v1/mappings */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(mappings, orgId as string | undefined);
   const enriched = filtered.map(enrichMapping);
@@ -159,19 +165,19 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/mappings/by-step/:stepId */
-router.get('/by-step/:stepId', (req: Request, res: Response) => {
+router.get('/by-step/:stepId', async (req: Request, res: Response) => {
   const filtered = mappings.filter((m) => m.processStepId === req.params.stepId);
   res.json({ success: true, data: filtered.map(enrichMapping) });
 });
 
 /** GET /api/v1/mappings/by-asset/:assetId */
-router.get('/by-asset/:assetId', (req: Request, res: Response) => {
+router.get('/by-asset/:assetId', async (req: Request, res: Response) => {
   const filtered = mappings.filter((m) => m.dataAssetId === req.params.assetId);
   res.json({ success: true, data: filtered.map(enrichMapping) });
 });
 
 /** POST /api/v1/mappings */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { processStepId, dataAssetId, policyId, attachmentId, linkType, notes, aiSuggested, orgId,
     criticality, dataFormat, sla, qualityRequirement, fulfillsExpected } = req.body;
 
@@ -218,13 +224,12 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  mappings.push(mapping);
-  saveStore('mappings', mappings);
+  await mappingsRepo.create(mapping);
   res.status(201).json({ success: true, data: enrichMapping(mapping) });
 });
 
 /** PUT /api/v1/mappings/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const mapping = mappings.find((m) => m.id === req.params.id);
   if (!mapping) {
     res.status(404).json({ success: false, error: 'Mapping not found' });
@@ -256,19 +261,17 @@ router.put('/:id', (req: Request, res: Response) => {
     mapping.fulfillsExpected = v || undefined;
   }
   mapping.updatedAt = new Date().toISOString();
-  saveStore('mappings', mappings);
+  await mappingsRepo.update(mapping.id, mapping);
   res.json({ success: true, data: enrichMapping(mapping) });
 });
 
 /** DELETE /api/v1/mappings/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = mappings.findIndex((m) => m.id === req.params.id);
-  if (idx === -1) {
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = await mappingsRepo.delete(String(req.params.id));
+  if (!removed) {
     res.status(404).json({ success: false, error: 'Mapping not found' });
     return;
   }
-  mappings.splice(idx, 1);
-  saveStore('mappings', mappings);
   res.status(204).send();
 });
 

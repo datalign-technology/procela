@@ -3,8 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import { getAttachmentsRepository } from '../db/attachments.repo';
 
 // ── Attachment model ────────────────────────────────────────────────────
 //
@@ -35,6 +36,8 @@ export interface StoredAttachment {
 
 export const attachments: StoredAttachment[] = loadStore<StoredAttachment>('attachments');
 registerStore('attachments', attachments);
+
+const attachmentsRepo = getAttachmentsRepository(attachments);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
@@ -88,9 +91,9 @@ function guessMimeType(filename: string): string {
 const router = Router();
 
 /** GET /api/v1/attachments?entityId=X&entityType=Y */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { entityId, entityType, orgId } = req.query;
-  let filtered = attachments;
+  let filtered = await attachmentsRepo.list();
   if (entityId) filtered = filtered.filter((a) => a.entityId === entityId);
   if (entityType) filtered = filtered.filter((a) => a.entityType === entityType);
   if (orgId) filtered = filtered.filter((a) => a.orgId === orgId);
@@ -98,15 +101,15 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/attachments/:id — get metadata */
-router.get('/:id', (req: Request, res: Response) => {
-  const a = attachments.find((x) => x.id === req.params.id);
+router.get('/:id', async (req: Request, res: Response) => {
+  const a = await attachmentsRepo.get(req.params.id as string);
   if (!a) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
   res.json({ success: true, data: a });
 });
 
 /** GET /api/v1/attachments/:id/download — stream the file */
-router.get('/:id/download', (req: Request, res: Response) => {
-  const a = attachments.find((x) => x.id === req.params.id);
+router.get('/:id/download', async (req: Request, res: Response) => {
+  const a = await attachmentsRepo.get(req.params.id as string);
   if (!a) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
   if (a.type !== 'FILE' || !a.filePath) {
     res.status(400).json({ success: false, error: 'Attachment is not a file' });
@@ -125,7 +128,7 @@ router.get('/:id/download', (req: Request, res: Response) => {
 /**
  * POST /api/v1/attachments/url — create a URL-type attachment
  */
-router.post('/url', (req: Request, res: Response) => {
+router.post('/url', async (req: Request, res: Response) => {
   const { entityType, entityId, name, description, url, orgId } = req.body;
   if (!entityType || !entityId || !name || !url) {
     res.status(400).json({ success: false, error: 'entityType, entityId, name, and url are required' });
@@ -151,8 +154,7 @@ router.post('/url', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  attachments.push(attachment);
-  saveStore('attachments', attachments);
+  await attachmentsRepo.create(attachment);
   auditService.log(attachment.orgId, attachment.uploadedBy, 'Attachment', attachment.id, 'CREATE', null, attachment);
   res.status(201).json({ success: true, data: attachment });
 });
@@ -164,7 +166,7 @@ router.post('/url', (req: Request, res: Response) => {
 router.post(
   '/upload',
   raw({ type: '*/*', limit: `${MAX_FILE_SIZE_MB}mb` }),
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const { entityType, entityId, filename, name, description, orgId } = req.query;
 
     if (!entityType || !entityId) {
@@ -217,8 +219,7 @@ router.post(
       createdAt: now,
       updatedAt: now,
     };
-    attachments.push(attachment);
-    saveStore('attachments', attachments);
+    await attachmentsRepo.create(attachment);
     auditService.log(attachment.orgId, attachment.uploadedBy, 'Attachment', attachment.id, 'CREATE', null, attachment);
     logger.info({ attachmentId, entityType, entityId, fileSize: body.length }, 'Attachment uploaded');
     res.status(201).json({ success: true, data: attachment });
@@ -226,30 +227,29 @@ router.post(
 );
 
 /** PUT /api/v1/attachments/:id — update name/description */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const a = attachments.find((x) => x.id === req.params.id);
   if (!a) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
   const { name, description } = req.body;
-  if (name !== undefined) a.name = name;
-  if (description !== undefined) a.description = description;
-  a.updatedAt = new Date().toISOString();
-  saveStore('attachments', attachments);
-  res.json({ success: true, data: a });
+  const patch: Partial<StoredAttachment> = {};
+  if (name !== undefined) patch.name = name;
+  if (description !== undefined) patch.description = description;
+  patch.updatedAt = new Date().toISOString();
+  const updated = await attachmentsRepo.update(a.id, patch);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/attachments/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = attachments.findIndex((a) => a.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
-  const removed = attachments[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = attachments.find((a) => a.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
   if (removed.type === 'FILE' && removed.filePath) {
     const dir = path.dirname(removed.filePath);
     if (dir.startsWith(ATTACHMENTS_ROOT) && fs.existsSync(dir)) {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }
-  attachments.splice(idx, 1);
-  saveStore('attachments', attachments);
+  await attachmentsRepo.delete(removed.id);
   auditService.log(removed.orgId, null, 'Attachment', removed.id, 'DELETE', removed, null);
   res.status(204).send();
 });

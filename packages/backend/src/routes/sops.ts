@@ -5,6 +5,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import logger from '../lib/logger';
+import { getSopsRepository } from '../db/sops.repo';
 
 // ── Types ──
 
@@ -51,6 +52,8 @@ export interface StoredSop {
 
 export const sops: StoredSop[] = loadStore<StoredSop>('sops');
 registerStore('sops', sops);
+
+const sopsRepo = getSopsRepository(sops);
 
 // ── Helpers ──
 

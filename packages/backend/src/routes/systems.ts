@@ -8,6 +8,7 @@ import logger from '../lib/logger';
 import { dataAssets } from './data-assets';
 import { connections, connectionSystemLinks, connectionsForSystem } from './connections';
 import { mappings } from './mappings';
+import { getSystemsRepository } from '../db/systems.repo';
 
 export interface SystemIntegration {
   id: string;
@@ -87,6 +88,8 @@ export interface StoredSystem {
 
 export const systems: StoredSystem[] = loadStore<StoredSystem>('systems');
 registerStore('systems', systems);
+
+const systemsRepo = getSystemsRepository(systems);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const VALID_CONNECTIVITY = ['INTEGRATED', 'MANUAL', 'EXTERNAL'] as const;
@@ -326,17 +329,17 @@ function decorate(sys: StoredSystem) {
 }
 
 /** DELETE /api/v1/systems/all — delete all systems */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = systems.length;
-  systems.splice(0, systems.length);
-  saveStore('systems', systems);
+  const ids = systems.map((s) => s.id);
+  for (const id of ids) await systemsRepo.delete(id);
   auditService.log(DEV_ORG_ID, null, 'System', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all systems');
   res.json({ success: true, deleted: count });
 });
 
 /** GET /api/v1/systems */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(systems, orgId as string | undefined);
   res.json({
@@ -351,7 +354,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/systems/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   res.json({
@@ -367,7 +370,7 @@ router.get('/:id', (req: Request, res: Response) => {
  *  more join through the mappings table), and the people accountable
  *  (owner, deputy, custodians). Used by the System detail modal's
  *  WhereUsed panel so all three layers are visible from one page. */
-router.get('/:id/360', (req: Request, res: Response) => {
+router.get('/:id/360', async (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
 
@@ -497,7 +500,7 @@ function validateIntegrations(
 }
 
 /** POST /api/v1/systems */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { name, description, systemType, orgId, businessCriticality, vendor, integrationPoints, connectivity, integrations, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (connectivity && !VALID_CONNECTIVITY.includes(connectivity)) {
@@ -540,14 +543,13 @@ router.post('/', (req: Request, res: Response) => {
     ...(cleanedCustodians.length > 0 ? { custodianIds: cleanedCustodians } : {}),
     createdAt: now, updatedAt: now,
   };
-  systems.push(sys);
-  saveStore('systems', systems);
+  await systemsRepo.create(sys);
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'CREATE', null, sys);
   res.status(201).json({ success: true, data: sys });
 });
 
 /** PUT /api/v1/systems/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const sys = systems.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrations, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
@@ -590,13 +592,26 @@ router.put('/:id', (req: Request, res: Response) => {
     sys.custodianIds = cleaned.length > 0 ? cleaned : undefined;
   }
   sys.updatedAt = new Date().toISOString();
-  saveStore('systems', systems);
+  await systemsRepo.update(sys.id, {
+    name: sys.name,
+    description: sys.description,
+    systemType: sys.systemType,
+    businessCriticality: sys.businessCriticality,
+    vendor: sys.vendor,
+    integrationPoints: sys.integrationPoints,
+    connectivity: sys.connectivity,
+    integrations: sys.integrations,
+    ownerPersonId: sys.ownerPersonId,
+    deputyOwnerId: sys.deputyOwnerId,
+    custodianIds: sys.custodianIds,
+    updatedAt: sys.updatedAt,
+  });
   auditService.log(DEV_ORG_ID, null, 'System', sys.id, 'UPDATE', null, sys);
   res.json({ success: true, data: sys });
 });
 
 /** GET /api/v1/systems/:id/impact — preview what would be affected by deleting this system */
-router.get('/:id/impact', (req: Request, res: Response) => {
+router.get('/:id/impact', async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const sys = systems.find((s) => s.id === id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
@@ -610,17 +625,16 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/systems/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = systems.findIndex((s) => s.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'System not found' }); return; }
-  const removed = systems[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = systems.find((s) => s.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   auditService.log(DEV_ORG_ID, null, 'System', removed.id, 'DELETE', removed, null);
-  systems.splice(idx, 1);
-  saveStore('systems', systems);
+  await systemsRepo.delete(removed.id);
   // Cascade: remove every connection→system link that pointed at this
   // system. The connections themselves keep existing — they may still
   // serve other systems, and a connection with zero links is a valid
-  // "unassigned" state captured by gap detection.
+  // "unassigned" state captured by gap detection. Cross-store (owned by
+  // connections route) — direct-array-access + saveStore per rules.
   let removedLinks = 0;
   for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
     if (connectionSystemLinks[i].systemId === removed.id) {
@@ -631,16 +645,13 @@ router.delete('/:id', (req: Request, res: Response) => {
   if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
   // Cascade: drop any integration edge on a surviving system that
   // pointed at the deleted one, so the catalog has no dangling targets.
-  let prunedEdges = false;
   for (const s of systems) {
     if (!s.integrations || s.integrations.length === 0) continue;
     const kept = s.integrations.filter((i) => i.targetSystemId !== removed.id);
     if (kept.length !== s.integrations.length) {
-      s.integrations = kept.length > 0 ? kept : undefined;
-      prunedEdges = true;
+      await systemsRepo.update(s.id, { integrations: kept.length > 0 ? kept : undefined });
     }
   }
-  if (prunedEdges) saveStore('systems', systems);
   // Cascade: clear `systemId` on any data asset that pointed at the
   // removed system. The asset itself stays (it may still be useful
   // catalogued, e.g. as an orphan to reassign) but the dangling ref is
@@ -678,7 +689,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  * JSON: { orgId, systems: [{ name, description?, systemType? }, ...] }
  * CSV:  { orgId, csv: "Name,Description,Type\nSAP ERP,Enterprise resource planning,ERP" }
  */
-router.post('/import', (req: Request, res: Response) => {
+router.post('/import', async (req: Request, res: Response) => {
   try {
     const { orgId, systems: systemList, csv } = req.body;
 
@@ -746,11 +757,10 @@ router.post('/import', (req: Request, res: Response) => {
         systemType: row.systemType && SYSTEM_TYPES.includes(row.systemType) ? row.systemType : row.systemType || '',
         createdAt: now, updatedAt: now,
       };
-      systems.push(sys);
+      await systemsRepo.create(sys);
       created.push(sys);
     }
 
-    saveStore('systems', systems);
     logger.info({ created: created.length, skipped: skipped.length, orgId }, 'Imported systems');
     res.status(201).json({
       success: true,

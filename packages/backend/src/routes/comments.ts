@@ -6,6 +6,7 @@ import logger from '../lib/logger';
 import { people } from './people';
 import { createNotification } from './notifications';
 import { auditService } from '../services/audit.service';
+import { getCommentsRepository } from '../db/comments.repo';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMENTS
@@ -48,6 +49,8 @@ export interface StoredComment {
 
 export const comments: StoredComment[] = loadStore<StoredComment>('comments');
 registerStore('comments', comments);
+
+const commentsRepo = getCommentsRepository(comments);
 
 // Request-body schemas — Zod at the API boundary. Shape checks fall out
 // of the parse so downstream code can use the typed body directly.
@@ -143,7 +146,7 @@ function dispatchMentionNotifications(
 const router = Router();
 
 /** GET /api/v1/comments?entityType=&entityId=&orgId= */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { entityType, entityId, orgId } = req.query as Record<string, string | undefined>;
   if (!entityType || !entityId) {
     res.status(400).json({ success: false, error: 'entityType and entityId query params are required' });
@@ -158,7 +161,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/comments */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const parsed = createCommentBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -203,8 +206,7 @@ router.post('/', (req: Request, res: Response) => {
     deletedAt: null,
   };
 
-  comments.push(comment);
-  saveStore('comments', comments);
+  await commentsRepo.create(comment);
   logger.info(
     { commentId: comment.id, entityType, entityId, mentions: comment.mentions.length, isReply: !!resolvedParentId },
     'Comment created',
@@ -233,7 +235,7 @@ router.post('/', (req: Request, res: Response) => {
 /** PATCH /api/v1/comments/:id — edit comment body. Only the author can
  *  edit. Newly-added mentions fire notifications; previously-mentioned
  *  people aren't re-notified. */
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const c = comments.find((c) => c.id === req.params.id);
   if (!c) { res.status(404).json({ success: false, error: 'Comment not found' }); return; }
   if (c.deletedAt) { res.status(409).json({ success: false, error: 'Comment is deleted' }); return; }
@@ -257,7 +259,7 @@ router.patch('/:id', (req: Request, res: Response) => {
   c.content = content.trim();
   c.mentions = newMentions;
   c.updatedAt = new Date().toISOString();
-  saveStore('comments', comments);
+  await commentsRepo.update(c.id, { content: c.content, mentions: c.mentions, updatedAt: c.updatedAt });
 
   if (addedMentions.length > 0) {
     dispatchMentionNotifications(c, addedMentions, entityLabel || `${c.entityType} ${c.entityId}`);
@@ -271,14 +273,14 @@ router.patch('/:id', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/comments/:id — soft delete (keeps thread structure) */
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   const c = comments.find((c) => c.id === req.params.id);
   if (!c) { res.status(404).json({ success: false, error: 'Comment not found' }); return; }
   c.deletedAt = new Date().toISOString();
   c.content = '';
   c.mentions = [];
   c.updatedAt = c.deletedAt;
-  saveStore('comments', comments);
+  await commentsRepo.update(c.id, { deletedAt: c.deletedAt, content: c.content, mentions: c.mentions, updatedAt: c.updatedAt });
   logger.info({ id: req.params.id }, 'Comment soft-deleted');
   auditService.log(
     c.orgId, c.userId, 'Comment', c.id, 'DELETE',

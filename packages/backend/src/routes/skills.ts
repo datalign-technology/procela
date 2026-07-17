@@ -21,6 +21,8 @@ import {
 export { skills, SKILL_CATEGORIES };
 export type { StoredSkill };
 
+const skillsRepo = getSkillsRepository(skills);
+
 // ──────────────────────────────────────────────────────────────────────────
 // Skills — DAMA-aligned capabilities that agents (and people) can possess.
 // Phase 1 of the AI agent automation feature. Each skill belongs to a
@@ -93,7 +95,7 @@ const SEED_SKILLS: Array<{ name: string; category: SkillCategory; description: s
  *  filterByOrgScope so a division-scoped view sees company-level
  *  skills rolling down and team-level skills rolling up, matching the
  *  visibility pattern for data assets, systems, and process nodes. */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const orgId = typeof req.query.orgId === 'string' ? req.query.orgId : undefined;
   const filtered = filterByOrgScope(skills, orgId);
   res.json({
@@ -104,7 +106,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/skills/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const skill = skills.find((s) => s.id === req.params.id);
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   res.json({ success: true, data: skill });
@@ -117,7 +119,7 @@ router.get('/:id', (req: Request, res: Response) => {
  *   - Name is unique in the visible scope (own org + ancestors +
  *     descendants) so a division can't shadow a company-level
  *     "Data Profiling" with a subtly different one. */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, name, category, description } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!isOwnershipLevel(orgId)) {
@@ -147,13 +149,12 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  skills.push(skill);
-  saveStore('skills', skills);
+  await skillsRepo.create(skill);
   res.status(201).json({ success: true, data: skill });
 });
 
 /** POST /api/v1/skills/seed — seed standard DAMA-aligned skills for an org */
-router.post('/seed', (req: Request, res: Response) => {
+router.post('/seed', async (req: Request, res: Response) => {
   const { orgId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!isOwnershipLevel(orgId)) {
@@ -177,16 +178,15 @@ router.post('/seed', (req: Request, res: Response) => {
       createdAt: now,
       updatedAt: now,
     };
-    skills.push(skill);
+    await skillsRepo.create(skill);
     created.push(skill);
   }
-  saveStore('skills', skills);
   logger.info({ created: created.length, orgId }, 'Seeded DAMA skills');
   res.status(201).json({ success: true, data: created, message: `Seeded ${created.length} skills` });
 });
 
 /** PUT /api/v1/skills/:id — update a skill */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const skill = skills.find((s) => s.id === req.params.id);
   if (!skill) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
   const { name, category, description } = req.body;
@@ -211,7 +211,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (category !== undefined && SKILL_CATEGORIES.includes(category)) skill.category = category;
   if (description !== undefined) skill.description = description;
   skill.updatedAt = new Date().toISOString();
-  saveStore('skills', skills);
+  await skillsRepo.update(skill.id, skill);
   res.json({ success: true, data: skill });
 });
 
@@ -228,12 +228,10 @@ router.put('/:id', (req: Request, res: Response) => {
  *  future confirm-dialog on the Skills page) can surface a
  *  meaningful blast-radius summary.
  */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = skills.findIndex((s) => s.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
-  const removed = skills[idx];
-  skills.splice(idx, 1);
-  saveStore('skills', skills);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = skills.find((s) => s.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Skill not found' }); return; }
+  await skillsRepo.delete(removed.id);
 
   // Cascade off people, agents, and process nodes. Lazy requires
   // break any lingering import-graph cycle at boot; each store is a
@@ -306,7 +304,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  *    byNode:   per-node detail (missing skill names). Keyed by
  *              nodeId. Populated only for nodes whose responsible
  *              person is short on skills. */
-router.get('/coverage', (req: Request, res: Response) => {
+router.get('/coverage', async (req: Request, res: Response) => {
   const orgId = String(req.query.orgId || '');
   if (!orgId) {
     res.status(400).json({ success: false, error: 'orgId is required' });
@@ -334,7 +332,7 @@ router.get('/coverage', (req: Request, res: Response) => {
  *  role saying it needs "Data Cataloging" should match any person
  *  whose catalog entry happens to be named "Data Cataloging"
  *  regardless of id. */
-router.get('/recommend-for-role', (req: Request, res: Response) => {
+router.get('/recommend-for-role', async (req: Request, res: Response) => {
   const orgId = String(req.query.orgId || '');
   if (!orgId) {
     res.status(400).json({ success: false, error: 'orgId is required' });
@@ -350,7 +348,7 @@ router.get('/recommend-for-role', (req: Request, res: Response) => {
  *  Org-wide skill-gap report for the dashboard widget. Skills are
  *  sorted by gap score descending so the worst-staffed required
  *  skills bubble to the top. */
-router.get('/gap-report', (req: Request, res: Response) => {
+router.get('/gap-report', async (req: Request, res: Response) => {
   const orgId = String(req.query.orgId || '');
   if (!orgId) {
     res.status(400).json({ success: false, error: 'orgId is required' });

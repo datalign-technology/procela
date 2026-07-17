@@ -2,6 +2,10 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
+import { getProcessVersionsRepository } from '../db/process-versions.repo';
+import { getSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
 import { getVisibleOrgScope, getAncestorOrgIds } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { rankSuggestions } from '../services/asset-suggestion.service';
@@ -244,6 +248,11 @@ export interface SuggestionDismissal {
 export const suggestionDismissals: SuggestionDismissal[] =
   loadStore<SuggestionDismissal>('suggestionDismissals');
 registerStore('suggestionDismissals', suggestionDismissals);
+
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const flowRelationshipsRepo = getFlowRelationshipsRepository(flowRelationships);
+const processVersionsRepo = getProcessVersionsRepository(processVersions);
+const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
 
 function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['kind']): Set<string> {
   const out = new Set<string>();
@@ -638,7 +647,7 @@ router.get('/nodes/:id', (req: Request, res: Response) => {
 });
 
 /** POST /nodes — create a node */
-router.post('/nodes', (req: Request, res: Response) => {
+router.post('/nodes', async (req: Request, res: Response) => {
   const { parentId, level, name, description, status, orgIds, ownerId,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
     responsibleRole, responsiblePersonId, statusJustification, frequency, riskLevel, automationLevel, estimatedDuration, requiredSkillIds, systemIds,
@@ -754,8 +763,7 @@ router.post('/nodes', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  processNodes.push(node);
-  saveStore('processNodes', processNodes);
+  await processNodesRepo.create(node);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'CREATE', null, node);
   logger.info({ level, name, parentId }, 'Created process node');
 
@@ -767,7 +775,7 @@ router.post('/nodes', (req: Request, res: Response) => {
 });
 
 /** PUT /nodes/:id — update a node */
-router.put('/nodes/:id', (req: Request, res: Response) => {
+router.put('/nodes/:id', async (req: Request, res: Response) => {
   const node = findNode(param(req.params.id));
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
@@ -924,8 +932,7 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
       status: node.status,
       note: `Status changed from ${node.status} to ${status}`,
     };
-    processVersions.push(versionSnapshot);
-    saveStore('processVersions', processVersions);
+    await processVersionsRepo.create(versionSnapshot);
   }
 
   if (status !== undefined) {
@@ -1068,13 +1075,13 @@ router.put('/nodes/:id', (req: Request, res: Response) => {
   node.updatedAt = new Date().toISOString();
   node.version = (node.version ?? 1) + 1;
 
-  saveStore('processNodes', processNodes);
+  await processNodesRepo.update(node.id, node);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'UPDATE', null, node);
   res.json({ success: true, data: node });
 });
 
 /** DELETE /nodes/:id — delete a node and all descendants */
-router.delete('/nodes/:id', (req: Request, res: Response) => {
+router.delete('/nodes/:id', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
@@ -1084,24 +1091,21 @@ router.delete('/nodes/:id', (req: Request, res: Response) => {
   const idsToRemove = new Set([nodeId, ...descendants.map((d) => d.id)]);
 
   // Remove all nodes
-  for (let i = processNodes.length - 1; i >= 0; i--) {
-    if (idsToRemove.has(processNodes[i].id)) {
-      processNodes.splice(i, 1);
-    }
+  for (const id of idsToRemove) {
+    await processNodesRepo.delete(id);
   }
 
   // Remove flow relationships involving deleted nodes
-  for (let i = flowRelationships.length - 1; i >= 0; i--) {
-    if (idsToRemove.has(flowRelationships[i].fromNodeId) || idsToRemove.has(flowRelationships[i].toNodeId)) {
-      flowRelationships.splice(i, 1);
-    }
+  const flowsToRemove = flowRelationships.filter(
+    (f) => idsToRemove.has(f.fromNodeId) || idsToRemove.has(f.toNodeId),
+  );
+  for (const f of flowsToRemove) {
+    await flowRelationshipsRepo.delete(f.id);
   }
 
   // Cascade: drop data mappings that referenced any deleted step.
   const mappingsRemoved = cascadeDeleteMappings(idsToRemove);
 
-  saveStore('processNodes', processNodes);
-  saveStore('flowRelationships', flowRelationships);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', nodeId, 'DELETE', node, null);
   logger.info({ id: nodeId, level: node.level, descendantsRemoved: descendants.length, mappingsRemoved }, 'Deleted process node');
 
@@ -1109,7 +1113,7 @@ router.delete('/nodes/:id', (req: Request, res: Response) => {
 });
 
 /** POST /nodes/:id/clone — deep-clone a node and all its descendants */
-router.post('/nodes/:id/clone', (req: Request, res: Response) => {
+router.post('/nodes/:id/clone', async (req: Request, res: Response) => {
   const source = findNode(param(req.params.id));
   if (!source) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
@@ -1139,8 +1143,7 @@ router.post('/nodes/:id/clone', (req: Request, res: Response) => {
     updatedAt: now,
   }));
 
-  processNodes.push(...cloned);
-  saveStore('processNodes', processNodes);
+  for (const c of cloned) await processNodesRepo.create(c);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', cloned[0].id, 'CLONE', null, { sourceId: source.id, count: cloned.length });
   logger.info({ sourceId: source.id, clonedRoot: cloned[0].id, count: cloned.length }, 'Cloned process node tree');
 
@@ -1350,7 +1353,7 @@ router.get('/data-graph', (req: Request, res: Response) => {
  *  that hides the suggestion from future ranks for this node.
  *  Idempotent: a duplicate dismissal returns the existing row rather
  *  than 409. */
-router.post('/nodes/:id/suggestions/dismiss', (req: Request, res: Response) => {
+router.post('/nodes/:id/suggestions/dismiss', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
@@ -1376,24 +1379,22 @@ router.post('/nodes/:id/suggestions/dismiss', (req: Request, res: Response) => {
     dismissedBy: (req as any).user?.id ?? null,
     dismissedAt: new Date().toISOString(),
   };
-  suggestionDismissals.push(row);
-  saveStore('suggestionDismissals', suggestionDismissals);
+  await suggestionDismissalsRepo.create(row);
   auditService.log(node.orgId, row.dismissedBy, 'SuggestionDismissal', row.id, 'CREATE', null, row);
   res.status(201).json({ success: true, data: row });
 });
 
 /** DELETE /nodes/:id/suggestions/dismiss/:kind/:targetId — undo a
  *  prior dismissal so the suggestion can come back. */
-router.delete('/nodes/:id/suggestions/dismiss/:kind/:targetId', (req: Request, res: Response) => {
+router.delete('/nodes/:id/suggestions/dismiss/:kind/:targetId', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const kind = param(req.params.kind);
   const targetId = param(req.params.targetId);
-  const idx = suggestionDismissals.findIndex(
+  const removed = suggestionDismissals.find(
     (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
   );
-  if (idx < 0) { res.status(404).json({ success: false, error: 'Dismissal not found' }); return; }
-  const [removed] = suggestionDismissals.splice(idx, 1);
-  saveStore('suggestionDismissals', suggestionDismissals);
+  if (!removed) { res.status(404).json({ success: false, error: 'Dismissal not found' }); return; }
+  await suggestionDismissalsRepo.delete(removed.id);
   auditService.log(removed.orgId, (req as any).user?.id ?? null, 'SuggestionDismissal', removed.id, 'DELETE', removed, null);
   res.json({ success: true });
 });
@@ -1491,7 +1492,7 @@ function nodeSummary(id: string): { id: string; name: string; level: string; sta
 }
 
 /** POST /flows — create a flow relationship */
-router.post('/flows', (req: Request, res: Response) => {
+router.post('/flows', async (req: Request, res: Response) => {
   const { fromNodeId, toNodeId, type, condition, label } = req.body;
 
   if (!fromNodeId || !toNodeId) {
@@ -1562,19 +1563,17 @@ router.post('/flows', (req: Request, res: Response) => {
     createdAt: new Date().toISOString(),
   };
 
-  flowRelationships.push(flow);
-  saveStore('flowRelationships', flowRelationships);
+  await flowRelationshipsRepo.create(flow);
   logger.info({ from: fromNode.name, to: toNode.name, type: flow.type }, 'Created flow relationship');
 
   res.status(201).json({ success: true, data: flow });
 });
 
 /** DELETE /flows/:id — delete a flow relationship */
-router.delete('/flows/:id', (req: Request, res: Response) => {
-  const idx = flowRelationships.findIndex((f) => f.id === param(req.params.id));
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
-  flowRelationships.splice(idx, 1);
-  saveStore('flowRelationships', flowRelationships);
+router.delete('/flows/:id', async (req: Request, res: Response) => {
+  const flow = flowRelationships.find((f) => f.id === param(req.params.id));
+  if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
+  await flowRelationshipsRepo.delete(flow.id);
   res.status(204).send();
 });
 

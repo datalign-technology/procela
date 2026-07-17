@@ -178,7 +178,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-groups */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   let filtered = filterByOrgScope(governanceGroups, orgId as string | undefined);
   // Deduplicate by name+type within the result set
@@ -205,7 +205,7 @@ router.get('/', (req: Request, res: Response) => {
  * Generate a standard governance structure as a starting point.
  * Must be registered BEFORE /:id to avoid route conflict.
  */
-router.post('/generate-template', (req: Request, res: Response) => {
+router.post('/generate-template', async (req: Request, res: Response) => {
   const parsed = generateTemplateBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -253,7 +253,7 @@ router.post('/generate-template', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-groups/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
@@ -282,7 +282,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-groups/:id/recommendations */
-router.get('/:id/recommendations', (req: Request, res: Response) => {
+router.get('/:id/recommendations', async (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Group not found' }); return; }
 
@@ -363,7 +363,7 @@ router.get('/:id/recommendations', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/governance-groups */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const parsed = createGroupBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -399,15 +399,14 @@ router.post('/', (req: Request, res: Response) => {
     name, type, description: description || '', charter: charter || '',
     status: status || 'ACTIVE', members: [], createdAt: now, updatedAt: now,
   };
-  governanceGroups.push(group);
-  saveStore('governanceGroups', governanceGroups);
+  await governanceGroupsRepo.create(group);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'CREATE', null, group);
   logger.info({ groupId: group.id, name: group.name, type: group.type, parentId }, 'Created governance group');
   res.status(201).json({ success: true, data: group, warning, validChildTypes: VALID_CHILDREN[group.type] || [] });
 });
 
 /** PUT /api/v1/governance-groups/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
@@ -426,28 +425,27 @@ router.put('/:id', (req: Request, res: Response) => {
   if (status !== undefined) group.status = status;
   if (parentId !== undefined) group.parentId = parentId;
   group.updatedAt = new Date().toISOString();
-  saveStore('governanceGroups', governanceGroups);
+  await governanceGroupsRepo.update(group.id, group);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'UPDATE', before, group);
   res.json({ success: true, data: group });
 });
 
 /** DELETE /api/v1/governance-groups/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = governanceGroups.findIndex((g) => g.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
-  const removed = governanceGroups[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = governanceGroups.find((g) => g.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
   // Re-parent children
   for (const g of governanceGroups) {
     if (g.parentId === removed.id) g.parentId = removed.parentId;
   }
   auditService.log(removed.orgId, null, 'GovernanceGroup', removed.id, 'DELETE', removed, null);
-  governanceGroups.splice(idx, 1);
+  await governanceGroupsRepo.delete(removed.id);
   saveStore('governanceGroups', governanceGroups);
   res.status(204).send();
 });
 
 /** POST /api/v1/governance-groups/:id/members */
-router.post('/:id/members', (req: Request, res: Response) => {
+router.post('/:id/members', async (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
@@ -510,7 +508,7 @@ router.post('/:id/members', (req: Request, res: Response) => {
  *  resolves to either a personId or an agentId on the membership row.
  *  We look it up across both so the frontend can use the same delete
  *  call for either holder kind. */
-router.delete('/:id/members/:memberId', (req: Request, res: Response) => {
+router.delete('/:id/members/:memberId', async (req: Request, res: Response) => {
   const group = governanceGroups.find((g) => g.id === req.params.id);
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
   const { memberId } = req.params;
