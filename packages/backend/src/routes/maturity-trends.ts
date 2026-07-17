@@ -79,26 +79,23 @@ router.post('/snapshot', async (req: Request, res: Response) => {
   res.status(201).json({ success: true, data: snapshot });
 });
 
-/** DELETE /api/v1/maturity-trends/all — clear all snapshots. Bulk write —
- *  the array is mutated in place then persisted once at the end rather
- *  than issuing N repo.delete() calls. */
+/** DELETE /api/v1/maturity-trends/all — clear all snapshots. */
 router.delete('/all', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
   if (oid) {
     // Remove only snapshots for this org
-    const before = maturitySnapshots.length;
-    for (let i = maturitySnapshots.length - 1; i >= 0; i--) {
-      if (maturitySnapshots[i].orgId === oid) {
-        maturitySnapshots.splice(i, 1);
-      }
+    const victims = maturitySnapshots.filter((s) => s.orgId === oid).map((s) => s.id);
+    for (const id of victims) {
+      await maturitySnapshotsRepo.delete(id);
     }
-    persist();
-    res.json({ success: true, removed: before - maturitySnapshots.length });
+    res.json({ success: true, removed: victims.length });
   } else {
-    maturitySnapshots.length = 0;
-    persist();
+    const ids = maturitySnapshots.map((s) => s.id);
+    for (const id of ids) {
+      await maturitySnapshotsRepo.delete(id);
+    }
     res.json({ success: true, removed: 0 });
   }
 });

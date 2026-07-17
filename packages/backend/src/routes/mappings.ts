@@ -144,13 +144,13 @@ function enrichMapping(m: StoredMapping) {
 
 const router = Router();
 
-/** DELETE /api/v1/mappings/all — delete all mappings. Bulk write —
- *  the array is truncated in place then persisted once at the end
- *  rather than issuing N repo.delete() calls. */
+/** DELETE /api/v1/mappings/all — delete all mappings. */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = mappings.length;
-  mappings.splice(0, mappings.length);
-  saveStore('mappings', mappings);
+  const ids = mappings.map((m) => m.id);
+  const count = ids.length;
+  for (const id of ids) {
+    await mappingsRepo.delete(id);
+  }
   auditService.log(DEV_ORG_ID, null, 'Mapping', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all mappings');
   res.json({ success: true, deleted: count });

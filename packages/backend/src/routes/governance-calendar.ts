@@ -383,7 +383,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     }
   }
 
-  saveStore('calendarEvents', calendarEvents);
+  await calendarEventsRepo.update(event.id, event);
   auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'RUN', before, event);
   logger.info({ eventId: event.id, name: event.name, createdTaskIds }, 'Ran calendar event occurrence');
 
@@ -470,12 +470,11 @@ router.post('/seed', async (req: Request, res: Response) => {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    calendarEvents.push(event);
+    await calendarEventsRepo.create(event);
     created.push(event);
     auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'CREATE', null, event);
   }
 
-  if (created.length > 0) saveStore('calendarEvents', calendarEvents);
   logger.info({ orgId, createdCount: created.length, skippedCount: skipped.length }, 'Seeded calendar events');
 
   res.json({

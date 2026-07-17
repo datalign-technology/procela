@@ -544,16 +544,20 @@ function validateSystemIds(value: unknown, res: Response): string[] | null {
 // ── HIERARCHY NODES ──
 
 /** DELETE /all — delete all process nodes and flow relationships */
-router.delete('/all', (_req: Request, res: Response) => {
-  const count = processNodes.length;
-  const flowCount = flowRelationships.length;
+router.delete('/all', async (_req: Request, res: Response) => {
+  const nodeIds = processNodes.map((n) => n.id);
+  const flowIds = flowRelationships.map((f) => f.id);
+  const count = nodeIds.length;
+  const flowCount = flowIds.length;
   // Every step is going away, so every mapping is now orphaned.
-  const allStepIds = new Set(processNodes.map((n) => n.id));
-  processNodes.splice(0, processNodes.length);
-  flowRelationships.splice(0, flowRelationships.length);
+  const allStepIds = new Set(nodeIds);
+  for (const id of flowIds) {
+    await flowRelationshipsRepo.delete(id);
+  }
+  for (const id of nodeIds) {
+    await processNodesRepo.delete(id);
+  }
   const mappingsRemoved = cascadeDeleteMappings(allStepIds);
-  saveStore('processNodes', processNodes);
-  saveStore('flowRelationships', flowRelationships);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', '*', 'DELETE_ALL', null, { count, flowCount, mappingsRemoved });
   logger.info({ count, flowCount, mappingsRemoved }, 'Deleted all process nodes and flow relationships');
   res.json({ success: true, deleted: count + flowCount });
