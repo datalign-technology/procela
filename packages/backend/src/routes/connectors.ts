@@ -167,26 +167,44 @@ function requireConnectorToken(req: Request, res: Response, next: () => void): v
 /** GET /connectors — list every connector in scope. Each row carries
  *  its live freshness bucket so the UI doesn't have to re-derive it. */
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const { orgId } = req.query;
-  const oid = (orgId as string | undefined) || req.user?.orgId;
-  const rows = connectors
-    .filter((c) => !oid || c.orgId === oid)
-    .map((c) => ({
-      id: c.id,
-      orgId: c.orgId,
-      name: c.name,
-      status: freshnessFor(c),
-      lastHeartbeatAt: c.lastHeartbeatAt,
-      agentVersion: c.agentVersion,
-      systemIds: c.systemIds,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-      // Surface whether a pair code is still active so the UI can
-      // prompt the admin to enter it on the connector side.
-      pairingCodeActive: !!c.pairingCode && !!c.pairingCodeExpiresAt
-        && new Date(c.pairingCodeExpiresAt).getTime() > Date.now(),
-    }));
-  res.json({ success: true, data: rows });
+  // Defensive: a single corrupt row shouldn't turn the whole list
+  // endpoint into a 500 — the Settings page shows On-prem connectors
+  // even when no connectors are paired, and a red "Internal Server
+  // Error" banner where an empty list belongs is worse UX than
+  // silently skipping a bad row.
+  try {
+    const { orgId } = req.query;
+    const oid = (orgId as string | undefined) || req.user?.orgId;
+    const rows = connectors
+      .filter((c) => !oid || c.orgId === oid)
+      .map((c) => {
+        try {
+          return {
+            id: c.id,
+            orgId: c.orgId,
+            name: c.name,
+            status: freshnessFor(c),
+            lastHeartbeatAt: c.lastHeartbeatAt,
+            agentVersion: c.agentVersion,
+            systemIds: c.systemIds,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            // Surface whether a pair code is still active so the UI can
+            // prompt the admin to enter it on the connector side.
+            pairingCodeActive: !!c.pairingCode && !!c.pairingCodeExpiresAt
+              && new Date(c.pairingCodeExpiresAt).getTime() > Date.now(),
+          };
+        } catch (rowErr) {
+          logger.warn({ err: rowErr, connectorId: c?.id }, 'Skipping malformed connector row');
+          return null;
+        }
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    logger.error({ err }, 'Failed to list connectors');
+    res.json({ success: true, data: [] });
+  }
 });
 
 /** POST /connectors/pair/start — admin creates a connector row and
