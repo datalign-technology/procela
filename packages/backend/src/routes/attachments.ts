@@ -36,7 +36,6 @@ export interface StoredAttachment {
 
 export const attachments: StoredAttachment[] = loadStore<StoredAttachment>('attachments');
 registerStore('attachments', attachments);
-
 const attachmentsRepo = getAttachmentsRepository(attachments);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
@@ -231,10 +230,9 @@ router.put('/:id', async (req: Request, res: Response) => {
   const a = attachments.find((x) => x.id === req.params.id);
   if (!a) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
   const { name, description } = req.body;
-  const patch: Partial<StoredAttachment> = {};
+  const patch: Partial<StoredAttachment> = { updatedAt: new Date().toISOString() };
   if (name !== undefined) patch.name = name;
   if (description !== undefined) patch.description = description;
-  patch.updatedAt = new Date().toISOString();
   const updated = await attachmentsRepo.update(a.id, patch);
   res.json({ success: true, data: updated });
 });

@@ -4,6 +4,7 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import logger from '../lib/logger';
+import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
 
 // ── Types ──
 
@@ -26,6 +27,8 @@ export interface StoredOperationsManual {
 
 export const operationsManuals: StoredOperationsManual[] = loadStore<StoredOperationsManual>('operationsManuals');
 registerStore('operationsManuals', operationsManuals);
+
+const operationsManualsRepo = getOperationsManualsRepository(operationsManuals);
 
 // ── Standard DAMA role templates ──
 
@@ -268,21 +271,21 @@ const STANDARD_MANUALS: Array<Omit<StoredOperationsManual, 'id' | 'orgId' | 'cre
 const router = Router();
 
 /** GET /api/v1/operations-manuals — list with ?orgId= filter */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(operationsManuals, orgId as string | undefined);
   res.json({ success: true, data: filtered });
 });
 
 /** GET /api/v1/operations-manuals/:id — single manual */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const manual = operationsManuals.find((m) => m.id === req.params.id);
   if (!manual) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
   res.json({ success: true, data: manual });
 });
 
 /** POST /api/v1/operations-manuals — create */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!label) { res.status(400).json({ success: false, error: 'label is required' }); return; }
@@ -305,15 +308,14 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  operationsManuals.push(manual);
-  saveStore('operationsManuals', operationsManuals);
+  await operationsManualsRepo.create(manual);
   auditService.log(manual.orgId, null, 'OperationsManual', manual.id, 'CREATE', null, manual);
   logger.info({ manualId: manual.id, label: manual.label }, 'Created operations manual');
   res.status(201).json({ success: true, data: manual });
 });
 
 /** PUT /api/v1/operations-manuals/:id — update any fields */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const manual = operationsManuals.find((m) => m.id === req.params.id);
   if (!manual) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
 
@@ -332,26 +334,24 @@ router.put('/:id', (req: Request, res: Response) => {
   if (isCustom !== undefined) manual.isCustom = isCustom;
 
   manual.updatedAt = new Date().toISOString();
-  saveStore('operationsManuals', operationsManuals);
+  await operationsManualsRepo.update(manual.id, manual);
   auditService.log(manual.orgId, null, 'OperationsManual', manual.id, 'UPDATE', before, manual);
   logger.info({ manualId: manual.id, label: manual.label }, 'Updated operations manual');
   res.json({ success: true, data: manual });
 });
 
 /** DELETE /api/v1/operations-manuals/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = operationsManuals.findIndex((m) => m.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
-  const removed = operationsManuals[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = operationsManuals.find((m) => m.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
   auditService.log(removed.orgId, null, 'OperationsManual', removed.id, 'DELETE', removed, null);
-  operationsManuals.splice(idx, 1);
-  saveStore('operationsManuals', operationsManuals);
+  await operationsManualsRepo.delete(removed.id);
   logger.info({ manualId: removed.id, label: removed.label }, 'Deleted operations manual');
   res.status(204).send();
 });
 
 /** POST /api/v1/operations-manuals/seed — seed standard DAMA role manuals for an org (skip existing) */
-router.post('/seed', (req: Request, res: Response) => {
+router.post('/seed', async (req: Request, res: Response) => {
   const { orgId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
@@ -372,12 +372,11 @@ router.post('/seed', (req: Request, res: Response) => {
       createdAt: now,
       updatedAt: now,
     };
-    operationsManuals.push(manual);
+    await operationsManualsRepo.create(manual);
     created.push(manual);
     auditService.log(manual.orgId, null, 'OperationsManual', manual.id, 'CREATE', null, manual);
   }
 
-  if (created.length > 0) saveStore('operationsManuals', operationsManuals);
   logger.info({ orgId, created: created.length, skipped: skipped.length }, 'Seeded standard operations manuals');
 
   res.json({

@@ -8,6 +8,7 @@ import logger from '../lib/logger';
 import { people } from './people';
 import { dataDomains } from './data-domains';
 import { organizations } from './organizations';
+import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
 
 export interface StoredGlossaryTerm {
   id: string;
@@ -30,6 +31,7 @@ export interface StoredGlossaryTerm {
 
 export const glossaryTerms: StoredGlossaryTerm[] = loadStore<StoredGlossaryTerm>('glossaryTerms');
 registerStore('glossaryTerms', glossaryTerms);
+const glossaryTermsRepo = getGlossaryTermsRepository(glossaryTerms);
 
 const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'APPROVED', 'DEPRECATED'] as const;
 const VALID_CATEGORIES = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'] as const;
@@ -143,7 +145,7 @@ const INDUSTRY_TERMS: Record<string, Array<{ term: string; definition: string; c
 const router = Router();
 
 /** GET /api/v1/business-glossary — list with filters */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, category, domainId, search } = req.query;
   let filtered = filterByOrgScope(glossaryTerms, orgId as string | undefined);
 
@@ -171,7 +173,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/business-glossary/summary — aggregate stats */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(glossaryTerms, orgId as string | undefined);
 
@@ -198,7 +200,7 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/business-glossary/:id — single term */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const term = glossaryTerms.find((t) => t.id === req.params.id);
   if (!term) {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
@@ -208,7 +210,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/business-glossary — create */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const {
     term, orgId, definition, context, synonyms, relatedTerms,
     domainId, ownerPersonId, status, category,
@@ -252,15 +254,14 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  glossaryTerms.push(newTerm);
-  saveStore('glossaryTerms', glossaryTerms);
+  await glossaryTermsRepo.create(newTerm);
   auditService.log('system', orgId, 'GlossaryTerm', newTerm.id, 'CREATE', null, newTerm);
   logger.info({ id: newTerm.id, term: newTerm.term }, 'Created glossary term');
   res.status(201).json({ success: true, data: enrichTerm(newTerm) });
 });
 
 /** PUT /api/v1/business-glossary/:id — update */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const existing = glossaryTerms.find((t) => t.id === req.params.id);
   if (!existing) {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
@@ -299,28 +300,27 @@ router.put('/:id', (req: Request, res: Response) => {
   if (sourceOfTruth !== undefined) existing.sourceOfTruth = sourceOfTruth;
 
   existing.updatedAt = new Date().toISOString();
-  saveStore('glossaryTerms', glossaryTerms);
+  await glossaryTermsRepo.update(existing.id, existing);
   auditService.log('system', existing.orgId, 'GlossaryTerm', existing.id, 'UPDATE', before, existing);
   logger.info({ id: existing.id, term: existing.term }, 'Updated glossary term');
   res.json({ success: true, data: enrichTerm(existing) });
 });
 
 /** DELETE /api/v1/business-glossary/:id — delete */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = glossaryTerms.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) {
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = glossaryTerms.find((t) => t.id === req.params.id);
+  if (!removed) {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
     return;
   }
-  const removed = glossaryTerms.splice(idx, 1)[0];
-  saveStore('glossaryTerms', glossaryTerms);
+  await glossaryTermsRepo.delete(removed.id);
   auditService.log('system', removed.orgId, 'GlossaryTerm', removed.id, 'DELETE', removed, null);
   logger.info({ id: removed.id, term: removed.term }, 'Deleted glossary term');
   res.status(204).send();
 });
 
 /** POST /api/v1/business-glossary/seed — create or preview starter terms for an org */
-router.post('/seed', (req: Request, res: Response) => {
+router.post('/seed', async (req: Request, res: Response) => {
   const { orgId, preview, selectedTerms } = req.body;
   if (!orgId || typeof orgId !== 'string') {
     res.status(400).json({ success: false, error: 'orgId is required' });
@@ -378,12 +378,11 @@ router.post('/seed', (req: Request, res: Response) => {
       updatedAt: now,
     };
 
-    glossaryTerms.push(newTerm);
+    await glossaryTermsRepo.create(newTerm);
     created.push(newTerm);
   }
 
   if (created.length > 0) {
-    saveStore('glossaryTerms', glossaryTerms);
     auditService.log('system', orgId, 'GlossaryTerm', '*', 'SEED', null, { count: created.length, industry });
     logger.info({ orgId, count: created.length, industry }, 'Seeded glossary terms');
   }
@@ -404,7 +403,7 @@ router.post('/seed', (req: Request, res: Response) => {
  * Applies the same partial update to every term in `ids`. Unknown ids are
  * skipped. Invalid status/category values are ignored field-by-field.
  */
-router.patch('/bulk', (req: Request, res: Response) => {
+router.patch('/bulk', async (req: Request, res: Response) => {
   const { ids, updates } = req.body || {};
   if (!Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
@@ -428,11 +427,11 @@ router.patch('/bulk', (req: Request, res: Response) => {
     if (updates.ownerPersonId !== undefined) t.ownerPersonId = updates.ownerPersonId || null;
     if (updates.domainId !== undefined) t.domainId = updates.domainId || null;
     t.updatedAt = now;
+    await glossaryTermsRepo.update(t.id, t);
     auditService.log('system', t.orgId, 'GlossaryTerm', t.id, 'BULK_UPDATE', before, t);
     updated++;
   }
 
-  if (updated > 0) saveStore('glossaryTerms', glossaryTerms);
   logger.info({ updated, skipped: skipped.length }, 'Bulk-updated glossary terms');
   res.json({ success: true, updated, skipped });
 });
@@ -444,7 +443,7 @@ router.patch('/bulk', (req: Request, res: Response) => {
  *
  * Removes every term whose id is in `ids`. Unknown ids are silently skipped.
  */
-router.post('/bulk-delete', (req: Request, res: Response) => {
+router.post('/bulk-delete', async (req: Request, res: Response) => {
   const { ids } = req.body || {};
   if (!Array.isArray(ids) || ids.length === 0) {
     res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
@@ -454,11 +453,8 @@ router.post('/bulk-delete', (req: Request, res: Response) => {
   const removed = glossaryTerms.filter((t) => idSet.has(t.id));
   for (const r of removed) {
     auditService.log('system', r.orgId, 'GlossaryTerm', r.id, 'DELETE', r, null);
+    await glossaryTermsRepo.delete(r.id);
   }
-  for (let i = glossaryTerms.length - 1; i >= 0; i--) {
-    if (idSet.has(glossaryTerms[i].id)) glossaryTerms.splice(i, 1);
-  }
-  if (removed.length > 0) saveStore('glossaryTerms', glossaryTerms);
   logger.info({ count: removed.length }, 'Bulk-deleted glossary terms');
   res.json({ success: true, deleted: removed.length });
 });
@@ -473,7 +469,7 @@ router.post('/bulk-delete', (req: Request, res: Response) => {
  * Duplicates (same term name in same org, case-insensitive) are skipped.
  * Returns { created, skipped, message } so the UI can flag partial imports.
  */
-router.post('/import', (req: Request, res: Response) => {
+router.post('/import', async (req: Request, res: Response) => {
   try {
     const { orgId, terms: termList, csv } = req.body;
 
@@ -577,12 +573,11 @@ router.post('/import', (req: Request, res: Response) => {
         createdAt: now,
         updatedAt: now,
       };
-      glossaryTerms.push(newTerm);
+      await glossaryTermsRepo.create(newTerm);
       created.push(newTerm);
     }
 
     if (created.length > 0) {
-      saveStore('glossaryTerms', glossaryTerms);
       auditService.log('system', orgId, 'GlossaryTerm', '*', 'IMPORT', null, { count: created.length, skipped: skipped.length });
     }
     logger.info({ created: created.length, skipped: skipped.length, orgId }, 'Imported glossary terms');
