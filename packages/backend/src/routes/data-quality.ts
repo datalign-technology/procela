@@ -5,6 +5,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { startBackgroundSweep } from '../lib/background-timer';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { dataAssets, getPrimaryBinding } from './data-assets';
 import { connections } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
@@ -107,6 +108,8 @@ function contextForRule(rule: DataQualityRule): DescribeContext {
 
 export const dataQualityRules: DataQualityRule[] = loadStore<DataQualityRule>('dataQualityRules');
 registerStore('dataQualityRules', dataQualityRules);
+
+const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const QUALITY_DIMENSIONS = ['COMPLETENESS', 'ACCURACY', 'TIMELINESS', 'CONSISTENCY', 'UNIQUENESS', 'VALIDITY'];
@@ -120,17 +123,17 @@ function computeStatus(currentScore: number, threshold: number): DataQualityRule
 const router = Router();
 
 /** DELETE /api/v1/data-quality/all — delete all rules */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = dataQualityRules.length;
-  dataQualityRules.splice(0, dataQualityRules.length);
-  saveStore('dataQualityRules', dataQualityRules);
+  const ids = dataQualityRules.map((r) => r.id);
+  for (const id of ids) await dataQualityRulesRepo.delete(id);
   auditService.log(DEV_ORG_ID, null, 'DataQualityRule', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all data quality rules');
   res.json({ success: true, deleted: count });
 });
 
 /** GET /api/v1/data-quality — list all (support ?orgId= and ?dataAssetId= filters), enrich with asset name */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, dataAssetId } = req.query;
   let filtered = dataQualityRules;
   if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
@@ -152,7 +155,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-quality/summary — overall quality stats */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(dataQualityRules, orgId as string | undefined);
 
@@ -190,7 +193,7 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-quality/by-asset/:assetId — all rules for a data asset */
-router.get('/by-asset/:assetId', (req: Request, res: Response) => {
+router.get('/by-asset/:assetId', async (req: Request, res: Response) => {
   const { assetId } = req.params;
   const rules = dataQualityRules.filter((r) => r.dataAssetId === assetId);
 
@@ -206,7 +209,7 @@ router.get('/by-asset/:assetId', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/data-quality/compute-health/:assetId — compute weighted health score */
-router.post('/compute-health/:assetId', (req: Request, res: Response) => {
+router.post('/compute-health/:assetId', async (req: Request, res: Response) => {
   const { assetId } = req.params;
   const asset = dataAssets.find((a) => a.id === assetId);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
@@ -249,7 +252,7 @@ router.post('/compute-health/:assetId', (req: Request, res: Response) => {
  * IMPORTANT: must be declared before `GET /:id` — otherwise Express
  * matches this request against the `:id` route and returns a 404.
  */
-router.get('/templates', (req: Request, res: Response) => {
+router.get('/templates', async (req: Request, res: Response) => {
   const column = typeof req.query.column === 'string' ? req.query.column : undefined;
   const assetId = typeof req.query.assetId === 'string' ? req.query.assetId : undefined;
   const { suggested, generic } = suggestTemplates(column);
@@ -294,7 +297,7 @@ router.get('/templates', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/data-quality/run-all/:assetId — run every typed rule for an asset */
-router.post('/run-all/:assetId', (req: Request, res: Response) => {
+router.post('/run-all/:assetId', async (req: Request, res: Response) => {
   const { assetId } = req.params;
   const asset = dataAssets.find((a) => a.id === assetId);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
@@ -330,14 +333,14 @@ router.post('/run-all/:assetId', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-quality/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const rule = dataQualityRules.find((r) => r.id === req.params.id);
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
   res.json({ success: true, data: rule });
 });
 
 /** POST /api/v1/data-quality — create rule */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { dataAssetId, columnId, dimension, name, description, threshold, currentScore, weight, orgId,
     ruleType, parameters, templateId, scheduleFrequency } = req.body;
 
@@ -389,14 +392,13 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  dataQualityRules.push(rule);
-  saveStore('dataQualityRules', dataQualityRules);
+  await dataQualityRulesRepo.create(rule);
   auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'CREATE', null, rule);
   res.status(201).json({ success: true, data: rule });
 });
 
 /** PUT /api/v1/data-quality/:id — update rule */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const rule = dataQualityRules.find((r) => r.id === req.params.id);
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
 
@@ -432,18 +434,33 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   rule.updatedAt = new Date().toISOString();
-  saveStore('dataQualityRules', dataQualityRules);
+  await dataQualityRulesRepo.update(rule.id, {
+    dataAssetId: rule.dataAssetId,
+    dimension: rule.dimension,
+    name: rule.name,
+    description: rule.description,
+    threshold: rule.threshold,
+    currentScore: rule.currentScore,
+    weight: rule.weight,
+    status: rule.status,
+    lastMeasured: rule.lastMeasured,
+    ruleType: rule.ruleType,
+    parameters: rule.parameters,
+    templateId: rule.templateId,
+    scheduleFrequency: rule.scheduleFrequency,
+    nextRunAt: rule.nextRunAt,
+    updatedAt: rule.updatedAt,
+  });
   auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'UPDATE', null, rule);
   res.json({ success: true, data: rule });
 });
 
 /** DELETE /api/v1/data-quality/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = dataQualityRules.findIndex((r) => r.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
-  auditService.log(DEV_ORG_ID, null, 'DataQualityRule', dataQualityRules[idx].id, 'DELETE', dataQualityRules[idx], null);
-  dataQualityRules.splice(idx, 1);
-  saveStore('dataQualityRules', dataQualityRules);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = dataQualityRules.find((r) => r.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
+  auditService.log(DEV_ORG_ID, null, 'DataQualityRule', removed.id, 'DELETE', removed, null);
+  await dataQualityRulesRepo.delete(removed.id);
   res.status(204).send();
 });
 
@@ -455,7 +472,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  * and compute real pass/fail numbers; every other connection type returns
  * a clearly-labelled simulated result.
  */
-router.post('/:id/run', (req: Request, res: Response) => {
+router.post('/:id/run', async (req: Request, res: Response) => {
   const rule = dataQualityRules.find((r) => r.id === req.params.id);
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
   if (!rule.ruleType) {

@@ -5,6 +5,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { people } from './people';
 import logger from '../lib/logger';
+import { getCalendarEventsRepository } from '../db/calendar-events.repo';
 
 const EVENT_TYPES = [
   'COUNCIL_MEETING',
@@ -49,6 +50,8 @@ export interface StoredCalendarEvent {
 
 export const calendarEvents: StoredCalendarEvent[] = loadStore<StoredCalendarEvent>('calendarEvents');
 registerStore('calendarEvents', calendarEvents);
+
+const calendarEventsRepo = getCalendarEventsRepository(calendarEvents);
 
 // ── Helpers ──
 
@@ -130,7 +133,7 @@ function projectOccurrences(
 const router = Router();
 
 /** GET /api/v1/governance-calendar — list events */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, eventType } = req.query;
   let filtered = filterByOrgScope(calendarEvents, orgId as string | undefined);
   if (status) filtered = filtered.filter((e) => e.status === status);
@@ -140,7 +143,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-calendar/upcoming?orgId=X&days=30 */
-router.get('/upcoming', (req: Request, res: Response) => {
+router.get('/upcoming', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const days = Math.max(1, parseInt((req.query.days as string) || '30', 10));
   const now = new Date();
@@ -200,7 +203,7 @@ router.get('/upcoming', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/governance-calendar — create event */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const {
     orgId, name, description, eventType, cadence,
     dayOfMonth, dayOfWeek, timeOfDay, durationMinutes,
@@ -250,15 +253,14 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now.toISOString(),
   };
 
-  calendarEvents.push(event);
-  saveStore('calendarEvents', calendarEvents);
+  await calendarEventsRepo.create(event);
   auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'CREATE', null, event);
   logger.info({ eventId: event.id, name: event.name, cadence: event.cadence }, 'Created calendar event');
   res.status(201).json({ success: true, data: enrichEvent(event) });
 });
 
 /** PUT /api/v1/governance-calendar/:id — update event */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const event = calendarEvents.find((e) => e.id === req.params.id);
   if (!event) { res.status(404).json({ success: false, error: 'Calendar event not found' }); return; }
 
@@ -312,19 +314,17 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   event.updatedAt = new Date().toISOString();
-  saveStore('calendarEvents', calendarEvents);
+  await calendarEventsRepo.update(event.id, event);
   auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'UPDATE', before, event);
   res.json({ success: true, data: enrichEvent(event) });
 });
 
 /** DELETE /api/v1/governance-calendar/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = calendarEvents.findIndex((e) => e.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Calendar event not found' }); return; }
-  const removed = calendarEvents[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = calendarEvents.find((e) => e.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Calendar event not found' }); return; }
   auditService.log(removed.orgId, null, 'CalendarEvent', removed.id, 'DELETE', removed, null);
-  calendarEvents.splice(idx, 1);
-  saveStore('calendarEvents', calendarEvents);
+  await calendarEventsRepo.delete(removed.id);
   logger.info({ eventId: removed.id, name: removed.name }, 'Deleted calendar event');
   res.status(204).send();
 });
@@ -333,7 +333,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  * POST /api/v1/governance-calendar/:id/run — record this occurrence, advance
  * nextOccurrence, and optionally create a governance task per attendee.
  */
-router.post('/:id/run', (req: Request, res: Response) => {
+router.post('/:id/run', async (req: Request, res: Response) => {
   const event = calendarEvents.find((e) => e.id === req.params.id);
   if (!event) { res.status(404).json({ success: false, error: 'Calendar event not found' }); return; }
 
@@ -383,7 +383,7 @@ router.post('/:id/run', (req: Request, res: Response) => {
     }
   }
 
-  saveStore('calendarEvents', calendarEvents);
+  await calendarEventsRepo.update(event.id, event);
   auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'RUN', before, event);
   logger.info({ eventId: event.id, name: event.name, createdTaskIds }, 'Ran calendar event occurrence');
 
@@ -400,7 +400,7 @@ router.post('/:id/run', (req: Request, res: Response) => {
  * POST /api/v1/governance-calendar/seed — create the standard set of events
  * for an org if not already present. Idempotent per-event by name+orgId.
  */
-router.post('/seed', (req: Request, res: Response) => {
+router.post('/seed', async (req: Request, res: Response) => {
   const { orgId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
@@ -470,12 +470,11 @@ router.post('/seed', (req: Request, res: Response) => {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    calendarEvents.push(event);
+    await calendarEventsRepo.create(event);
     created.push(event);
     auditService.log(event.orgId, null, 'CalendarEvent', event.id, 'CREATE', null, event);
   }
 
-  if (created.length > 0) saveStore('calendarEvents', calendarEvents);
   logger.info({ orgId, createdCount: created.length, skippedCount: skipped.length }, 'Seeded calendar events');
 
   res.json({

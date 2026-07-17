@@ -4,6 +4,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { reconcileDbtManifest, DbtImportSummary } from './data-lineage';
+import { getDbtCloudConnectionsRepository } from '../db/dbt-cloud-connections.repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DBT CLOUD CONNECTIONS
@@ -51,6 +52,8 @@ export interface DbtCloudConnection {
 export const dbtCloudConnections: DbtCloudConnection[] =
   loadStore<DbtCloudConnection>('dbtCloudConnections');
 registerStore('dbtCloudConnections', dbtCloudConnections);
+
+const dbtCloudConnectionsRepo = getDbtCloudConnectionsRepository(dbtCloudConnections);
 
 // Migrate v1 records that lack the polling fields. Defaults to NEVER so
 // existing connections aren't surprise-polled after the upgrade.
@@ -105,14 +108,14 @@ function requireConn(req: Request, res: Response): DbtCloudConnection | null {
 // ── Routes ──────────────────────────────────────────────────────────────
 
 /** GET /api/v1/dbt-cloud-connections?orgId= */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query as Record<string, string | undefined>;
   const filtered = orgId ? dbtCloudConnections.filter((c) => c.orgId === orgId) : dbtCloudConnections;
   res.json({ success: true, data: filtered.map(publicShape) });
 });
 
 /** POST /api/v1/dbt-cloud-connections */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, name, host, accountId, jobId, token, pollFrequency } = req.body as Partial<DbtCloudConnection>;
   if (!name || !accountId || !jobId || !token) {
     res.status(400).json({ success: false, error: 'name, accountId, jobId, and token are required' });
@@ -141,13 +144,12 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   };
-  dbtCloudConnections.push(conn);
-  saveStore('dbtCloudConnections', dbtCloudConnections);
+  await dbtCloudConnectionsRepo.create(conn);
   res.status(201).json({ success: true, data: publicShape(conn) });
 });
 
 /** PATCH /api/v1/dbt-cloud-connections/:id */
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const conn = requireConn(req, res);
   if (!conn) return;
   const { name, host, accountId, jobId, token, pollFrequency } = req.body as Partial<DbtCloudConnection>;
@@ -168,16 +170,14 @@ router.patch('/:id', (req: Request, res: Response) => {
     }
   }
   conn.updatedAt = new Date().toISOString();
-  saveStore('dbtCloudConnections', dbtCloudConnections);
+  await dbtCloudConnectionsRepo.update(conn.id, conn);
   res.json({ success: true, data: publicShape(conn) });
 });
 
 /** DELETE /api/v1/dbt-cloud-connections/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = dbtCloudConnections.findIndex((c) => c.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'not found' }); return; }
-  dbtCloudConnections.splice(idx, 1);
-  saveStore('dbtCloudConnections', dbtCloudConnections);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = await dbtCloudConnectionsRepo.delete(String(req.params.id));
+  if (!removed) { res.status(404).json({ success: false, error: 'not found' }); return; }
   res.status(204).send();
 });
 

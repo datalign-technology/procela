@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import { getSavedViewsRepository } from '../db/saved-views.repo';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SAVED VIEWS
@@ -42,12 +43,14 @@ export interface StoredView {
 export const savedViews: StoredView[] = loadStore<StoredView>('savedViews');
 registerStore('savedViews', savedViews);
 
+const savedViewsRepo = getSavedViewsRepository(savedViews);
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const router = Router();
 
 /** GET /api/v1/saved-views?orgId=&pageKey= */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, pageKey } = req.query as Record<string, string | undefined>;
   if (!pageKey) {
     res.status(400).json({ success: false, error: 'pageKey is required' });
@@ -62,7 +65,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/saved-views */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, pageKey, name, filters, ownerName } = req.body as {
     orgId?: string; pageKey?: string; name?: string;
     filters?: Record<string, unknown>; ownerName?: string;
@@ -97,15 +100,14 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  savedViews.push(view);
-  saveStore('savedViews', savedViews);
+  await savedViewsRepo.create(view);
   logger.info({ viewId: view.id, pageKey, ownerId }, 'Saved view created');
   res.status(201).json({ success: true, data: view });
 });
 
 /** PATCH /api/v1/saved-views/:id — rename and/or update filters. Only the
  *  owner can modify their view. */
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const v = savedViews.find((v) => v.id === req.params.id);
   if (!v) { res.status(404).json({ success: false, error: 'Saved view not found' }); return; }
   const editorId = (req as any).user?.sub || null;
@@ -114,28 +116,27 @@ router.patch('/:id', (req: Request, res: Response) => {
     return;
   }
   const { name, filters } = req.body as { name?: string; filters?: Record<string, unknown> };
+  const patch: Partial<StoredView> = {};
   if (name !== undefined) {
     if (!name.trim()) { res.status(400).json({ success: false, error: 'name cannot be empty' }); return; }
-    v.name = name.trim();
+    patch.name = name.trim();
   }
-  if (filters !== undefined) v.filters = filters;
-  v.updatedAt = new Date().toISOString();
-  saveStore('savedViews', savedViews);
-  res.json({ success: true, data: v });
+  if (filters !== undefined) patch.filters = filters;
+  patch.updatedAt = new Date().toISOString();
+  const updated = await savedViewsRepo.update(v.id, patch);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/saved-views/:id — only the owner can delete. */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = savedViews.findIndex((v) => v.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Saved view not found' }); return; }
-  const v = savedViews[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const v = savedViews.find((v) => v.id === req.params.id);
+  if (!v) { res.status(404).json({ success: false, error: 'Saved view not found' }); return; }
   const editorId = (req as any).user?.sub || null;
   if (v.ownerId && editorId && v.ownerId !== editorId) {
     res.status(403).json({ success: false, error: 'Only the owner can delete this view' });
     return;
   }
-  savedViews.splice(idx, 1);
-  saveStore('savedViews', savedViews);
+  await savedViewsRepo.delete(v.id);
   res.status(204).send();
 });
 

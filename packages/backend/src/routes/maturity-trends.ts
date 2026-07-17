@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { getMaturitySnapshotsRepository } from '../db/maturity-snapshots.repo';
 
 const router = Router();
 
@@ -26,6 +27,8 @@ export interface ScorecardSnapshot {
 export const maturitySnapshots: ScorecardSnapshot[] = loadStore<ScorecardSnapshot>('maturitySnapshots');
 registerStore('maturitySnapshots', maturitySnapshots);
 
+const maturitySnapshotsRepo = getMaturitySnapshotsRepository(maturitySnapshots);
+
 function persist() {
   saveStore('maturitySnapshots', maturitySnapshots);
 }
@@ -35,7 +38,7 @@ function persist() {
 // ---------------------------------------------------------------------------
 
 /** GET /api/v1/maturity-trends — list snapshots for an org, sorted by timestamp */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
@@ -50,7 +53,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/maturity-trends/snapshot — save a scorecard snapshot */
-router.post('/snapshot', (req: Request, res: Response) => {
+router.post('/snapshot', async (req: Request, res: Response) => {
   const { orgId, overall, dimensions } = req.body;
 
   if (!orgId || overall === undefined || !Array.isArray(dimensions)) {
@@ -71,30 +74,28 @@ router.post('/snapshot', (req: Request, res: Response) => {
     })),
   };
 
-  maturitySnapshots.push(snapshot);
-  persist();
+  await maturitySnapshotsRepo.create(snapshot);
 
   res.status(201).json({ success: true, data: snapshot });
 });
 
-/** DELETE /api/v1/maturity-trends/all — clear all snapshots */
-router.delete('/all', (req: Request, res: Response) => {
+/** DELETE /api/v1/maturity-trends/all — clear all snapshots. */
+router.delete('/all', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
 
   if (oid) {
     // Remove only snapshots for this org
-    const before = maturitySnapshots.length;
-    for (let i = maturitySnapshots.length - 1; i >= 0; i--) {
-      if (maturitySnapshots[i].orgId === oid) {
-        maturitySnapshots.splice(i, 1);
-      }
+    const victims = maturitySnapshots.filter((s) => s.orgId === oid).map((s) => s.id);
+    for (const id of victims) {
+      await maturitySnapshotsRepo.delete(id);
     }
-    persist();
-    res.json({ success: true, removed: before - maturitySnapshots.length });
+    res.json({ success: true, removed: victims.length });
   } else {
-    maturitySnapshots.length = 0;
-    persist();
+    const ids = maturitySnapshots.map((s) => s.id);
+    for (const id of ids) {
+      await maturitySnapshotsRepo.delete(id);
+    }
     res.json({ success: true, removed: 0 });
   }
 });

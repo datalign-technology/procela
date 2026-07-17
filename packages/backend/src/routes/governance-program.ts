@@ -6,6 +6,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { hasPermission } from '../lib/permissions';
 import { AuthenticatedRequest } from '../middleware/auth';
 import logger from '../lib/logger';
+import { getGovernanceProgramsRepository } from '../db/governance-programs.repo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,6 +95,8 @@ interface Recommendation {
 export const governancePrograms: StoredGovernanceProgram[] =
   loadStore<StoredGovernanceProgram>('governancePrograms');
 registerStore('governancePrograms', governancePrograms);
+
+const governanceProgramsRepo = getGovernanceProgramsRepository(governancePrograms);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
@@ -433,7 +436,7 @@ const router = Router();
  * Returns the program for the given org. Creates a default program if none
  * exists so the UI always has something to render.
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const orgIdQuery = req.query.orgId as string | undefined;
   const orgId = orgIdQuery || DEV_ORG_ID;
 
@@ -447,8 +450,7 @@ router.get('/', (req: Request, res: Response) => {
 
   if (!program) {
     program = buildDefaultProgram(orgId);
-    governancePrograms.push(program);
-    saveStore('governancePrograms', governancePrograms);
+    await governanceProgramsRepo.create(program);
     auditService.log(orgId, null, 'GovernanceProgram', program.id, 'CREATE', null, program);
     logger.info({ programId: program.id, orgId }, 'Created default governance program');
   }
@@ -457,7 +459,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** PUT /api/v1/governance-program/:id — update the program */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const program = governancePrograms.find((p) => p.id === req.params.id);
   if (!program) {
     res.status(404).json({ success: false, error: 'Governance program not found' });
@@ -590,7 +592,7 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   program.updatedAt = new Date().toISOString();
-  saveStore('governancePrograms', governancePrograms);
+  await governanceProgramsRepo.update(program.id, program);
 
   const actorId = (req as AuthenticatedRequest).user?.sub || null;
   auditService.log(program.orgId, actorId, 'GovernanceProgram', program.id, 'UPDATE', before, program);
@@ -625,7 +627,7 @@ router.put('/:id', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-program/:id/status — compute current phase */
-router.get('/:id/status', (req: Request, res: Response) => {
+router.get('/:id/status', async (req: Request, res: Response) => {
   const program = governancePrograms.find((p) => p.id === req.params.id);
   if (!program) {
     res.status(404).json({ success: false, error: 'Governance program not found' });
@@ -636,7 +638,7 @@ router.get('/:id/status', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-program/:id/recommendations — next-step suggestions */
-router.get('/:id/recommendations', (req: Request, res: Response) => {
+router.get('/:id/recommendations', async (req: Request, res: Response) => {
   const program = governancePrograms.find((p) => p.id === req.params.id);
   if (!program) {
     res.status(404).json({ success: false, error: 'Governance program not found' });

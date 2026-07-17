@@ -4,6 +4,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
+import { getDecisionRightsRepository } from '../db/decision-rights.repo';
 
 export type DecisionCategory =
   | 'POLICY'
@@ -33,6 +34,8 @@ export interface StoredDecisionRight {
 
 export const decisionRights: StoredDecisionRight[] = loadStore<StoredDecisionRight>('decisionRights');
 registerStore('decisionRights', decisionRights);
+
+const decisionRightsRepo = getDecisionRightsRepository(decisionRights);
 
 const VALID_CATEGORIES: DecisionCategory[] = [
   'POLICY', 'EXCEPTION', 'ISSUE', 'CLASSIFICATION', 'ACCESS', 'SCOPE', 'ROLE', 'OTHER',
@@ -75,7 +78,7 @@ function enrichWithDeciderName(row: StoredDecisionRight): StoredDecisionRight & 
 const router = Router();
 
 /** GET /api/v1/decision-rights — list (optional ?orgId= and ?category= filters) */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, category } = req.query;
   let filtered = [...decisionRights];
   if (orgId) filtered = filtered.filter((r) => r.orgId === orgId);
@@ -86,14 +89,14 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/decision-rights/:id — single decision right */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const row = decisionRights.find((r) => r.id === req.params.id);
   if (!row) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
   res.json({ success: true, data: enrichWithDeciderName(row) });
 });
 
 /** POST /api/v1/decision-rights — create */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const {
     orgId, decision, category, description,
     decider, deciderType, recommends, approves, informed, escalationPath,
@@ -130,15 +133,14 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  decisionRights.push(row);
-  saveStore('decisionRights', decisionRights);
+  await decisionRightsRepo.create(row);
   auditService.log(row.orgId, null, 'DecisionRight', row.id, 'CREATE', null, row);
   logger.info({ decisionRightId: row.id, decision: row.decision }, 'Created decision right');
   res.status(201).json({ success: true, data: enrichWithDeciderName(row) });
 });
 
 /** PUT /api/v1/decision-rights/:id — update */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const row = decisionRights.find((r) => r.id === req.params.id);
   if (!row) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
 
@@ -171,25 +173,23 @@ router.put('/:id', (req: Request, res: Response) => {
   if (escalationPath !== undefined) row.escalationPath = escalationPath;
 
   row.updatedAt = new Date().toISOString();
-  saveStore('decisionRights', decisionRights);
+  await decisionRightsRepo.update(row.id, row);
   auditService.log(row.orgId, null, 'DecisionRight', row.id, 'UPDATE', before, row);
   res.json({ success: true, data: enrichWithDeciderName(row) });
 });
 
 /** DELETE /api/v1/decision-rights/:id — delete */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = decisionRights.findIndex((r) => r.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
-  const removed = decisionRights[idx];
-  decisionRights.splice(idx, 1);
-  saveStore('decisionRights', decisionRights);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = decisionRights.find((r) => r.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
+  await decisionRightsRepo.delete(removed.id);
   auditService.log(removed.orgId, null, 'DecisionRight', removed.id, 'DELETE', removed, null);
   logger.info({ decisionRightId: removed.id }, 'Deleted decision right');
   res.status(204).send();
 });
 
 /** POST /api/v1/decision-rights/seed — creates standard decision rights for an org */
-router.post('/seed', (req: Request, res: Response) => {
+router.post('/seed', async (req: Request, res: Response) => {
   const { orgId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 

@@ -8,6 +8,7 @@ import { agents } from './agents';
 import { skills } from './skills';
 import { governanceTasks } from './governance-tasks';
 import { dataDomains } from './data-domains';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
 
 export const DAMA_ROLE_TYPES = [
   // Executive/Strategic
@@ -75,6 +76,8 @@ export interface StoredDamaRole {
 export const damaRoles: StoredDamaRole[] = loadStore<StoredDamaRole>('damaRoles');
 registerStore('damaRoles', damaRoles);
 
+const damaRolesRepo = getDamaRolesRepository(damaRoles);
+
 // Backfill agentId/agentName on legacy records
 {
   let backfilled = 0;
@@ -107,17 +110,19 @@ function roleOrgId(r: StoredDamaRole): string | null {
 const router = Router();
 
 /** DELETE /api/v1/dama-roles/all — delete all DAMA role assignments */
-router.delete('/all', (_req: Request, res: Response) => {
-  const count = damaRoles.length;
-  damaRoles.splice(0, damaRoles.length);
-  saveStore('damaRoles', damaRoles);
+router.delete('/all', async (_req: Request, res: Response) => {
+  const ids = damaRoles.map((r) => r.id);
+  const count = ids.length;
+  for (const id of ids) {
+    await damaRolesRepo.delete(id);
+  }
   auditService.log('system', null, 'DamaRole', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all DAMA role assignments');
   res.json({ success: true, deleted: count });
 });
 
 /** GET /api/v1/dama-roles — list all (support ?orgId=, ?personId=, ?agentId= filters). Enrich with person/agent name. */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, personId, agentId } = req.query;
   let filtered = [...damaRoles];
 
@@ -148,7 +153,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/dama-roles — assign a DAMA role (accepts personId OR agentId, not both) */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { personId, agentId, roleType, scopeType, scopeId } = req.body;
 
   if (!personId && !agentId) { res.status(400).json({ success: false, error: 'Either personId or agentId is required' }); return; }
@@ -242,8 +247,7 @@ router.post('/', (req: Request, res: Response) => {
     since: now,
     createdAt: now,
   };
-  damaRoles.push(role);
-  saveStore('damaRoles', damaRoles);
+  await damaRolesRepo.create(role);
 
   // Auto-generate onboarding tasks for steward roles (people only)
   let onboardingTaskCount = 0;
@@ -292,16 +296,15 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/dama-roles/:id — remove assignment */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = damaRoles.findIndex((r) => r.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Governance role assignment not found' }); return; }
-  damaRoles.splice(idx, 1);
-  saveStore('damaRoles', damaRoles);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = damaRoles.find((r) => r.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Governance role assignment not found' }); return; }
+  await damaRolesRepo.delete(removed.id);
   res.status(204).send();
 });
 
 /** GET /api/v1/dama-roles/by-person/:personId — all DAMA roles for a person */
-router.get('/by-person/:personId', (req: Request, res: Response) => {
+router.get('/by-person/:personId', async (req: Request, res: Response) => {
   const personId = req.params.personId;
   const person = people.find((p) => p.id === personId);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
@@ -314,7 +317,7 @@ router.get('/by-person/:personId', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/dama-roles/by-agent/:agentId — all DAMA roles for an agent */
-router.get('/by-agent/:agentId', (req: Request, res: Response) => {
+router.get('/by-agent/:agentId', async (req: Request, res: Response) => {
   const agentId = req.params.agentId;
   const agent = agents.find((a) => a.id === agentId);
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
@@ -327,7 +330,7 @@ router.get('/by-agent/:agentId', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/dama-roles/skill-match — analyze skill coverage for a candidate (person or agent) against a role's expected skills */
-router.get('/skill-match', (req: Request, res: Response) => {
+router.get('/skill-match', async (req: Request, res: Response) => {
   const { roleType, candidateType, candidateId, orgId } = req.query;
 
   if (!roleType || !candidateType || !candidateId) {
@@ -404,7 +407,7 @@ router.get('/skill-match', (req: Request, res: Response) => {
 /** GET /api/v1/dama-roles/summary — counts by role type. Accepts
  *  ?orgId= to match the same filter the list endpoint uses so the
  *  summary cards and the table below them show consistent numbers. */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   let filtered = [...damaRoles];
   if (orgId) {

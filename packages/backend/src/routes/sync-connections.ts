@@ -9,6 +9,7 @@ import { systems } from './systems';
 import { glossaryTerms } from './business-glossary';
 import { connections } from './connections';
 import logger from '../lib/logger';
+import { getSyncConnectionsRepository } from '../db/sync-connections.repo';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,6 +83,8 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 export const syncConnections: SyncConnection[] = loadStore<SyncConnection>('syncConnections');
 registerStore('syncConnections', syncConnections);
+
+const syncConnectionsRepo = getSyncConnectionsRepository(syncConnections);
 
 // Request-body schemas — Zod at the API boundary. Enum checks + type
 // guarantees fall out of the parse so downstream code can use the
@@ -389,7 +392,7 @@ function applyRow(
 const router = Router();
 
 /** GET /api/v1/sync-connections — list all, supports ?orgId= and ?targetEntity= filters */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, targetEntity } = req.query;
   let filtered = syncConnections;
   if (orgId && typeof orgId === 'string') {
@@ -408,7 +411,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/sync-connections/:id — get single connection */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const sc = syncConnections.find((c) => c.id === req.params.id);
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
@@ -418,7 +421,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/sync-connections — create new sync connection */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const parsed = createSyncConnectionBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -464,14 +467,13 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  syncConnections.push(sc);
-  saveStore('syncConnections', syncConnections);
+  await syncConnectionsRepo.create(sc);
   logger.info({ id: sc.id, name: sc.name, targetEntity: sc.targetEntity, sourceType: sc.sourceType }, 'Created sync connection');
   res.status(201).json({ success: true, data: sc });
 });
 
 /** PUT /api/v1/sync-connections/:id — update connection */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const sc = syncConnections.find((c) => c.id === req.params.id);
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
@@ -520,20 +522,29 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   sc.updatedAt = new Date().toISOString();
-  saveStore('syncConnections', syncConnections);
+  await syncConnectionsRepo.update(sc.id, {
+    name: sc.name,
+    targetEntity: sc.targetEntity,
+    sourceType: sc.sourceType,
+    connectionId: sc.connectionId,
+    config: sc.config,
+    fieldMapping: sc.fieldMapping,
+    matchKey: sc.matchKey,
+    schedule: sc.schedule,
+    status: sc.status,
+    updatedAt: sc.updatedAt,
+  });
   res.json({ success: true, data: sc });
 });
 
 /** DELETE /api/v1/sync-connections/:id — delete connection */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = syncConnections.findIndex((c) => c.id === req.params.id);
-  if (idx === -1) {
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = syncConnections.find((c) => c.id === req.params.id);
+  if (!removed) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;
   }
-  const removed = syncConnections[idx];
-  syncConnections.splice(idx, 1);
-  saveStore('syncConnections', syncConnections);
+  await syncConnectionsRepo.delete(removed.id);
   logger.info({ id: removed.id, name: removed.name }, 'Deleted sync connection');
   res.status(204).send();
 });
@@ -582,7 +593,11 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     sc.status = 'ERROR';
     sc.lastSyncResult = result;
     sc.updatedAt = new Date().toISOString();
-    saveStore('syncConnections', syncConnections);
+    await syncConnectionsRepo.update(sc.id, {
+      status: sc.status,
+      lastSyncResult: sc.lastSyncResult,
+      updatedAt: sc.updatedAt,
+    });
     logger.error({ err, id: sc.id }, 'Sync connection fetch failed');
     res.json({ success: false, data: result, error: msg });
     return;
@@ -631,7 +646,12 @@ router.post('/:id/run', async (req: Request, res: Response) => {
     sc.status = 'ACTIVE';
   }
   sc.updatedAt = new Date().toISOString();
-  saveStore('syncConnections', syncConnections);
+  await syncConnectionsRepo.update(sc.id, {
+    lastSyncResult: sc.lastSyncResult,
+    schedule: sc.schedule,
+    status: sc.status,
+    updatedAt: sc.updatedAt,
+  });
 
   logger.info(
     { id: sc.id, created: result.created, updated: result.updated, skipped: result.skipped, missingFromSource: result.missingFromSource, errors: result.errors, simulated },

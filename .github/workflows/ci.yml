@@ -68,7 +68,13 @@ jobs:
   test-backend-live-db:
     name: Backend tests (live Postgres)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 20 min budget: prisma generate + prisma migrate deploy +
+    # the full 833-test suite + the live-DB round-trips all run
+    # here. 10 min was tight when the entity list was smaller;
+    # after the secondary-store + route-conversion batches landed
+    # it started hitting the limit. 20 min gives comfortable
+    # headroom without waiting on genuinely-broken jobs forever.
+    timeout-minutes: 20
     services:
       postgres:
         # Ephemeral CI-only Postgres. `trust` auth means no

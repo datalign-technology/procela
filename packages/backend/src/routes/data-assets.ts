@@ -6,6 +6,9 @@ import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { aiService, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
 import logger from '../lib/logger';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
+import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { systems } from './systems';
 import { dataDomains } from './data-domains';
 import { mappings } from './mappings';
@@ -421,6 +424,10 @@ export const dataAssetColumns: StoredDataAssetColumn[] =
   loadStore<StoredDataAssetColumn>('dataAssetColumns');
 registerStore('dataAssetColumns', dataAssetColumns);
 
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const dataAssetBindingsRepo = getDataAssetBindingsRepository(dataAssetBindings);
+const dataAssetColumnsRepo = getDataAssetColumnsRepository(dataAssetColumns);
+
 /**
  * Resolve the primary binding for an asset, or undefined if it isn't linked
  * to a physical location yet. Exported so other modules (DQ engine,
@@ -476,7 +483,7 @@ function computeSuggestedTier(asset: StoredDataAsset): 'BRONZE' | 'SILVER' | 'GO
 const router = Router();
 
 /** DELETE /api/v1/data-assets/all — delete all data assets */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = dataAssets.length;
   dataAssets.splice(0, dataAssets.length);
   saveStore('dataAssets', dataAssets);
@@ -694,7 +701,7 @@ router.get('/:id/bindings', (req: Request, res: Response) => {
  * If this is the asset's first binding it's automatically marked primary.
  * If `isPrimary: true` is sent, any previously-primary binding is demoted.
  */
-router.post('/:id/bindings', (req: Request, res: Response) => {
+router.post('/:id/bindings', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
@@ -753,7 +760,7 @@ router.post('/:id/bindings', (req: Request, res: Response) => {
  * this binding and create a new one (mirrors the "unlink → link"
  * interaction the UI offers).
  */
-router.put('/:id/bindings/:bindingId', (req: Request, res: Response) => {
+router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const binding = dataAssetBindings.find((b) => b.id === req.params.bindingId && b.dataAssetId === asset.id);
@@ -790,7 +797,7 @@ router.put('/:id/bindings/:bindingId', (req: Request, res: Response) => {
  * exist, the next one in creation order is promoted to primary so the
  * asset still has a canonical location.
  */
-router.delete('/:id/bindings/:bindingId', (req: Request, res: Response) => {
+router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const idx = dataAssetBindings.findIndex((b) => b.id === req.params.bindingId && b.dataAssetId === asset.id);
@@ -820,7 +827,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/data-assets */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const parsed = createDataAssetBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -881,14 +888,13 @@ router.post('/', (req: Request, res: Response) => {
     origin: resolvedOrigin,
     createdAt: now, updatedAt: now,
   };
-  dataAssets.push(asset);
-  saveStore('dataAssets', dataAssets);
+  await dataAssetsRepo.create(asset);
   if (syncBindingFromAssetFields(asset)) saveStore('dataAssetBindings', dataAssetBindings);
   res.status(201).json({ success: true, data: asset });
 });
 
 /** PUT /api/v1/data-assets/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
@@ -948,18 +954,16 @@ router.put('/:id', (req: Request, res: Response) => {
     asset.refreshFrequency = refreshFrequency;
   }
   asset.updatedAt = now;
-  saveStore('dataAssets', dataAssets);
+  await dataAssetsRepo.update(asset.id, asset);
   if (syncBindingFromAssetFields(asset)) saveStore('dataAssetBindings', dataAssetBindings);
   res.json({ success: true, data: asset });
 });
 
 /** DELETE /api/v1/data-assets/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = dataAssets.findIndex((a) => a.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
-  const removed = dataAssets[idx];
-  dataAssets.splice(idx, 1);
-  saveStore('dataAssets', dataAssets);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = dataAssets.find((a) => a.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
+  await dataAssetsRepo.delete(removed.id);
   // Cascade: delete this asset's bindings so they don't linger.
   const ownBindings = dataAssetBindings.filter((b) => b.dataAssetId === removed.id);
   for (const b of ownBindings) {
@@ -1016,7 +1020,7 @@ router.get('/:id/columns', (req: Request, res: Response) => {
 });
 
 /** POST /data-assets/:id/columns — create a column */
-router.post('/:id/columns', (req: Request, res: Response) => {
+router.post('/:id/columns', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const parsed = createColumnBodySchema.safeParse(req.body);
@@ -1035,13 +1039,12 @@ router.post('/:id/columns', (req: Request, res: Response) => {
     sourceColumn: sourceColumn || columnName,
     createdAt: now, updatedAt: now,
   };
-  dataAssetColumns.push(col);
-  saveStore('dataAssetColumns', dataAssetColumns);
+  await dataAssetColumnsRepo.create(col);
   res.status(201).json({ success: true, data: col });
 });
 
 /** PUT /data-assets/:id/columns/:colId — update a column */
-router.put('/:id/columns/:colId', (req: Request, res: Response) => {
+router.put('/:id/columns/:colId', async (req: Request, res: Response) => {
   const col = dataAssetColumns.find((c) => c.id === req.params.colId && c.dataAssetId === req.params.id);
   if (!col) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
   const parsed = updateColumnBodySchema.safeParse(req.body);
@@ -1051,20 +1054,19 @@ router.put('/:id/columns/:colId', (req: Request, res: Response) => {
     return;
   }
   const { columnName, dataType, description } = parsed.data;
-  if (columnName !== undefined) col.columnName = columnName;
-  if (dataType !== undefined) col.dataType = normalizeDataType(dataType);
-  if (description !== undefined) col.description = description;
-  col.updatedAt = new Date().toISOString();
-  saveStore('dataAssetColumns', dataAssetColumns);
-  res.json({ success: true, data: col });
+  const patch: Partial<StoredDataAssetColumn> = { updatedAt: new Date().toISOString() };
+  if (columnName !== undefined) patch.columnName = columnName;
+  if (dataType !== undefined) patch.dataType = normalizeDataType(dataType);
+  if (description !== undefined) patch.description = description;
+  const updated = await dataAssetColumnsRepo.update(col.id, patch);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /data-assets/:id/columns/:colId — delete a column */
-router.delete('/:id/columns/:colId', (req: Request, res: Response) => {
-  const idx = dataAssetColumns.findIndex((c) => c.id === req.params.colId && c.dataAssetId === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
-  dataAssetColumns.splice(idx, 1);
-  saveStore('dataAssetColumns', dataAssetColumns);
+router.delete('/:id/columns/:colId', async (req: Request, res: Response) => {
+  const col = dataAssetColumns.find((c) => c.id === req.params.colId && c.dataAssetId === req.params.id);
+  if (!col) { res.status(404).json({ success: false, error: 'Column not found' }); return; }
+  await dataAssetColumnsRepo.delete(col.id);
   res.status(204).send();
 });
 
@@ -1134,10 +1136,9 @@ router.post('/:id/columns/auto-discover', async (req: Request, res: Response) =>
         sourceColumn: colName,
         createdAt: now, updatedAt: now,
       };
-      dataAssetColumns.push(col);
+      await dataAssetColumnsRepo.create(col);
       created.push(col);
     }
-    if (created.length > 0) saveStore('dataAssetColumns', dataAssetColumns);
     res.json({ success: true, data: created, message: `Discovered ${created.length} new column(s).`, total: existing.length + created.length });
   } catch (err: any) {
     logger.error({ err, assetId: asset.id }, 'Column auto-discover failed');
@@ -1442,7 +1443,7 @@ router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
 });
 
 /** PUT /api/v1/data-assets/:id/sensitivity */
-router.put('/:id/sensitivity', (req: Request, res: Response) => {
+router.put('/:id/sensitivity', async (req: Request, res: Response) => {
   const asset = dataAssets.find((a) => a.id === req.params.id);
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const parsed = putSensitivityBodySchema.safeParse(req.body);
@@ -1463,7 +1464,7 @@ router.put('/:id/sensitivity', (req: Request, res: Response) => {
   const previous = asset.sensitivityTags || [];
   asset.sensitivityTags = clean.length > 0 ? clean : undefined;
   asset.updatedAt = new Date().toISOString();
-  saveStore('dataAssets', dataAssets);
+  await dataAssetsRepo.update(asset.id, asset);
   auditService.log(asset.orgId, null, 'DataAsset', asset.id, 'SENSITIVITY_UPDATED', { sensitivityTags: previous }, { sensitivityTags: clean });
   res.json({ success: true, data: { id: asset.id, sensitivityTags: clean } });
 });

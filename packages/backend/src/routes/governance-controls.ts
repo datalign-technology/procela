@@ -5,6 +5,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { governancePolicies } from './governance-policies';
 import { people } from './people';
 import logger from '../lib/logger';
+import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
 
 export interface StoredGovernanceControl {
   id: string;
@@ -27,6 +28,8 @@ export interface StoredGovernanceControl {
 export const governanceControls: StoredGovernanceControl[] = loadStore<StoredGovernanceControl>('governanceControls');
 registerStore('governanceControls', governanceControls);
 
+const governanceControlsRepo = getGovernanceControlsRepository(governanceControls);
+
 function generateCode(): string {
   const seq = governanceControls.length + 1;
   return `CTL-${String(seq).padStart(3, '0')}`;
@@ -47,9 +50,9 @@ function resolvePolicyName(policyId: string): string | null {
 const router = Router();
 
 /** GET /api/v1/governance-controls — list controls */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, policyId, controlType, automationMode, status } = req.query;
-  let filtered = [...governanceControls];
+  let filtered = await governanceControlsRepo.list();
   if (orgId) filtered = filtered.filter((c) => c.orgId === orgId);
   if (policyId) filtered = filtered.filter((c) => c.policyId === policyId);
   if (controlType) filtered = filtered.filter((c) => c.controlType === controlType);
@@ -66,9 +69,9 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-controls/summary — aggregate counts */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  let filtered = [...governanceControls];
+  let filtered = await governanceControlsRepo.list();
   if (orgId) filtered = filtered.filter((c) => c.orgId === orgId);
 
   const byControlType: Record<string, number> = {};
@@ -85,7 +88,7 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-controls/:id — single control */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const control = governanceControls.find((c) => c.id === req.params.id);
   if (!control) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
 
@@ -100,7 +103,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/governance-controls — create control */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { name, policyId, orgId, description, controlType, automationMode, status,
           ownerAssignmentId, evidenceRequired, linkedDomainId, linkedSystemId } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
@@ -126,15 +129,14 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  governanceControls.push(control);
-  saveStore('governanceControls', governanceControls);
+  await governanceControlsRepo.create(control);
   auditService.log(control.orgId, null, 'GovernanceControl', control.id, 'CREATE', null, control);
   logger.info({ controlId: control.id, code: control.code, name: control.name, policyId }, 'Created governance control');
   res.status(201).json({ success: true, data: control });
 });
 
 /** PUT /api/v1/governance-controls/:id — update control */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const control = governanceControls.find((c) => c.id === req.params.id);
   if (!control) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
 
@@ -142,32 +144,31 @@ router.put('/:id', (req: Request, res: Response) => {
   const { name, policyId, description, controlType, automationMode, status,
           ownerAssignmentId, evidenceRequired, linkedDomainId, linkedSystemId } = req.body;
 
-  if (name !== undefined) control.name = name;
-  if (policyId !== undefined) control.policyId = policyId;
-  if (description !== undefined) control.description = description;
-  if (controlType !== undefined) control.controlType = controlType;
-  if (automationMode !== undefined) control.automationMode = automationMode;
-  if (status !== undefined) control.status = status;
-  if (ownerAssignmentId !== undefined) control.ownerAssignmentId = ownerAssignmentId;
-  if (evidenceRequired !== undefined) control.evidenceRequired = evidenceRequired;
-  if (linkedDomainId !== undefined) control.linkedDomainId = linkedDomainId;
-  if (linkedSystemId !== undefined) control.linkedSystemId = linkedSystemId;
+  const patch: Partial<StoredGovernanceControl> = {};
+  if (name !== undefined) patch.name = name;
+  if (policyId !== undefined) patch.policyId = policyId;
+  if (description !== undefined) patch.description = description;
+  if (controlType !== undefined) patch.controlType = controlType;
+  if (automationMode !== undefined) patch.automationMode = automationMode;
+  if (status !== undefined) patch.status = status;
+  if (ownerAssignmentId !== undefined) patch.ownerAssignmentId = ownerAssignmentId;
+  if (evidenceRequired !== undefined) patch.evidenceRequired = evidenceRequired;
+  if (linkedDomainId !== undefined) patch.linkedDomainId = linkedDomainId;
+  if (linkedSystemId !== undefined) patch.linkedSystemId = linkedSystemId;
+  patch.updatedAt = new Date().toISOString();
 
-  control.updatedAt = new Date().toISOString();
-  saveStore('governanceControls', governanceControls);
-  auditService.log(control.orgId, null, 'GovernanceControl', control.id, 'UPDATE', before, control);
-  res.json({ success: true, data: control });
+  const updated = await governanceControlsRepo.update(control.id, patch);
+  auditService.log(control.orgId, null, 'GovernanceControl', control.id, 'UPDATE', before, updated);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/governance-controls/:id — delete control */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = governanceControls.findIndex((c) => c.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = governanceControls.find((c) => c.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
 
-  const removed = governanceControls[idx];
   auditService.log(removed.orgId, null, 'GovernanceControl', removed.id, 'DELETE', removed, null);
-  governanceControls.splice(idx, 1);
-  saveStore('governanceControls', governanceControls);
+  await governanceControlsRepo.delete(removed.id);
 
   // Cascade: sweep the deleted control id off every activity that
   // referenced it. Lazy-require breaks the controls ↔ catalog import

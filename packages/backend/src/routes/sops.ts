@@ -5,6 +5,7 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import logger from '../lib/logger';
+import { getSopsRepository } from '../db/sops.repo';
 
 // ── Types ──
 
@@ -51,6 +52,8 @@ export interface StoredSop {
 
 export const sops: StoredSop[] = loadStore<StoredSop>('sops');
 registerStore('sops', sops);
+
+const sopsRepo = getSopsRepository(sops);
 
 // ── Helpers ──
 
@@ -207,7 +210,7 @@ const STANDARD_SOPS: Array<{
 const router = Router();
 
 /** GET /api/v1/sops — list with filters */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, category, role, status } = req.query;
   let filtered = filterByOrgScope(sops, orgId as string | undefined);
 
@@ -223,14 +226,14 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/sops/:id — single SOP */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const sop = sops.find((s) => s.id === req.params.id);
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
   res.json({ success: true, data: enrichSop(sop) });
 });
 
 /** POST /api/v1/sops — create */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const {
     title, orgId, purpose, category, applicableRoles, triggerEvent,
     steps, status, ownerPersonId, lastReviewedAt,
@@ -267,15 +270,14 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  sops.push(sop);
-  saveStore('sops', sops);
+  await sopsRepo.create(sop);
   auditService.log(sop.orgId, null, 'Sop', sop.id, 'CREATE', null, sop);
   logger.info({ sopId: sop.id, code: sop.code, title: sop.title }, 'Created SOP');
   res.status(201).json({ success: true, data: enrichSop(sop) });
 });
 
 /** PUT /api/v1/sops/:id — update. Bumps version when steps change. */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const sop = sops.find((s) => s.id === req.params.id);
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
 
@@ -314,20 +316,18 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   sop.updatedAt = new Date().toISOString();
-  saveStore('sops', sops);
+  await sopsRepo.update(sop.id, sop);
   auditService.log(sop.orgId, null, 'Sop', sop.id, 'UPDATE', before, sop);
   logger.info({ sopId: sop.id, code: sop.code, version: sop.version }, 'Updated SOP');
   res.json({ success: true, data: enrichSop(sop) });
 });
 
 /** DELETE /api/v1/sops/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = sops.findIndex((s) => s.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
-  const removed = sops[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = sops.find((s) => s.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
   auditService.log(removed.orgId, null, 'Sop', removed.id, 'DELETE', removed, null);
-  sops.splice(idx, 1);
-  saveStore('sops', sops);
+  await sopsRepo.delete(removed.id);
   logger.info({ sopId: removed.id, code: removed.code }, 'Deleted SOP');
   res.status(204).send();
 });
@@ -336,7 +336,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  * POST /api/v1/sops/seed — create the 5 standard SOPs for an org if not
  * already present. Idempotent per-SOP by title+orgId.
  */
-router.post('/seed', (req: Request, res: Response) => {
+router.post('/seed', async (req: Request, res: Response) => {
   const { orgId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
@@ -367,12 +367,11 @@ router.post('/seed', (req: Request, res: Response) => {
       createdAt: now,
       updatedAt: now,
     };
-    sops.push(sop);
+    await sopsRepo.create(sop);
     created.push(sop);
     auditService.log(sop.orgId, null, 'Sop', sop.id, 'CREATE', null, sop);
   }
 
-  if (created.length > 0) saveStore('sops', sops);
   logger.info({ orgId, created: created.length, skipped: skipped.length }, 'Seeded standard SOPs');
 
   res.json({

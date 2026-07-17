@@ -7,6 +7,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import { createNotification } from './notifications';
 import logger from '../lib/logger';
+import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 
 const TASK_TYPES = [
   'STEWARDSHIP',
@@ -99,6 +100,8 @@ const governanceTaskRowSchema = z.object({
 
 export const governanceTasks: StoredGovernanceTask[] = loadStore<StoredGovernanceTask>('governanceTasks', governanceTaskRowSchema);
 registerStore('governanceTasks', governanceTasks);
+
+const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
 
 // Request-body schemas — Zod at the API boundary. Enum checks + type
 // guarantees fall out of the parse so downstream code can drop the
@@ -201,14 +204,14 @@ const router = Router();
  *  overdue sweep manually. The scheduler in index.ts calls the same
  *  function on a timer; this route exists so an admin (or a test) can
  *  drive the flow synchronously. */
-router.post('/sweep-overdue', (req: Request, res: Response) => {
+router.post('/sweep-overdue', async (req: Request, res: Response) => {
   const orgId = ((req.query.orgId as string) || '').trim() || undefined;
   const result = sweepOverdueTasks(orgId);
   res.json({ success: true, data: result });
 });
 
 /** GET /api/v1/governance-tasks/summary */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(governanceTasks, orgId as string | undefined);
 
@@ -230,7 +233,7 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-tasks */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, assigneeId, taskType, priority } = req.query;
   let filtered = filterByOrgScope(governanceTasks, orgId as string | undefined);
 
@@ -243,14 +246,14 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-tasks/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const task = governanceTasks.find((t) => t.id === req.params.id);
   if (!task) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
   res.json({ success: true, data: enrichTask(task) });
 });
 
 /** POST /api/v1/governance-tasks */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const parsed = createTaskBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -281,15 +284,14 @@ router.post('/', (req: Request, res: Response) => {
     completedAt: resolvedStatus === 'COMPLETED' ? now : null,
   };
 
-  governanceTasks.push(task);
-  saveStore('governanceTasks', governanceTasks);
+  await governanceTasksRepo.create(task);
   auditService.log(task.orgId, null, 'GovernanceTask', task.id, 'CREATE', null, task);
   logger.info({ taskId: task.id, title: task.title, taskType: task.taskType }, 'Created governance task');
   res.status(201).json({ success: true, data: enrichTask(task) });
 });
 
 /** PUT /api/v1/governance-tasks/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const task = governanceTasks.find((t) => t.id === req.params.id);
   if (!task) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
 
@@ -353,20 +355,18 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   task.updatedAt = new Date().toISOString();
-  saveStore('governanceTasks', governanceTasks);
+  await governanceTasksRepo.update(task.id, task);
   auditService.log(task.orgId, null, 'GovernanceTask', task.id, 'UPDATE', before, task);
   logger.info({ taskId: task.id, title: task.title }, 'Updated governance task');
   res.json({ success: true, data: enrichTask(task) });
 });
 
 /** DELETE /api/v1/governance-tasks/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = governanceTasks.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
-  const removed = governanceTasks[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = governanceTasks.find((t) => t.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
   auditService.log(removed.orgId, null, 'GovernanceTask', removed.id, 'DELETE', removed, null);
-  governanceTasks.splice(idx, 1);
-  saveStore('governanceTasks', governanceTasks);
+  await governanceTasksRepo.delete(removed.id);
   logger.info({ taskId: removed.id, title: removed.title }, 'Deleted governance task');
   res.status(204).send();
 });

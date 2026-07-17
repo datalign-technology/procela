@@ -5,6 +5,7 @@ import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { people } from './people';
 import logger from '../lib/logger';
+import { getAgentsRepository } from '../db/agents.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -37,6 +38,8 @@ export interface StoredAgent {
 
 export const agents: StoredAgent[] = loadStore<StoredAgent>('agents');
 registerStore('agents', agents);
+
+const agentsRepo = getAgentsRepository(agents);
 
 // Backfill skillIds on legacy records that lack the field
 {
@@ -145,7 +148,7 @@ export function pauseAgentsForMissingOwner(
 const router = Router();
 
 /** DELETE /api/v1/agents/all — delete all agents */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = agents.length;
   agents.splice(0, agents.length);
   saveStore('agents', agents);
@@ -154,7 +157,7 @@ router.delete('/all', (_req: Request, res: Response) => {
 });
 
 /** GET /api/v1/agents — list, optionally filtered by ?orgId= */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = orgId ? agents.filter((a) => a.orgIds.includes(orgId as string)) : agents;
   res.json({
@@ -166,14 +169,14 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/agents/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const agent = agents.find((a) => a.id === req.params.id);
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   res.json({ success: true, data: agent });
 });
 
 /** POST /api/v1/agents */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   const assignedOrgIds: string[] = Array.isArray(orgIds) ? orgIds : [];
@@ -213,13 +216,12 @@ router.post('/', (req: Request, res: Response) => {
     instructions: typeof instructions === 'string' ? instructions : '',
     createdAt: now, updatedAt: now,
   };
-  agents.push(agent);
-  saveStore('agents', agents);
+  await agentsRepo.create(agent);
   res.status(201).json({ success: true, data: agent });
 });
 
 /** PUT /api/v1/agents/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const agent = agents.find((a) => a.id === req.params.id);
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
@@ -280,16 +282,15 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   agent.updatedAt = new Date().toISOString();
-  saveStore('agents', agents);
+  await agentsRepo.update(agent.id, agent);
   res.json({ success: true, data: agent, cascade });
 });
 
 /** DELETE /api/v1/agents/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = agents.findIndex((a) => a.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
-  agents.splice(idx, 1);
-  saveStore('agents', agents);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const existing = agents.find((a) => a.id === req.params.id);
+  if (!existing) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
+  await agentsRepo.delete(existing.id);
   res.status(204).send();
 });
 
@@ -299,7 +300,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  * JSON: { orgId, agents: [{ name, agentType?, provider?, description? }, ...] }
  * CSV:  { orgId, csv: "Name,Type,Provider,Description\n..." }
  */
-router.post('/import', (req: Request, res: Response) => {
+router.post('/import', async (req: Request, res: Response) => {
   try {
     const { orgId, agents: agentList, csv } = req.body;
     if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required for import' }); return; }
@@ -357,10 +358,9 @@ router.post('/import', (req: Request, res: Response) => {
         instructions: '',
         createdAt: now, updatedAt: now,
       };
-      agents.push(agent);
+      await agentsRepo.create(agent);
       created.push(agent);
     }
-    saveStore('agents', agents);
     logger.info({ created: created.length, orgId }, 'Imported agents');
     res.status(201).json({ success: true, data: created, message: `Imported ${created.length} agents` });
   } catch (err) {

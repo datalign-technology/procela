@@ -9,6 +9,7 @@ import { dataDomains } from './data-domains';
 import { dataAssets } from './data-assets';
 import { createNotification } from './notifications';
 import logger from '../lib/logger';
+import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
 
 const ISSUE_TYPES = [
   'METADATA',
@@ -243,6 +244,8 @@ export function openAgentOwnershipIssue(input: {
 export const governanceIssues: StoredGovernanceIssue[] = loadStore<StoredGovernanceIssue>('governanceIssues');
 registerStore('governanceIssues', governanceIssues);
 
+const governanceIssuesRepo = getGovernanceIssuesRepository(governanceIssues);
+
 // Request-body schemas at the API boundary. See governance-tasks
 // for the rationale.
 const createIssueBodySchema = z.object({
@@ -289,7 +292,7 @@ function enrichIssue(issue: StoredGovernanceIssue): StoredGovernanceIssue & { re
 const router = Router();
 
 /** GET /api/v1/governance-issues/summary */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const filtered = filterByOrgScope(governanceIssues, orgId as string | undefined);
 
@@ -314,7 +317,7 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-issues */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, severity, issueType, assignedTo, domainId } = req.query;
   let filtered = filterByOrgScope(governanceIssues, orgId as string | undefined);
 
@@ -328,14 +331,14 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-issues/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const issue = governanceIssues.find((i) => i.id === req.params.id);
   if (!issue) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
   res.json({ success: true, data: enrichIssue(issue) });
 });
 
 /** POST /api/v1/governance-issues */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const parsed = createIssueBodySchema.safeParse(req.body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -365,15 +368,14 @@ router.post('/', (req: Request, res: Response) => {
     closedAt: TERMINAL_STATUSES.has(resolvedStatus) ? now : null,
   };
 
-  governanceIssues.push(issue);
-  saveStore('governanceIssues', governanceIssues);
+  await governanceIssuesRepo.create(issue);
   auditService.log(issue.orgId, null, 'GovernanceIssue', issue.id, 'CREATE', null, issue);
   logger.info({ issueId: issue.id, title: issue.title, issueType: issue.issueType }, 'Created governance issue');
   res.status(201).json({ success: true, data: enrichIssue(issue) });
 });
 
 /** PUT /api/v1/governance-issues/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const issue = governanceIssues.find((i) => i.id === req.params.id);
   if (!issue) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
 
@@ -411,20 +413,18 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 
   issue.updatedAt = new Date().toISOString();
-  saveStore('governanceIssues', governanceIssues);
+  await governanceIssuesRepo.update(issue.id, issue);
   auditService.log(issue.orgId, null, 'GovernanceIssue', issue.id, 'UPDATE', before, issue);
   logger.info({ issueId: issue.id, title: issue.title }, 'Updated governance issue');
   res.json({ success: true, data: enrichIssue(issue) });
 });
 
 /** DELETE /api/v1/governance-issues/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = governanceIssues.findIndex((i) => i.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
-  const removed = governanceIssues[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = governanceIssues.find((i) => i.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
   auditService.log(removed.orgId, null, 'GovernanceIssue', removed.id, 'DELETE', removed, null);
-  governanceIssues.splice(idx, 1);
-  saveStore('governanceIssues', governanceIssues);
+  await governanceIssuesRepo.delete(removed.id);
   logger.info({ issueId: removed.id, title: removed.title }, 'Deleted governance issue');
   res.status(204).send();
 });

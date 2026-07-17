@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { getNotificationsRepository } from '../db/notifications.repo';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATION CENTER
@@ -24,9 +25,16 @@ export interface StoredNotification {
 export const notifications: StoredNotification[] = loadStore<StoredNotification>('notifications');
 registerStore('notifications', notifications);
 
+const notificationsRepo = getNotificationsRepository(notifications);
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 // ── Helper: create a notification (used internally by other features) ──
+//
+// This helper stays synchronous so the many callers across the codebase
+// (audit, comments, digest, etc.) can keep calling it inline. The direct
+// push + saveStore path is functionally equivalent to
+// notificationsRepo.create() on the JSON backend.
 
 export function createNotification(opts: {
   orgId?: string;
@@ -60,9 +68,10 @@ export function createNotification(opts: {
 const router = Router();
 
 /** GET / — list all notifications (support ?unreadOnly=true) */
-router.get('/', (req: Request, res: Response) => {
-  const unreadOnly = req.query.unreadOnly === 'true';
-  let result = [...notifications].sort(
+router.get('/', async (_req: Request, res: Response) => {
+  const unreadOnly = _req.query.unreadOnly === 'true';
+  const all = await notificationsRepo.list();
+  let result = all.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
   if (unreadOnly) {
@@ -72,26 +81,26 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /count — returns { unread: number } */
-router.get('/count', (_req: Request, res: Response) => {
+router.get('/count', async (_req: Request, res: Response) => {
   const unread = notifications.filter((n) => !n.read).length;
   res.json({ success: true, data: { unread } });
 });
 
 /** PUT /:id/read — mark a single notification as read */
-router.put('/:id/read', (req: Request, res: Response) => {
-  const id = req.params.id;
-  const notification = notifications.find((n) => n.id === id);
-  if (!notification) {
+router.put('/:id/read', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const updated = await notificationsRepo.update(id, { read: true });
+  if (!updated) {
     res.status(404).json({ success: false, error: 'Notification not found' });
     return;
   }
-  notification.read = true;
-  saveStore('notifications', notifications);
-  res.json({ success: true, data: notification });
+  res.json({ success: true, data: updated });
 });
 
-/** PUT /read-all — mark all notifications as read */
-router.put('/read-all', (_req: Request, res: Response) => {
+/** PUT /read-all — mark all notifications as read. Bulk write — this
+ *  handler still mutates the array directly + saves once at the end
+ *  rather than issuing N repo.update() calls. */
+router.put('/read-all', async (_req: Request, res: Response) => {
   for (const n of notifications) {
     n.read = true;
   }
@@ -99,8 +108,9 @@ router.put('/read-all', (_req: Request, res: Response) => {
   res.json({ success: true, data: { updated: notifications.length } });
 });
 
-/** DELETE /all — clear every notification. */
-router.delete('/all', (_req: Request, res: Response) => {
+/** DELETE /all — clear every notification. Bulk write — same reasoning
+ *  as read-all above. */
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = notifications.length;
   notifications.splice(0, notifications.length);
   saveStore('notifications', notifications);
@@ -109,16 +119,14 @@ router.delete('/all', (_req: Request, res: Response) => {
 });
 
 /** DELETE /:id — remove a single notification. */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = notifications.findIndex((n) => n.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Notification not found' }); return; }
-  notifications.splice(idx, 1);
-  saveStore('notifications', notifications);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = await notificationsRepo.delete(String(req.params.id));
+  if (!removed) { res.status(404).json({ success: false, error: 'Notification not found' }); return; }
   res.status(204).send();
 });
 
 /** POST / — create a notification (can also be used via API) */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, userId, type, title, message, link } = req.body;
 
   if (!title || !message || !type) {
