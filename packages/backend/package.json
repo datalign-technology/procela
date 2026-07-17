@@ -13,6 +13,7 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "test": "tsx --test src/__tests__/*.test.ts",
+    "test:live-db": "tsx --test src/__tests__/live-db.test.ts",
     "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-exclude='src/__tests__/**' --test-coverage-exclude='src/index.ts' --test-coverage-exclude='src/lib/markdown-pdf.ts' src/__tests__/*.test.ts",
     "test:coverage:lcov": "tsx --test --experimental-test-coverage --test-coverage-exclude='src/__tests__/**' --test-coverage-exclude='src/index.ts' --test-coverage-exclude='src/lib/markdown-pdf.ts' --test-reporter=lcov --test-reporter-destination=coverage.lcov --test-reporter=spec --test-reporter-destination=stdout src/__tests__/*.test.ts"
   },

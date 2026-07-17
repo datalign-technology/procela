@@ -68,13 +68,13 @@ jobs:
   test-backend-live-db:
     name: Backend tests (live Postgres)
     runs-on: ubuntu-latest
-    # 20 min budget: prisma generate + prisma migrate deploy +
-    # the full 833-test suite + the live-DB round-trips all run
-    # here. 10 min was tight when the entity list was smaller;
-    # after the secondary-store + route-conversion batches landed
-    # it started hitting the limit. 20 min gives comfortable
-    # headroom without waiting on genuinely-broken jobs forever.
-    timeout-minutes: 20
+    # 10 min is plenty: this job now runs ONLY the live-db.test.ts
+    # file (~10 tests, all round-trips against a fresh Postgres),
+    # not the full 833-test suite. The route-conversion PR made
+    # keeping DATABASE_URL set during the full suite unsafe —
+    # converted routes hit Prisma against tables the JSON-shaped
+    # tests never populated, leading to indefinite hangs.
+    timeout-minutes: 10
     services:
       postgres:
         # Ephemeral CI-only Postgres. `trust` auth means no
@@ -134,11 +134,14 @@ jobs:
       - name: Apply migrations
         run: npx prisma migrate deploy
         working-directory: packages/backend
-      # Same npm test target as the JSON job — the live-db test file
-      # opts in on DATABASE_URL, everything else keeps running on
-      # JSON (no cross-contamination since the two paths use
-      # different storage).
-      - run: npm test -w packages/backend
+      # Run ONLY live-db.test.ts against Postgres. The other 830+
+      # tests set up JSON state and expect JSON reads — with
+      # DATABASE_URL set, the route handlers we converted to
+      # `await repo.*()` would go through Prisma against an
+      # otherwise-empty DB, so they'd either fail assertions or
+      # hang on queries against uninitialised state. Keep those
+      # tests on the JSON-only `Backend tests` job.
+      - run: npm run test:live-db -w packages/backend
 
   test-frontend:
     name: Frontend tests
