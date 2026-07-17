@@ -136,15 +136,17 @@ function buildTree(orgs: StoredOrg[]): any[] {
 const router = Router();
 
 /** DELETE /api/v1/organizations/all — delete all organizations */
-router.delete('/all', (req: AuthenticatedRequest, res: Response) => {
+router.delete('/all', async (req: AuthenticatedRequest, res: Response) => {
   const { getVisibleOrgIds } = accessHelpers();
   if (getVisibleOrgIds(req.user) !== null) {
     res.status(403).json({ success: false, error: 'Only super admins can delete all organizations' });
     return;
   }
-  const count = organizations.length;
-  organizations.splice(0, organizations.length);
-  saveStore('organizations', organizations);
+  const ids = organizations.map((o) => o.id);
+  const count = ids.length;
+  for (const id of ids) {
+    await orgRepo.delete(id);
+  }
   logger.info({ count }, 'Deleted all organizations');
   res.json({ success: true, deleted: count });
 });
@@ -196,8 +198,8 @@ router.get('/', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 /** GET /api/v1/organizations/:id */
-router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
-  const org = organizations.find((o) => o.id === req.params.id);
+router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const org = await orgRepo.get(req.params.id as string);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
   const { canAccessOrg } = accessHelpers();
   if (!canAccessOrg(req.user, org.id)) {
@@ -208,7 +210,7 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
 });
 
 /** POST /api/v1/organizations */
-router.post('/', (req: AuthenticatedRequest, res: Response) => {
+router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   const { name, parentId, type, industry, description, headCount } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (parentId && !organizations.find((o) => o.id === parentId)) {
@@ -234,13 +236,12 @@ router.post('/', (req: AuthenticatedRequest, res: Response) => {
     description: description || '', headCount: headCount || 0,
     createdAt: now, updatedAt: now,
   };
-  organizations.push(org);
-  saveStore('organizations', organizations);
+  await orgRepo.create(org);
   res.status(201).json({ success: true, data: org });
 });
 
 /** PUT /api/v1/organizations/:id */
-router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
+router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
   const { canAccessOrg } = accessHelpers();
@@ -296,7 +297,7 @@ router.put('/:id', (req: AuthenticatedRequest, res: Response) => {
     }
   }
   org.updatedAt = new Date().toISOString();
-  saveStore('organizations', organizations);
+  await orgRepo.update(org.id, org);
   res.json({ success: true, data: org });
 });
 
@@ -798,7 +799,7 @@ router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
  * - advanced → simple: PROPOSED/UNDER_REVIEW/APPROVED → DRAFT
  * - simple → advanced: no migration needed (simple statuses are a subset)
  */
-router.post('/:id/status-mode', (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/status-mode', async (req: AuthenticatedRequest, res: Response) => {
   const org = organizations.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
 
@@ -816,7 +817,7 @@ router.post('/:id/status-mode', (req: AuthenticatedRequest, res: Response) => {
 
   org.statusMode = mode;
   org.updatedAt = new Date().toISOString();
-  saveStore('organizations', organizations);
+  await orgRepo.update(org.id, org);
 
   // Migrate process nodes and data domains in this org's scope. When
   // switching *out of* a mode that carries statuses the new mode
@@ -875,7 +876,7 @@ router.post('/:id/status-mode', (req: AuthenticatedRequest, res: Response) => {
  * JSON format: { organizations: [{ name, parentName?, type?, industry?, description? }, ...] }
  * CSV format:  { csv: "Name,Parent,Type,Industry,Description\nAcme Corp,,company,..." }
  */
-router.post('/import', (req: AuthenticatedRequest, res: Response) => {
+router.post('/import', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { organizations: orgList, csv, parentId } = req.body;
     const rootParent = parentId || null;
@@ -992,13 +993,12 @@ router.post('/import', (req: AuthenticatedRequest, res: Response) => {
         description: row.description || '', headCount: 0,
         createdAt: now, updatedAt: now,
       };
-      organizations.push(org);
+      await orgRepo.create(org);
       created.push(org);
       newlyCreated.add(org.id);
       nameToId.set(org.name.toLowerCase(), org.id);
     }
 
-    saveStore('organizations', organizations);
     logger.info({ created: created.length, skipped: skipped.length }, 'Imported organizations');
     res.status(201).json({
       success: true,

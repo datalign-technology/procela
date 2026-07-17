@@ -8,6 +8,8 @@ import { dataAssets } from './data-assets';
 import { createNotification } from './notifications';
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
 import { rateLimit } from '../middleware/rate-limit';
+import { getConnectorsRepository } from '../db/connectors.repo';
+import { getConnectorEventsRepository } from '../db/connector-events.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Connectors — the on-prem agent surface.
@@ -89,6 +91,9 @@ export interface StoredConnectorEvent {
 export const connectorEvents: StoredConnectorEvent[] = loadStore<StoredConnectorEvent>('connectorEvents');
 registerStore('connectorEvents', connectorEvents);
 
+const connectorsRepo = getConnectorsRepository(connectors);
+const connectorEventsRepo = getConnectorEventsRepository(connectorEvents);
+
 const router = Router();
 
 // Pairing-code brute force throttle. The codes are 8 digits with a
@@ -161,7 +166,7 @@ function requireConnectorToken(req: Request, res: Response, next: () => void): v
 
 /** GET /connectors — list every connector in scope. Each row carries
  *  its live freshness bucket so the UI doesn't have to re-derive it. */
-router.get('/', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const { orgId } = req.query;
   const oid = (orgId as string | undefined) || req.user?.orgId;
   const rows = connectors
@@ -186,7 +191,7 @@ router.get('/', authenticateToken, (req: AuthenticatedRequest, res: Response) =>
 
 /** POST /connectors/pair/start — admin creates a connector row and
  *  receives a pairing code. Body: { name, orgId?, systemIds? }. */
-router.post('/pair/start', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.post('/pair/start', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const name = String(req.body?.name || '').trim();
   if (!name) { res.status(400).json({ success: false, error: 'name is required' }); return; }
   const orgId = (req.body?.orgId as string | undefined) || req.user?.orgId || '';
@@ -207,8 +212,7 @@ router.post('/pair/start', authenticateToken, (req: AuthenticatedRequest, res: R
     createdAt: now,
     updatedAt: now,
   };
-  connectors.push(row);
-  saveStore('connectors', connectors);
+  await connectorsRepo.create(row);
   auditService.log(orgId, req.user?.sub ?? null, 'Connector', row.id, 'CREATE', null, { name });
   res.status(201).json({
     success: true,
@@ -219,22 +223,23 @@ router.post('/pair/start', authenticateToken, (req: AuthenticatedRequest, res: R
 /** PATCH /connectors/:id — update mutable admin fields. v1 only
  *  surfaces name + systemIds; everything else (token, freshness,
  *  agentVersion) is set by the agent or by lifecycle events. */
-router.patch('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const row = connectors.find((c) => c.id === req.params.id);
   if (!row) { res.status(404).json({ success: false, error: 'connector not found' }); return; }
   const before = { name: row.name, systemIds: [...row.systemIds] };
+  const patch: Partial<StoredConnector> = {};
   if (typeof req.body?.name === 'string' && req.body.name.trim()) {
-    row.name = req.body.name.trim();
+    patch.name = req.body.name.trim();
   }
   if (Array.isArray(req.body?.systemIds)) {
     // Coerce to strings and de-dupe so a sloppy frontend can't
     // wedge the store with duplicate entries.
-    row.systemIds = Array.from(new Set(
+    patch.systemIds = Array.from(new Set(
       req.body.systemIds.map((s: unknown) => String(s)).filter((s: string) => s.length > 0),
     ));
   }
-  row.updatedAt = nowIso();
-  saveStore('connectors', connectors);
+  patch.updatedAt = nowIso();
+  await connectorsRepo.update(row.id, patch);
   auditService.log(row.orgId, req.user?.sub ?? null, 'Connector', row.id, 'UPDATE', before, {
     name: row.name, systemIds: row.systemIds,
   });
@@ -247,15 +252,16 @@ router.patch('/:id', authenticateToken, (req: AuthenticatedRequest, res: Respons
 /** DELETE /connectors/:id — revoke a connector. Marks it REVOKED so
  *  the row sticks around for audit, but the token is dead and no
  *  further heartbeats are accepted. */
-router.delete('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const row = connectors.find((c) => c.id === req.params.id);
   if (!row) { res.status(404).json({ success: false, error: 'connector not found' }); return; }
-  row.status = 'REVOKED';
-  row.tokenHash = null;
-  row.pairingCode = null;
-  row.pairingCodeExpiresAt = null;
-  row.updatedAt = nowIso();
-  saveStore('connectors', connectors);
+  await connectorsRepo.update(row.id, {
+    status: 'REVOKED',
+    tokenHash: null,
+    pairingCode: null,
+    pairingCodeExpiresAt: null,
+    updatedAt: nowIso(),
+  });
   auditService.log(row.orgId, req.user?.sub ?? null, 'Connector', row.id, 'REVOKE', null, { name: row.name });
   res.json({ success: true });
 });
@@ -263,7 +269,7 @@ router.delete('/:id', authenticateToken, (req: AuthenticatedRequest, res: Respon
 /** GET /connectors/:id/events — recent activity for one connector.
  *  Reverse chronological, capped at 200. Drives the Activity tab on
  *  the connector detail drawer. */
-router.get('/:id/events', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id/events', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const events = connectorEvents
     .filter((e) => e.connectorId === req.params.id)
     .sort((a, b) => b.ts.localeCompare(a.ts))
@@ -276,7 +282,7 @@ router.get('/:id/events', authenticateToken, (req: AuthenticatedRequest, res: Re
 /** POST /connectors/pair/claim — connector hands in its pairing code,
  *  gets back a long-lived token. The code is one-shot; subsequent
  *  claims with the same code 404. */
-router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, (req: Request, res: Response) => {
+router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, async (req: Request, res: Response) => {
   const code = String(req.body?.code || '').trim();
   const agentVersion = String(req.body?.agentVersion || '').trim();
   if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
@@ -287,39 +293,41 @@ router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, (req: Request
     return;
   }
   const token = generateToken();
-  row.tokenHash = hashToken(token);
-  row.pairingCode = null;
-  row.pairingCodeExpiresAt = null;
-  row.agentVersion = agentVersion || null;
-  row.lastHeartbeatAt = nowIso();
-  row.status = 'ONLINE';
-  row.updatedAt = nowIso();
-  saveStore('connectors', connectors);
-  connectorEvents.push({
+  await connectorsRepo.update(row.id, {
+    tokenHash: hashToken(token),
+    pairingCode: null,
+    pairingCodeExpiresAt: null,
+    agentVersion: agentVersion || null,
+    lastHeartbeatAt: nowIso(),
+    status: 'ONLINE',
+    updatedAt: nowIso(),
+  });
+  await connectorEventsRepo.create({
     id: uuid(), connectorId: row.id, orgId: row.orgId,
     type: 'PAIRED', ts: nowIso(), data: { agentVersion: row.agentVersion },
   });
-  saveStore('connectorEvents', connectorEvents);
   auditService.log(row.orgId, null, 'Connector', row.id, 'PAIRED', null, { name: row.name });
   res.json({ success: true, data: { connectorId: row.id, token } });
 });
 
 /** POST /connectors/heartbeat — agent says "still here". Plain
  *  freshness ping; no payload required beyond the token. */
-router.post('/heartbeat', requireConnectorToken, (req: Request, res: Response) => {
+router.post('/heartbeat', requireConnectorToken, async (req: Request, res: Response) => {
   const row = (req as any).connector as StoredConnector;
   const agentVersion = String(req.body?.agentVersion || '').trim();
-  if (agentVersion) row.agentVersion = agentVersion;
   const wasOffline = freshnessFor(row) === 'OFFLINE';
-  row.lastHeartbeatAt = nowIso();
-  row.updatedAt = nowIso();
+  const patch: Partial<StoredConnector> = {
+    lastHeartbeatAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  if (agentVersion) patch.agentVersion = agentVersion;
+  await connectorsRepo.update(row.id, patch);
   if (wasOffline) {
     // Transitioned back online — note it; the notification path
     // doesn't need a "we're back" entry but the audit log row helps
     // with forensics.
     auditService.log(row.orgId, null, 'Connector', row.id, 'BACK_ONLINE', null, { name: row.name });
   }
-  saveStore('connectors', connectors);
   res.json({ success: true });
 });
 
@@ -334,7 +342,7 @@ router.post('/heartbeat', requireConnectorToken, (req: Request, res: Response) =
  *      Removing an asset is still an explicit admin action.
  *  Returns the number of created vs updated rows so the connector
  *  can log it. */
-router.post('/report', requireConnectorToken, (req: Request, res: Response) => {
+router.post('/report', requireConnectorToken, async (req: Request, res: Response) => {
   const row = (req as any).connector as StoredConnector;
   const incoming = Array.isArray(req.body?.assets) ? req.body.assets : [];
   let created = 0;
@@ -378,15 +386,12 @@ router.post('/report', requireConnectorToken, (req: Request, res: Response) => {
     }
   }
   saveStore('dataAssets', dataAssets);
-  row.lastHeartbeatAt = nowIso();
-  row.updatedAt = nowIso();
-  saveStore('connectors', connectors);
-  connectorEvents.push({
+  await connectorsRepo.update(row.id, { lastHeartbeatAt: nowIso(), updatedAt: nowIso() });
+  await connectorEventsRepo.create({
     id: uuid(), connectorId: row.id, orgId: row.orgId,
     type: 'ASSETS_REPORTED', ts: nowIso(),
     data: { incoming: incoming.length, created, updated, rowCount: incoming.length },
   });
-  saveStore('connectorEvents', connectorEvents);
   res.json({ success: true, data: { created, updated, total: incoming.length } });
 });
 

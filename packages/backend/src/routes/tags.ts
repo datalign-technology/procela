@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import { getTagsRepository } from '../db/tags.repo';
 
 export interface StoredTag {
   id: string;
@@ -15,16 +16,19 @@ export interface StoredTag {
 export const tags: StoredTag[] = loadStore<StoredTag>('tags');
 registerStore('tags', tags);
 
+const tagsRepo = getTagsRepository(tags);
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const router = Router();
 
 /** GET /api/v1/tags — get tags for an entity (by entityType+entityId) or find entities with a tag (by orgId+tag) */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { entityType, entityId, orgId, tag } = req.query;
+  const all = await tagsRepo.list();
 
   if (entityType && entityId) {
-    const filtered = tags.filter(
+    const filtered = all.filter(
       (t) => t.entityType === entityType && t.entityId === entityId
     );
     res.json({ success: true, data: filtered });
@@ -32,7 +36,7 @@ router.get('/', (req: Request, res: Response) => {
   }
 
   if (orgId && tag) {
-    const filtered = tags.filter(
+    const filtered = all.filter(
       (t) => t.orgId === orgId && t.tag === tag
     );
     res.json({ success: true, data: filtered });
@@ -40,20 +44,21 @@ router.get('/', (req: Request, res: Response) => {
   }
 
   // If no specific filters, return all tags (optionally filtered by orgId)
-  const filtered = orgId ? tags.filter((t) => t.orgId === orgId) : tags;
+  const filtered = orgId ? all.filter((t) => t.orgId === orgId) : all;
   res.json({ success: true, data: filtered });
 });
 
 /** GET /api/v1/tags/all — list all unique tag names */
-router.get('/all', (req: Request, res: Response) => {
+router.get('/all', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? tags.filter((t) => t.orgId === orgId) : tags;
+  const all = await tagsRepo.list();
+  const filtered = orgId ? all.filter((t) => t.orgId === orgId) : all;
   const uniqueTags = [...new Set(filtered.map((t) => t.tag))].sort();
   res.json({ success: true, data: uniqueTags });
 });
 
 /** POST /api/v1/tags — create a tag */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { entityType, entityId, tag: tagName, orgId } = req.body;
 
   if (!entityType || !entityId || !tagName) {
@@ -79,22 +84,20 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: new Date().toISOString(),
   };
 
-  tags.push(newTag);
-  saveStore('tags', tags);
+  await tagsRepo.create(newTag);
   logger.info({ entityType, entityId, tag: tagName }, 'Created tag');
 
   res.status(201).json({ success: true, data: newTag });
 });
 
 /** DELETE /api/v1/tags/:id — remove a tag */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = tags.findIndex((t) => t.id === req.params.id);
-  if (idx === -1) {
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = tags.find((t) => t.id === req.params.id);
+  if (!removed) {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
-  const removed = tags.splice(idx, 1)[0];
-  saveStore('tags', tags);
+  await tagsRepo.delete(removed.id);
   logger.info({ id: removed.id, tag: removed.tag }, 'Deleted tag');
   res.status(204).send();
 });

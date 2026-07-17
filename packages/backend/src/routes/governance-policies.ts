@@ -4,6 +4,7 @@ import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { people } from './people';
 import logger from '../lib/logger';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 
 export interface StoredGovernancePolicy {
   id: string;
@@ -51,6 +52,8 @@ export const governancePolicies: StoredGovernancePolicy[] = loadStore<StoredGove
 }));
 registerStore('governancePolicies', governancePolicies);
 
+const governancePoliciesRepo = getGovernancePoliciesRepository(governancePolicies);
+
 // Code prefix per documentType so a charter coded "POL-001" stops
 // reading as a misnamed policy. Sequence is per-type: CHA-001,
 // CHA-002, STD-001, etc. — counts existing rows of the same type
@@ -76,9 +79,9 @@ function resolveOwnerName(ownerAssignmentId: string | null): string | null {
 const router = Router();
 
 /** GET /api/v1/governance-policies — list policies / charters / frameworks / standards */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, category, documentType } = req.query;
-  let filtered = [...governancePolicies];
+  let filtered = await governancePoliciesRepo.list();
   if (orgId) filtered = filtered.filter((p) => p.orgId === orgId);
   if (status) filtered = filtered.filter((p) => p.status === status);
   if (category) filtered = filtered.filter((p) => p.category === category);
@@ -93,9 +96,9 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-policies/summary — aggregate counts */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  let filtered = [...governancePolicies];
+  let filtered = await governancePoliciesRepo.list();
   if (orgId) filtered = filtered.filter((p) => p.orgId === orgId);
 
   const byStatus: Record<string, number> = {};
@@ -115,7 +118,7 @@ router.get('/summary', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/governance-policies/:id — single policy */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const policy = governancePolicies.find((p) => p.id === req.params.id);
   if (!policy) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
 
@@ -137,7 +140,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/governance-policies — create policy */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { name, orgId, description, status, ownerAssignmentId, category, reviewFrequency,
           lastReviewDate, nextReviewDate, effectiveDate, content, documentType } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
@@ -164,15 +167,14 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now,
   };
 
-  governancePolicies.push(policy);
-  saveStore('governancePolicies', governancePolicies);
+  await governancePoliciesRepo.create(policy);
   auditService.log(policy.orgId, null, 'GovernancePolicy', policy.id, 'CREATE', null, policy);
   logger.info({ policyId: policy.id, code: policy.code, name: policy.name }, 'Created governance policy');
   res.status(201).json({ success: true, data: policy });
 });
 
 /** PUT /api/v1/governance-policies/:id — update policy */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const policy = governancePolicies.find((p) => p.id === req.params.id);
   if (!policy) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
 
@@ -180,36 +182,35 @@ router.put('/:id', (req: Request, res: Response) => {
   const { name, description, status, ownerAssignmentId, category, reviewFrequency,
           lastReviewDate, nextReviewDate, effectiveDate, content } = req.body;
 
-  if (name !== undefined) policy.name = name;
-  if (description !== undefined) policy.description = description;
-  if (ownerAssignmentId !== undefined) policy.ownerAssignmentId = ownerAssignmentId;
-  if (category !== undefined) policy.category = category;
-  if (reviewFrequency !== undefined) policy.reviewFrequency = reviewFrequency;
-  if (lastReviewDate !== undefined) policy.lastReviewDate = lastReviewDate;
-  if (nextReviewDate !== undefined) policy.nextReviewDate = nextReviewDate;
-  if (effectiveDate !== undefined) policy.effectiveDate = effectiveDate;
-  if (content !== undefined) policy.content = content;
+  const patch: Partial<StoredGovernancePolicy> = {};
+  if (name !== undefined) patch.name = name;
+  if (description !== undefined) patch.description = description;
+  if (ownerAssignmentId !== undefined) patch.ownerAssignmentId = ownerAssignmentId;
+  if (category !== undefined) patch.category = category;
+  if (reviewFrequency !== undefined) patch.reviewFrequency = reviewFrequency;
+  if (lastReviewDate !== undefined) patch.lastReviewDate = lastReviewDate;
+  if (nextReviewDate !== undefined) patch.nextReviewDate = nextReviewDate;
+  if (effectiveDate !== undefined) patch.effectiveDate = effectiveDate;
+  if (content !== undefined) patch.content = content;
 
   // When status changes to ACTIVE, set effectiveDate if not already set
   if (status !== undefined) {
-    if (status === 'ACTIVE' && policy.status !== 'ACTIVE' && !policy.effectiveDate) {
-      policy.effectiveDate = new Date().toISOString().slice(0, 10);
+    if (status === 'ACTIVE' && policy.status !== 'ACTIVE' && !policy.effectiveDate && patch.effectiveDate === undefined) {
+      patch.effectiveDate = new Date().toISOString().slice(0, 10);
     }
-    policy.status = status;
+    patch.status = status;
   }
 
-  policy.updatedAt = new Date().toISOString();
-  saveStore('governancePolicies', governancePolicies);
-  auditService.log(policy.orgId, null, 'GovernancePolicy', policy.id, 'UPDATE', before, policy);
-  res.json({ success: true, data: policy });
+  patch.updatedAt = new Date().toISOString();
+  const updated = await governancePoliciesRepo.update(policy.id, patch);
+  auditService.log(policy.orgId, null, 'GovernancePolicy', policy.id, 'UPDATE', before, updated);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/governance-policies/:id — delete policy and orphan its controls */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = governancePolicies.findIndex((p) => p.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
-
-  const removed = governancePolicies[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = governancePolicies.find((p) => p.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
 
   // Orphan controls linked to this policy (set policyId to empty string)
   try {
@@ -223,8 +224,7 @@ router.delete('/:id', (req: Request, res: Response) => {
   } catch { /* controls module not loaded yet */ }
 
   auditService.log(removed.orgId, null, 'GovernancePolicy', removed.id, 'DELETE', removed, null);
-  governancePolicies.splice(idx, 1);
-  saveStore('governancePolicies', governancePolicies);
+  await governancePoliciesRepo.delete(removed.id);
   logger.info({ policyId: removed.id, code: removed.code }, 'Deleted governance policy');
   res.status(204).send();
 });

@@ -8,6 +8,7 @@ import { dataDomains } from './data-domains';
 import { people } from './people';
 import { agents } from './agents';
 import logger from '../lib/logger';
+import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
 
 // Governance Hierarchy Tiers (aligned with data governance best practices)
 const GROUP_TYPES = [
@@ -73,6 +74,8 @@ export interface StoredGovernanceGroup {
 
 export const governanceGroups: StoredGovernanceGroup[] = loadStore<StoredGovernanceGroup>('governanceGroups');
 registerStore('governanceGroups', governanceGroups);
+
+const governanceGroupsRepo = getGovernanceGroupsRepository(governanceGroups);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 // Request-body schemas — Zod at the API boundary. Enum checks + type
@@ -165,7 +168,7 @@ function buildTree(groups: StoredGovernanceGroup[]): GroupTreeNode[] {
 const router = Router();
 
 /** DELETE /api/v1/governance-groups/all — delete all governance groups */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = governanceGroups.length;
   governanceGroups.splice(0, governanceGroups.length);
   saveStore('governanceGroups', governanceGroups);

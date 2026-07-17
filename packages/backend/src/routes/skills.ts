@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { saveStore } from '../lib/persistence';
 import { filterByOrgScope, isOwnershipLevel, getVisibleOrgScope, OWNERSHIP_LEVELS } from '../lib/org-scope';
 import logger from '../lib/logger';
+import { getSkillsRepository } from '../db/skills.repo';
 import {
   unqualifiedSummaryByPerson,
   listUnqualifiedAssignments,

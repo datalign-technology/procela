@@ -16,6 +16,7 @@ import { damaRoles } from './dama-roles';
 import { people } from './people';
 import { auditService } from '../services/audit.service';
 import { createNotification } from './notifications';
+import { getAgentExecutionsRepository } from '../db/agent-executions.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agent Executions — an AI agent actually PERFORMING a governance activity.
@@ -77,6 +78,8 @@ function describeMapping(m: { dataAssetId?: string; policyId?: string; attachmen
 export const agentExecutions: StoredAgentExecution[] = loadStore<StoredAgentExecution>('agentExecutions');
 registerStore('agentExecutions', agentExecutions);
 
+const agentExecutionsRepo = getAgentExecutionsRepository(agentExecutions);
+
 // One-time normalisation: existing records pre-date the promotedDocumentId
 // field. Treat undefined as null so the rest of the code can rely on the
 // field being present.
@@ -94,7 +97,7 @@ registerStore('agentExecutions', agentExecutions);
 const router = Router();
 
 /** GET /api/v1/agent-executions — list executions with optional filters */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, agentId, activityId } = req.query;
   let filtered = [...agentExecutions];
 
@@ -115,7 +118,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/agent-executions/:id — get single execution */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const exec = agentExecutions.find((e) => e.id === req.params.id);
   if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
   res.json({ success: true, data: exec });
@@ -238,8 +241,7 @@ export async function runAgentExecution(params: {
     logger.error({ executionId: execution.id, agentId, activityId: node.id, err, triggeredBy }, 'Agent execution failed');
   }
 
-  agentExecutions.push(execution);
-  saveStore('agentExecutions', agentExecutions);
+  await agentExecutionsRepo.create(execution);
 
   // Audit the finish with the outcome.
   auditService.log(orgId, userId, 'AgentExecution', execution.id, `AGENT_RUN_${execution.status}`, null, {
@@ -292,7 +294,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 /** PATCH /api/v1/agent-executions/:id/review — approve or reject a draft. */
-router.patch('/:id/review', (req: Request, res: Response) => {
+router.patch('/:id/review', async (req: Request, res: Response) => {
   const exec = agentExecutions.find((e) => e.id === req.params.id);
   if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
   const { reviewStatus, reviewedBy } = req.body;
@@ -304,7 +306,7 @@ router.patch('/:id/review', (req: Request, res: Response) => {
   exec.reviewStatus = reviewStatus;
   exec.reviewedBy = reviewStatus === 'PENDING' ? null : (typeof reviewedBy === 'string' && reviewedBy ? reviewedBy : 'Unknown');
   exec.reviewedAt = reviewStatus === 'PENDING' ? null : new Date().toISOString();
-  saveStore('agentExecutions', agentExecutions);
+  await agentExecutionsRepo.update(exec.id, exec);
   const userId = (req as Request & { user?: { id?: string } }).user?.id || null;
   auditService.log(exec.orgId, userId, 'AgentExecution', exec.id, `AGENT_REVIEW_${reviewStatus}`, before, {
     reviewStatus, reviewedBy: exec.reviewedBy,
@@ -325,7 +327,7 @@ router.patch('/:id/review', (req: Request, res: Response) => {
  *   - category — defaults to GOVERNANCE.
  *   - reviewedBy — stamped on the execution if provided.
  */
-router.post('/:id/promote', (req: Request, res: Response) => {
+router.post('/:id/promote', async (req: Request, res: Response) => {
   const exec = agentExecutions.find((e) => e.id === req.params.id);
   if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
   if (exec.status !== 'SUCCESS') {
@@ -411,7 +413,7 @@ router.post('/:id/promote', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/agent-executions/all — delete all executions */
-router.delete('/all', (_req: Request, res: Response) => {
+router.delete('/all', async (_req: Request, res: Response) => {
   const count = agentExecutions.length;
   agentExecutions.splice(0, agentExecutions.length);
   saveStore('agentExecutions', agentExecutions);

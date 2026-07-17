@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { getPeopleRepository } from '../db/people.repo';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
@@ -319,6 +320,8 @@ export function canAccessOrg(
 export const people: StoredPerson[] = loadStore<StoredPerson>('people');
 registerStore('people', people);
 
+const peopleRepo = getPeopleRepository(people);
+
 // Migration: PROCESS_OWNER and DATA_STEWARD were legacy app-roles that
 // conflated platform permissions with governance accountability. They've
 // been replaced by the DAMA role model. Migrate anyone still carrying
@@ -503,7 +506,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/people */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgIds, orgId, name, email, role, title, jobRole, accessibleOrgIds, skillIds } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   // Support both orgIds (array) and orgId (single, backward compat)
@@ -528,13 +531,12 @@ router.post('/', (req: Request, res: Response) => {
     skillIds: Array.isArray(skillIds) ? skillIds : [],
     createdAt: now, updatedAt: now,
   };
-  people.push(person);
-  saveStore('people', people);
+  await peopleRepo.create(person);
   res.status(201).json({ success: true, data: publicPerson(person) });
 });
 
 /** PUT /api/v1/people/:id */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const person = people.find((p) => p.id === req.params.id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   const { name, email, role, title, jobRole, orgIds, orgId, accessibleOrgIds, skillIds } = req.body;
@@ -555,7 +557,7 @@ router.put('/:id', (req: Request, res: Response) => {
     person.orgIds = newOrgIds;
   }
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   res.json({ success: true, data: publicPerson(person) });
 });
 

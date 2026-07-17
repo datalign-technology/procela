@@ -6,6 +6,7 @@ import { agents } from './agents';
 import { processNodes, isGovernanceNode } from './process-catalog';
 import { auditService } from '../services/audit.service';
 import { runAgentExecution } from './agent-executions';
+import { getAgentSchedulesRepository } from '../db/agent-schedules.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agent Schedules — one-shot or recurring schedules that fire agent runs
@@ -46,6 +47,8 @@ export interface StoredAgentSchedule {
 export const agentSchedules: StoredAgentSchedule[] = loadStore<StoredAgentSchedule>('agentSchedules');
 registerStore('agentSchedules', agentSchedules);
 
+const agentSchedulesRepo = getAgentSchedulesRepository(agentSchedules);
+
 /** Advance nextRunAt by one frequency unit. For ONCE, returns the same time
  *  (caller marks the schedule COMPLETED instead). */
 function advanceNextRunAt(frequency: Frequency, from: Date): Date {
@@ -63,7 +66,7 @@ function advanceNextRunAt(frequency: Frequency, from: Date): Date {
 const router = Router();
 
 /** GET /api/v1/agent-schedules — list, optionally filtered. */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, activityId, agentId } = req.query;
   let filtered = [...agentSchedules];
   if (orgId) filtered = filtered.filter((s) => s.orgId === orgId);
@@ -74,7 +77,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/agent-schedules — create a schedule. */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, agentId, activityId, roleType, frequency, startAt } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!agentId) { res.status(400).json({ success: false, error: 'agentId is required' }); return; }
@@ -116,8 +119,7 @@ router.post('/', (req: Request, res: Response) => {
     updatedAt: now.toISOString(),
   };
 
-  agentSchedules.push(schedule);
-  saveStore('agentSchedules', agentSchedules);
+  await agentSchedulesRepo.create(schedule);
   auditService.log(orgId, schedule.createdBy, 'AgentSchedule', schedule.id, 'AGENT_SCHEDULE_CREATED', null, {
     agentId, activityId: node.id, frequency, startAt: schedule.startAt,
   });
@@ -126,7 +128,7 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 /** PATCH /api/v1/agent-schedules/:id — update status (pause / resume), frequency, or startAt. */
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const sched = agentSchedules.find((s) => s.id === req.params.id);
   if (!sched) { res.status(404).json({ success: false, error: 'Schedule not found' }); return; }
   const before = { status: sched.status, frequency: sched.frequency, nextRunAt: sched.nextRunAt };
@@ -146,7 +148,7 @@ router.patch('/:id', (req: Request, res: Response) => {
     sched.nextRunAt = start.toISOString();
   }
   sched.updatedAt = new Date().toISOString();
-  saveStore('agentSchedules', agentSchedules);
+  await agentSchedulesRepo.update(sched.id, sched);
   const userId = (req as Request & { user?: { id?: string } }).user?.id || null;
   auditService.log(sched.orgId, userId, 'AgentSchedule', sched.id, 'AGENT_SCHEDULE_UPDATED', before, {
     status: sched.status, frequency: sched.frequency, nextRunAt: sched.nextRunAt,
@@ -155,11 +157,10 @@ router.patch('/:id', (req: Request, res: Response) => {
 });
 
 /** DELETE /api/v1/agent-schedules/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = agentSchedules.findIndex((s) => s.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Schedule not found' }); return; }
-  const [removed] = agentSchedules.splice(idx, 1);
-  saveStore('agentSchedules', agentSchedules);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = agentSchedules.find((s) => s.id === req.params.id);
+  if (!removed) { res.status(404).json({ success: false, error: 'Schedule not found' }); return; }
+  await agentSchedulesRepo.delete(removed.id);
   const userId = (req as Request & { user?: { id?: string } }).user?.id || null;
   auditService.log(removed.orgId, userId, 'AgentSchedule', removed.id, 'AGENT_SCHEDULE_DELETED', removed, null);
   res.json({ success: true });

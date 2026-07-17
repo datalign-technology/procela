@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import { getAnalysisReportsRepository } from '../db/analysis-reports.repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ANALYSIS REPORTS — saved configurations for the cube/pivot builder.
@@ -30,12 +31,14 @@ export const analysisReports: StoredAnalysisReport[] =
   loadStore<StoredAnalysisReport>('analysisReports');
 registerStore('analysisReports', analysisReports);
 
+const analysisReportsRepo = getAnalysisReportsRepository(analysisReports);
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const router = Router();
 
 /** GET /api/v1/analysis-reports?orgId= */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query as Record<string, string | undefined>;
   const effectiveOrgId = orgId || DEV_ORG_ID;
   const list = analysisReports
@@ -45,14 +48,14 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/analysis-reports/:id */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const r = analysisReports.find((r) => r.id === req.params.id);
   if (!r) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   res.json({ success: true, data: r });
 });
 
 /** POST /api/v1/analysis-reports */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, name, description, config, ownerName } = req.body as {
     orgId?: string; name?: string; description?: string | null;
     config?: Record<string, unknown>; ownerName?: string;
@@ -91,14 +94,13 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  analysisReports.push(rec);
-  saveStore('analysisReports', analysisReports);
+  await analysisReportsRepo.create(rec);
   logger.info({ reportId: rec.id, ownerId }, 'Analysis report saved');
   res.status(201).json({ success: true, data: rec });
 });
 
 /** PATCH /api/v1/analysis-reports/:id — rename, edit description, update config. */
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const r = analysisReports.find((r) => r.id === req.params.id);
   if (!r) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const editorId = (req as any).user?.sub || null;
@@ -109,29 +111,28 @@ router.patch('/:id', (req: Request, res: Response) => {
   const { name, description, config } = req.body as {
     name?: string; description?: string | null; config?: Record<string, unknown>;
   };
+  const patch: Partial<StoredAnalysisReport> = {};
   if (name !== undefined) {
     if (!name.trim()) { res.status(400).json({ success: false, error: 'name cannot be empty' }); return; }
-    r.name = name.trim();
+    patch.name = name.trim();
   }
-  if (description !== undefined) r.description = description?.trim() || null;
-  if (config !== undefined) r.config = config;
-  r.updatedAt = new Date().toISOString();
-  saveStore('analysisReports', analysisReports);
-  res.json({ success: true, data: r });
+  if (description !== undefined) patch.description = description?.trim() || null;
+  if (config !== undefined) patch.config = config;
+  patch.updatedAt = new Date().toISOString();
+  const updated = await analysisReportsRepo.update(r.id, patch);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/analysis-reports/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = analysisReports.findIndex((r) => r.id === req.params.id);
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
-  const rec = analysisReports[idx];
+router.delete('/:id', async (req: Request, res: Response) => {
+  const rec = analysisReports.find((r) => r.id === req.params.id);
+  if (!rec) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const editorId = (req as any).user?.sub || null;
   if (rec.ownerId && editorId && rec.ownerId !== editorId) {
     res.status(403).json({ success: false, error: 'Only the owner can delete this report' });
     return;
   }
-  analysisReports.splice(idx, 1);
-  saveStore('analysisReports', analysisReports);
+  await analysisReportsRepo.delete(rec.id);
   res.status(204).send();
 });
 

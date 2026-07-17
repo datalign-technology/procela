@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { executeReport, validateDefinition, type ReportDefinition } from '../services/report-engine';
+import { getReportsRepository } from '../db/reports.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Reports — user-defined report definitions backed by the LDM.
@@ -37,10 +38,12 @@ export interface StoredReport {
 export const reports: StoredReport[] = loadStore<StoredReport>('reports');
 registerStore('reports', reports);
 
+const reportsRepo = getReportsRepository(reports);
+
 const router = Router();
 
 /** GET /api/v1/reports?orgId=… — list reports in the org. */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const orgId = String(req.query.orgId || '');
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   const data = reports
@@ -50,7 +53,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/reports/:id — one report, full definition included. */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   const report = reports.find((r) => r.id === String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   res.json({ success: true, data: report });
@@ -58,7 +61,7 @@ router.get('/:id', (req: Request, res: Response) => {
 
 /** POST /api/v1/reports — create. Body: { orgId, name, description?,
  *  ownerId?, visibility?, definition }. */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { orgId, name, description, ownerId, visibility, definition } = req.body || {};
   if (!orgId)     { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!name)      { res.status(400).json({ success: false, error: 'name is required' }); return; }
@@ -82,44 +85,42 @@ router.post('/', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  reports.push(report);
-  saveStore('reports', reports);
+  await reportsRepo.create(report);
   res.status(201).json({ success: true, data: report });
 });
 
 /** PUT /api/v1/reports/:id — update. */
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const report = reports.find((r) => r.id === String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const { name, description, ownerId, visibility, definition } = req.body || {};
+  const patch: Partial<StoredReport> = {};
   if (definition !== undefined) {
     const validation = validateDefinition(definition);
     if (validation.length > 0) {
       res.status(400).json({ success: false, error: 'Invalid report definition', details: validation });
       return;
     }
-    report.definition = definition;
+    patch.definition = definition;
   }
-  if (name !== undefined) report.name = name;
-  if (description !== undefined) report.description = description;
-  if (ownerId !== undefined) report.ownerId = ownerId;
-  if (visibility !== undefined) report.visibility = visibility === 'private' ? 'private' : 'org';
-  report.updatedAt = new Date().toISOString();
-  saveStore('reports', reports);
-  res.json({ success: true, data: report });
+  if (name !== undefined) patch.name = name;
+  if (description !== undefined) patch.description = description;
+  if (ownerId !== undefined) patch.ownerId = ownerId;
+  if (visibility !== undefined) patch.visibility = visibility === 'private' ? 'private' : 'org';
+  patch.updatedAt = new Date().toISOString();
+  const updated = await reportsRepo.update(report.id, patch);
+  res.json({ success: true, data: updated });
 });
 
 /** DELETE /api/v1/reports/:id */
-router.delete('/:id', (req: Request, res: Response) => {
-  const idx = reports.findIndex((r) => r.id === String(req.params.id));
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
-  reports.splice(idx, 1);
-  saveStore('reports', reports);
+router.delete('/:id', async (req: Request, res: Response) => {
+  const removed = await reportsRepo.delete(String(req.params.id));
+  if (!removed) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   res.status(204).send();
 });
 
 /** POST /api/v1/reports/:id/run — execute and return rows. */
-router.post('/:id/run', (req: Request, res: Response) => {
+router.post('/:id/run', async (req: Request, res: Response) => {
   const report = reports.find((r) => r.id === String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   try {
@@ -133,7 +134,7 @@ router.post('/:id/run', (req: Request, res: Response) => {
 /** POST /api/v1/reports/preview — execute a draft definition without
  *  saving it. Body: { orgId, definition }. Powers the Builder UI's
  *  live preview pane. */
-router.post('/preview', (req: Request, res: Response) => {
+router.post('/preview', async (req: Request, res: Response) => {
   const { orgId, definition } = req.body || {};
   if (!orgId)      { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!definition) { res.status(400).json({ success: false, error: 'definition is required' }); return; }
