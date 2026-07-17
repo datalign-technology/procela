@@ -510,6 +510,12 @@ model DataAssetBinding {
   connectionId String   @db.Uuid
   sourceAsset  String
   sourceColumn String?
+  // Optional free-form label ("prod", "staging", …) and a primary flag
+  // (exactly one binding per asset should be primary once any exist).
+  // Both fields carried on the JSON row already; the schema drift here
+  // was picked up during the secondary-store repo sweep.
+  label        String?
+  isPrimary    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -933,15 +939,515 @@ model FlowRelationship {
 }
 
 // =============================================================================
-// PENDING — secondary stores not yet modelled
+// Secondary stores
 // -----------------------------------------------------------------------------
-// The following stores from lib/persistence.ts still live as JSON. They are
-// out of scope for this first migration and will land in follow-up work:
-//   agents, agentExecutions, agentSchedules, analysisReports, attachments,
-//   businessGlossary, chatSessions, connections, connectionSystemLinks,
-//   connectors, dataLineage, dataModels, dataQualityRules, dbtCloudConnections,
-//   decisionRights, digestSubscriptions, enterpriseViews, exportsQueue,
-//   gapDetectionRules, governanceCalendar, maturityTrends, operationsManuals,
-//   processVersions, savedViews, schedulerState, scimTokens, sensitivityTags,
-//   sopDocs, suggestionDismissals, syncConnections, tags, trends.
+// The models below cover the ~30 secondary JSON stores migrated in the
+// batch-3 repo sweep. String[] arrays and JSONB payloads mirror the JSON
+// row shapes one-for-one rather than being promoted to join tables — the
+// repos flatten and rewrite them on read/write. Every classifier
+// (status / type / severity / …) is String rather than a Prisma enum so
+// customers can extend the vocabulary without a schema migration, same
+// pattern the governance rows use.
 // =============================================================================
+
+model Attachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  entityType  String
+  entityId    String
+  type        String
+  name        String
+  description String?  @db.Text
+  fileName    String?
+  filePath    String?
+  fileSize    Int?
+  mimeType    String?
+  url         String?
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, entityType, entityId])
+  @@map("attachments")
+}
+
+model Tag {
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @db.Uuid
+  entityType String
+  entityId   String
+  tag        String
+  createdAt  DateTime @default(now())
+
+  @@index([orgId])
+  @@index([orgId, entityType, entityId])
+  @@index([orgId, tag])
+  @@map("tags")
+}
+
+model SavedView {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  pageKey   String
+  name      String
+  ownerId   String?
+  ownerName String?
+  isShared  Boolean  @default(true)
+  filters   Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, pageKey])
+  @@map("saved_views")
+}
+
+model Report {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  description String   @default("") @db.Text
+  ownerId     String?
+  visibility  String   @default("org")
+  definition  Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("reports")
+}
+
+model AnalysisReport {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  description String?  @db.Text
+  ownerId     String?
+  ownerName   String?
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("analysis_reports")
+}
+
+model Sop {
+  id              String    @id @default(uuid()) @db.Uuid
+  orgId           String    @db.Uuid
+  code            String
+  title           String
+  purpose         String    @default("") @db.Text
+  category        String    @default("OTHER")
+  applicableRoles String[]  @default([])
+  triggerEvent    String    @default("")
+  steps           Json      @default("[]")
+  status          String    @default("DRAFT")
+  version         Int       @default(1)
+  ownerPersonId   String?   @db.Uuid
+  lastReviewedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, code])
+  @@map("sops")
+}
+
+model GlossaryTerm {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid
+  term          String
+  definition    String   @default("") @db.Text
+  context       String   @default("") @db.Text
+  synonyms      String[] @default([])
+  relatedTerms  String[] @default([])
+  domainId      String?  @db.Uuid
+  ownerPersonId String?  @db.Uuid
+  status        String   @default("DRAFT")
+  category      String   @default("GENERAL")
+  exampleValues String   @default("") @db.Text
+  businessRules String   @default("") @db.Text
+  sourceOfTruth String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, category])
+  @@map("glossary_terms")
+}
+
+model OperationsManual {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid
+  roleType      String
+  label         String
+  purpose       String   @default("") @db.Text
+  daily         String[] @default([])
+  weekly        String[] @default([])
+  monthly       String[] @default([])
+  quarterly     String[] @default([])
+  escalation    String[] @default([])
+  customContent String   @default("") @db.Text
+  isCustom      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, roleType])
+  @@map("operations_manuals")
+}
+
+model CalendarEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  orgId           String   @db.Uuid
+  name            String
+  description     String   @default("") @db.Text
+  eventType       String
+  cadence         String
+  dayOfMonth      Int?
+  dayOfWeek       Int?
+  timeOfDay       String   @default("")
+  durationMinutes Int      @default(0)
+  attendees       String[] @default([])
+  agendaTemplate  String   @default("") @db.Text
+  nextOccurrence  String?
+  lastOccurrence  String?
+  autoCreateTasks Boolean  @default(false)
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("calendar_events")
+}
+
+model GovernanceProgram {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @db.Uuid
+  name             String
+  scope            Json     @default("{}")
+  principles       Json     @default("{}")
+  targetStartDate  String?
+  targetLaunchDate String?
+  status           String   @default("PLANNING")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("governance_programs")
+}
+
+model DecisionRight {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  decision       String
+  category       String   @default("OTHER")
+  description    String   @default("") @db.Text
+  decider        String?
+  deciderType    String   @default("PERSON")
+  recommends     String[] @default([])
+  approves       String[] @default([])
+  informed       String[] @default([])
+  escalationPath String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("decision_rights")
+}
+
+model Connection {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  systemId       String?  @db.Uuid
+  name           String
+  connectionType String
+  config         Json     @default("{}")
+  credentials    Json     @default("{}")
+  status         String   @default("UNTESTED")
+  lastTestedAt   String?
+  lastTestResult String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("connections")
+}
+
+model ConnectionSystemLink {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @db.Uuid
+  connectionId String   @db.Uuid
+  systemId     String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  @@index([orgId])
+  @@index([connectionId])
+  @@index([systemId])
+  @@map("connection_system_links")
+}
+
+model Connector {
+  id                   String   @id @default(uuid()) @db.Uuid
+  orgId                String   @db.Uuid
+  name                 String
+  tokenHash            String?
+  pairingCode          String?
+  pairingCodeExpiresAt String?
+  systemIds            String[] @default([])
+  lastHeartbeatAt      String?
+  agentVersion         String?
+  status               String   @default("PAIRED")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("connectors")
+}
+
+model ConnectorEvent {
+  id          String @id @default(uuid()) @db.Uuid
+  connectorId String @db.Uuid
+  orgId       String @db.Uuid
+  type        String
+  ts          String
+  data        Json   @default("{}")
+
+  @@index([orgId])
+  @@index([connectorId])
+  @@map("connector_events")
+}
+
+model DataAssetColumn {
+  id                 String   @id @default(uuid()) @db.Uuid
+  dataAssetId        String   @db.Uuid
+  columnName         String
+  dataType           String?
+  description        String?  @db.Text
+  sourceConnectionId String?  @db.Uuid
+  sourceAsset        String?
+  sourceColumn       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([dataAssetId])
+  @@map("data_asset_columns")
+}
+
+model DataLineageLink {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  sourceSystemId String   @db.Uuid
+  targetSystemId String   @db.Uuid
+  dataAssetId    String?  @db.Uuid
+  description    String   @default("") @db.Text
+  flowType       String   @default("ETL")
+  frequency      String   @default("ON_DEMAND")
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("data_lineage_links")
+}
+
+model AssetLineageEdge {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid
+  sourceAssetId String   @db.Uuid
+  targetAssetId String   @db.Uuid
+  source        String   @default("manual")
+  sourceRef     String?
+  lastSeenAt    String
+  createdAt     DateTime @default(now())
+
+  @@index([orgId])
+  @@index([orgId, sourceRef])
+  @@map("asset_lineage_edges")
+}
+
+model DataQualityRule {
+  id                String   @id @default(uuid()) @db.Uuid
+  orgId             String   @db.Uuid
+  dataAssetId       String   @db.Uuid
+  columnId          String?  @db.Uuid
+  columnName        String?
+  dimension         String
+  name              String
+  description       String   @default("") @db.Text
+  threshold         Float    @default(0)
+  currentScore      Float    @default(0)
+  weight            Float    @default(1)
+  status            String   @default("NOT_MEASURED")
+  lastMeasured      String?
+  ruleType          String?
+  parameters        Json?
+  lastRun           Json?
+  templateId        String?
+  scheduleFrequency String?
+  nextRunAt         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, dataAssetId])
+  @@map("data_quality_rules")
+}
+
+model DbtCloudConnection {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid
+  name          String
+  host          String
+  accountId     String
+  jobId         String
+  token         String
+  lastRunAt     String?
+  lastStatus    String   @default("NEVER")
+  lastError     String?  @db.Text
+  lastSummary   Json?
+  pollFrequency String   @default("NEVER")
+  nextPollAt    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("dbt_cloud_connections")
+}
+
+model SyncConnection {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  name           String
+  targetEntity   String
+  sourceType     String
+  connectionId   String?  @db.Uuid
+  config         Json     @default("{}")
+  fieldMapping   Json     @default("{}")
+  matchKey       String
+  schedule       Json     @default("{}")
+  status         String   @default("ACTIVE")
+  lastSyncResult Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("sync_connections")
+}
+
+model MaturitySnapshot {
+  id         String @id @default(uuid()) @db.Uuid
+  orgId      String @db.Uuid
+  timestamp  String
+  overall    Float  @default(0)
+  dimensions Json   @default("[]")
+
+  @@index([orgId])
+  @@map("maturity_snapshots")
+}
+
+model GapSnapshot {
+  id      String @id @default(uuid()) @db.Uuid
+  orgId   String @db.Uuid
+  takenAt String
+  metrics Json   @default("{}")
+
+  @@index([orgId])
+  @@map("gap_snapshots")
+}
+
+model ProcessVersion {
+  id        String  @id @default(uuid()) @db.Uuid
+  nodeId    String  @db.Uuid
+  version   Int
+  snapshot  Json    @default("{}")
+  changedBy String?
+  changedAt String
+  status    String  @default("")
+  note      String  @default("") @db.Text
+
+  @@index([nodeId])
+  @@map("process_versions")
+}
+
+model SuggestionDismissal {
+  id          String  @id @default(uuid()) @db.Uuid
+  orgId       String  @db.Uuid
+  nodeId      String  @db.Uuid
+  kind        String
+  targetId    String
+  dismissedBy String?
+  dismissedAt String
+
+  @@index([orgId])
+  @@index([nodeId, kind])
+  @@map("suggestion_dismissals")
+}
+
+model Agent {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgIds        String[] @default([])
+  name          String
+  agentType     String   @default("AI")
+  description   String   @default("") @db.Text
+  provider      String   @default("")
+  status        String   @default("ACTIVE")
+  ownerPersonId String?
+  skillIds      String[] @default([])
+  instructions  String   @default("") @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([ownerPersonId])
+  @@map("agents")
+}
+
+model AgentSchedule {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @db.Uuid
+  agentId      String   @db.Uuid
+  agentName    String
+  activityId   String   @db.Uuid
+  activityName String
+  roleType     String
+  frequency    String
+  status       String   @default("ACTIVE")
+  startAt      String
+  nextRunAt    String
+  lastRunAt    String?
+  runCount     Int      @default(0)
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([agentId])
+  @@map("agent_schedules")
+}
+
+model AgentExecution {
+  id                 String   @id @default(uuid()) @db.Uuid
+  orgId              String   @db.Uuid
+  agentId            String   @db.Uuid
+  agentName          String
+  activityId         String   @db.Uuid
+  activityName       String
+  roleType           String
+  status             String   @default("PENDING")
+  startedAt          String
+  completedAt        String?
+  output             String   @default("") @db.Text
+  error              String?  @db.Text
+  durationMs         Int?
+  reviewStatus       String   @default("PENDING")
+  reviewedBy         String?
+  reviewedAt         String?
+  promotedDocumentId String?
+  createdAt          DateTime @default(now())
+
+  @@index([orgId])
+  @@index([agentId])
+  @@map("agent_executions")
+}

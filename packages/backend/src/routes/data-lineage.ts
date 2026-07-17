@@ -7,7 +7,7 @@ import { systems } from './systems';
 import { dataAssets } from './data-assets';
 import { dataQualityRules } from './data-quality';
 
-interface DataLineageLink {
+export interface DataLineageLink {
   id: string;
   orgId: string;
   sourceSystemId: string;

@@ -7,12 +7,12 @@ const router = Router();
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-interface SnapshotDimension {
+export interface SnapshotDimension {
   name: string;
   score: number;
 }
 
-interface ScorecardSnapshot {
+export interface ScorecardSnapshot {
   id: string;
   orgId: string;
   timestamp: string;

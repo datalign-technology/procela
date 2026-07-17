@@ -13,7 +13,7 @@ import logger from '../lib/logger';
 // Types
 // ---------------------------------------------------------------------------
 
-interface ConnectionProfile {
+export interface ConnectionProfile {
   id: string;
   orgId: string;
   /** @deprecated Retired. A connection links to zero or more systems

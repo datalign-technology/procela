@@ -19,7 +19,7 @@ import {
   DescribeContext,
 } from '../services/dq-engine';
 
-interface DataQualityRule {
+export interface DataQualityRule {
   id: string;
   orgId: string;
   dataAssetId: string;

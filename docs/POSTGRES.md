@@ -29,13 +29,63 @@ pieces live, and how to migrate the next entity.
    ```bash
    cd packages/backend
    npm run db:generate     # regenerate the Prisma client
-   npm run db:migrate      # applies all migrations in prisma/migrations/
+   npx prisma migrate deploy  # applies prisma/migrations/*.sql
    ```
+
+   The initial migration `20260716200000_init/migration.sql` was
+   generated from the schema via `prisma migrate diff` and is the
+   ground truth for the DB shape. Every future schema change should
+   be captured as a new migration via `prisma migrate dev --name
+   <describe-change>` against a local dev DB, then committed.
 
 4. **Boot the backend**. It runs as before; any route that has been
    migrated to the async Repository pattern (see below) automatically
    uses Postgres, while unmigrated routes continue to read/write
    the JSON files under `.procela-data/`.
+
+## Converting a route to actually use its repository
+
+Every entity has a repository shipped (`db/<entity>.repo.ts`).
+Routes still touch the exported in-memory arrays directly — turning
+a route into "uses the repo" is per-handler work. The pattern:
+
+1. **Import the factory** at the top of the route file:
+   ```ts
+   import { getOrganizationsRepository } from '../db/organizations.repo';
+   ```
+2. **Cache the repo** at module load, right below the store:
+   ```ts
+   const orgRepo = getOrganizationsRepository(organizations);
+   ```
+3. **Convert one handler at a time** — the read handlers first
+   (simpler, no cascade concerns). Add `async`, replace direct array
+   reads with `await orgRepo.list()` / `.get()`, then keep the rest
+   of the business logic unchanged.
+
+   ```ts
+   router.get('/', async (req, res) => {
+     const all = await orgRepo.list();
+     // ... same logic as before, operating on `all` instead of the
+     // module-level `organizations` array.
+   });
+   ```
+4. **Write handlers** (POST/PUT/DELETE) follow the same shape but
+   call `.create()` / `.update()` / `.delete()`. When on the JSON
+   path, the shared in-memory array stays consistent because
+   `jsonRepository()` mutates the same reference. On the Postgres
+   path, the array falls out of sync — cross-file consumers that
+   still import the array will read stale data. That's the reason
+   the migration is per-handler: each conversion has to consider
+   what else is reading the array and either convert those too, or
+   leave the array in sync by writing to both paths (dual-write).
+
+`routes/organizations.ts` has the reference `async` handler (GET /
+— the whole-org list). The other 9 handlers on that route are
+follow-up per-handler work.
+
+Long-run: once every handler on a route is async, drop the exported
+in-memory array and the `saveStore` calls. The repo is the only
+persistence surface.
 
 ## Where the pieces live
 
@@ -184,28 +234,24 @@ Repository-mapped so far:
     AutomationMode, GroupLevel, FlowType, DamaScopeType) were
     dropped when the fuller Stored* types landed.
 
-**All 18 core entities are now on the repository pattern.** The
-schema is source-of-truth against the JSON row shape; the repos are
-wired up but unused (routes still touch the in-memory arrays
-directly).
+**All 18 core entities + 29 secondary entities are now on the
+repository pattern.** Every non-trivial store has schema + repo +
+stubbed-Prisma tests + live-DB integration coverage.
 
-Still on JSON only — the ~30 secondary stores:
+Skipped as low-value or requiring source-shape changes:
+- `branding` — Organization-level; already on Organization model.
+- `aiSettings`, `schedulerState` — singletons without id/orgId.
+- `raciOverrides`, `dbtAssetMappings`, `dbtTestMappings` —
+  composite-key mapping rows without a real `id` field.
 
-- **Data catalog adjuncts**: DataAssetBinding, DataAssetColumn,
-  ProcessVersion, GlossaryTerm, DataQualityRule, DbtAssetMapping,
-  DbtTestMapping, DbtCloudConnection, DataLineageLink,
-  AssetLineageEdge.
-- **Integration + connectors**: Connection, Connector,
-  ConnectorEvent, ConnectionSystemLink, SyncConnection, Agent,
-  AgentSchedule, AgentExecution.
-- **Governance ops**: SavedView, Report, AnalysisReport,
-  OperationsManual, SOP, CalendarEvent, DecisionRight,
-  RaciOverride, GapSnapshot, MaturitySnapshot,
-  SuggestionDismissal, Tag.
-- **Auth + system**: SchemaGroup, AiSettings, AiTemplateCache,
-  Branding, SchedulerState.
+The schema is source-of-truth against the JSON row shape.
 
-These land in the schema + get a repo as their route needs them.
+**Route conversion status**: `routes/organizations.ts` has one
+reference `async` handler (GET /) using `await orgRepo.list()`.
+Every other route handler across the codebase still touches the
+in-memory arrays directly. See the "Converting a route to actually
+use its repository" section above for the pattern; each handler
+conversion is one small PR of work.
 
 Each migration is one PR. That gives you an incremental cutover
 you can pause or roll back at any point, versus a big-bang PR that
