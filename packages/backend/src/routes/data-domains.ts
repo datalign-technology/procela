@@ -131,9 +131,11 @@ router.post('/generate', async (req: Request, res: Response) => {
 });
 
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = dataDomains.length;
-  dataDomains.splice(0, dataDomains.length);
-  saveStore('dataDomains', dataDomains);
+  const ids = dataDomains.map((d) => d.id);
+  const count = ids.length;
+  for (const id of ids) {
+    await dataDomainsRepo.delete(id);
+  }
   auditService.log('system', null, 'DataDomain', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all data domains');
   res.json({ success: true, deleted: count });
@@ -322,11 +324,11 @@ router.patch('/bulk', async (req: Request, res: Response) => {
     if (updates.ownerId !== undefined) domain.ownerId = updates.ownerId || null;
 
     domain.updatedAt = now;
+    await dataDomainsRepo.update(domain.id, domain);
     auditService.log('system', domain.orgId, 'DataDomain', domain.id, 'BULK_UPDATE', null, domain);
     updated++;
   }
 
-  if (updated > 0) saveStore('dataDomains', dataDomains);
   logger.info({ updated, skipped: skipped.length }, 'Bulk-updated data domains');
   res.json({ success: true, updated, skipped });
 });
@@ -346,11 +348,8 @@ router.post('/bulk-delete', async (req: Request, res: Response) => {
   const removed = dataDomains.filter((d) => idSet.has(d.id));
   for (const r of removed) {
     auditService.log('system', r.orgId, 'DataDomain', r.id, 'DELETE', r, null);
+    await dataDomainsRepo.delete(r.id);
   }
-  for (let i = dataDomains.length - 1; i >= 0; i--) {
-    if (idSet.has(dataDomains[i].id)) dataDomains.splice(i, 1);
-  }
-  if (removed.length > 0) saveStore('dataDomains', dataDomains);
   logger.info({ count: removed.length }, 'Bulk-deleted data domains');
   res.json({ success: true, deleted: removed.length });
 });

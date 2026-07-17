@@ -111,9 +111,11 @@ const router = Router();
 
 /** DELETE /api/v1/dama-roles/all — delete all DAMA role assignments */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = damaRoles.length;
-  damaRoles.splice(0, damaRoles.length);
-  saveStore('damaRoles', damaRoles);
+  const ids = damaRoles.map((r) => r.id);
+  const count = ids.length;
+  for (const id of ids) {
+    await damaRolesRepo.delete(id);
+  }
   auditService.log('system', null, 'DamaRole', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all DAMA role assignments');
   res.json({ success: true, deleted: count });
