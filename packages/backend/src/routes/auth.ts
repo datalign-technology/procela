@@ -1175,13 +1175,13 @@ router.get('/config', (_req: Request, res: Response) => {
  * is never echoed back; updates are write-only.
  */
 router.post('/oidc-providers', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { id, displayName, issuer, clientId, clientSecret, allowedEmailDomains } = req.body;
     if (!id || !displayName || !issuer || !clientId || !clientSecret) {
       res.status(400).json({ success: false, error: 'id, displayName, issuer, clientId, clientSecret are required' });
       return;
     }
-    upsertOidcProvider({
+    await upsertOidcProvider({
       id, displayName, issuer, clientId, clientSecret,
       ...(Array.isArray(allowedEmailDomains) ? { allowedEmailDomains } : {}),
     });
@@ -1192,9 +1192,9 @@ router.post('/oidc-providers', authenticateToken, authorize('SUPER_ADMIN', 'ORG_
   });
 
 router.delete('/oidc-providers/:id', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const id = String(req.params.id);
-    const removed = removeOidcProvider(id);
+    const removed = await removeOidcProvider(id);
     if (!removed) {
       res.status(404).json({ success: false, error: 'Provider not found' });
       return;
@@ -1210,7 +1210,7 @@ router.delete('/oidc-providers/:id', authenticateToken, authorize('SUPER_ADMIN',
  * Accepts { provider?, oidcIssuer?, oidcClientId? }.
  * Secrets (clientSecret) are never returned in the response.
  */
-router.put('/config', (req: Request, res: Response) => {
+router.put('/config', async (req: Request, res: Response) => {
   const { provider, oidcIssuer, oidcClientId } = req.body;
 
   const validProviders = ['dev', 'local', 'oidc', 'saml'];
@@ -1222,7 +1222,7 @@ router.put('/config', (req: Request, res: Response) => {
     return;
   }
 
-  updateAuthConfig({ provider, oidcIssuer, oidcClientId });
+  await updateAuthConfig({ provider, oidcIssuer, oidcClientId });
 
   const authCfg = getAuthConfig();
   auditService.log(DEV_ORG_ID, null, 'Auth', 'config', 'AUTH_CONFIG_UPDATED', null, {

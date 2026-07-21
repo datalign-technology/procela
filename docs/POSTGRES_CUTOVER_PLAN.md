@@ -147,9 +147,13 @@ Slices:
   `people.find/some/push/splice` + `saveStore` calls, mirroring the proven
   mutate-then-`update(id, person)` pattern from `routes/people.ts`. Added the
   first SCIM `/Users` route tests.
-- **3c — Auth-providers config.** `authConfig` → `AppSetting` (key `"authConfig"`,
-  hydrate-at-boot to keep the sync read API); `oidcProviders` Map → `OidcProvider`
-  repo (in-memory instance cache rebuilt from persisted config).
+- **3c — Auth-providers config (done).** `authConfig` → `AppSetting` (key
+  `"authConfig"`) via a shared `stores/app-settings.ts`; `oidcProviders` Map →
+  `OidcProvider` repo. The read API (`getAuthProvider`/`getOidcProvider`) stays
+  **synchronous** over the in-memory instances; the three writes
+  (`updateAuthConfig`/`upsertOidcProvider`/`removeOidcProvider`) became async and
+  persist, and a new `initAuthProviders()` (called at boot in `index.ts`)
+  rehydrates the in-memory state from persistence. Added persistence tests.
 - **3d — Refresh tokens.** `validRefreshTokens` Map → `RefreshTokenRepository`
   across `auth.ts` (mint / refresh / sessions / logout / SLO).
 - **3e — Password / MFA / WebAuthn / lockout.** `auth-password.ts`, `auth-mfa.ts`,
