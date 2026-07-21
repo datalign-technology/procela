@@ -211,7 +211,7 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
 
   // Issue the real session now that MFA cleared.
   const orgId = person.orgIds[0] || DEV_ORG_ID;
-  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+  const refresh = await createRefreshToken(person.id, fingerprintFromRequest(req));
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
     sessionJti: refresh.jti,
