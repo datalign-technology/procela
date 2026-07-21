@@ -27,6 +27,7 @@ import compression from 'compression';
 import config from './config';
 import logger from './lib/logger';
 import { startAutoSave, flushStores } from './lib/persistence';
+import { hasDatabase } from './db/prisma';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
@@ -338,7 +339,18 @@ import { runResponsibleRoleCdoMigration } from './migrations/2026-05-responsible
 runGovernanceDocsMigration();
 runResponsibleRoleCdoMigration();
 
-const autoSaveHandle = startAutoSave(stores);
+// Persistence mode. When DATABASE_URL is set, the repositories route
+// reads and writes to Postgres and the module-level JSON arrays are no
+// longer the source of truth — they hold only stale boot-state. The
+// JSON autosave timer must NOT run in that mode: it would periodically
+// (every 10s) overwrite `.procela-data/*.json` with those stale/empty
+// arrays, silently destroying any JSON backup on disk. So the timer —
+// and the shutdown flush below — are gated on JSON mode only. Direct
+// per-handler `saveStore` calls are retired as each subsystem migrates
+// to its repository (see docs/POSTGRES_CUTOVER_PLAN.md).
+const persistenceMode = hasDatabase() ? 'postgres' : 'json';
+logger.info({ persistenceMode }, 'Persistence mode resolved');
+const autoSaveHandle = hasDatabase() ? null : startAutoSave(stores);
 
 // Offline-connector scan. Walks the connector store every 5 min
 // and flips any row whose last heartbeat is older than the OFFLINE
@@ -513,10 +525,12 @@ function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
-  clearInterval(autoSaveHandle);
+  if (autoSaveHandle) clearInterval(autoSaveHandle);
   if (offlineScanHandle) clearInterval(offlineScanHandle);
   stopScheduler();
-  flushStores(stores);
+  // Only flush JSON stores in JSON mode. In Postgres mode the arrays are
+  // stale boot-state and flushing them would clobber the JSON files.
+  if (!hasDatabase()) flushStores(stores);
   server.close((err) => {
     if (err) logger.error({ err }, 'Error closing HTTP server');
     process.exit(err ? 1 : 0);
