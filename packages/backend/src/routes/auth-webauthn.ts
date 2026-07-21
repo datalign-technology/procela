@@ -216,7 +216,7 @@ router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res
 
   // Issue the session, same as the TOTP path.
   const orgId = person.orgIds[0] || DEV_ORG_ID;
-  const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+  const refresh = await createRefreshToken(person.id, fingerprintFromRequest(req));
   const accessToken = createAccessToken({
     sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
     sessionJti: refresh.jti,
@@ -389,7 +389,7 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
     saveStore('people', people);
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
-    const refresh = createRefreshToken(person.id, fingerprintFromRequest(req));
+    const refresh = await createRefreshToken(person.id, fingerprintFromRequest(req));
     const accessToken = createAccessToken({
       sub: person.id, email: person.email, name: person.name, role: person.role, orgId,
       sessionJti: refresh.jti,

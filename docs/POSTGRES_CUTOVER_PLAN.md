@@ -154,8 +154,11 @@ Slices:
   (`updateAuthConfig`/`upsertOidcProvider`/`removeOidcProvider`) became async and
   persist, and a new `initAuthProviders()` (called at boot in `index.ts`)
   rehydrates the in-memory state from persistence. Added persistence tests.
-- **3d — Refresh tokens.** `validRefreshTokens` Map → `RefreshTokenRepository`
-  across `auth.ts` (mint / refresh / sessions / logout / SLO).
+- **3d — Refresh tokens (done).** `validRefreshTokens` Map → `RefreshTokenRepository`
+  across `auth.ts` (mint / refresh / rotation / logout / SLO / the three
+  `/sessions` handlers). `createRefreshToken` became async, so its callers in
+  `auth.ts`, `auth-mfa.ts`, `auth-webauthn.ts` await it (their handlers were
+  already async). Added the first `/sessions` + `/refresh`-rotation tests.
 - **3e — Password / MFA / WebAuthn / lockout.** `auth-password.ts`, `auth-mfa.ts`,
   `auth-webauthn.ts`, `account-lockout.ts`: `people` array + `saveStore` →
   `await peopleRepo.*`.

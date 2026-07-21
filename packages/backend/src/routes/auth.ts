@@ -8,7 +8,8 @@ import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people, computeAccessibleOrgs, isActive as isPersonActive, getRoleForOrg } from './people';
 import { organizations } from './organizations';
-import { saveStore } from '../lib/persistence';
+import { saveStore, loadStore } from '../lib/persistence';
+import { getRefreshTokensRepository, type StoredRefreshToken } from '../db/refresh-tokens.repo';
 import { peekFlow } from '../services/pending-oidc-flows';
 import { checkLockout, recordFailedLogin, clearLockout, adminClearLockout } from '../services/account-lockout';
 import {
@@ -69,7 +70,11 @@ interface RefreshTokenContext {
   ip?: string;
   userAgent?: string;
 }
-const validRefreshTokens = new Map<string, RefreshTokenContext>();
+// Refresh-token / session store. Postgres when DATABASE_URL is set, the
+// in-memory `refreshTokens` array (JSON) otherwise — replaces the former
+// in-memory Map so sessions survive a restart and span instances. PR 3d.
+const refreshTokens = loadStore<StoredRefreshToken>('refreshTokens');
+const refreshTokensRepo = getRefreshTokensRepository(refreshTokens);
 
 // ---------------------------------------------------------------------------
 // Token helpers
@@ -130,12 +135,13 @@ export function fingerprintFromRequest(req: Request): { ip?: string; userAgent?:
   };
 }
 
-export function createRefreshToken(sub: string, context: RefreshTokenContext = {}): { token: string; jti: string } {
+export async function createRefreshToken(sub: string, context: RefreshTokenContext = {}): Promise<{ token: string; jti: string }> {
   const jti = uuid();
   const payload: RefreshTokenPayload = { sub, type: 'refresh', jti };
   const token = signJwt(payload, { expiresIn: REFRESH_TOKEN_EXPIRY });
   const now = new Date().toISOString();
-  validRefreshTokens.set(jti, {
+  await refreshTokensRepo.upsert({
+    jti,
     personId: sub,
     createdAt: now,
     lastUsedAt: now,
@@ -447,7 +453,7 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
 
     // Mint refresh first so we can stamp its jti onto the access
     // token — /auth/sessions uses that to tag the caller's own row.
-    const refresh = createRefreshToken(user.sub, fingerprintFromRequest(req));
+    const refresh = await createRefreshToken(user.sub, fingerprintFromRequest(req));
     const accessToken = createAccessToken({
       ...user,
       name: resolvedName,
@@ -589,7 +595,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     // id_token is verified, contains no Procela secret, and is only
     // valid as a logout hint for this specific IdP session — safe
     // to hold for the refresh-token lifetime.
-    const refresh = createRefreshToken(person.id, {
+    const refresh = await createRefreshToken(person.id, {
       oidcProviderId: flow.providerId,
       oidcIdToken: idToken,
       ...fingerprintFromRequest(req),
@@ -689,7 +695,7 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
     const role = getRoleForOrg(person, orgId) || user.role;
-    const refresh = createRefreshToken(person.id, {
+    const refresh = await createRefreshToken(person.id, {
       samlNameID: nameID,
       ...(sessionIndex ? { samlSessionIndex: sessionIndex } : {}),
       ...fingerprintFromRequest(req),
@@ -763,11 +769,11 @@ const handleSamlSls = async (req: Request, res: Response): Promise<void> => {
     // in on multiple devices through the same IdP has one entry per
     // device — all of them go.
     let revoked = 0;
-    for (const [jti, ctx] of validRefreshTokens) {
+    for (const ctx of await refreshTokensRepo.list()) {
       if (ctx.samlNameID === nameID) {
-        validRefreshTokens.delete(jti);
+        await refreshTokensRepo.remove(ctx.jti);
         revoked++;
-        auditService.log(DEV_ORG_ID, ctx.personId || null, 'Auth', 'saml', 'SAML_SLO_REVOKED', null, { jti, nameID });
+        auditService.log(DEV_ORG_ID, ctx.personId || null, 'Auth', 'saml', 'SAML_SLO_REVOKED', null, { jti: ctx.jti, nameID });
       }
     }
 
@@ -835,12 +841,12 @@ router.get('/saml/metadata', (req: Request, res: Response) => {
  * attacker fails closed. The frontend must replace its stored
  * refreshToken on every successful refresh.
  *
- * Detection of token reuse: if the incoming jti isn't in
- * validRefreshTokens, it's either expired (auto-cleaned) or already
+ * Detection of token reuse: if the incoming jti isn't in the
+ * refresh-token store, it's either expired (auto-cleaned) or already
  * rotated. Either way we 401 — the second case is the suspicious one
  * and the audit entry surfaces it so a SOC can investigate.
  */
-router.post('/refresh', (req: Request, res: Response) => {
+router.post('/refresh', async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
 
   if (!refreshToken) {
@@ -856,7 +862,7 @@ router.post('/refresh', (req: Request, res: Response) => {
       return;
     }
 
-    const ctx = validRefreshTokens.get(decoded.jti);
+    const ctx = await refreshTokensRepo.get(decoded.jti);
     if (!ctx) {
       auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'REFRESH_REVOKED', null, {
         jti: decoded.jti,
@@ -871,7 +877,7 @@ router.post('/refresh', (req: Request, res: Response) => {
     // stolen and is being replayed from a different network. Revoke
     // it, audit, force the user back through login.
     if (!sessionFingerprintMatches(ctx, req)) {
-      validRefreshTokens.delete(decoded.jti);
+      await refreshTokensRepo.remove(decoded.jti);
       auditService.log(DEV_ORG_ID, decoded.sub, 'Auth', 'refresh', 'REFRESH_BINDING_MISMATCH', null, {
         jti: decoded.jti,
         ip: req.ip,
@@ -887,7 +893,7 @@ router.post('/refresh', (req: Request, res: Response) => {
     // fingerprint). Preserving createdAt lets the Active Sessions page
     // keep showing "Signed in 3 days ago" rather than resetting on
     // every refresh.
-    const newRefresh = createRefreshToken(decoded.sub, {
+    const newRefresh = await createRefreshToken(decoded.sub, {
       oidcProviderId: ctx.oidcProviderId,
       oidcIdToken: ctx.oidcIdToken,
       ip: ctx.ip,
@@ -895,9 +901,14 @@ router.post('/refresh', (req: Request, res: Response) => {
     });
     // Overwrite the auto-set createdAt with the original so the
     // session timeline doesn't reset on every refresh.
-    const rotatedCtx = validRefreshTokens.get(newRefresh.jti);
-    if (rotatedCtx && ctx.createdAt) rotatedCtx.createdAt = ctx.createdAt;
-    validRefreshTokens.delete(decoded.jti);
+    if (ctx.createdAt) {
+      const rotatedCtx = await refreshTokensRepo.get(newRefresh.jti);
+      if (rotatedCtx) {
+        rotatedCtx.createdAt = ctx.createdAt;
+        await refreshTokensRepo.upsert(rotatedCtx);
+      }
+    }
+    await refreshTokensRepo.remove(decoded.jti);
 
     // Re-derive the user details from the people store so the access
     // token reflects current role + name. The old refresh path
@@ -962,8 +973,8 @@ router.post('/logout', async (req: Request, res: Response) => {
 
     // Pull the session context BEFORE deleting so we can build the
     // RP / SP-initiated logout URL with the original id_token / nameID.
-    const ctx = validRefreshTokens.get(decoded.jti) || {};
-    const wasValid = validRefreshTokens.delete(decoded.jti);
+    const ctx: Partial<StoredRefreshToken> = (await refreshTokensRepo.get(decoded.jti)) ?? {};
+    const wasValid = await refreshTokensRepo.remove(decoded.jti);
 
     let logoutUrl: string | null = null;
     if (ctx.oidcProviderId && ctx.oidcIdToken) {
@@ -1311,7 +1322,7 @@ router.use(webauthnRouter);
 //   DELETE /auth/sessions          revoke all (sign out everywhere)
 // ---------------------------------------------------------------------------
 
-router.get('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.get('/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
   // sjti is the refresh-token jti minted alongside the access token
@@ -1319,43 +1330,43 @@ router.get('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Resp
   // the UI can label one as "This device".
   const currentJti = (req.user as { sjti?: string } | undefined)?.sjti;
   const sessions: Array<Record<string, unknown>> = [];
-  for (const [jti, ctx] of validRefreshTokens) {
+  for (const ctx of await refreshTokensRepo.list()) {
     if (ctx.personId !== userId) continue;
     sessions.push({
-      jti,
+      jti: ctx.jti,
       createdAt: ctx.createdAt || null,
       lastUsedAt: ctx.lastUsedAt || null,
       ip: ctx.ip || null,
       userAgent: ctx.userAgent || null,
       provider: ctx.oidcProviderId ? 'oidc' : 'local',
-      current: jti === currentJti,
+      current: ctx.jti === currentJti,
     });
   }
   sessions.sort((a, b) => String(b.lastUsedAt).localeCompare(String(a.lastUsedAt)));
   res.json({ success: true, data: sessions });
 });
 
-router.delete('/sessions/:jti', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/sessions/:jti', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
   const jti = String(req.params.jti);
-  const ctx = validRefreshTokens.get(jti);
+  const ctx = await refreshTokensRepo.get(jti);
   if (!ctx || ctx.personId !== userId) {
     res.status(404).json({ success: false, error: 'Session not found' });
     return;
   }
-  validRefreshTokens.delete(jti);
+  await refreshTokensRepo.remove(jti);
   auditService.log(DEV_ORG_ID, userId, 'Auth', 'session', 'SESSION_REVOKED_SELF', null, { jti });
   res.status(204).end();
 });
 
-router.delete('/sessions', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.delete('/sessions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
   let revoked = 0;
-  for (const [jti, ctx] of validRefreshTokens) {
+  for (const ctx of await refreshTokensRepo.list()) {
     if (ctx.personId === userId) {
-      validRefreshTokens.delete(jti);
+      await refreshTokensRepo.remove(ctx.jti);
       revoked++;
     }
   }
