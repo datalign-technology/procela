@@ -93,11 +93,24 @@ Gates `startAutoSave(stores)` / `flushStores(stores)` on `!hasDatabase()` and lo
 the resolved persistence mode at boot, so Postgres mode never overwrites the JSON
 files. No behavior change in JSON mode (all 833 tests green).
 
-**PR 1 — Close the model gaps.** Per store, decide model-or-drop. Persist
-(add model + repo): `scim-groups`, `branding`, `schedulerState`, `aiSettings`,
-`raciOverrides`. Cache/derived (model or mark rebuildable): `aiTemplateCache`,
-`dbtAssetMappings`, `dbtTestMappings`. Schema + repo scaffolding only; no consumer
-changes. Adds a Prisma migration.
+**PR 1 — Close the model gaps.** *Implemented.* Seven of the eight orphan stores
+don't fit the standard `{id}` entity repository, so they're modeled by shape:
+
+- **`AppSetting`** — one generic key-value table (`key` PK, JSONB `value`) backing
+  the three global singletons `branding`, `aiSettings`, `schedulerState`. Exposed
+  via a `SettingRepository` (`get`/`set`), not the CRUD `Repository<T>`.
+- **`ScimGroup`** — standard `{id}` model + `Repository<StoredScimGroup>` (members
+  as a JSON column; no orgId — SCIM groups are directory-global).
+- **`RaciOverride`** — composite `@@id([nodeId, personId])`, FK-free; repo exposes
+  `list`/`upsert`/`remove`.
+- **`DbtAssetMapping`** / **`DbtTestMapping`** — composite `@@id([orgId,
+  dbtUniqueId])`, served by one generic org-keyed mapping repository.
+- **`aiTemplateCache`** — deliberately **not** modeled; it is a regenerable AI
+  cache and stays in-memory per instance in Postgres mode.
+
+Adds a Prisma migration (`20260721000000_pg_cutover_pr1_orphan_stores`) and repo
+tests (JSON path + stubbed-delegate Prisma path). No consumer changes yet — the
+wiring lands per-subsystem in PRs 3/6/7.
 
 **PR 2 — Auth persistence foundation.** Sessions/refresh tokens are an in-memory
 `Map` today (`auth.ts`, comment already says "would be Redis or a DB table").
