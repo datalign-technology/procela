@@ -130,12 +130,32 @@ was in-memory-only (no store, no model):
 Adds a migration (`20260721010000_pg_cutover_pr2_auth_persistence`) and repo
 tests. No consumer wiring yet — the auth/SCIM cutover is PR 3.
 
-**PR 3 — Auth/SCIM → repo.** The `Person` model **already carries every auth
-column** (`passwordHash`, `mfaSecret`, `webauthnCredentials`, `lockedUntil`, …),
-so no people-schema change — the routes just bypass the repo. Replace
-`people.find/push/splice` + `saveStore('people', people)` with `await peopleRepo.*`;
-convert the sync SCIM handlers to async. Verify: extend live-db with a login +
-SCIM-provision flow.
+**PR 3 — Auth/SCIM → repo.** *First behavior-changing PR — delivered as small,
+independently-reviewable slices rather than one large diff.* The `Person` model
+**already carries every auth column** (`passwordHash`, `mfaSecret`,
+`webauthnCredentials`, `lockedUntil`, …), so no people-schema change — the routes
+just bypass the repo.
+
+Slices:
+- **3a — SCIM Groups (done).** `services/scim-groups.ts` + the `scim.ts` `/Groups`
+  handlers converted to async over the `ScimGroup` repo; the `/Users` DELETE
+  handler awaits the (now async) member cleanup. Added the first SCIM-groups
+  service tests (the subsystem had none). Self-contained — `scim.ts` is the only
+  consumer.
+- **3b — SCIM Users.** `scim.ts` `/Users` handlers: `people.find/push/splice` +
+  `saveStore` → `await peopleRepo.*`; sync → async.
+- **3c — Auth-providers config.** `authConfig` → `AppSetting` (key `"authConfig"`,
+  hydrate-at-boot to keep the sync read API); `oidcProviders` Map → `OidcProvider`
+  repo (in-memory instance cache rebuilt from persisted config).
+- **3d — Refresh tokens.** `validRefreshTokens` Map → `RefreshTokenRepository`
+  across `auth.ts` (mint / refresh / sessions / logout / SLO).
+- **3e — Password / MFA / WebAuthn / lockout.** `auth-password.ts`, `auth-mfa.ts`,
+  `auth-webauthn.ts`, `account-lockout.ts`: `people` array + `saveStore` →
+  `await peopleRepo.*`.
+
+Verify each slice: `tsc` + JSON suite green, plus the live-db CI job for the
+Postgres path. This subsystem had almost no prior test coverage, so each slice
+adds tests as it lands.
 
 **PR 4 — org-scope.** Widest blast radius: `lib/org-scope` helpers are called
 inline in ~25 route modules. **Don't** make each helper `await orgRepo.list()`

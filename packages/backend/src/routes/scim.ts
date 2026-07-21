@@ -5,7 +5,7 @@ import { auditService } from '../services/audit.service';
 import { people, isActive, type StoredPerson } from './people';
 import { saveStore } from '../lib/persistence';
 import {
-  scimGroups,
+  listGroups,
   findGroup,
   createGroup,
   replaceGroup,
@@ -540,13 +540,13 @@ router.patch('/Users/:id', (req: Request, res: Response) => {
 // Hard delete (vs. active=false which is soft-delete). Removes the
 // person from every SCIM group they're in so we don't leave dangling
 // member refs that would 404 on next group read.
-router.delete('/Users/:id', (req: Request, res: Response) => {
+router.delete('/Users/:id', async (req: Request, res: Response) => {
   const idx = people.findIndex((p) => p.id === req.params.id);
   if (idx === -1) return scimError(res, 404, `User ${req.params.id} not found`);
   const person = people[idx];
   people.splice(idx, 1);
   saveStore('people', people);
-  removeMemberFromAllGroups(person.id);
+  await removeMemberFromAllGroups(person.id);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DELETED', null, {
     personId: person.id, email: person.email,
   });
@@ -649,7 +649,7 @@ router.get('/Schemas', (_req: Request, res: Response) => {
 // formal data-governance program. An admin can wire a mapping later
 // if they want SCIM group membership to drive role / org assignment.
 
-router.get('/Groups', (req: Request, res: Response) => {
+router.get('/Groups', async (req: Request, res: Response) => {
   const startIndex = Math.max(1, parseInt(req.query.startIndex as string) || 1);
   const count = Math.max(0, parseInt(req.query.count as string) || 100);
   const filterStr = req.query.filter as string | undefined;
@@ -657,12 +657,12 @@ router.get('/Groups', (req: Request, res: Response) => {
   // Simple group filtering: only displayName eq supported. The full
   // user-filter parser is overkill for groups (they have ~3 queryable
   // attrs) so we cherry-pick the common case.
-  let filtered = scimGroups;
+  let filtered = await listGroups();
   if (filterStr) {
     const m = filterStr.match(/^\s*displayName\s+eq\s+"([^"]+)"\s*$/i);
     if (!m) return scimError(res, 400, 'Only "displayName eq \\"<name>\\"" is supported for group filters');
     const target = m[1].toLowerCase();
-    filtered = scimGroups.filter((g) => g.displayName.toLowerCase() === target);
+    filtered = filtered.filter((g) => g.displayName.toLowerCase() === target);
   }
 
   const page = filtered.slice(startIndex - 1, startIndex - 1 + count);
@@ -676,14 +676,14 @@ router.get('/Groups', (req: Request, res: Response) => {
   });
 });
 
-router.get('/Groups/:id', (req: Request, res: Response) => {
+router.get('/Groups/:id', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const group = findGroup(id);
+  const group = await findGroup(id);
   if (!group) return scimError(res, 404, `Group ${id} not found`);
   res.json(toScimGroup(group, baseUrlFor(req)));
 });
 
-router.post('/Groups', (req: Request, res: Response) => {
+router.post('/Groups', async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.displayName) return scimError(res, 400, 'displayName is required');
   const members: ScimGroupMember[] = Array.isArray(body.members)
@@ -693,7 +693,7 @@ router.post('/Groups', (req: Request, res: Response) => {
         type: m.type === 'Group' ? 'Group' : 'User',
       }))
     : [];
-  const group = createGroup({
+  const group = await createGroup({
     displayName: String(body.displayName),
     externalId: body.externalId ? String(body.externalId) : undefined,
     members,
@@ -704,7 +704,7 @@ router.post('/Groups', (req: Request, res: Response) => {
   res.status(201).json(toScimGroup(group, baseUrlFor(req)));
 });
 
-router.put('/Groups/:id', (req: Request, res: Response) => {
+router.put('/Groups/:id', async (req: Request, res: Response) => {
   const body = req.body || {};
   const members: ScimGroupMember[] | undefined = Array.isArray(body.members)
     ? body.members.map((m: any) => ({
@@ -714,7 +714,7 @@ router.put('/Groups/:id', (req: Request, res: Response) => {
       }))
     : undefined;
   const id = String(req.params.id);
-  const group = replaceGroup(id, {
+  const group = await replaceGroup(id, {
     displayName: body.displayName,
     externalId: body.externalId,
     members,
@@ -726,9 +726,9 @@ router.put('/Groups/:id', (req: Request, res: Response) => {
   res.json(toScimGroup(group, baseUrlFor(req)));
 });
 
-router.patch('/Groups/:id', (req: Request, res: Response) => {
+router.patch('/Groups/:id', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const group = findGroup(id);
+  const group = await findGroup(id);
   if (!group) return scimError(res, 404, `Group ${id} not found`);
   const body = req.body || {};
   if (!Array.isArray(body.Operations)) return scimError(res, 400, 'PATCH body must include Operations[]');
@@ -739,7 +739,7 @@ router.patch('/Groups/:id', (req: Request, res: Response) => {
     const value = op.value;
 
     if (opType === 'replace' && (path === 'displayName' || path.toLowerCase() === 'displayname')) {
-      replaceGroup(group.id, { displayName: String(value) });
+      await replaceGroup(group.id, { displayName: String(value) });
     } else if (opType === 'add' && path === 'members') {
       const toAdd: ScimGroupMember[] = Array.isArray(value)
         ? value.map((m: any) => ({
@@ -748,19 +748,19 @@ router.patch('/Groups/:id', (req: Request, res: Response) => {
             type: m.type === 'Group' ? 'Group' : 'User',
           }))
         : [];
-      addMembers(group.id, toAdd);
+      await addMembers(group.id, toAdd);
     } else if (opType === 'remove' && path.startsWith('members')) {
       // Two shapes IdPs send for member removal:
       //   1) { op: 'remove', path: 'members[value eq "abc"]' }     single
       //   2) { op: 'remove', path: 'members', value: [{value:'abc'}] } batch
       const m = path.match(/members\[\s*value\s+eq\s+"([^"]+)"\s*\]/i);
       if (m) {
-        removeMembers(group.id, [m[1]]);
+        await removeMembers(group.id, [m[1]]);
       } else if (Array.isArray(value)) {
-        removeMembers(group.id, value.map((v: any) => String(v.value)));
+        await removeMembers(group.id, value.map((v: any) => String(v.value)));
       } else if (path === 'members' && value === undefined) {
         // "remove all members" — rare but allowed.
-        replaceGroup(group.id, { members: [] });
+        await replaceGroup(group.id, { members: [] });
       }
     }
     // Other op/path combos are ignored — Procela's group model is
@@ -768,16 +768,16 @@ router.patch('/Groups/:id', (req: Request, res: Response) => {
     // attribute the IdP wants to track beyond name + members is
     // dropped on the floor here. SCIM allows it.
   }
-  const updated = findGroup(group.id)!;
+  const updated = (await findGroup(group.id))!;
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_GROUP_PATCHED', null, {
     groupId: group.id, ops: body.Operations.length, memberCount: updated.members.length,
   });
   res.json(toScimGroup(updated, baseUrlFor(req)));
 });
 
-router.delete('/Groups/:id', (req: Request, res: Response) => {
+router.delete('/Groups/:id', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const ok = deleteGroup(id);
+  const ok = await deleteGroup(id);
   if (!ok) return scimError(res, 404, `Group ${id} not found`);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_GROUP_DELETED', null, { groupId: id });
   res.status(204).end();
