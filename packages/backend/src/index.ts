@@ -273,7 +273,7 @@ import { maturitySnapshots } from './routes/maturity-trends';
 import { dataLineageLinks } from './routes/data-lineage';
 import { dataQualityRules } from './routes/data-quality';
 import { connections } from './routes/connections';
-import { brandingStoreArray } from './routes/branding';
+import { initBranding } from './routes/branding';
 import { attachments } from './routes/attachments';
 import { syncConnections } from './routes/sync-connections';
 import { governancePolicies } from './routes/governance-policies';
@@ -315,7 +315,6 @@ const stores = {
   dataQualityRules: () => dataQualityRules,
   connections: () => connections,
   syncConnections: () => syncConnections,
-  branding: () => brandingStoreArray,
   attachments: () => attachments,
   governancePolicies: () => governancePolicies,
   governanceControls: () => governanceControls,
@@ -397,6 +396,8 @@ const server = app.listen(PORT, () => {
   // Hydrate the org-scope cache from the repo so visibility filtering is
   // correct in Postgres mode (PR 4). No-op in JSON mode.
   initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));
+  // Hydrate branding config from persistence (PR 7).
+  initBranding().catch((err) => logger.error({ err }, 'initBranding failed'));
 });
 
 // Startup AI probe. Fires one cheap 1-token /messages call to

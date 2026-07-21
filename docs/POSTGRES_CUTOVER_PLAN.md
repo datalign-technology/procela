@@ -211,8 +211,23 @@ unchanged.
 
 **PR 7 — Foreign-array long tail.** Grep-driven sweep: every
 `<foreignArray>.push/splice/find/filter` outside the array's owning route, routed
-through that entity's repo. Known sites: `agent-executions.ts`, `data-lineage.ts`,
-`dama-roles.ts`, `dashboard.ts`, `ai.ts`, `branding.ts`.
+through that entity's repo. Split into two mergeable parts:
+
+- **PR 7a (done) — config stores → AppSetting.** `branding` and `aiSettings`
+  retired to the shared `AppSetting` table via the 3c hydrate-at-boot + persist
+  pattern (`initBranding()` wired into `index.ts`; `rehydrateAiOverride()` async).
+  Reads stay synchronous over the in-memory copy; writes are async. The old
+  `brandingStoreArray` autosave entry is removed. `aiTemplateCache` stays
+  in-memory (unmodeled, per PR 1).
+- **PR 7b (pending) — cross-entity foreign writes.** `dashboard.ts` `raciOverrides`
+  → repo (reads live in RACI-matrix helpers, so convert reads+writes together);
+  `data-lineage.ts` dbt mappings → repos plus its `dataAssets`/`dataQualityRules`
+  creates; and the governance-entity pushes in `agent-executions.ts`
+  (governancePolicies/mappings), `dama-roles.ts` / `governance-calendar.ts`
+  (governanceTasks), `connectors.ts` (dataAssets). The cascade `mappings.splice`
+  in `organizations.ts` / `process-catalog.ts` are JSON-mode cleanups that
+  Postgres FK cascades handle, and `demo-seed`/one-time migrations are boot/dev
+  tooling — both left as-is.
 
 **PR 8 — Migration script.** No `prisma/seed.ts` exists though `package.json`
 points at it. Model on `services/demo-seed.service.ts` (already inserts in
