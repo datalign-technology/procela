@@ -7,6 +7,9 @@ import logger from '../lib/logger';
 import { people, isActive as isPersonActive } from '../routes/people';
 import { mintFlow, consumeFlow, pkceChallenge, type PendingFlow } from './pending-oidc-flows';
 import { resolveEnvSecretSync } from './crypto.service';
+import { loadStore } from '../lib/persistence';
+import { settingsRepo } from '../stores/app-settings';
+import { getOidcProvidersRepository } from '../db/oidc-providers.repo';
 
 // ---------------------------------------------------------------------------
 // Auth Provider Abstraction
@@ -291,6 +294,12 @@ export class OidcAuthProvider implements AuthProvider {
     this.jwks = null;
   }
 
+  /** The full config (including clientSecret) — used to persist this
+   *  provider to the OidcProvider repository. */
+  getConfig(): OidcConfig {
+    return { ...this.config };
+  }
+
   async validateCredentials(_credentials: any): Promise<AuthResult> {
     // OIDC flow uses getLoginUrl + handleCallback, not direct credential validation.
     return { success: false, error: 'OIDC provider requires redirect-based login. Use startLogin() instead.' };
@@ -543,6 +552,36 @@ const localProvider = new LocalAuthProvider();
 // the wire-up is observable without a schema change.
 const oidcProviders = new Map<string, OidcAuthProvider>();
 
+// Persisted OIDC provider configs (Postgres / oidcProviders.json). The
+// in-memory Map above holds the live provider *instances* rebuilt from these
+// configs at boot (initAuthProviders) and on every write, so the read API
+// (getAuthProvider / getOidcProvider) stays synchronous. See
+// docs/POSTGRES_CUTOVER_PLAN.md (PR 3c).
+const oidcProviderConfigs = loadStore<OidcConfig>('oidcProviders');
+const oidcRepo = getOidcProvidersRepository(oidcProviderConfigs);
+
+async function persistOidcProvider(cfg: OidcConfig): Promise<void> {
+  const existing = await oidcRepo.get(cfg.id);
+  if (existing) await oidcRepo.update(cfg.id, cfg);
+  else await oidcRepo.create(cfg);
+}
+
+/**
+ * Hydrate the in-memory auth state from persistence at boot: the active
+ * provider from AppSetting, and the live OIDC provider instances from their
+ * persisted configs. Env-bootstrapped providers (loadInitialOidcProviders)
+ * remain as a fallback; a persisted provider with the same id wins.
+ */
+export async function initAuthProviders(): Promise<void> {
+  const stored = await settingsRepo.get<{ activeProvider: ProviderName }>('authConfig');
+  if (stored?.activeProvider && VALID_PROVIDERS.includes(stored.activeProvider)) {
+    authConfig.activeProvider = stored.activeProvider;
+  }
+  for (const cfg of await oidcRepo.list()) {
+    oidcProviders.set(cfg.id, new OidcAuthProvider(cfg));
+  }
+}
+
 function loadInitialOidcProviders(): void {
   const issuer = process.env.OIDC_ISSUER || '';
   const clientId = process.env.OIDC_CLIENT_ID || '';
@@ -617,13 +656,14 @@ export function getAuthConfig(): {
 /** Update the active provider and/or OIDC settings at runtime.
  *  Accepts a single-provider update for backwards compatibility; use
  *  upsertOidcProvider() for multi-IdP management. */
-export function updateAuthConfig(update: {
+export async function updateAuthConfig(update: {
   provider?: ProviderName;
   oidcIssuer?: string;
   oidcClientId?: string;
-}): void {
+}): Promise<void> {
   if (update.provider && VALID_PROVIDERS.includes(update.provider)) {
     authConfig.activeProvider = update.provider;
+    await settingsRepo.set('authConfig', { activeProvider: authConfig.activeProvider });
   }
   if (update.oidcIssuer !== undefined || update.oidcClientId !== undefined) {
     // Backwards-compat: when only issuer/clientId are provided,
@@ -634,14 +674,17 @@ export function updateAuthConfig(update: {
         issuer: update.oidcIssuer,
         clientId: update.oidcClientId,
       });
+      await persistOidcProvider(existing.getConfig());
     } else if (update.oidcIssuer || update.oidcClientId) {
-      oidcProviders.set('default', new OidcAuthProvider({
+      const cfg: OidcConfig = {
         id: 'default',
         displayName: 'Single sign-on',
         issuer: update.oidcIssuer || '',
         clientId: update.oidcClientId || '',
         clientSecret: '',
-      }));
+      };
+      oidcProviders.set('default', new OidcAuthProvider(cfg));
+      await persistOidcProvider(cfg);
     }
   }
 }
@@ -649,14 +692,17 @@ export function updateAuthConfig(update: {
 /** Add or replace an OIDC provider by id. Used by the multi-IdP admin
  *  flow — the same call serves "configure Entra for the first time"
  *  and "rotate the Okta client secret". */
-export function upsertOidcProvider(cfg: OidcConfig): void {
+export async function upsertOidcProvider(cfg: OidcConfig): Promise<void> {
   if (!cfg.id) throw new Error('OIDC provider id is required');
   oidcProviders.set(cfg.id, new OidcAuthProvider(cfg));
+  await persistOidcProvider(cfg);
   logger.info({ id: cfg.id, displayName: cfg.displayName }, 'OIDC provider upserted');
 }
 
-export function removeOidcProvider(id: string): boolean {
-  return oidcProviders.delete(id);
+export async function removeOidcProvider(id: string): Promise<boolean> {
+  const had = oidcProviders.delete(id);
+  await oidcRepo.delete(id);
+  return had;
 }
 
 /** Direct access to a specific OIDC provider. */
