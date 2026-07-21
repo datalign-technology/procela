@@ -112,11 +112,23 @@ Adds a Prisma migration (`20260721000000_pg_cutover_pr1_orphan_stores`) and repo
 tests (JSON path + stubbed-delegate Prisma path). No consumer changes yet — the
 wiring lands per-subsystem in PRs 3/6/7.
 
-**PR 2 — Auth persistence foundation.** Sessions/refresh tokens are an in-memory
-`Map` today (`auth.ts`, comment already says "would be Redis or a DB table").
-`authConfig`/`oidcProviders` have no persistence at all. Add `Session`/
-`RefreshToken` model (or Redis) + `AuthConfig`/`OidcProvider` models. No behavior
-change yet — just the storage backing.
+**PR 2 — Auth persistence foundation.** *Implemented.* Backs the auth state that
+was in-memory-only (no store, no model):
+
+- **`RefreshToken`** model + `RefreshTokenRepository` (`list`/`get`/`upsert`/
+  `remove`, keyed by `jti`) — replaces the `validRefreshTokens` Map in
+  `auth.ts`. Timestamps kept as ISO strings to match `RefreshTokenContext`
+  verbatim. (Postgres-backed; Redis with TTL remains a valid production
+  alternative for this high-churn store.)
+- **`OidcProvider`** model + standard `{id}` repo — replaces the `oidcProviders`
+  Map; persists the plain `OidcConfig` (running providers reconstructed at the
+  call site in PR 3). `clientSecret` must be KMS-encrypted at rest before
+  production (checklist #11).
+- **`authConfig`** — the one-field `{ activeProvider }` global singleton reuses
+  the PR 1 `AppSetting` table (key `"authConfig"`); **no new model**.
+
+Adds a migration (`20260721010000_pg_cutover_pr2_auth_persistence`) and repo
+tests. No consumer wiring yet — the auth/SCIM cutover is PR 3.
 
 **PR 3 — Auth/SCIM → repo.** The `Person` model **already carries every auth
 column** (`passwordHash`, `mfaSecret`, `webauthnCredentials`, `lockedUntil`, …),
