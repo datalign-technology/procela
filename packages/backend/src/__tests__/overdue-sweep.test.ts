@@ -72,7 +72,7 @@ describe('sweepOverdueTasks', () => {
     sweep(notifications, (n) => n.orgId === orgId);
   });
 
-  it('fires one notification for each overdue OPEN task in scope', () => {
+  it('fires one notification for each overdue OPEN task in scope', async () => {
     governanceTasks.push(
       makeTask({ title: 'Overdue A', status: 'OPEN', dueDate: daysAgo(2), assigneeId: 'user-a' }),
       makeTask({ title: 'Overdue B', status: 'IN_PROGRESS', dueDate: daysAgo(5), assigneeId: 'user-b' }),
@@ -87,7 +87,7 @@ describe('sweepOverdueTasks', () => {
     }
   });
 
-  it('skips future-dated and null-dueDate tasks', () => {
+  it('skips future-dated and null-dueDate tasks', async () => {
     governanceTasks.push(
       makeTask({ title: 'Future', status: 'OPEN', dueDate: daysAhead(3) }),
       makeTask({ title: 'No date', status: 'OPEN', dueDate: null }),
@@ -97,7 +97,7 @@ describe('sweepOverdueTasks', () => {
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 0);
   });
 
-  it('skips terminal statuses (COMPLETED, CANCELLED, REJECTED)', () => {
+  it('skips terminal statuses (COMPLETED, CANCELLED, REJECTED)', async () => {
     governanceTasks.push(
       makeTask({ title: 'Done', status: 'COMPLETED', dueDate: daysAgo(1) }),
       makeTask({ title: 'Cancelled', status: 'CANCELLED', dueDate: daysAgo(1) }),
@@ -108,7 +108,7 @@ describe('sweepOverdueTasks', () => {
     assert.strictEqual(result.fired.length, 0);
   });
 
-  it('is idempotent — a second sweep with no state change fires nothing', () => {
+  it('is idempotent — a second sweep with no state change fires nothing', async () => {
     governanceTasks.push(makeTask({ title: 'Once', status: 'OPEN', dueDate: daysAgo(1), assigneeId: 'user-a' }));
     const first = sweepOverdueTasks(orgId);
     assert.strictEqual(first.fired.length, 1);
@@ -117,7 +117,7 @@ describe('sweepOverdueTasks', () => {
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 1);
   });
 
-  it('re-arms when dueDate is pushed forward past the notified marker', () => {
+  it('re-arms when dueDate is pushed forward past the notified marker', async () => {
     const task: any = makeTask({ title: 'Push', status: 'OPEN', dueDate: daysAgo(3), assigneeId: 'user-a' });
     governanceTasks.push(task);
     sweepOverdueTasks(orgId);
@@ -137,7 +137,7 @@ describe('sweepOverdueTasks', () => {
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 2);
   });
 
-  it('fires org-wide (userId=null) when the task has no assignee', () => {
+  it('fires org-wide (userId=null) when the task has no assignee', async () => {
     governanceTasks.push(makeTask({ title: 'Unassigned', status: 'OPEN', dueDate: daysAgo(1), assigneeId: null }));
     sweepOverdueTasks(orgId);
     const orgNotifs = notifications.filter((n) => n.orgId === orgId);
@@ -145,7 +145,7 @@ describe('sweepOverdueTasks', () => {
     assert.strictEqual(orgNotifs[0].userId, null);
   });
 
-  it('scopes to a single org when scopeOrgId is provided', () => {
+  it('scopes to a single org when scopeOrgId is provided', async () => {
     const otherOrg = orgId + '-other';
     governanceTasks.push(
       makeTask({ title: 'Ours', status: 'OPEN', dueDate: daysAgo(1) }),
@@ -162,22 +162,22 @@ describe('sweepOverdueTasks', () => {
 describe('shouldFireWeeklyDigest (boundary check)', () => {
   before(() => scheduler.resetSchedulerState());
   after(() => scheduler.resetSchedulerState());
-  it('returns false Monday-Saturday regardless of hour', () => {
+  it('returns false Monday-Saturday regardless of hour', async () => {
     // Monday 23:59 UTC — 2026-06-01 was a Monday.
     const monday = new Date('2026-06-01T23:59:00Z').getTime();
-    assert.strictEqual(scheduler.shouldFireWeeklyDigest(monday), false);
+    assert.strictEqual(await scheduler.shouldFireWeeklyDigest(monday), false);
     // Saturday 23:00 UTC — 2026-06-06.
     const saturday = new Date('2026-06-06T23:00:00Z').getTime();
-    assert.strictEqual(scheduler.shouldFireWeeklyDigest(saturday), false);
+    assert.strictEqual(await scheduler.shouldFireWeeklyDigest(saturday), false);
   });
 
-  it('returns false Sunday before 23:00 UTC', () => {
+  it('returns false Sunday before 23:00 UTC', async () => {
     // Sunday — 2026-06-07 — but 22:59 UTC.
     const before = new Date('2026-06-07T22:59:00Z').getTime();
-    assert.strictEqual(scheduler.shouldFireWeeklyDigest(before), false);
+    assert.strictEqual(await scheduler.shouldFireWeeklyDigest(before), false);
   });
 
-  it('returns true Sunday 23:00 UTC on a fresh scheduler', () => {
+  it('returns true Sunday 23:00 UTC on a fresh scheduler', async () => {
     // 2026-06-07 was a Sunday; use 23:15 UTC as a clean firing moment.
     const sunday = new Date('2026-06-07T23:15:00Z').getTime();
     // The test process shares module state, so the outcome depends on

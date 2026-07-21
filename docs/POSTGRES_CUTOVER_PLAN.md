@@ -196,12 +196,18 @@ lookups (no N+1 against Postgres). `filterByOrg`/`matches`/sort/limit are
 unchanged; `validateDefinition` stays sync (empty-index stub). The two
 `reports.ts` callers `await`. JSON-mode behavior is byte-identical.
 
-**PR 6 — digest + scheduler.** `digest.service`: `gapSnapshots`→repo, **preserve
-push-order** — `findPreviousSnapshot` relies on insertion order, not `takenAt`
-(ms collisions); use an `ORDER BY` on a sequence / `createdAt,id`.
-`scheduler.service`: `for (const org of organizations)` → `await orgRepo.list()`;
-`schedulerState` get/set → repo (needs PR 1's model); injected arrays → `await`.
-`tick()` is already async, so timer plumbing is unchanged.
+**PR 6 — digest + scheduler (done).** `digest.service`: `gapSnapshots` → the
+gap-snapshots repo; `takeGapSnapshot`/`findPreviousSnapshot`/`digestForOrg` are
+async. Push-order is preserved — the repo's Postgres `list()` now `ORDER BY
+takenAt` (matching the JSON array/push order `findPreviousSnapshot` walks); the
+same-millisecond tie is a test/rapid-trigger edge only. `scheduler.service`:
+`for (const org of organizations)` → `await orgRepo.list()`, the injected digest
+inputs fetched once via repos, and `schedulerState` → the shared `AppSetting`
+table (key `"schedulerState"`); `getLastWeeklyDigestFiredAt` /
+`shouldFireWeeklyDigest` / `setLastWeeklyDigestFiredAt` / `resetSchedulerState`
+are async. `tick()` was already async, so the timer plumbing is unchanged.
+`routes/digest.ts` fetches inputs via repos and awaits. JSON-mode behavior
+unchanged.
 
 **PR 7 — Foreign-array long tail.** Grep-driven sweep: every
 `<foreignArray>.push/splice/find/filter` outside the array's owning route, routed

@@ -19,7 +19,7 @@ type PrismaGapSnapshotRow = {
 };
 
 export interface PrismaGapSnapshotDelegate {
-  findMany(arg?: { where?: { orgId?: string } }): Promise<PrismaGapSnapshotRow[]>;
+  findMany(arg?: { where?: { orgId?: string }; orderBy?: { takenAt: 'asc' | 'desc' } }): Promise<PrismaGapSnapshotRow[]>;
   findUnique(arg: { where: { id: string } }): Promise<PrismaGapSnapshotRow | null>;
   create(arg: { data: Record<string, unknown> }): Promise<PrismaGapSnapshotRow>;
   update(arg: { where: { id: string }; data: Record<string, unknown> }): Promise<PrismaGapSnapshotRow>;
@@ -50,9 +50,12 @@ export function prismaGapSnapshotsRepository(
   return {
     async list(filter) {
       const client = clientFactory();
+      // Order by takenAt so the list is in insertion order (the JSON path is
+      // array/push order) — digest.service.findPreviousSnapshot relies on it.
+      const orderBy = { takenAt: 'asc' as const };
       const rows = filter?.orgId
-        ? await client.gapSnapshot.findMany({ where: { orgId: filter.orgId } })
-        : await client.gapSnapshot.findMany();
+        ? await client.gapSnapshot.findMany({ where: { orgId: filter.orgId }, orderBy })
+        : await client.gapSnapshot.findMany({ orderBy });
       return rows.map(fromPrisma);
     },
     async get(id) {

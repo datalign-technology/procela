@@ -1,11 +1,15 @@
 import logger from '../lib/logger';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { sweepOverdueTasks } from '../routes/governance-tasks';
 import { digestForOrg } from './digest.service';
 import { processNodes } from '../routes/process-catalog';
 import { dataAssets } from '../routes/data-assets';
 import { mappings } from '../routes/mappings';
 import { organizations } from '../routes/organizations';
+import { settingsRepo } from '../stores/app-settings';
+import { getOrganizationsRepository } from '../db/organizations.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // scheduler.service — self-driving background loops that turn
@@ -35,23 +39,24 @@ const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 let timer: NodeJS.Timeout | null = null;
 
-// The weekly-digest last-fired timestamp is persisted so a boot in the
-// firing window (e.g. Sunday 23:30 after a Sunday 23:15 fire) doesn't
-// forget the earlier run and double-notify. Stored as a single-row
-// array to fit the loadStore/saveStore shape everything else uses.
-interface SchedulerStateRow { key: string; lastWeeklyDigestFiredAt: number | null }
-const schedulerState: SchedulerStateRow[] = loadStore<SchedulerStateRow>('schedulerState');
-registerStore('schedulerState', schedulerState);
-function getLastWeeklyDigestFiredAt(): number | null {
-  return schedulerState[0]?.lastWeeklyDigestFiredAt ?? null;
+// Repositories for the org sweep + digest inputs. In Postgres mode these read
+// the database; in JSON mode they wrap the same in-memory arrays. PR 6.
+const orgRepo = getOrganizationsRepository(organizations);
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const mappingsRepo = getMappingsRepository(mappings);
+
+// The weekly-digest last-fired timestamp is persisted so a boot in the firing
+// window (e.g. Sunday 23:30 after a Sunday 23:15 fire) doesn't forget the
+// earlier run and double-notify. Stored in the shared AppSetting table under
+// the "schedulerState" key.
+interface SchedulerState { lastWeeklyDigestFiredAt: number | null }
+async function getLastWeeklyDigestFiredAt(): Promise<number | null> {
+  const state = await settingsRepo.get<SchedulerState>('schedulerState');
+  return state?.lastWeeklyDigestFiredAt ?? null;
 }
-function setLastWeeklyDigestFiredAt(ms: number): void {
-  if (schedulerState.length === 0) {
-    schedulerState.push({ key: 'default', lastWeeklyDigestFiredAt: ms });
-  } else {
-    schedulerState[0].lastWeeklyDigestFiredAt = ms;
-  }
-  saveStore('schedulerState', schedulerState);
+async function setLastWeeklyDigestFiredAt(ms: number): Promise<void> {
+  await settingsRepo.set<SchedulerState>('schedulerState', { lastWeeklyDigestFiredAt: ms });
 }
 
 function isDisabled(): boolean {
@@ -65,12 +70,12 @@ function isDisabled(): boolean {
  * because the interval always runs at a coarse boundary anyway — we
  * just need "did the boundary pass since we last fired?".
  */
-function shouldFireWeeklyDigest(nowMs: number): boolean {
+async function shouldFireWeeklyDigest(nowMs: number): Promise<boolean> {
   const now = new Date(nowMs);
   // Sunday = 0 in JS. Fire when it's Sunday AFTER 23:00 UTC, once.
   const isSundayLate = now.getUTCDay() === 0 && now.getUTCHours() >= 23;
   if (!isSundayLate) return false;
-  const last = getLastWeeklyDigestFiredAt();
+  const last = await getLastWeeklyDigestFiredAt();
   if (last === null) return true;
   // At least six days must have passed since the last fire so a
   // Sunday sweep at 23:15 and then 23:45 don't double-fire, and so a
@@ -89,19 +94,27 @@ async function tick(): Promise<void> {
     logger.error({ err }, 'Scheduler: overdue sweep failed');
   }
 
-  if (shouldFireWeeklyDigest(Date.now())) {
+  if (await shouldFireWeeklyDigest(Date.now())) {
     try {
+      // Fetch the org list + digest inputs once (Postgres or JSON) rather than
+      // reading the stale in-memory arrays.
+      const [orgs, pn, da, mp] = await Promise.all([
+        orgRepo.list(),
+        processNodesRepo.list(),
+        dataAssetsRepo.list(),
+        mappingsRepo.list(),
+      ]);
       let totalWritten = 0;
-      for (const org of organizations) {
+      for (const org of orgs) {
         try {
-          const result = digestForOrg(org.id, { processNodes, dataAssets, mappings });
+          const result = await digestForOrg(org.id, { processNodes: pn, dataAssets: da, mappings: mp });
           totalWritten += result.notifications.length;
         } catch (err) {
           logger.error({ err, orgId: org.id }, 'Scheduler: digest failed for org');
         }
       }
-      setLastWeeklyDigestFiredAt(Date.now());
-      logger.info({ totalWritten, orgs: organizations.length }, 'Scheduler: weekly digest fired');
+      await setLastWeeklyDigestFiredAt(Date.now());
+      logger.info({ totalWritten, orgs: orgs.length }, 'Scheduler: weekly digest fired');
     } catch (err) {
       logger.error({ err }, 'Scheduler: weekly digest failed');
     }
@@ -133,8 +146,7 @@ export function stopScheduler(): void {
 // stores, so tests can drive them directly without touching the timer.
 // resetSchedulerState lets a test wipe the persisted last-fire time
 // so its assertions don't depend on run ordering across suites.
-function resetSchedulerState(): void {
-  schedulerState.length = 0;
-  saveStore('schedulerState', schedulerState);
+async function resetSchedulerState(): Promise<void> {
+  await settingsRepo.set<SchedulerState>('schedulerState', { lastWeeklyDigestFiredAt: null });
 }
 export const __test__ = { tick, shouldFireWeeklyDigest, resetSchedulerState };
