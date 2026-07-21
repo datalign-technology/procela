@@ -33,6 +33,7 @@ import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import { initAuthProviders } from './services/auth-providers';
+import { initOrgScope } from './lib/org-scope';
 import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
 import { enforceAiBudget } from './middleware/ai-budget';
@@ -393,6 +394,9 @@ const server = app.listen(PORT, () => {
   // auth state so the sync read API serves them (PR 3c). Env-bootstrapped
   // providers already loaded at module import; this augments/overrides.
   initAuthProviders().catch((err) => logger.error({ err }, 'initAuthProviders failed'));
+  // Hydrate the org-scope cache from the repo so visibility filtering is
+  // correct in Postgres mode (PR 4). No-op in JSON mode.
+  initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));
 });
 
 // Startup AI probe. Fires one cheap 1-token /messages call to
