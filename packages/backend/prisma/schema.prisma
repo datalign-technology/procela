@@ -1451,3 +1451,75 @@ model AgentExecution {
   @@index([agentId])
   @@map("agent_executions")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Postgres cutover (PR 1) — stores that previously had no Prisma model.
+// See docs/POSTGRES_CUTOVER_PLAN.md. These are the JSON stores that don't fit
+// the standard {id} entity-repository pattern: global singletons collapse into
+// AppSetting; the dbt / RACI mappings use composite primary keys.
+// aiTemplateCache is intentionally NOT modeled — it is a regenerable AI cache
+// and stays in-memory per instance in Postgres mode.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Generic global key-value config. Backs the former `branding`, `aiSettings`,
+// and `schedulerState` single-row JSON stores. `value` holds the store's row
+// object verbatim, so each consumer keeps its own typed shape.
+model AppSetting {
+  key       String   @id
+  value     Json     @default("{}")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("app_settings")
+}
+
+// SCIM 2.0 group (IdP-provisioned). Members are stored as a JSON array to match
+// the StoredScimGroup shape; there is no orgId — SCIM groups are
+// directory-global, mirroring the current store.
+model ScimGroup {
+  id          String   @id @db.Uuid
+  displayName String
+  externalId  String?
+  members     Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("scim_groups")
+}
+
+// Manual RACI cell override keyed by (processNode, person). No orgId in the
+// current store; scope is implied by the node. Kept FK-free so an override can
+// outlive a transiently-missing node/person row, matching the JSON behavior.
+model RaciOverride {
+  nodeId   String
+  personId String
+  value    String
+  reason   String?
+
+  @@id([nodeId, personId])
+  @@map("raci_overrides")
+}
+
+// Maps a dbt manifest node to a Procela data asset so re-imports reuse the same
+// asset. Composite key (orgId, dbtUniqueId).
+model DbtAssetMapping {
+  orgId       String
+  dbtUniqueId String
+  assetId     String
+
+  @@id([orgId, dbtUniqueId])
+  @@index([orgId])
+  @@map("dbt_asset_mappings")
+}
+
+// Maps a dbt test node to a Procela data-quality rule so re-imports reuse the
+// same rule. Composite key (orgId, dbtUniqueId).
+model DbtTestMapping {
+  orgId       String
+  dbtUniqueId String
+  ruleId      String
+
+  @@id([orgId, dbtUniqueId])
+  @@index([orgId])
+  @@map("dbt_test_mappings")
+}
