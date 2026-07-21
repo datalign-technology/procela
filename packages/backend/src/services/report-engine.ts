@@ -30,6 +30,15 @@ import { mappings } from '../routes/mappings';
 import { dataDomains } from '../routes/data-domains';
 import { damaRoles } from '../routes/dama-roles';
 import { organizations } from '../routes/organizations';
+import { getPeopleRepository } from '../db/people.repo';
+import { getSkillsRepository } from '../db/skills.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getOrganizationsRepository } from '../db/organizations.repo';
 
 export type FilterOp =
   | 'eq' | 'ne'
@@ -80,30 +89,67 @@ export interface ReportRunResult {
   totalMatched: number;
 }
 
-// ── Store registry ───────────────────────────────────────────────────────
+// ── Repository registry ──────────────────────────────────────────────────
 //
-// Maps an LDM entity id to the actual in-memory array. Adding a new
-// entity to the LDM requires one new line here. Kept as a function (not
-// a top-level object) so test fixtures can replace the underlying
-// arrays — test/array-by-reference replaces only the contents, not the
-// binding.
+// Maps an LDM entity id to a repository over the entity's store. Adding a
+// new entity to the LDM requires one new line here. Each repository routes
+// to Postgres when DATABASE_URL is set and to the in-memory array (the same
+// binding the arrays are imported as) otherwise — so JSON-mode reads are
+// unchanged while Postgres-mode reads hit the database.
 
-const STORES: Record<string, () => unknown[]> = {
-  processNodes: () => processNodes,
-  dataAssets: () => dataAssets,
-  systems: () => systems,
-  people: () => people,
-  organizations: () => organizations,
-  mappings: () => mappings,
-  dataDomains: () => dataDomains,
-  damaRoles: () => damaRoles,
-  skills: () => skills,
+type Row = Record<string, unknown>;
+interface Listable { list(): Promise<Row[]>; }
+
+const REPOS: Record<string, () => Listable> = {
+  processNodes: () => getProcessNodesRepository(processNodes) as unknown as Listable,
+  dataAssets: () => getDataAssetsRepository(dataAssets) as unknown as Listable,
+  systems: () => getSystemsRepository(systems) as unknown as Listable,
+  people: () => getPeopleRepository(people) as unknown as Listable,
+  organizations: () => getOrganizationsRepository(organizations) as unknown as Listable,
+  mappings: () => getMappingsRepository(mappings) as unknown as Listable,
+  dataDomains: () => getDataDomainsRepository(dataDomains) as unknown as Listable,
+  damaRoles: () => getDamaRolesRepository(damaRoles) as unknown as Listable,
+  skills: () => getSkillsRepository(skills) as unknown as Listable,
 };
 
-function getStore(entityId: string): unknown[] {
-  const fn = STORES[entityId];
-  if (!fn) throw new Error(`No store registered for entity '${entityId}'`);
+function repoFor(entityId: string): Listable {
+  const fn = REPOS[entityId];
+  if (!fn) throw new Error(`No repository registered for entity '${entityId}'`);
   return fn();
+}
+
+/**
+ * Fetch every entity a report touches — the primary entity plus each join
+ * target referenced by a projected column or the sort field — once, and build
+ * an id-index per entity. Replaces the former per-row store scans: joins now
+ * resolve via O(1) Map lookups against these pre-fetched snapshots, so there
+ * are no N+1 queries against Postgres.
+ */
+function neededEntities(entity: LdmEntity, def: ReportDefinition): Set<string> {
+  const ids = new Set<string>([def.entity]);
+  const paths = [
+    ...(def.columns ?? []).map((c) => c.field),
+    ...(def.sort ? [def.sort.field] : []),
+  ];
+  for (const p of paths) {
+    if (!p.includes('.')) continue;
+    const rel = entity.relationships.find((r) => r.id === p.split('.')[0]);
+    if (rel) ids.add(rel.target);
+  }
+  return ids;
+}
+
+async function materialize(ids: Set<string>): Promise<Map<string, Map<string, Row>>> {
+  const byEntity = new Map<string, Map<string, Row>>();
+  await Promise.all(
+    [...ids].map(async (id) => {
+      const rows = await repoFor(id).list();
+      const index = new Map<string, Row>();
+      for (const r of rows) index.set(r.id as string, r);
+      byEntity.set(id, index);
+    }),
+  );
+  return byEntity;
 }
 
 // ── Validation ───────────────────────────────────────────────────────────
@@ -126,7 +172,7 @@ export function validateDefinition(def: ReportDefinition): DefinitionValidationE
     errors.push({ message: 'A report needs at least one column.' });
   }
   for (const col of def.columns || []) {
-    if (!resolveFieldPath(entity, col.field)) {
+    if (!resolveFieldPath(entity, col.field, EMPTY_TARGET)) {
       errors.push({ field: col.field, message: `Column '${col.field}' does not exist on ${entity.label}.` });
     }
   }
@@ -137,12 +183,16 @@ export function validateDefinition(def: ReportDefinition): DefinitionValidationE
     }
   }
   if (def.sort) {
-    if (!resolveFieldPath(entity, def.sort.field)) {
+    if (!resolveFieldPath(entity, def.sort.field, EMPTY_TARGET)) {
       errors.push({ field: def.sort.field, message: `Sort field '${def.sort.field}' does not exist on ${entity.label}.` });
     }
   }
   return errors;
 }
+
+// Validation only checks that a field path resolves; it never invokes the
+// reader, so an empty target index is sufficient (and avoids any store access).
+const EMPTY_TARGET = () => new Map<string, Row>();
 
 interface ResolvedField {
   /** Final display label for the column header. */
@@ -151,7 +201,11 @@ interface ResolvedField {
   read: (row: Record<string, unknown>) => unknown;
 }
 
-function resolveFieldPath(entity: LdmEntity, fieldPath: string): ResolvedField | null {
+function resolveFieldPath(
+  entity: LdmEntity,
+  fieldPath: string,
+  resolveTarget: (entityId: string) => Map<string, Row>,
+): ResolvedField | null {
   // Direct field, no dot.
   if (!fieldPath.includes('.')) {
     const f = entity.fields.find((x) => x.id === fieldPath);
@@ -169,7 +223,8 @@ function resolveFieldPath(entity: LdmEntity, fieldPath: string): ResolvedField |
   if (!targetField) return null;
 
   const label = `${rel.label} — ${targetField.label}`;
-  const targetStore = () => getStore(rel.target) as Array<Record<string, unknown>>;
+  // Pre-fetched id-index for the target entity — O(1) join lookups, no scans.
+  const targetIndex = () => resolveTarget(rel.target);
 
   if (rel.cardinality === 'one') {
     return {
@@ -177,7 +232,7 @@ function resolveFieldPath(entity: LdmEntity, fieldPath: string): ResolvedField |
       read: (row) => {
         const fk = row[rel.via];
         if (!fk) return null;
-        const hit = targetStore().find((r) => r.id === fk);
+        const hit = targetIndex().get(fk as string);
         return hit ? hit[targetFieldId] : null;
       },
     };
@@ -187,8 +242,12 @@ function resolveFieldPath(entity: LdmEntity, fieldPath: string): ResolvedField |
     read: (row) => {
       const fks = (row[rel.via] as string[]) || [];
       if (!Array.isArray(fks) || fks.length === 0) return '';
-      const hits = targetStore().filter((r) => fks.includes(r.id as string));
-      return hits.map((h) => h[targetFieldId]).filter((v) => v != null).join(', ');
+      return fks
+        .map((fk) => targetIndex().get(fk))
+        .filter((h): h is Row => h != null)
+        .map((h) => h[targetFieldId])
+        .filter((v) => v != null)
+        .join(', ');
     },
   };
 }
@@ -216,18 +275,23 @@ function matches(rowValue: unknown, op: FilterOp, value: ReportFilter['value']):
 
 const DEFAULT_LIMIT = 1000;
 
-export function executeReport(def: ReportDefinition, orgId: string): ReportRunResult {
+export async function executeReport(def: ReportDefinition, orgId: string): Promise<ReportRunResult> {
   const errors = validateDefinition(def);
   if (errors.length > 0) {
     throw new Error(`Invalid report definition: ${errors.map((e) => e.message).join('; ')}`);
   }
   const entity = getEntity(def.entity)!;
 
+  // Fetch the primary entity + every join target once, each indexed by id.
+  // Joins then resolve via O(1) Map lookups — no per-row store scans, no N+1.
+  const byEntity = await materialize(neededEntities(entity, def));
+  const resolveTarget = (id: string) => byEntity.get(id) ?? new Map<string, Row>();
+
   // 1. Source rows for the primary entity, scoped to the org. Entities
   //    that don't have an orgId field (the `people` row carries
   //    `orgIds: string[]` instead, organizations are global) get
-  //    handled per-entity here.
-  let rows = getStore(def.entity) as Array<Record<string, unknown>>;
+  //    handled per-entity here. Map values preserve insertion (list) order.
+  let rows: Array<Record<string, unknown>> = [...(byEntity.get(def.entity)?.values() ?? [])];
   rows = filterByOrg(def.entity, rows, orgId);
 
   // 2. Apply WHERE filters on direct fields.
@@ -239,7 +303,7 @@ export function executeReport(def: ReportDefinition, orgId: string): ReportRunRe
   // 3. Project columns. Each column's render value is computed once
   //    per row and stored under its `field` key.
   const resolved = (def.columns || []).map((c) => {
-    const r = resolveFieldPath(entity, c.field)!;
+    const r = resolveFieldPath(entity, c.field, resolveTarget)!;
     return { field: c.field, label: c.label ?? r.label, read: r.read };
   });
   const projected: Array<Record<string, unknown>> = rows.map((row) => {

@@ -187,8 +187,14 @@ tests. **All 24 caller files are untouched** and JSON-mode behavior is
 byte-identical. *Follow-up:* invalidate the cache on org writes for immediate
 read-your-writes (currently eventually-consistent within the TTL).
 
-**PR 5 — report-engine.** *Highest technical risk — has its own design doc:*
-[`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md).
+**PR 5 — report-engine (done).** Implemented per its design doc
+[`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md):
+the `STORES` array-thunk registry became a `REPOS` registry over the 9 entity
+repositories; `executeReport` is async and **materializes each needed entity
+once** into an id-indexed `Map`, so the per-row join closures resolve via O(1)
+lookups (no N+1 against Postgres). `filterByOrg`/`matches`/sort/limit are
+unchanged; `validateDefinition` stays sync (empty-index stub). The two
+`reports.ts` callers `await`. JSON-mode behavior is byte-identical.
 
 **PR 6 — digest + scheduler.** `digest.service`: `gapSnapshots`→repo, **preserve
 push-order** — `findPreviousSnapshot` relies on insertion order, not `takenAt`
