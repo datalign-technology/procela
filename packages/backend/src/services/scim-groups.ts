@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
+import { getScimGroupsRepository } from '../db/scim-groups.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // scim-groups — flat group directory used by the SCIM /Groups
@@ -39,22 +40,33 @@ export interface StoredScimGroup {
   updatedAt: string;
 }
 
+// The in-memory array is the JSON-mode backing the repository wraps (and
+// the reload-registry target). In Postgres mode the repository talks to
+// the scim_groups table and this array is unused. See
+// docs/POSTGRES_CUTOVER_PLAN.md (PR 3).
 export const scimGroups: StoredScimGroup[] = loadStore<StoredScimGroup>('scim-groups');
 registerStore('scim-groups', scimGroups);
 
-export function findGroup(id: string): StoredScimGroup | undefined {
-  return scimGroups.find((g) => g.id === id);
+const groupsRepo = getScimGroupsRepository(scimGroups);
+
+export async function listGroups(): Promise<StoredScimGroup[]> {
+  return groupsRepo.list();
 }
 
-export function findGroupByDisplayName(name: string): StoredScimGroup | undefined {
-  return scimGroups.find((g) => g.displayName.toLowerCase() === name.toLowerCase());
+export async function findGroup(id: string): Promise<StoredScimGroup | null> {
+  return groupsRepo.get(id);
 }
 
-export function createGroup(args: {
+export async function findGroupByDisplayName(name: string): Promise<StoredScimGroup | undefined> {
+  const all = await groupsRepo.list();
+  return all.find((g) => g.displayName.toLowerCase() === name.toLowerCase());
+}
+
+export async function createGroup(args: {
   displayName: string;
   externalId?: string;
   members?: ScimGroupMember[];
-}): StoredScimGroup {
+}): Promise<StoredScimGroup> {
   const now = new Date().toISOString();
   const group: StoredScimGroup = {
     id: uuid(),
@@ -64,71 +76,57 @@ export function createGroup(args: {
     createdAt: now,
     updatedAt: now,
   };
-  scimGroups.push(group);
-  saveStore('scim-groups', scimGroups);
+  await groupsRepo.create(group);
   logger.info({ groupId: group.id, displayName: group.displayName }, 'SCIM group created');
   return group;
 }
 
-export function replaceGroup(id: string, args: {
+export async function replaceGroup(id: string, args: {
   displayName?: string;
   externalId?: string;
   members?: ScimGroupMember[];
-}): StoredScimGroup | null {
-  const group = findGroup(id);
-  if (!group) return null;
-  if (args.displayName !== undefined) group.displayName = args.displayName;
-  if (args.externalId !== undefined) group.externalId = args.externalId;
-  if (args.members !== undefined) group.members = args.members;
-  group.updatedAt = new Date().toISOString();
-  saveStore('scim-groups', scimGroups);
-  return group;
+}): Promise<StoredScimGroup | null> {
+  const existing = await groupsRepo.get(id);
+  if (!existing) return null;
+  const patch: Partial<StoredScimGroup> = { updatedAt: new Date().toISOString() };
+  if (args.displayName !== undefined) patch.displayName = args.displayName;
+  if (args.externalId !== undefined) patch.externalId = args.externalId;
+  if (args.members !== undefined) patch.members = args.members;
+  return groupsRepo.update(id, patch);
 }
 
-export function deleteGroup(id: string): boolean {
-  const idx = scimGroups.findIndex((g) => g.id === id);
-  if (idx === -1) return false;
-  scimGroups.splice(idx, 1);
-  saveStore('scim-groups', scimGroups);
-  return true;
+export async function deleteGroup(id: string): Promise<boolean> {
+  return groupsRepo.delete(id);
 }
 
-export function addMembers(id: string, members: ScimGroupMember[]): StoredScimGroup | null {
-  const group = findGroup(id);
+export async function addMembers(id: string, members: ScimGroupMember[]): Promise<StoredScimGroup | null> {
+  const group = await groupsRepo.get(id);
   if (!group) return null;
+  const merged = [...group.members];
   for (const m of members) {
-    if (!group.members.some((existing) => existing.value === m.value)) {
-      group.members.push(m);
+    if (!merged.some((existing) => existing.value === m.value)) {
+      merged.push(m);
     }
   }
-  group.updatedAt = new Date().toISOString();
-  saveStore('scim-groups', scimGroups);
-  return group;
+  return groupsRepo.update(id, { members: merged, updatedAt: new Date().toISOString() });
 }
 
-export function removeMembers(id: string, memberIds: string[]): StoredScimGroup | null {
-  const group = findGroup(id);
+export async function removeMembers(id: string, memberIds: string[]): Promise<StoredScimGroup | null> {
+  const group = await groupsRepo.get(id);
   if (!group) return null;
-  const before = group.members.length;
-  group.members = group.members.filter((m) => !memberIds.includes(m.value));
-  if (group.members.length !== before) {
-    group.updatedAt = new Date().toISOString();
-    saveStore('scim-groups', scimGroups);
-  }
-  return group;
+  const filtered = group.members.filter((m) => !memberIds.includes(m.value));
+  if (filtered.length === group.members.length) return group; // no change
+  return groupsRepo.update(id, { members: filtered, updatedAt: new Date().toISOString() });
 }
 
 /** Remove a person from every group they're a member of. Called when
  *  a Person is hard-deleted so we don't leave dangling member refs. */
-export function removeMemberFromAllGroups(personId: string): void {
-  let changed = false;
-  for (const g of scimGroups) {
-    const before = g.members.length;
-    g.members = g.members.filter((m) => m.value !== personId);
-    if (g.members.length !== before) {
-      g.updatedAt = new Date().toISOString();
-      changed = true;
+export async function removeMemberFromAllGroups(personId: string): Promise<void> {
+  const all = await groupsRepo.list();
+  for (const g of all) {
+    const filtered = g.members.filter((m) => m.value !== personId);
+    if (filtered.length !== g.members.length) {
+      await groupsRepo.update(g.id, { members: filtered, updatedAt: new Date().toISOString() });
     }
   }
-  if (changed) saveStore('scim-groups', scimGroups);
 }
