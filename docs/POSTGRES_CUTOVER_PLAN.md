@@ -1,0 +1,187 @@
+# Postgres cutover plan
+
+Moving the backend from JSON-file persistence to Postgres so that setting
+`DATABASE_URL` yields a correct, multi-instance-safe system. This is the
+detailed engineering plan behind checklist items **#3, #4, #5** in
+[`GO_LIVE_CHECKLIST.md`](./GO_LIVE_CHECKLIST.md). It is grounded in the current
+code under `packages/backend/src`, not a summary.
+
+## 1. Where we actually are
+
+**Already done (the hard ~80%):**
+
+- 47 `db/*.repo.ts` repositories, each with a JSON path and a Prisma path,
+  switched on `hasDatabase()` (`= !!process.env.DATABASE_URL`, `db/prisma.ts`).
+- 56 Prisma models (47 entities + 9 join tables); `prisma/migrations/20260716200000_init`.
+- ~37 route files route **their own** entity's writes through `getXRepository(store)`.
+- CI has a `test-backend-live-db` job: spins up `postgres:16-alpine`, runs
+  `prisma migrate deploy`, runs `live-db.test.ts` against real Postgres.
+
+**The failure mode (why flipping `DATABASE_URL` today is unsafe):**
+
+Every module-level array is loaded from JSON at boot **unconditionally**
+(`export const people = loadStore('people')`, no `DATABASE_URL` gate). In
+Postgres mode the repo ignores that array and writes only to Postgres — so the
+array stays frozen at boot state (empty on a fresh DB). Anything reading the raw
+array sees empty/stale data forever.
+
+Two **boot hazards** compounded it (both fixed in PR 0 below): `startAutoSave`
+and the shutdown `flushStores` ran unconditionally, so Postgres mode would
+overwrite `.procela-data/*.json` with the stale/empty arrays every 10s.
+
+**The scope is bigger than the checklist's four files.** Direct-array readers
+that break under Postgres:
+
+- The four checklist consumers: `services/report-engine`, `services/digest.service`,
+  `services/scheduler.service`, `lib/org-scope`.
+- **The entire auth subsystem**: `routes/auth.ts`, `auth-password.ts`,
+  `auth-mfa.ts`, `auth-webauthn.ts`, `routes/scim.ts`,
+  `services/account-lockout.ts`, `services/scim-groups.ts` — all mutate the
+  `people` array + `saveStore`, all sync handlers.
+- **Cross-entity foreign-array writes even inside repo-converted routes**:
+  `agent-executions.ts` → `governancePolicies.push`/`mappings.push`;
+  `data-lineage.ts` → `dataAssets.push`/`dataQualityRules.push`;
+  `dama-roles.ts` → `governanceTasks.push`; `dashboard.ts` → `raciOverrides`.
+- **8 stores with no Prisma model** (would be lost in a cutover): `scim-groups`,
+  `branding`, `raciOverrides`, `schedulerState`, `aiTemplateCache`, `aiSettings`,
+  `dbtAssetMappings`, `dbtTestMappings`.
+- **In-memory-only auth state with no store *and* no model**: refresh-token
+  sessions (`validRefreshTokens` Map, `auth.ts`), `authConfig`, `oidcProviders`.
+
+## 2. The one strategic decision (make this first)
+
+**How do direct-array consumers get their data in Postgres mode?**
+
+- **Option A — Hydration bridge (fast, single-instance only).** At boot, hydrate
+  each module array from Postgres; keep arrays in sync on write. Lets the 25+
+  direct-array call sites keep working unchanged. But every instance has its own
+  array → violates the stateless / horizontal-scaling mandate in `CLAUDE.md`,
+  and goes stale across instances. Acceptable only for a **single-node pilot**.
+- **Option B — Full repo conversion (correct end state).** Convert every
+  direct-array read to `await repo.list({orgId})` and every write to
+  `await repo.*`. Stateless, multi-instance safe. This is the destination and
+  what the PRs below assume.
+
+**Recommendation:** Option B. If a single pilot must go live sooner, PR 0 plus a
+scoped Option-A bridge gives a correct single-node deployment in ~2 PRs, then
+continue with B behind it.
+
+## 3. PR sequence
+
+Each PR is independently mergeable, keeps the JSON path (and all 833 existing
+tests) green, and is verified by extending `live-db.test.ts` so the new path runs
+against real Postgres in CI.
+
+| PR | Title | Scope | Effort | Risk |
+|----|-------|-------|--------|------|
+| 0 | Postgres boot safety | Gate `startAutoSave`/`flushStores` on JSON mode; boot log for persistence mode | S | Low |
+| 1 | Close the model gaps | Prisma models + repos for the 8 model-less stores (or explicit "accept loss") | M | Low |
+| 2 | Auth persistence foundation | Models for sessions/refresh tokens, `authConfig`, `oidcProviders` (or Redis for sessions) | M | Med |
+| 3 | Auth/SCIM → repo (async) | Convert `auth*.ts`, `scim.ts`, `account-lockout`, `scim-groups` off the `people` array to `await peopleRepo.*`; sync→async handlers | L | Med |
+| 4 | org-scope conversion | Load org tree once per request, thread it through the ~25 route callers of `lib/org-scope` | L | Med (wide) |
+| 5 | report-engine conversion | Pre-materialize the 9 stores; move join reads out of per-row closures; `executeReport`→async — see [`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md) | M | **High** |
+| 6 | digest + scheduler | `gapSnapshots`→repo (preserve push-order via `ORDER BY`); org iteration + `schedulerState`→repo | M | Med |
+| 7 | Foreign-array long tail | Every `<foreignArray>.push/splice` outside its owning route → foreign repo | M | Med |
+| 8 | JSON→Postgres migration script | `scripts/migrate-json-to-postgres.ts` (the missing `prisma/seed.ts`) | M | Med |
+| 9 | Statelessness cleanup | Gate `loadStore` hydration off in PG mode; retire dead arrays | S–M | Low |
+| 10 | Expand live-db CI | Business-flow tests under `DATABASE_URL`, not just one file (checklist #24) | M | Low |
+
+### Detail per PR
+
+**PR 0 — Postgres boot safety.** *Prerequisite for everything. Landed.*
+Gates `startAutoSave(stores)` / `flushStores(stores)` on `!hasDatabase()` and logs
+the resolved persistence mode at boot, so Postgres mode never overwrites the JSON
+files. No behavior change in JSON mode (all 833 tests green).
+
+**PR 1 — Close the model gaps.** Per store, decide model-or-drop. Persist
+(add model + repo): `scim-groups`, `branding`, `schedulerState`, `aiSettings`,
+`raciOverrides`. Cache/derived (model or mark rebuildable): `aiTemplateCache`,
+`dbtAssetMappings`, `dbtTestMappings`. Schema + repo scaffolding only; no consumer
+changes. Adds a Prisma migration.
+
+**PR 2 — Auth persistence foundation.** Sessions/refresh tokens are an in-memory
+`Map` today (`auth.ts`, comment already says "would be Redis or a DB table").
+`authConfig`/`oidcProviders` have no persistence at all. Add `Session`/
+`RefreshToken` model (or Redis) + `AuthConfig`/`OidcProvider` models. No behavior
+change yet — just the storage backing.
+
+**PR 3 — Auth/SCIM → repo.** The `Person` model **already carries every auth
+column** (`passwordHash`, `mfaSecret`, `webauthnCredentials`, `lockedUntil`, …),
+so no people-schema change — the routes just bypass the repo. Replace
+`people.find/push/splice` + `saveStore('people', people)` with `await peopleRepo.*`;
+convert the sync SCIM handlers to async. Verify: extend live-db with a login +
+SCIM-provision flow.
+
+**PR 4 — org-scope.** Widest blast radius: `lib/org-scope` helpers are called
+inline in ~25 route modules. **Don't** make each helper `await orgRepo.list()`
+(N redundant tree fetches per request). Build the org tree **once per request**
+(middleware or per-handler) and pass it into the helpers. Preserve the existing
+ancestor-walk / BFS semantics (they assume the full tree is materialized). Split
+by route cluster if the single PR is too large.
+
+**PR 5 — report-engine.** *Highest technical risk — has its own design doc:*
+[`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md).
+
+**PR 6 — digest + scheduler.** `digest.service`: `gapSnapshots`→repo, **preserve
+push-order** — `findPreviousSnapshot` relies on insertion order, not `takenAt`
+(ms collisions); use an `ORDER BY` on a sequence / `createdAt,id`.
+`scheduler.service`: `for (const org of organizations)` → `await orgRepo.list()`;
+`schedulerState` get/set → repo (needs PR 1's model); injected arrays → `await`.
+`tick()` is already async, so timer plumbing is unchanged.
+
+**PR 7 — Foreign-array long tail.** Grep-driven sweep: every
+`<foreignArray>.push/splice/find/filter` outside the array's owning route, routed
+through that entity's repo. Known sites: `agent-executions.ts`, `data-lineage.ts`,
+`dama-roles.ts`, `dashboard.ts`, `ai.ts`, `branding.ts`.
+
+**PR 8 — Migration script.** No `prisma/seed.ts` exists though `package.json`
+points at it. Model on `services/demo-seed.service.ts` (already inserts in
+dependency order). Swap each `saveStore(name, arr)` for a loop of
+`getXRepository(arr).create(row)` (auto-targets Postgres). FK insert order:
+1. `Organization` (self-parent `parentId`, `onDelete: Restrict` → two-pass:
+   insert with null parent, then set), then `Person` (root, `email @unique`).
+2. `System`, `ProcessNode` (self-parent), `DataDomain`, `Skill`, `DamaRole`, `PersonOrg`.
+3. `DataAsset`, join tables (`SystemCustodian`, `DataDomainSteward`, `ProcessNode*`).
+4. `GovernancePolicy` → `Mapping`, `FlowRelationship`, `DataAssetBinding/Column/Steward`.
+5. Leaves (Org-only or no FK): tasks, issues, comments, notifications, audit logs,
+   connectors, lineage links, snapshots, agents, etc.
+Person `onDelete: SetNull` FKs let you insert even if a referenced person is
+missing. Make it idempotent (skip/upsert on existing id). *Optional* — most
+customers cut over on a fresh org with no JSON to preserve.
+
+**PR 9 — Statelessness cleanup.** Once all consumers go through repos, gate the
+`loadStore` array hydration off in PG mode and retire the dead exports so an
+instance holds no per-process entity state.
+
+**PR 10 — Expand live-db CI.** Today the `test-backend-live-db` job runs only
+`live-db.test.ts`. Add real business-flow coverage (catalog CRUD, mapping,
+gap-detection, auth) under `DATABASE_URL` (checklist #24).
+
+## 4. Critical path & sequencing
+
+```
+PR0 (boot safety) ─┬─> PR3 (auth) ──> PR7 (long tail) ──> PR9 (cleanup) ──> PR10 (CI)
+                   ├─> PR4 (org-scope) ─┘        (PR8 migration can land any time after PR1)
+PR1 (models) ──────┼─> PR6 (digest/scheduler)
+PR2 (auth models) ─┘
+                   └─> PR5 (report-engine)  [parallelizable, highest risk — start early]
+```
+
+- **PR 0 first, always** — it stops Postgres mode from corrupting the JSON files.
+- **PR 1 + PR 2 (models)** unblock PR 3 and PR 6.
+- **PR 5 (report-engine)** is the long pole on risk — scope it early even if it
+  merges later.
+- PRs 3–7 are the bulk; each is verifiable in isolation against the live-db harness.
+
+## 5. Deploy prerequisites (ops, not app code — parallel track)
+
+Go-live checklist items that gate an actual Postgres deploy but need no app
+changes: **#1** provision Postgres, **#2** `prisma migrate deploy`, **#7** RS256
+`JWT_PRIVATE_KEY`/`PUBLIC_KEY`, **#8** real `REDIS_URL`, **#11** `KMS_PROVIDER`
+for at-rest MFA/password secrets.
+
+## 6. Rough size
+
+~10 PRs. PRs 4, 5, 7 are the large ones; PRs 0, 9 are small. The critical path
+for a **single-node pilot** (0→1→2→3→6 + migration) is a couple of weeks; full
+statelessness (4, 5, 7, 9, 10) is the tail.
