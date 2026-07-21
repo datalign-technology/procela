@@ -142,8 +142,11 @@ Slices:
   handler awaits the (now async) member cleanup. Added the first SCIM-groups
   service tests (the subsystem had none). Self-contained — `scim.ts` is the only
   consumer.
-- **3b — SCIM Users.** `scim.ts` `/Users` handlers: `people.find/push/splice` +
-  `saveStore` → `await peopleRepo.*`; sync → async.
+- **3b — SCIM Users (done).** `scim.ts` `/Users` handlers converted to async over
+  a local `getPeopleRepository(people)`: list/get/create/update/delete replace the
+  `people.find/some/push/splice` + `saveStore` calls, mirroring the proven
+  mutate-then-`update(id, person)` pattern from `routes/people.ts`. Added the
+  first SCIM `/Users` route tests.
 - **3c — Auth-providers config.** `authConfig` → `AppSetting` (key `"authConfig"`,
   hydrate-at-boot to keep the sync read API); `oidcProviders` Map → `OidcProvider`
   repo (in-memory instance cache rebuilt from persisted config).

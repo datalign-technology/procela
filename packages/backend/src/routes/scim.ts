@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people, isActive, type StoredPerson } from './people';
-import { saveStore } from '../lib/persistence';
+import { getPeopleRepository } from '../db/people.repo';
 import {
   listGroups,
   findGroup,
@@ -321,6 +321,11 @@ function applyEmailSelectorPath(person: StoredPerson, path: string, value: unkno
   return true;
 }
 
+// Users are persisted through the people repository (Postgres when
+// DATABASE_URL is set, the in-memory `people` array otherwise) — see
+// docs/POSTGRES_CUTOVER_PLAN.md (PR 3b).
+const peopleRepo = getPeopleRepository(people);
+
 const router = Router();
 router.use(scimAuth);
 router.use((_req, res, next) => {
@@ -329,7 +334,7 @@ router.use((_req, res, next) => {
 });
 
 // ── GET /Users ──
-router.get('/Users', (req: Request, res: Response) => {
+router.get('/Users', async (req: Request, res: Response) => {
   const startIndex = Math.max(1, parseInt(req.query.startIndex as string) || 1);
   const count = Math.max(0, parseInt(req.query.count as string) || 100);
   const filterStr = req.query.filter as string | undefined;
@@ -347,7 +352,8 @@ router.get('/Users', (req: Request, res: Response) => {
   // is the one driving the active flag and wants to see its own
   // record back. Local API consumers should still filter on the
   // active flag when displaying lists to humans.
-  const filtered = predicate ? people.filter(predicate) : people;
+  const all = await peopleRepo.list();
+  const filtered = predicate ? all.filter(predicate) : all;
 
   const page = filtered.slice(startIndex - 1, startIndex - 1 + count);
   const base = baseUrlFor(req);
@@ -361,21 +367,22 @@ router.get('/Users', (req: Request, res: Response) => {
 });
 
 // ── GET /Users/:id ──
-router.get('/Users/:id', (req: Request, res: Response) => {
-  const p = people.find((x) => x.id === req.params.id);
+router.get('/Users/:id', async (req: Request, res: Response) => {
+  const p = await peopleRepo.get(String(req.params.id));
   if (!p) return scimError(res, 404, `User ${req.params.id} not found`);
   res.json(toScimUser(p, baseUrlFor(req)));
 });
 
 // ── POST /Users (create) ──
-router.post('/Users', (req: Request, res: Response) => {
+router.post('/Users', async (req: Request, res: Response) => {
   const body = req.body || {};
   const userName: string | undefined = body.userName;
   const email: string | undefined = body.emails?.[0]?.value || body.userName;
   if (!userName || !email) {
     return scimError(res, 400, 'userName and at least one email are required');
   }
-  if (people.some((p) => p.email.toLowerCase() === email.toLowerCase())) {
+  const existing = await peopleRepo.list();
+  if (existing.some((p) => p.email.toLowerCase() === email.toLowerCase())) {
     return scimError(res, 409, `User with email ${email} already exists`);
   }
   const now = new Date().toISOString();
@@ -395,8 +402,7 @@ router.post('/Users', (req: Request, res: Response) => {
     createdAt: now,
     updatedAt: now,
   };
-  people.push(person);
-  saveStore('people', people);
+  await peopleRepo.create(person);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_CREATED', null, {
     personId: person.id, email: person.email,
   });
@@ -405,14 +411,14 @@ router.post('/Users', (req: Request, res: Response) => {
 });
 
 // ── PUT /Users/:id (replace) ──
-router.put('/Users/:id', (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+router.put('/Users/:id', async (req: Request, res: Response) => {
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) return scimError(res, 404, `User ${req.params.id} not found`);
   const body = req.body || {};
   if (body.userName) {
     const newEmail = body.userName.toLowerCase();
     if (newEmail !== person.email.toLowerCase() &&
-      people.some((p) => p.id !== person.id && p.email.toLowerCase() === newEmail)) {
+      (await peopleRepo.list()).some((p) => p.id !== person.id && p.email.toLowerCase() === newEmail)) {
       return scimError(res, 409, `Email ${newEmail} is in use`);
     }
     person.email = body.userName;
@@ -447,7 +453,7 @@ router.put('/Users/:id', (req: Request, res: Response) => {
     logger.info({ personId: person.id }, 'SCIM reactivated user');
   }
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_REPLACED', null, {
     personId: person.id, email: person.email,
   });
@@ -455,8 +461,8 @@ router.put('/Users/:id', (req: Request, res: Response) => {
 });
 
 // ── PATCH /Users/:id (partial update) ──
-router.patch('/Users/:id', (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+router.patch('/Users/:id', async (req: Request, res: Response) => {
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) return scimError(res, 404, `User ${req.params.id} not found`);
   const body = req.body || {};
   if (!Array.isArray(body.Operations)) {
@@ -529,7 +535,7 @@ router.patch('/Users/:id', (req: Request, res: Response) => {
     });
   }
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_PATCHED', null, {
     personId: person.id, ops: body.Operations.length,
   });
@@ -541,11 +547,9 @@ router.patch('/Users/:id', (req: Request, res: Response) => {
 // person from every SCIM group they're in so we don't leave dangling
 // member refs that would 404 on next group read.
 router.delete('/Users/:id', async (req: Request, res: Response) => {
-  const idx = people.findIndex((p) => p.id === req.params.id);
-  if (idx === -1) return scimError(res, 404, `User ${req.params.id} not found`);
-  const person = people[idx];
-  people.splice(idx, 1);
-  saveStore('people', people);
+  const person = await peopleRepo.get(String(req.params.id));
+  if (!person) return scimError(res, 404, `User ${req.params.id} not found`);
+  await peopleRepo.delete(person.id);
   await removeMemberFromAllGroups(person.id);
   auditService.log(DEV_ORG_ID, null, 'Auth', 'scim', 'SCIM_USER_DELETED', null, {
     personId: person.id, email: person.email,
