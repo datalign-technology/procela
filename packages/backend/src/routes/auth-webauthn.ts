@@ -4,7 +4,7 @@ import { AuthenticatedRequest, authenticateToken, authorize } from '../middlewar
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people, isActive as isPersonActive } from './people';
-import { saveStore } from '../lib/persistence';
+import { getPeopleRepository } from '../db/people.repo';
 import { mintPendingMfa, consumePendingMfa } from '../services/pending-mfa';
 import {
   buildRegistrationOptions, completeRegistration,
@@ -21,6 +21,9 @@ import {
 } from './auth';
 
 const router = Router();
+// People writes go through the repository (Postgres when DATABASE_URL is set,
+// the in-memory array otherwise) — PR 3e.
+const peopleRepo = getPeopleRepository(people);
 
 // ---------------------------------------------------------------------------
 // WebAuthn / FIDO2
@@ -54,7 +57,7 @@ router.post('/mfa/webauthn/register-start', authenticateToken,
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.sub;
     if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-    const person = people.find((p) => p.id === userId);
+    const person = await peopleRepo.get(userId);
     if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
     const { options } = await buildRegistrationOptions({
@@ -72,7 +75,7 @@ router.post('/mfa/webauthn/register-finish', authenticateToken,
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.sub;
     if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-    const person = people.find((p) => p.id === userId);
+    const person = await peopleRepo.get(userId);
     if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
     const { response, label } = req.body || {};
@@ -112,7 +115,7 @@ router.post('/mfa/webauthn/register-finish', authenticateToken,
       ...result.credential,
     });
     person.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(person.id, person);
 
     auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_REGISTERED', null, {
       label,
@@ -141,7 +144,7 @@ router.post('/mfa/webauthn/login-start', async (req: Request, res: Response) => 
     res.status(401).json({ success: false, error: 'MFA token is invalid or expired' });
     return;
   }
-  const person = people.find((p) => p.id === personId);
+  const person = await peopleRepo.get(personId);
   if (!person || !(person.webauthnCredentials || []).length) {
     res.status(404).json({ success: false, error: 'No WebAuthn credentials registered' });
     return;
@@ -169,7 +172,7 @@ router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res
     res.status(401).json({ success: false, error: 'MFA token is invalid or expired' });
     return;
   }
-  const person = people.find((p) => p.id === personId);
+  const person = await peopleRepo.get(personId);
   if (!person) {
     res.status(401).json({ success: false, error: 'MFA state invalid' });
     return;
@@ -212,7 +215,7 @@ router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res
   // counter hasn't advanced past what we last saw.
   if (typeof result.newCounter === 'number') credential.counter = result.newCounter;
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
 
   // Issue the session, same as the TOTP path.
   const orgId = person.orgIds[0] || DEV_ORG_ID;
@@ -246,10 +249,10 @@ router.post('/mfa/webauthn/login-finish', loginLimiter, async (req: Request, res
 });
 
 router.delete('/mfa/webauthn/credentials/:id', authenticateToken,
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.sub;
     if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-    const person = people.find((p) => p.id === userId);
+    const person = await peopleRepo.get(userId);
     if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
     const credentialId = String(req.params.id);
@@ -260,7 +263,7 @@ router.delete('/mfa/webauthn/credentials/:id', authenticateToken,
       return;
     }
     person.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(person.id, person);
     auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'WEBAUTHN_CREDENTIAL_REMOVED', null, {
       remaining: person.webauthnCredentials.length,
     });
@@ -278,16 +281,16 @@ router.delete('/mfa/webauthn/credentials/:id', authenticateToken,
  * blow away whichever factor is the actual problem.
  */
 router.post('/mfa/webauthn/admin-reset', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { personId } = req.body || {};
     if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
-    const target = people.find((p) => p.id === personId);
+    const target = await peopleRepo.get(personId);
     if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
     const cleared = target.webauthnCredentials?.length || 0;
     target.webauthnCredentials = undefined;
     target.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(target.id, target);
 
     auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'mfa', 'WEBAUTHN_ADMIN_RESET', null, {
       targetPersonId: target.id,
@@ -351,7 +354,7 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
       return;
     }
     const personId = Buffer.from(userHandle, 'base64url').toString('utf-8');
-    const person = people.find((p) => p.id === personId);
+    const person = await peopleRepo.get(personId);
     if (!person) {
       auditService.log(DEV_ORG_ID, null, 'Auth', 'mfa', 'WEBAUTHN_DISCOVERABLE_NO_PERSON', null, { userHandle: personId });
       res.status(401).json({ success: false, error: 'Account not found' });
@@ -386,7 +389,7 @@ router.post('/webauthn/discoverable/login-finish', loginLimiter,
 
     if (typeof result.newCounter === 'number') credential.counter = result.newCounter;
     person.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(person.id, person);
 
     const orgId = person.orgIds[0] || DEV_ORG_ID;
     const refresh = await createRefreshToken(person.id, fingerprintFromRequest(req));

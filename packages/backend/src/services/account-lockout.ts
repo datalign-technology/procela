@@ -1,5 +1,10 @@
-import { saveStore } from '../lib/persistence';
 import { people, type StoredPerson } from '../routes/people';
+import { getPeopleRepository } from '../db/people.repo';
+
+// Persist lockout-state changes through the people repository (Postgres when
+// DATABASE_URL is set, the in-memory array otherwise) — see
+// docs/POSTGRES_CUTOVER_PLAN.md (PR 3e).
+const peopleRepo = getPeopleRepository(people);
 
 // ──────────────────────────────────────────────────────────────────────────
 // account-lockout — soft, per-account brute-force protection.
@@ -51,7 +56,7 @@ export function checkLockout(person: StoredPerson): LockoutState {
  *  locks the account when the threshold is crossed inside the window.
  *  Returns the resulting lockout state so the caller can include the
  *  retry-after info in the 401 response. */
-export function recordFailedLogin(person: StoredPerson): LockoutState {
+export async function recordFailedLogin(person: StoredPerson): Promise<LockoutState> {
   const now = Date.now();
   const windowStart = person.failedLoginFirstAt
     ? new Date(person.failedLoginFirstAt).getTime()
@@ -67,24 +72,24 @@ export function recordFailedLogin(person: StoredPerson): LockoutState {
     person.lockedUntil = new Date(now + DURATION_MS).toISOString();
   }
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   return checkLockout(person);
 }
 
 /** Call on a successful login — clears the counter and any active lock. */
-export function clearLockout(person: StoredPerson): void {
+export async function clearLockout(person: StoredPerson): Promise<void> {
   if (person.failedLoginCount || person.failedLoginFirstAt || person.lockedUntil) {
     person.failedLoginCount = undefined;
     person.failedLoginFirstAt = undefined;
     person.lockedUntil = undefined;
     person.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(person.id, person);
   }
 }
 
 /** Manually clear a lock (admin action). Same as clearLockout but
  *  exposed as a distinct verb so the audit log makes the actor's
  *  intent clear ("admin-unlocked" rather than "succeeded"). */
-export function adminClearLockout(person: StoredPerson): void {
-  clearLockout(person);
+export async function adminClearLockout(person: StoredPerson): Promise<void> {
+  await clearLockout(person);
 }

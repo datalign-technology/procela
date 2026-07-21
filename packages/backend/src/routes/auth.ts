@@ -8,8 +8,9 @@ import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people, computeAccessibleOrgs, isActive as isPersonActive, getRoleForOrg } from './people';
 import { organizations } from './organizations';
-import { saveStore, loadStore } from '../lib/persistence';
+import { loadStore } from '../lib/persistence';
 import { getRefreshTokensRepository, type StoredRefreshToken } from '../db/refresh-tokens.repo';
+import { getPeopleRepository } from '../db/people.repo';
 import { peekFlow } from '../services/pending-oidc-flows';
 import { checkLockout, recordFailedLogin, clearLockout, adminClearLockout } from '../services/account-lockout';
 import {
@@ -75,6 +76,9 @@ interface RefreshTokenContext {
 // in-memory Map so sessions survive a restart and span instances. PR 3d.
 const refreshTokens = loadStore<StoredRefreshToken>('refreshTokens');
 const refreshTokensRepo = getRefreshTokensRepository(refreshTokens);
+// People reads/writes go through the repository (Postgres when DATABASE_URL is
+// set, the in-memory `people` array otherwise) — PR 3e.
+const peopleRepo = getPeopleRepository(people);
 
 // ---------------------------------------------------------------------------
 // Token helpers
@@ -329,7 +333,7 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     // email passes this branch and lands in the standard "invalid
     // credentials" error from the provider.
     if (provider.type === 'local' && req.body.email) {
-      const preflight = people.find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase());
+      const preflight = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase());
       if (preflight) {
         const state = checkLockout(preflight);
         if (state.locked) {
@@ -355,10 +359,10 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
       // don't differentiate "unknown email" vs "bad password" in the
       // response, but we do count differently behind the scenes.
       const matched = req.body.email
-        ? people.find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase())
+        ? (await peopleRepo.list()).find((p) => p.email.toLowerCase() === String(req.body.email).toLowerCase())
         : null;
       if (matched && provider.type === 'local') {
-        const after = recordFailedLogin(matched);
+        const after = await recordFailedLogin(matched);
         if (after.locked) {
           auditService.log(matched.orgIds[0] || DEV_ORG_ID, matched.id, 'Auth', 'login', 'ACCOUNT_LOCKED', null, {
             retryAfterSeconds: after.retryAfterSeconds,
@@ -389,7 +393,7 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
     // The role at the resolved org wins over the person.role fallback —
     // someone who is ORG_ADMIN in Operations but VIEWER in Finance gets
     // the Operations role when their first-listed org is Operations.
-    const personRecord = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    const personRecord = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === user.email.toLowerCase());
     const resolvedOrgId = personRecord?.orgIds?.[0] || DEV_ORG_ID;
     const resolvedRole = personRecord
       ? getRoleForOrg(personRecord, resolvedOrgId)
@@ -397,7 +401,7 @@ router.post('/login', loginLimiter, loginHourLimiter, async (req: Request, res: 
 
     // Successful credential check resets the lockout counter +
     // unlocks the account if it had been locked by an earlier burst.
-    if (personRecord && provider.type === 'local') clearLockout(personRecord);
+    if (personRecord && provider.type === "local") await clearLockout(personRecord);
     // …and resets the per-IP CAPTCHA challenge counter — the
     // legitimate user just produced valid credentials, so the IP
     // gets a fresh budget.
@@ -555,7 +559,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     // not, create a minimal Person assigned to the dev org with the
     // IdP-supplied role (VIEWER unless the IdP emitted a known role
     // claim). Admins can move them to the right org later.
-    let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    let person = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === user.email.toLowerCase());
 
     // Deactivated users can't sign in via OIDC either. We let the
     // IdP do the heavy auth lift and then reject — surface a generic
@@ -583,8 +587,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         createdAt: now,
         updatedAt: now,
       };
-      people.push(person);
-      saveStore('people', people);
+      await peopleRepo.create(person);
       provisioned = true;
     }
 
@@ -666,7 +669,7 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
     const { user, returnTo, nameID, sessionIndex } = await samlProv.completeAcs(req.body as Record<string, string>);
 
     // Find-or-just-in-time-provision — same shape as OIDC.
-    let person = people.find((p) => p.email.toLowerCase() === user.email.toLowerCase());
+    let person = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === user.email.toLowerCase());
     if (person && !isPersonActive(person)) {
       auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'saml', 'SAML_DEACTIVATED_LOGIN_BLOCKED', null, {
         email: person.email,
@@ -688,8 +691,7 @@ router.post('/saml/acs', async (req: Request, res: Response) => {
         createdAt: now,
         updatedAt: now,
       };
-      people.push(person);
-      saveStore('people', people);
+      await peopleRepo.create(person);
       provisioned = true;
     }
 
@@ -914,7 +916,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
     // token reflects current role + name. The old refresh path
     // re-issued from the sub claim alone, which drifted whenever a
     // role changed mid-session.
-    const person = people.find((p) => p.id === decoded.sub);
+    const person = await peopleRepo.get(decoded.sub);
     const orgId = person?.orgIds[0] || DEV_ORG_ID;
     const role = person ? getRoleForOrg(person, orgId) : 'VIEWER';
     const accessToken = createAccessToken({
@@ -1032,12 +1034,12 @@ router.post('/logout', async (req: Request, res: Response) => {
  * Returns the current user from the JWT access token.
  * Requires authentication.
  */
-router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   // Enrich the JWT-decoded user with a few fields the frontend needs
   // but that aren't (and shouldn't be) on the access token. mfaEnrolled
   // + mfaBackupCodesRemaining drive the Settings panel and the
   // "running low — regenerate?" nudge.
-  const person = req.user?.sub ? people.find((p) => p.id === req.user!.sub) : null;
+  const person = req.user?.sub ? await peopleRepo.get(req.user!.sub) : null;
   res.json({
     success: true,
     data: {
@@ -1387,12 +1389,12 @@ router.delete('/sessions', authenticateToken, async (req: AuthenticatedRequest, 
 // The target org must be in the caller's accessibleOrgIds (or be one
 // of their assigned orgIds). SUPER_ADMINs can switch to any org.
 // ---------------------------------------------------------------------------
-router.post('/switch-org', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.post('/switch-org', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
   const { orgId } = req.body || {};
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  const person = people.find((p) => p.id === userId);
+  const person = await peopleRepo.get(userId);
   if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
   // Membership check — SUPER_ADMIN bypasses, everyone else has to
@@ -1434,12 +1436,12 @@ router.post('/switch-org', authenticateToken, (req: AuthenticatedRequest, res: R
 // admin has positively identified the user via another channel (phone
 // call, in-person) and doesn't want to wait out the auto-unlock.
 router.post('/lockout/admin-clear', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { personId } = req.body || {};
     if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
-    const target = people.find((p) => p.id === personId);
+    const target = await peopleRepo.get(personId);
     if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-    adminClearLockout(target);
+    await adminClearLockout(target);
     auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'lockout', 'LOCKOUT_ADMIN_CLEARED', null, {
       targetPersonId: target.id,
       targetEmail: target.email,
@@ -1468,14 +1470,14 @@ router.post('/lockout/admin-clear', authenticateToken, authorize('SUPER_ADMIN', 
  * - Explicit grants: always added on top of computed access
  * - No people record: all orgs (dev fallback)
  */
-router.get('/accessible-orgs', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.get('/accessible-orgs', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const user = req.user;
   if (!user) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
 
   const WORKING_LEVELS = ['company', 'division'];
 
   // Find the user's people record by email
-  const person = people.find((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
+  const person = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === (user.email || '').toLowerCase());
 
   if (!person) {
     // No people record — dev fallback, show all working-level orgs (deduplicated by name+type)

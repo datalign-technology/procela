@@ -159,9 +159,16 @@ Slices:
   `/sessions` handlers). `createRefreshToken` became async, so its callers in
   `auth.ts`, `auth-mfa.ts`, `auth-webauthn.ts` await it (their handlers were
   already async). Added the first `/sessions` + `/refresh`-rotation tests.
-- **3e — Password / MFA / WebAuthn / lockout.** `auth-password.ts`, `auth-mfa.ts`,
-  `auth-webauthn.ts`, `account-lockout.ts`: `people` array + `saveStore` →
-  `await peopleRepo.*`.
+- **3e — Password / MFA / WebAuthn / lockout (done).** `auth-password.ts`,
+  `auth-mfa.ts`, `auth-webauthn.ts`, `account-lockout.ts`, plus the remaining
+  `people.find` + `saveStore('people', …)` in `auth.ts`'s login/callback/refresh
+  handlers → `await peopleRepo.*` (mutate-then-`update(id, person)`). Lockout
+  helpers (`recordFailedLogin`/`clearLockout`/`adminClearLockout`) became async;
+  their callers and the `account-lockout` test were updated to await.
+
+**PR 3 complete:** no direct `people`-array or `saveStore('people', …)` access
+remains anywhere in the auth/SCIM subsystem — it reads and writes entirely
+through the repositories.
 
 Verify each slice: `tsc` + JSON suite green, plus the live-db CI job for the
 Postgres path. This subsystem had almost no prior test coverage, so each slice
