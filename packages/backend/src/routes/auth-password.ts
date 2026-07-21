@@ -6,7 +6,7 @@ import { rateLimit } from '../middleware/rate-limit';
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people } from './people';
-import { saveStore } from '../lib/persistence';
+import { getPeopleRepository } from '../db/people.repo';
 import { validatePassword } from '../lib/password-policy';
 import { mintResetToken, consumeResetToken, RESET_TOKEN_TTL_MS } from '../services/reset-tokens';
 import { sendPasswordResetEmail, isConfigured as isMailConfigured } from '../services/mail.service';
@@ -14,6 +14,9 @@ import { hashPassword } from '../services/auth-providers';
 import { DEV_ORG_ID } from './auth';
 
 const router = Router();
+// People writes go through the repository (Postgres when DATABASE_URL is set,
+// the in-memory array otherwise) — PR 3e.
+const peopleRepo = getPeopleRepository(people);
 
 // Password change / forgot: 10 per hour per user. Forgot-password
 // keyed on email only so a user can't be locked out by someone
@@ -71,7 +74,7 @@ router.post('/password', authenticateToken, passwordChangeLimiter, async (req: A
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
 
-  const person = people.find((p) => p.id === userId);
+  const person = await peopleRepo.get(userId);
   if (!person) {
     res.status(404).json({ success: false, error: 'No person record found for the current user' });
     return;
@@ -110,7 +113,7 @@ router.post('/password', authenticateToken, passwordChangeLimiter, async (req: A
   person.passwordUpdatedAt = new Date().toISOString();
   person.passwordMustChange = false;
   person.updatedAt = person.passwordUpdatedAt;
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
 
   auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'password', 'PASSWORD_CHANGED', null, { self: true });
   logger.info({ personId: person.id }, 'User changed their password');
@@ -138,7 +141,7 @@ router.post('/password/admin-reset', authenticateToken, authorize('SUPER_ADMIN',
       return;
     }
 
-    const target = people.find((p) => p.id === personId);
+    const target = await peopleRepo.get(personId);
     if (!target) {
       res.status(404).json({ success: false, error: 'Person not found' });
       return;
@@ -154,7 +157,7 @@ router.post('/password/admin-reset', authenticateToken, authorize('SUPER_ADMIN',
     target.passwordUpdatedAt = new Date().toISOString();
     target.passwordMustChange = requireChangeOnNextLogin !== false;
     target.updatedAt = target.passwordUpdatedAt;
-    saveStore('people', people);
+    await peopleRepo.update(target.id, target);
 
     auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'password', 'PASSWORD_ADMIN_RESET', null, {
       targetPersonId: target.id,
@@ -185,7 +188,7 @@ router.post('/password/forgot', forgotLimiter, async (req: Request, res: Respons
     return;
   }
 
-  const person = people.find((p) => p.email.toLowerCase() === email.toLowerCase());
+  const person = (await peopleRepo.list()).find((p) => p.email.toLowerCase() === email.toLowerCase());
   const mailReady = isMailConfigured();
 
   if (person) {
@@ -264,7 +267,7 @@ router.post('/password/reset', forgotLimiter, async (req: Request, res: Response
     return;
   }
 
-  const person = people.find((p) => p.id === personId);
+  const person = await peopleRepo.get(personId);
   if (!person) {
     // The token was minted for a person that no longer exists.
     // Treat as terminal — log so the orphan token shows up but
@@ -278,7 +281,7 @@ router.post('/password/reset', forgotLimiter, async (req: Request, res: Response
   person.passwordUpdatedAt = new Date().toISOString();
   person.passwordMustChange = false;
   person.updatedAt = person.passwordUpdatedAt;
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
 
   auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'password', 'PASSWORD_RESET_CONSUMED', null, {
     targetPersonId: person.id,
@@ -304,7 +307,7 @@ router.post('/password/reset', forgotLimiter, async (req: Request, res: Response
  */
 router.post('/migrate-to-local', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
   async (req: AuthenticatedRequest, res: Response) => {
-    const targets = people.filter((p) => !p.passwordHash);
+    const targets = (await peopleRepo.list()).filter((p) => !p.passwordHash);
 
     const temp: Array<{ personId: string; email: string; name: string; tempPassword: string }> = [];
     for (const p of targets) {
@@ -318,7 +321,7 @@ router.post('/migrate-to-local', authenticateToken, authorize('SUPER_ADMIN', 'OR
       p.updatedAt = p.passwordUpdatedAt;
       temp.push({ personId: p.id, email: p.email, name: p.name, tempPassword });
     }
-    saveStore('people', people);
+    for (const p of targets) await peopleRepo.update(p.id, p);
 
     auditService.log(DEV_ORG_ID, req.user?.sub || null, 'Auth', 'migrate', 'MIGRATED_TO_LOCAL', null, {
       count: targets.length,

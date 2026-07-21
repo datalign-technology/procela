@@ -3,7 +3,7 @@ import { AuthenticatedRequest, authenticateToken, authorize } from '../middlewar
 import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { people } from './people';
-import { saveStore } from '../lib/persistence';
+import { getPeopleRepository } from '../db/people.repo';
 import { startBackgroundSweep } from '../lib/background-timer';
 import {
   generateEnrollment,
@@ -24,6 +24,9 @@ import {
 } from './auth';
 
 const router = Router();
+// People writes go through the repository (Postgres when DATABASE_URL is set,
+// the in-memory array otherwise) — PR 3e.
+const peopleRepo = getPeopleRepository(people);
 
 /**
  * POST /api/v1/auth/mfa/regenerate-backup-codes
@@ -37,7 +40,7 @@ router.post('/mfa/regenerate-backup-codes', authenticateToken,
   async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.sub;
     if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-    const person = people.find((p) => p.id === userId);
+    const person = await peopleRepo.get(userId);
     if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
     if (!person.mfaEnrolled || !person.mfaSecret) {
       res.status(409).json({ success: false, error: 'Not enrolled in two-step verification' });
@@ -52,7 +55,7 @@ router.post('/mfa/regenerate-backup-codes', authenticateToken,
     const fresh = generateBackupCodes();
     person.mfaBackupCodes = await hashBackupCodes(fresh);
     person.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(person.id, person);
     auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_BACKUP_CODES_REGENERATED', null, null);
     res.json({ success: true, data: { backupCodes: fresh } });
   });
@@ -96,7 +99,7 @@ startBackgroundSweep(() => {
 router.post('/mfa/start', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-  const person = people.find((p) => p.id === userId);
+  const person = await peopleRepo.get(userId);
   if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
   const enrollment = await generateEnrollment(person.email);
@@ -121,7 +124,7 @@ router.post('/mfa/start', authenticateToken, async (req: AuthenticatedRequest, r
 router.post('/mfa/verify', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-  const person = people.find((p) => p.id === userId);
+  const person = await peopleRepo.get(userId);
   if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
   const { code } = req.body || {};
@@ -153,7 +156,7 @@ router.post('/mfa/verify', authenticateToken, async (req: AuthenticatedRequest, 
   person.mfaBackupCodes = hashedBackupCodes;
   person.mfaEnrolled = true;
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   pendingEnrollments.delete(person.id);
 
   auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_ENROLLED', null, null);
@@ -181,7 +184,7 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
     res.status(401).json({ success: false, error: 'MFA token is invalid or expired — please sign in again' });
     return;
   }
-  const person = people.find((p) => p.id === personId);
+  const person = await peopleRepo.get(personId);
   if (!person || !person.mfaEnrolled || !person.mfaSecret) {
     res.status(401).json({ success: false, error: 'MFA state is invalid — please sign in again' });
     return;
@@ -219,7 +222,7 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
 
   if (usedBackup) {
     person.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(person.id, person);
   }
   auditService.log(orgId, person.id, 'Auth', 'mfa', 'MFA_LOGIN_SUCCESS', null, {
     method: usedBackup ? 'backup' : 'totp',
@@ -252,7 +255,7 @@ router.post('/mfa/login-verify', loginLimiter, async (req: Request, res: Respons
 router.post('/mfa/disable', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.sub;
   if (!userId) { res.status(401).json({ success: false, error: 'Not authenticated' }); return; }
-  const person = people.find((p) => p.id === userId);
+  const person = await peopleRepo.get(userId);
   if (!person) { res.status(404).json({ success: false, error: 'No person record' }); return; }
 
   const { currentPassword, code } = req.body || {};
@@ -284,7 +287,7 @@ router.post('/mfa/disable', authenticateToken, async (req: AuthenticatedRequest,
   person.mfaBackupCodes = undefined;
   person.mfaEnrolled = false;
   person.updatedAt = new Date().toISOString();
-  saveStore('people', people);
+  await peopleRepo.update(person.id, person);
   pendingEnrollments.delete(person.id);
 
   auditService.log(person.orgIds[0] || DEV_ORG_ID, person.id, 'Auth', 'mfa', 'MFA_DISABLED', null, { self: true });
@@ -292,17 +295,17 @@ router.post('/mfa/disable', authenticateToken, async (req: AuthenticatedRequest,
 });
 
 router.post('/mfa/admin-reset', authenticateToken, authorize('SUPER_ADMIN', 'ORG_ADMIN'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     const { personId } = req.body || {};
     if (!personId) { res.status(400).json({ success: false, error: 'personId is required' }); return; }
-    const target = people.find((p) => p.id === personId);
+    const target = await peopleRepo.get(personId);
     if (!target) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
     target.mfaSecret = undefined;
     target.mfaBackupCodes = undefined;
     target.mfaEnrolled = false;
     target.updatedAt = new Date().toISOString();
-    saveStore('people', people);
+    await peopleRepo.update(target.id, target);
     pendingEnrollments.delete(target.id);
 
     auditService.log(target.orgIds[0] || DEV_ORG_ID, req.user?.sub || null, 'Auth', 'mfa', 'MFA_ADMIN_RESET', null, {
