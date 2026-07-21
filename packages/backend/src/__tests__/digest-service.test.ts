@@ -63,7 +63,7 @@ describe('digest.service', () => {
   });
 
   describe('computeMetrics', () => {
-    it('returns zeros for an empty org', () => {
+    it('returns zeros for an empty org', async () => {
       const m = computeMetrics(orgId, { processNodes: [], dataAssets: [], mappings: [] });
       assert.deepStrictEqual(m, {
         activities: 0, mappedActivities: 0, coveragePct: 0,
@@ -71,7 +71,7 @@ describe('digest.service', () => {
       });
     });
 
-    it('counts activities and computes coverage% as a rounded integer', () => {
+    it('counts activities and computes coverage% as a rounded integer', async () => {
       const m = computeMetrics(orgId, {
         processNodes: [
           baseNode({ id: 'a1', level: 'ACTIVITY' }),
@@ -86,7 +86,7 @@ describe('digest.service', () => {
       assert.strictEqual(m.coveragePct, 33); // round(1/3 * 100)
     });
 
-    it('identifies orphans as assets with no mapping pointing at them', () => {
+    it('identifies orphans as assets with no mapping pointing at them', async () => {
       const m = computeMetrics(orgId, {
         processNodes: [baseNode({ id: 'a1', level: 'ACTIVITY' })],
         dataAssets: [
@@ -98,7 +98,7 @@ describe('digest.service', () => {
       assert.strictEqual(m.orphanAssets, 1);
     });
 
-    it('flags Bronze-tier assets that are in use as ungoverned', () => {
+    it('flags Bronze-tier assets that are in use as ungoverned', async () => {
       const m = computeMetrics(orgId, {
         processNodes: [baseNode({ id: 'a1', level: 'ACTIVITY' })],
         dataAssets: [
@@ -115,7 +115,7 @@ describe('digest.service', () => {
       assert.strictEqual(m.ungovernedAssets, 1);
     });
 
-    it('counts ownerless value streams and processes only — not activities', () => {
+    it('counts ownerless value streams and processes only — not activities', async () => {
       const m = computeMetrics(orgId, {
         processNodes: [
           baseNode({ id: 'vs', level: 'VALUE_STREAM', ownerId: null }),
@@ -132,16 +132,16 @@ describe('digest.service', () => {
   describe('digestForOrg', () => {
     const emptyInputs: DigestInputs = { processNodes: [], dataAssets: [], mappings: [] };
 
-    it('records the snapshot but writes no notifications on the baseline run', () => {
-      const res = digestForOrg(orgId, emptyInputs);
+    it('records the snapshot but writes no notifications on the baseline run', async () => {
+      const res = await digestForOrg(orgId, emptyInputs);
       assert.strictEqual(res.baseline, true);
       assert.strictEqual(res.notifications.length, 0);
       assert.strictEqual(gapSnapshots.filter((s) => s.orgId === orgId).length, 1);
     });
 
-    it('fires the orphan-asset warning when ≥3 new orphans appear', () => {
+    it('fires the orphan-asset warning when ≥3 new orphans appear', async () => {
       // Baseline: 0 orphans.
-      digestForOrg(orgId, emptyInputs);
+      await digestForOrg(orgId, emptyInputs);
       // Week 2: add 3 unmapped assets.
       const withOrphans: DigestInputs = {
         processNodes: [],
@@ -150,7 +150,7 @@ describe('digest.service', () => {
         ],
         mappings: [],
       };
-      const res = digestForOrg(orgId, withOrphans);
+      const res = await digestForOrg(orgId, withOrphans);
       assert.strictEqual(res.baseline, false);
       const titles = res.notifications.map((n) => n.title);
       assert.ok(titles.some((t) => /3 new orphan data assets/.test(t)),
@@ -160,17 +160,17 @@ describe('digest.service', () => {
       assert.strictEqual(orphanNote.link, '/data-assets/orphans');
     });
 
-    it('does NOT fire the orphan warning on sub-threshold movement', () => {
-      digestForOrg(orgId, emptyInputs);
+    it('does NOT fire the orphan warning on sub-threshold movement', async () => {
+      await digestForOrg(orgId, emptyInputs);
       const withOneOrphan: DigestInputs = {
         processNodes: [], dataAssets: [baseAsset({ id: 'just-one' })], mappings: [],
       };
-      const res = digestForOrg(orgId, withOneOrphan);
+      const res = await digestForOrg(orgId, withOneOrphan);
       assert.ok(!res.notifications.some((n) => /orphan/i.test(n.title)),
         `1 new orphan should not trigger the warning`);
     });
 
-    it('fires the coverage-drop warning when coverage falls ≥5pp', () => {
+    it('fires the coverage-drop warning when coverage falls ≥5pp', async () => {
       // Baseline: 4 of 4 activities mapped → 100%.
       const allMapped: DigestInputs = {
         processNodes: [
@@ -185,10 +185,10 @@ describe('digest.service', () => {
           baseMapping({ id: 'm4', processStepId: 'a4', dataAssetId: 'as' }),
         ],
       };
-      digestForOrg(orgId, allMapped);
+      await digestForOrg(orgId, allMapped);
       // Week 2: remove all mappings → 0%, a 100pp drop.
       const noneMapped: DigestInputs = { ...allMapped, mappings: [] };
-      const res = digestForOrg(orgId, noneMapped);
+      const res = await digestForOrg(orgId, noneMapped);
       assert.ok(res.notifications.some((n) => /coverage dropped/i.test(n.title)),
         `expected coverage-dropped notification; got snapshot ${JSON.stringify(res.snapshot.metrics)} + notifications ${JSON.stringify(res.notifications.map((n) => n.title))}`);
     });

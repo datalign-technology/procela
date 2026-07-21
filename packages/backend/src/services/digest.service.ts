@@ -30,7 +30,8 @@
 // so a cron caller is one line.
 
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
+import { getGapSnapshotsRepository } from '../db/gap-snapshots.repo';
 import { createNotification } from '../routes/notifications';
 import logger from '../lib/logger';
 
@@ -60,6 +61,12 @@ export interface GapSnapshot {
 
 export const gapSnapshots: GapSnapshot[] = loadStore<GapSnapshot>('gapSnapshots');
 registerStore('gapSnapshots', gapSnapshots);
+
+// Snapshots persist through the repository (Postgres when DATABASE_URL is set,
+// the in-memory array otherwise). list() returns insertion order in both modes
+// (array order in JSON; ORDER BY takenAt in Postgres), which findPreviousSnapshot
+// relies on. See docs/POSTGRES_CUTOVER_PLAN.md (PR 6).
+const gapSnapshotsRepo = getGapSnapshotsRepository(gapSnapshots);
 
 /** Compute the current metrics for an org. Caller supplies the
  *  required stores by injection rather than importing them so this
@@ -106,15 +113,14 @@ export function computeMetrics(orgId: string, inputs: DigestInputs): GapMetrics 
 /** Take and persist a snapshot. Returns the persisted row so callers
  *  that need to chain a digestForOrg() can read it back without a
  *  follow-up query. */
-export function takeGapSnapshot(orgId: string, inputs: DigestInputs): GapSnapshot {
+export async function takeGapSnapshot(orgId: string, inputs: DigestInputs): Promise<GapSnapshot> {
   const snap: GapSnapshot = {
     id: uuid(),
     orgId,
     takenAt: new Date().toISOString(),
     metrics: computeMetrics(orgId, inputs),
   };
-  gapSnapshots.push(snap);
-  saveStore('gapSnapshots', gapSnapshots);
+  await gapSnapshotsRepo.create(snap);
   return snap;
 }
 
@@ -124,11 +130,12 @@ export function takeGapSnapshot(orgId: string, inputs: DigestInputs): GapSnapsho
  *  reorder, so it's the source of truth for sequence. Using
  *  takenAt alone breaks down when two snapshots are taken inside
  *  the same millisecond (test suites, rapid manual triggers). */
-function findPreviousSnapshot(orgId: string, current: GapSnapshot): GapSnapshot | undefined {
-  const currentIdx = gapSnapshots.findIndex((s) => s.id === current.id);
+async function findPreviousSnapshot(orgId: string, current: GapSnapshot): Promise<GapSnapshot | undefined> {
+  const all = await gapSnapshotsRepo.list();
+  const currentIdx = all.findIndex((s) => s.id === current.id);
   if (currentIdx <= 0) return undefined;
   for (let i = currentIdx - 1; i >= 0; i--) {
-    if (gapSnapshots[i].orgId === orgId) return gapSnapshots[i];
+    if (all[i].orgId === orgId) return all[i];
   }
   return undefined;
 }
@@ -218,9 +225,9 @@ export interface DigestResult {
   notifications: ReturnType<typeof createNotification>[];
   baseline: boolean;
 }
-export function digestForOrg(orgId: string, inputs: DigestInputs): DigestResult {
-  const snapshot = takeGapSnapshot(orgId, inputs);
-  const previous = findPreviousSnapshot(orgId, snapshot);
+export async function digestForOrg(orgId: string, inputs: DigestInputs): Promise<DigestResult> {
+  const snapshot = await takeGapSnapshot(orgId, inputs);
+  const previous = await findPreviousSnapshot(orgId, snapshot);
   if (!previous) {
     logger.info({ orgId }, 'Digest: baseline snapshot, no notifications written');
     return { snapshot, notifications: [], baseline: true };

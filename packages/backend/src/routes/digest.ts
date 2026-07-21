@@ -3,7 +3,15 @@ import { digestForOrg } from '../services/digest.service';
 import { processNodes } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { mappings } from './mappings';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
 import logger from '../lib/logger';
+
+// Digest inputs are read through repositories (Postgres or JSON) — PR 6.
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const mappingsRepo = getMappingsRepository(mappings);
 
 // ──────────────────────────────────────────────────────────────────────────
 // Digest — proactive weekly notifications driven by gap-signal deltas.
@@ -20,7 +28,7 @@ const router = Router();
  *  for every rule that fires. Returns the snapshot id, a baseline
  *  flag (true on the very first run for the org), and the list of
  *  notification rows created. */
-router.post('/run', (req: Request, res: Response) => {
+router.post('/run', async (req: Request, res: Response) => {
   const orgId = (req.query.orgId as string | undefined)?.trim()
     || (req.body?.orgId as string | undefined)?.trim()
     || '';
@@ -29,7 +37,10 @@ router.post('/run', (req: Request, res: Response) => {
     return;
   }
   try {
-    const result = digestForOrg(orgId, { processNodes, dataAssets, mappings });
+    const [pn, da, mp] = await Promise.all([
+      processNodesRepo.list(), dataAssetsRepo.list(), mappingsRepo.list(),
+    ]);
+    const result = await digestForOrg(orgId, { processNodes: pn, dataAssets: da, mappings: mp });
     res.json({
       success: true,
       data: {
