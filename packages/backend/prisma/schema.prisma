@@ -1523,3 +1523,48 @@ model DbtTestMapping {
   @@index([orgId])
   @@map("dbt_test_mappings")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Postgres cutover (PR 2) — auth persistence foundation.
+// See docs/POSTGRES_CUTOVER_PLAN.md. Backs auth state that is currently
+// in-memory-only (no store, no model). The global `authConfig` singleton reuses
+// the AppSetting key-value table (key "authConfig") and needs no model here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Refresh-token / session store. Replaces the in-memory validRefreshTokens Map
+// in routes/auth.ts so sessions survive a restart and are shared across
+// instances. Keyed by the token's jti. Timestamps are ISO strings to match the
+// in-memory RefreshTokenContext shape verbatim (same convention as
+// AgentExecution.startedAt).
+model RefreshToken {
+  jti              String  @id
+  personId         String?
+  oidcProviderId   String?
+  oidcIdToken      String? @db.Text
+  samlNameID       String?
+  samlSessionIndex String?
+  ip               String?
+  userAgent        String? @db.Text
+  createdAt        String?
+  lastUsedAt       String?
+
+  @@index([personId])
+  @@map("refresh_tokens")
+}
+
+// OIDC provider registry (multi-IdP). Replaces the in-memory oidcProviders Map.
+// `clientSecret` is sensitive — encrypt at rest via KMS before production
+// (go-live checklist #11); stored as-is here to match the current in-memory
+// handling. allowedEmailDomains is a scalar list (empty = no domain scoping).
+model OidcProvider {
+  id                  String   @id
+  displayName         String
+  issuer              String
+  clientId            String
+  clientSecret        String
+  allowedEmailDomains String[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("oidc_providers")
+}
