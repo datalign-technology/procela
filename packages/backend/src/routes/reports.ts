@@ -124,7 +124,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
   const report = reports.find((r) => r.id === String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   try {
-    const result = executeReport(report.definition, report.orgId);
+    const result = await executeReport(report.definition, report.orgId);
     res.json({ success: true, data: result });
   } catch (err) {
     res.status(400).json({ success: false, error: err instanceof Error ? err.message : 'Execution failed' });
@@ -139,7 +139,7 @@ router.post('/preview', async (req: Request, res: Response) => {
   if (!orgId)      { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!definition) { res.status(400).json({ success: false, error: 'definition is required' }); return; }
   try {
-    const result = executeReport(definition, orgId);
+    const result = await executeReport(definition, orgId);
     res.json({ success: true, data: result });
   } catch (err) {
     res.status(400).json({ success: false, error: err instanceof Error ? err.message : 'Execution failed' });

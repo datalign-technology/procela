@@ -56,17 +56,17 @@ useStoreIsolation(
 );
 
 describe('validateDefinition', () => {
-  it('flags unknown entity', () => {
+  it('flags unknown entity', async () => {
     const errs = validateDefinition({ entity: 'nope', columns: [{ field: 'x' }], filters: [] });
     assert.ok(errs.some((e) => e.message.includes('Unknown entity')));
   });
 
-  it('flags missing columns', () => {
+  it('flags missing columns', async () => {
     const errs = validateDefinition({ entity: 'processNodes', columns: [], filters: [] });
     assert.ok(errs.some((e) => e.message.includes('at least one column')));
   });
 
-  it('flags unknown direct field', () => {
+  it('flags unknown direct field', async () => {
     const errs = validateDefinition({
       entity: 'processNodes',
       columns: [{ field: 'nonsense' }],
@@ -75,7 +75,7 @@ describe('validateDefinition', () => {
     assert.ok(errs.some((e) => e.field === 'nonsense'));
   });
 
-  it('accepts a valid joined field path', () => {
+  it('accepts a valid joined field path', async () => {
     const errs = validateDefinition({
       entity: 'processNodes',
       columns: [{ field: 'name' }, { field: 'responsiblePerson.name' }],
@@ -84,7 +84,7 @@ describe('validateDefinition', () => {
     assert.deepStrictEqual(errs, []);
   });
 
-  it('rejects filters on joined fields', () => {
+  it('rejects filters on joined fields', async () => {
     const errs = validateDefinition({
       entity: 'processNodes',
       columns: [{ field: 'name' }],
@@ -95,12 +95,12 @@ describe('validateDefinition', () => {
 });
 
 describe('executeReport — projection + filters', () => {
-  it('returns direct-field rows scoped to the org', () => {
+  it('returns direct-field rows scoped to the org', async () => {
     processNodes.push(node('n1', 'Activity 1'));
     processNodes.push(node('n2', 'Activity 2'));
     processNodes.push(node('n3', 'Other-org activity', { orgId: OTHER_ORG }));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }],
       filters: [],
@@ -110,12 +110,12 @@ describe('executeReport — projection + filters', () => {
     assert.deepStrictEqual(result.rows.map((r) => r.name).sort(), ['Activity 1', 'Activity 2']);
   });
 
-  it('applies a contains filter case-insensitively', () => {
+  it('applies a contains filter case-insensitively', async () => {
     processNodes.push(node('n1', 'Outage triage'));
     processNodes.push(node('n2', 'Bill calculation'));
     processNodes.push(node('n3', 'Routine inspection'));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }],
       filters: [{ field: 'name', op: 'contains', value: 'OUTAGE' }],
@@ -125,10 +125,10 @@ describe('executeReport — projection + filters', () => {
     assert.strictEqual(result.rows[0].name, 'Outage triage');
   });
 
-  it('respects the limit and reports totalMatched separately', () => {
+  it('respects the limit and reports totalMatched separately', async () => {
     for (let i = 0; i < 10; i++) processNodes.push(node(`n${i}`, `Activity ${i}`));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }],
       filters: [],
@@ -139,12 +139,12 @@ describe('executeReport — projection + filters', () => {
     assert.strictEqual(result.totalMatched, 10);
   });
 
-  it('sorts by direct field descending', () => {
+  it('sorts by direct field descending', async () => {
     processNodes.push(node('n1', 'Charlie'));
     processNodes.push(node('n2', 'Alpha'));
     processNodes.push(node('n3', 'Bravo'));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }],
       filters: [],
@@ -156,11 +156,11 @@ describe('executeReport — projection + filters', () => {
 });
 
 describe('executeReport — cross-entity joins', () => {
-  it('renders a one-to-one joined field', () => {
+  it('renders a one-to-one joined field', async () => {
     people.push(person('p1', 'Alice'));
     processNodes.push(node('n1', 'Activity 1', { responsiblePersonId: 'p1' }));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [
         { field: 'name' },
@@ -173,10 +173,10 @@ describe('executeReport — cross-entity joins', () => {
     assert.strictEqual(result.rows[0]['responsiblePerson.name'], 'Alice');
   });
 
-  it('returns null on a one-to-one join when the FK is missing', () => {
+  it('returns null on a one-to-one join when the FK is missing', async () => {
     processNodes.push(node('n1', 'Orphan activity'));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }, { field: 'responsiblePerson.name' }],
       filters: [],
@@ -185,12 +185,12 @@ describe('executeReport — cross-entity joins', () => {
     assert.strictEqual(result.rows[0]['responsiblePerson.name'], null);
   });
 
-  it('joins a many-relationship as a comma-joined string', () => {
+  it('joins a many-relationship as a comma-joined string', async () => {
     skills.push(skill('s1', 'Data Profiling'));
     skills.push(skill('s2', 'Anomaly Detection'));
     processNodes.push(node('n1', 'Activity 1', { requiredSkillIds: ['s1', 's2'] }));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }, { field: 'requiredSkills.name' }],
       filters: [],
@@ -199,10 +199,10 @@ describe('executeReport — cross-entity joins', () => {
     assert.strictEqual(result.rows[0]['requiredSkills.name'], 'Data Profiling, Anomaly Detection');
   });
 
-  it('returns an empty string for an empty many-relationship', () => {
+  it('returns an empty string for an empty many-relationship', async () => {
     processNodes.push(node('n1', 'Activity 1'));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'requiredSkills.name' }],
       filters: [],
@@ -213,9 +213,9 @@ describe('executeReport — cross-entity joins', () => {
 });
 
 describe('executeReport — column labels', () => {
-  it('uses the LDM label by default', () => {
+  it('uses the LDM label by default', async () => {
     processNodes.push(node('n1', 'Activity 1'));
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name' }, { field: 'responsiblePerson.name' }],
       filters: [],
@@ -224,9 +224,9 @@ describe('executeReport — column labels', () => {
     assert.strictEqual(result.columns[1].label, 'Responsible Person — Name');
   });
 
-  it('honours an explicit column label override', () => {
+  it('honours an explicit column label override', async () => {
     processNodes.push(node('n1', 'Activity 1'));
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'processNodes',
       columns: [{ field: 'name', label: 'Activity' }],
       filters: [],
@@ -236,11 +236,11 @@ describe('executeReport — column labels', () => {
 });
 
 describe('executeReport — people org-scoping', () => {
-  it('scopes People by orgIds, not orgId', () => {
+  it('scopes People by orgIds, not orgId', async () => {
     people.push(person('p1', 'In-org'));
     people.push(person('p2', 'Other-org', { orgIds: [OTHER_ORG] }));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'people',
       columns: [{ field: 'name' }],
       filters: [],
@@ -252,12 +252,12 @@ describe('executeReport — people org-scoping', () => {
 });
 
 describe('executeReport — data assets', () => {
-  it('reads enum + numeric fields and filters with gte', () => {
+  it('reads enum + numeric fields and filters with gte', async () => {
     dataAssets.push(asset('a1', 'Healthy', { healthScore: 95 }));
     dataAssets.push(asset('a2', 'Mediocre', { healthScore: 60 }));
     dataAssets.push(asset('a3', 'Poor', { healthScore: 30 }));
 
-    const result = executeReport({
+    const result = await executeReport({
       entity: 'dataAssets',
       columns: [{ field: 'name' }, { field: 'healthScore' }],
       filters: [{ field: 'healthScore', op: 'gte', value: 70 }],
