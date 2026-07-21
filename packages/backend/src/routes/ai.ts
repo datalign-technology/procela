@@ -7,6 +7,7 @@ import { aiService, getConfiguredModel, setModelOverride } from '../services/ai.
 // free-form; the enum lives only on the frontend combobox as
 // autocomplete hints.
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { settingsRepo } from '../stores/app-settings';
 import logger from '../lib/logger';
 import config from '../config';
 
@@ -43,19 +44,16 @@ registerStore('aiTemplateCache', aiTemplateCache);
 // module at boot in index.ts; changes here call setModelOverride
 // so the running service picks them up immediately.
 interface StoredAiSettings { model?: string; updatedAt?: string; updatedBy?: string | null }
-const aiSettingsStore: StoredAiSettings[] = loadStore<StoredAiSettings>('aiSettings');
-registerStore('aiSettings', aiSettingsStore);
-function currentSettings(): StoredAiSettings {
-  return aiSettingsStore[0] || {};
-}
-// Rehydrate the in-memory override from disk. Called once at
-// module load; also re-called by the startup ping in index.ts to
-// ensure the order is deterministic regardless of import timing.
-export function rehydrateAiOverride(): void {
-  const s = currentSettings();
+// The AI model override persists through the shared AppSetting table (key
+// "aiSettings") — Postgres when DATABASE_URL is set, appSettings.json
+// otherwise. PR 7.
+// Rehydrate the in-memory override from persistence. Called once at
+// module load (fire-and-forget) and re-callable from the startup ping.
+export async function rehydrateAiOverride(): Promise<void> {
+  const s = (await settingsRepo.get<StoredAiSettings>('aiSettings')) ?? {};
   setModelOverride(s.model || null);
 }
-rehydrateAiOverride();
+rehydrateAiOverride().catch((err) => logger.warn({ err }, 'rehydrateAiOverride failed'));
 
 /**
  * POST /api/v1/ai/generate-template
@@ -247,8 +245,8 @@ interface AnthropicModel {
 /** GET /api/v1/ai/settings — current model config the UI reads.
  *  `source` tells the admin where the resolved value came from so
  *  they know what to change to override it. */
-router.get('/settings', (_req: Request, res: Response) => {
-  const s = currentSettings();
+router.get('/settings', async (_req: Request, res: Response) => {
+  const s = (await settingsRepo.get<StoredAiSettings>('aiSettings')) ?? {};
   const overrideModel = s.model || null;
   const envModel = process.env.ANTHROPIC_MODEL || null;
   const resolved = getConfiguredModel();
@@ -272,16 +270,14 @@ router.get('/settings', (_req: Request, res: Response) => {
 /** PUT /api/v1/ai/settings — persist a model override. Sending
  *  `{ model: '' }` or `{ model: null }` clears the override and
  *  falls back to the env var / default. */
-router.put('/settings', (req: Request, res: Response) => {
+router.put('/settings', async (req: Request, res: Response) => {
   const model = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
   const updatedBy = (req as { user?: { sub?: string } }).user?.sub || null;
   const now = new Date().toISOString();
   const next: StoredAiSettings = model
     ? { model, updatedAt: now, updatedBy }
     : { updatedAt: now, updatedBy };
-  aiSettingsStore.length = 0;
-  aiSettingsStore.push(next);
-  saveStore('aiSettings', aiSettingsStore);
+  await settingsRepo.set<StoredAiSettings>('aiSettings', next, updatedBy);
   setModelOverride(model || null);
   logger.info({ model, updatedBy }, 'AI model override updated');
   res.json({ success: true, data: { resolvedModel: getConfiguredModel() } });

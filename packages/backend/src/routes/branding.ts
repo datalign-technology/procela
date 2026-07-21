@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { organizations } from './organizations';
+import { settingsRepo } from '../stores/app-settings';
 import logger from '../lib/logger';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -44,24 +44,20 @@ const DEFAULT_BRANDING: BrandingConfig = {
   updatedBy:          null,
 };
 
-// Persisted as a single-element array to reuse the loadStore/saveStore
-// helpers. `brandingRef.current` is always the active config.
-const initial = loadStore<BrandingConfig>('branding');
-registerStore('branding', initial);
-let current: BrandingConfig = initial.length > 0 ? { ...DEFAULT_BRANDING, ...initial[0] } : { ...DEFAULT_BRANDING };
+// Branding persists through the shared AppSetting table (key "branding") —
+// Postgres when DATABASE_URL is set, appSettings.json otherwise. The active
+// config is held in-memory (`current`) so the public GET stays synchronous;
+// it's hydrated at boot via initBranding() and updated on every write. PR 7.
+let current: BrandingConfig = { ...DEFAULT_BRANDING };
 
-function persist() {
-  saveStore('branding', [current]);
+async function persist() {
+  await settingsRepo.set<BrandingConfig>('branding', current, current.updatedBy);
 }
 
-// Export for the autosave bundle in index.ts so the file gets periodically
-// flushed alongside every other store (redundant with the explicit persist()
-// above, but keeps the shutdown-flush behaviour uniform).
-export const brandingStoreArray: BrandingConfig[] = [current];
-
-function syncRef() {
-  brandingStoreArray.length = 0;
-  brandingStoreArray.push(current);
+/** Hydrate the in-memory branding config from persistence at boot. */
+export async function initBranding(): Promise<void> {
+  const stored = await settingsRepo.get<BrandingConfig>('branding');
+  if (stored) current = { ...DEFAULT_BRANDING, ...stored };
 }
 
 function isHex(s: unknown): s is string {
@@ -87,7 +83,7 @@ router.get('/', (_req: Request, res: Response) => {
 });
 
 // PUT is auth'd. Validates each field before writing.
-router.put('/', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.put('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const body = req.body || {};
   const next: BrandingConfig = { ...current };
 
@@ -125,8 +121,7 @@ router.put('/', authenticateToken, (req: AuthenticatedRequest, res: Response) =>
   next.updatedBy = req.user?.email || req.user?.sub || null;
 
   current = next;
-  syncRef();
-  persist();
+  await persist();
   logger.info({ by: next.updatedBy, company: next.companyName }, 'Branding updated');
 
   const { updatedBy: _ub, ...publicFields } = current;
@@ -184,10 +179,9 @@ export { resolveTenantSlug, tenantBrandingFor };
 
 // POST /reset — restores defaults. Useful during setup or when a bad colour
 // pair makes the UI unusable (which defeats the point of a settings page).
-router.post('/reset', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+router.post('/reset', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   current = { ...DEFAULT_BRANDING, updatedAt: new Date().toISOString(), updatedBy: req.user?.email || req.user?.sub || null };
-  syncRef();
-  persist();
+  await persist();
   logger.info({ by: current.updatedBy }, 'Branding reset to defaults');
   const { updatedBy: _ub, ...publicFields } = current;
   res.json({ success: true, data: publicFields });
