@@ -174,12 +174,18 @@ Verify each slice: `tsc` + JSON suite green, plus the live-db CI job for the
 Postgres path. This subsystem had almost no prior test coverage, so each slice
 adds tests as it lands.
 
-**PR 4 — org-scope.** Widest blast radius: `lib/org-scope` helpers are called
-inline in ~25 route modules. **Don't** make each helper `await orgRepo.list()`
-(N redundant tree fetches per request). Build the org tree **once per request**
-(middleware or per-handler) and pass it into the helpers. Preserve the existing
-ancestor-walk / BFS semantics (they assume the full tree is materialized). Split
-by route cluster if the single PR is too large.
+**PR 4 — org-scope (done).** Widest blast radius: `lib/org-scope` helpers are
+called inline at **80+ sites across 24 route modules**, so an async conversion
+would ripple `await` everywhere. Instead — since the org tree is small,
+slowly-changing reference data read synchronously — org-scope keeps its public
+API and reads from a **repo-backed cached snapshot in Postgres mode** (the live
+`organizations` array in JSON mode): hydrated at boot via `initOrgScope()`
+(wired in `index.ts`), refreshed on a short background TTL, and only ever
+under-inclusive while cold (never over-inclusive → no cross-org leak). The
+scoping logic is factored into pure `*In(orgs, …)` helpers with direct unit
+tests. **All 24 caller files are untouched** and JSON-mode behavior is
+byte-identical. *Follow-up:* invalidate the cache on org writes for immediate
+read-your-writes (currently eventually-consistent within the TTL).
 
 **PR 5 — report-engine.** *Highest technical risk — has its own design doc:*
 [`POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md`](./POSTGRES_CUTOVER_PR5_REPORT_ENGINE.md).
