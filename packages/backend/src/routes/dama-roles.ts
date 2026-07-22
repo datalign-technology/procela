@@ -7,6 +7,7 @@ import { people } from './people';
 import { agents } from './agents';
 import { skills } from './skills';
 import { governanceTasks } from './governance-tasks';
+import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 import { dataDomains } from './data-domains';
 import { getDamaRolesRepository } from '../db/dama-roles.repo';
 
@@ -260,9 +261,12 @@ router.post('/', async (req: Request, res: Response) => {
     ];
 
     const now = new Date();
+    // Created lazily (not at module load) to avoid a circular-import init cycle
+    // with the governance-tasks route. PR 7b.
+    const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
     for (const template of STEWARD_ONBOARDING_TASKS) {
       const dueDate = new Date(now.getTime() + template.dueOffset * 24 * 60 * 60 * 1000);
-      governanceTasks.push({
+      await governanceTasksRepo.create({
         id: uuid(),
         orgId: scopeId,
         title: template.title,
@@ -282,7 +286,6 @@ router.post('/', async (req: Request, res: Response) => {
         completedAt: null,
       });
     }
-    saveStore('governanceTasks', governanceTasks);
     onboardingTaskCount = STEWARD_ONBOARDING_TASKS.length;
     logger.info({ roleId: role.id, personId, roleType, tasksCreated: onboardingTaskCount }, 'Created steward onboarding tasks');
   }
