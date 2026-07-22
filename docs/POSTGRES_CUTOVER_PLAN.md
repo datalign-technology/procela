@@ -255,6 +255,20 @@ Person `onDelete: SetNull` FKs let you insert even if a referenced person is
 missing. Make it idempotent (skip/upsert on existing id). *Optional* — most
 customers cut over on a fresh org with no JSON to preserve.
 
+*Done:* `scripts/migrate-json-to-postgres.ts` (npm `db:migrate-json`). Reads
+`.procela-data/*.json` and creates each row through the entity repositories
+(which target Postgres when `DATABASE_URL` is set), in the FK-tier order above,
+with a two-pass insert for the self-parent entities (`organizations`,
+`processNodes`, `governanceGroups`). Idempotent (get-then-create skips existing
+ids); the composite-key (`raciOverrides`, dbt mappings) and `appSetting` stores
+upsert. A `--dry-run` flag reports per-store counts without writing (verified:
+444 rows across 34 stores from the dev fixtures). `refreshTokens` (ephemeral)
+and `aiTemplateCache` (regenerable) are skipped. **Caveat:** entity repos
+persist scalar columns; M2M join tables (org memberships, stewards, skills,
+process-node systems/controls) migrate only to the extent an entity's own
+`create()` writes them — verify join coverage before relying on this for a
+data-carrying cutover, or take the fresh-org path.
+
 **PR 9 — Statelessness cleanup.** Once all consumers go through repos, gate the
 `loadStore` array hydration off in PG mode and retire the dead exports so an
 instance holds no per-process entity state.
