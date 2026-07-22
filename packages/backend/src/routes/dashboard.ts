@@ -12,7 +12,8 @@ import { governanceTasks, type StoredGovernanceTask } from './governance-tasks';
 import { governanceIssues, type StoredGovernanceIssue } from './governance-issues';
 import { calendarEvents, type StoredCalendarEvent } from './governance-calendar';
 import { governancePolicies, type StoredGovernancePolicy } from './governance-policies';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
+import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { OWNERSHIP_LEVELS, filterByOrgScope } from '../lib/org-scope';
 
@@ -25,6 +26,8 @@ interface RaciOverride {
 }
 const raciOverrides: RaciOverride[] = loadStore<RaciOverride>('raciOverrides');
 registerStore('raciOverrides', raciOverrides);
+// RACI overrides read/write through the repository (Postgres or JSON) — PR 7c.
+const raciRepo = getRaciOverridesRepository(raciOverrides);
 
 const router = Router();
 
@@ -304,9 +307,12 @@ function scoreColor(score: number): string {
 }
 
 /** GET /api/v1/dashboard/raci — Auto-generated RACI matrix */
-router.get('/raci', (req: Request, res: Response) => {
+router.get('/raci', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
+
+  // Manual RACI overrides, fetched once for the whole matrix build.
+  const raciList = await raciRepo.list();
 
   // Filter data by org. damaRoles keeps its bespoke filter — it uses
   // scopeType/scopeId rather than orgId/orgIds so filterByOrgScope
@@ -506,7 +512,7 @@ router.get('/raci', (req: Request, res: Response) => {
       }
 
       // Apply overrides
-      const nodeOverrides = raciOverrides.filter((o) => o.nodeId === row.id);
+      const nodeOverrides = raciList.filter((o) => o.nodeId === row.id);
       for (const ov of nodeOverrides) {
         cellMap[ov.personId] = ov.value;
         reasonMap[ov.personId] = ov.reason || 'Manual override';
@@ -593,7 +599,7 @@ router.get('/raci', (req: Request, res: Response) => {
     }
 
     // Apply manual overrides — they take precedence over derived values
-    const nodeOverrides = raciOverrides.filter((o) => o.nodeId === row.id);
+    const nodeOverrides = raciList.filter((o) => o.nodeId === row.id);
     for (const ov of nodeOverrides) {
       cellMap[ov.personId] = ov.value;
       reasonMap[ov.personId] = ov.reason || 'Manual override';
@@ -664,20 +670,18 @@ router.get('/raci', (req: Request, res: Response) => {
 });
 
 /** POST /api/v1/dashboard/raci/override — set or clear a manual RACI override */
-router.post('/raci/override', (req: Request, res: Response) => {
+router.post('/raci/override', async (req: Request, res: Response) => {
   const { nodeId, personId, value } = req.body;
   if (!nodeId || !personId) {
     res.status(400).json({ success: false, error: 'nodeId and personId are required' });
     return;
   }
-  // Remove existing override for this cell
-  const idx = raciOverrides.findIndex((o) => o.nodeId === nodeId && o.personId === personId);
-  if (idx !== -1) raciOverrides.splice(idx, 1);
-  // Add new override (unless clearing)
+  // Set the override, or clear it when no valid value is supplied.
   if (value && ['R', 'A', 'C', 'I'].includes(value)) {
-    raciOverrides.push({ nodeId, personId, value, reason: 'Manual override' });
+    await raciRepo.upsert({ nodeId, personId, value, reason: 'Manual override' });
+  } else {
+    await raciRepo.remove(nodeId, personId);
   }
-  saveStore('raciOverrides', raciOverrides);
   res.json({ success: true });
 });
 
