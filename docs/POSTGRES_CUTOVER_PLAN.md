@@ -227,12 +227,18 @@ through that entity's repo. Split into two mergeable parts:
   circular-import init cycle.) The cascade `mappings.splice` in `organizations.ts`
   / `process-catalog.ts` are JSON-mode cleanups Postgres FK cascades handle, and
   `demo-seed` / one-time migrations are boot/dev tooling — all left as-is.
-- **PR 7c (pending) — entangled routes needing a fuller migration.**
-  `agent-executions.ts`, `data-lineage.ts`, and `dashboard.ts` mix reads of their
-  *own* still-array-backed entity with foreign writes, so converting only the
-  foreign write would leave reads on the stale array — they need a PR-3-style
-  route migration (own reads → repo too). This also covers wiring the PR-1
-  `raciOverrides` and dbt-mapping repos (their consumers live in those routes).
+- **PR 7c (done) — dashboard `raciOverrides`.** Fully migrated: `GET /raci`
+  fetches the overrides once via the repo (`raciRepo.list()`) and the two matrix
+  branches read that snapshot; `POST /raci/override` upserts/removes through the
+  repo. Retires the PR-1 `raciOverrides` orphan store.
+- **Remaining route migrations (own foreign-array reads) — broader than a tail.**
+  `agent-executions.ts` and `data-lineage.ts` are full multi-handler routes that
+  read their own still-array-backed entity across several handlers (plus the dbt
+  mapping repos to wire), and `dashboard.ts`'s stats/scorecard handlers still read
+  `people`/`systems`/`dataAssets`/… arrays. These are PR-3-style route migrations,
+  not quick tail items. **PR 9 drives them**: gating `loadStore` hydration off in
+  Postgres mode makes every remaining stale-array reader fail loudly, surfacing
+  exactly which routes still need converting.
 
 **PR 8 — Migration script.** No `prisma/seed.ts` exists though `package.json`
 points at it. Model on `services/demo-seed.service.ts` (already inserts in
