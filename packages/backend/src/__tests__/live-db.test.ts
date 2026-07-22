@@ -68,6 +68,14 @@ import { prismaGapSnapshotsRepository } from '../db/gap-snapshots.repo';
 import { prismaProcessVersionsRepository } from '../db/process-versions.repo';
 import { prismaSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
 
+// Converted-service imports — the "business flow" suite below exercises the
+// cutover-migrated services end-to-end against Postgres, not just the raw
+// repos. This is what proves the whole read path (service → repo → Prisma)
+// works once DATABASE_URL is set, which the repo round-trips alone can't.
+import { executeReport } from '../services/report-engine';
+import { getVisibleOrgScope, refreshOrgScopeCache } from '../lib/org-scope';
+import { getSettingRepository } from '../db/settings.repo';
+
 // Lazy-require the Prisma client so this file doesn't blow up
 // module-load when Prisma hasn't been generated (local dev without
 // DATABASE_URL). The test bodies only touch it when running.
@@ -112,6 +120,7 @@ async function truncateAll(): Promise<void> {
     'dbt_cloud_connections',
     'agent_executions', 'agent_schedules', 'agents',
     'maturity_snapshots', 'gap_snapshots', 'suggestion_dismissals',
+    'app_settings',
     'organizations',
   ];
   for (const table of tables) {
@@ -779,5 +788,117 @@ suite('live-db repository round-trips', () => {
     assert.strictEqual(gaps[0].metrics.coveragePct, 60);
     assert.strictEqual((await pv.list()).length, 1);
     assert.strictEqual((await dismiss.list({ orgId })).length, 1);
+  });
+});
+
+// ── Business-flow suite ──────────────────────────────────────────────────
+//
+// The round-trip suite above proves each repository maps to Postgres
+// correctly in isolation. This suite goes one layer up: it drives the
+// cutover-converted *services* against the same live Postgres, seeding via
+// the Prisma repos and asserting the service reads what the DB holds. These
+// are the paths that broke most subtly during the cutover — a service that
+// still closed over a stale boot-time array would pass the repo tests but
+// return empty here. Same SKIP/truncate harness as above.
+const prismaRepo = <F extends (loader: () => never) => unknown>(factory: F): ReturnType<F> =>
+  factory(() => loadPrisma() as never) as ReturnType<F>;
+
+suite('live-db business flows', () => {
+  after(async () => {
+    if (SKIP) return;
+    await prisma?.$disconnect();
+  });
+  beforeEach(async () => {
+    if (SKIP) return;
+    await truncateAll();
+  });
+
+  it('report-engine: executeReport resolves a Postgres join (processNodes → responsiblePerson)', async () => {
+    const { orgId } = await seedFixture();
+    const now = new Date().toISOString();
+
+    // Seed a person, then an activity whose responsiblePersonId points at
+    // them — the join the report projects. Both live in Postgres; the
+    // service reads them back through getProcessNodesRepository/
+    // getPeopleRepository, which route to Prisma because DATABASE_URL is set.
+    const people = prismaRepo(prismaPeopleRepository);
+    const personId = randomUUID();
+    await people.create({
+      id: personId, orgIds: [orgId], accessibleOrgIds: [],
+      name: 'Dana Reyes', email: `dana-${Date.now()}@x.com`,
+      role: 'PROCESS_OWNER', title: 'Grid Ops Lead', skillIds: [],
+      createdAt: now, updatedAt: now,
+    });
+    const nodes = prismaRepo(prismaProcessNodesRepository);
+    const nodeId = randomUUID();
+    await nodes.create({
+      id: nodeId, parentId: null, level: 'ACTIVITY', name: 'Dispatch crews',
+      description: '', activityId: null, status: 'DRAFT', orderIndex: 0,
+      orgId, orgIds: [orgId], ownerId: null, version: 1,
+      responsiblePersonId: personId,
+      purpose: '', complianceTags: [], criticalityTier: 'TIER_1', rtoHours: 4,
+      controlIds: [], requiredSkillIds: [], systemIds: [], domain: 'OPERATIONAL',
+      createdAt: now, updatedAt: now,
+    });
+
+    const result = await executeReport(
+      {
+        entity: 'processNodes',
+        columns: [
+          { field: 'name' },
+          { field: 'responsiblePerson.name', label: 'Owner' },
+        ],
+        filters: [],
+      },
+      orgId,
+    );
+
+    assert.strictEqual(result.totalMatched, 1);
+    assert.strictEqual(result.rows.length, 1);
+    assert.strictEqual(result.rows[0].name, 'Dispatch crews');
+    // The join resolved against the Postgres people table, not a stale array.
+    assert.strictEqual(result.rows[0]['responsiblePerson.name'], 'Dana Reyes');
+  });
+
+  it('org-scope: getVisibleOrgScope cascades over a Postgres-hydrated cache', async () => {
+    // Seed a company → division tree in Postgres via the repo, then hydrate
+    // the org-scope cache from it. getVisibleOrgScope must walk the tree it
+    // read from Postgres (parent sees child; child sees parent).
+    const orgs = prismaRepo(prismaOrganizationsRepository);
+    const now = new Date().toISOString();
+    const companyId = randomUUID();
+    const divisionId = randomUUID();
+    await orgs.create({
+      id: companyId, parentId: null, name: 'Tidewater Utilities', type: 'company',
+      industry: 'utilities', description: '', headCount: 0, createdAt: now, updatedAt: now,
+    });
+    await orgs.create({
+      id: divisionId, parentId: companyId, name: 'Water Division', type: 'division',
+      industry: 'utilities', description: '', headCount: 0, createdAt: now, updatedAt: now,
+    });
+
+    await refreshOrgScopeCache();
+
+    const fromCompany = getVisibleOrgScope(companyId);
+    assert.ok(fromCompany, 'company scope should be non-null');
+    assert.ok(fromCompany!.has(companyId), 'company sees itself');
+    assert.ok(fromCompany!.has(divisionId), 'company sees its division (walk down)');
+
+    const fromDivision = getVisibleOrgScope(divisionId);
+    assert.ok(fromDivision, 'division scope should be non-null');
+    assert.ok(fromDivision!.has(divisionId), 'division sees itself');
+    assert.ok(fromDivision!.has(companyId), 'division sees its parent (walk up)');
+  });
+
+  it('settings: AppSetting set → get round-trips a JSON value through Postgres', async () => {
+    // getSettingRepository([]) hands back the Prisma-backed repo when
+    // DATABASE_URL is set — the empty array is ignored. A structured value
+    // must survive the Json column round-trip unchanged.
+    const repo = getSettingRepository([]);
+    const value = { theme: 'procela-dark', retentionDays: 90, features: ['gap-detection'] };
+    await repo.set('branding', value, 'admin-user');
+    const read = await repo.get<typeof value>('branding');
+    assert.deepStrictEqual(read, value);
+    assert.strictEqual(await repo.get('never-set'), null);
   });
 });

@@ -285,9 +285,19 @@ data-carrying cutover, or take the fresh-org path.
   `loadStore` in Postgres mode to return `[]` (no proxy) and retire the dead
   module-level exports so an instance holds no per-process entity state.
 
-**PR 10 — Expand live-db CI.** Today the `test-backend-live-db` job runs only
-`live-db.test.ts`. Add real business-flow coverage (catalog CRUD, mapping,
-gap-detection, auth) under `DATABASE_URL` (checklist #24).
+**PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
+`live-db repository round-trips` suite proving each repo maps to Postgres in
+isolation. Added a `live-db business flows` suite that drives the
+cutover-converted *services* against the same live Postgres — the paths that
+broke most subtly during the cutover, where a service still closing over a
+stale boot-time array would pass the repo tests but return empty here. Seeds via
+the Prisma repos, then asserts the service reads what the DB holds:
+report-engine `executeReport` resolving a `processNodes → responsiblePerson`
+join off Postgres; org-scope `getVisibleOrgScope` cascading over a
+`refreshOrgScopeCache()`-hydrated tree; `SettingRepository` set→get round-trip
+through the `app_settings` Json column. Same SKIP-when-`DATABASE_URL`-unset
+harness, so `npm test` stays fast locally and the suite runs in CI's
+`test-backend-live-db` job (checklist #24).
 
 ## 4. Critical path & sequencing
 
