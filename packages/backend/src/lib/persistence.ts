@@ -3,6 +3,54 @@ import path from 'path';
 import { randomBytes } from 'crypto';
 import type { ZodType, ZodTypeDef } from 'zod';
 import logger from './logger';
+import { hasDatabase } from '../db/prisma';
+
+// ──────────────────────────────────────────────────────────────────────────
+// Postgres cutover PR 9 — stale-store read diagnostic.
+//
+// In Postgres mode the module-level `loadStore(...)` arrays hold only stale
+// boot-state (empty on a fresh DB); the source of truth is the repository. Any
+// consumer that still reads such an array directly is a cutover bug. To turn
+// "which routes still read arrays?" from an open-ended grep into a loud,
+// self-reporting worklist, in Postgres mode loadStore returns a Proxy that logs
+// a one-time warning (with the calling site) the first time a read-ish member
+// is accessed. In JSON mode it returns the plain array unchanged (zero
+// behavioural difference), so this is inert for the default dev/test path.
+// ──────────────────────────────────────────────────────────────────────────
+
+// Stores that stay intentionally in-memory-per-instance even in Postgres mode
+// (regenerable caches) — reads of these are NOT bugs, so don't flag them.
+const IN_MEMORY_STORES = new Set<string>(['aiTemplateCache']);
+const warnedStaleStores = new Set<string>();
+const STALE_READ_KEYS = new Set<string>([
+  'find', 'filter', 'some', 'every', 'map', 'forEach', 'reduce', 'length',
+  'indexOf', 'findIndex', 'includes', 'slice', 'entries', 'values', 'keys',
+]);
+
+/** Wrap an array so the first read-ish access logs one diagnostic warning.
+ *  Exported for tests; production goes through loadStore. */
+export function instrumentStaleStore<T>(name: string, arr: T[]): T[] {
+  return new Proxy(arr, {
+    get(target, prop, receiver) {
+      const isRead = prop === Symbol.iterator
+        || (typeof prop === 'string' && (STALE_READ_KEYS.has(prop) || /^\d+$/.test(prop)));
+      if (isRead && !warnedStaleStores.has(name)) {
+        warnedStaleStores.add(name);
+        const at = (new Error().stack || '').split('\n').slice(2, 4).map((s) => s.trim()).join(' <- ');
+        logger.warn(
+          { store: name, at },
+          'Stale JSON-store read in Postgres mode — this consumer must go through the repository (cutover PR 9)',
+        );
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
+function maybeInstrumentStore<T>(name: string, arr: T[]): T[] {
+  if (!hasDatabase() || IN_MEMORY_STORES.has(name)) return arr;
+  return instrumentStaleStore(name, arr);
+}
 
 const DATA_DIR = path.resolve(process.cwd(), '.procela-data');
 
@@ -98,6 +146,10 @@ export function saveStore(name: string, data: any[]) {
 // input shape differs from the parsed StoredX shape). Output type is
 // still pinned to T, so downstream code sees the concrete row shape.
 export function loadStore<T>(name: string, rowSchema?: ZodType<T, ZodTypeDef, unknown>): T[] {
+  return maybeInstrumentStore(name, loadStoreRaw(name, rowSchema));
+}
+
+function loadStoreRaw<T>(name: string, rowSchema?: ZodType<T, ZodTypeDef, unknown>): T[] {
   const filePath = path.join(DATA_DIR, `${name}.json`);
   // Stale `.tmp` siblings mean a crash occurred between the tmp
   // write and the rename. Sweep them so they don't accumulate — but
