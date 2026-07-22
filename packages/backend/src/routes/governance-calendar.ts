@@ -352,6 +352,8 @@ router.post('/:id/run', async (req: Request, res: Response) => {
   if (event.autoCreateTasks) {
     try {
       const { governanceTasks } = require('./governance-tasks');
+      const { getGovernanceTasksRepository } = require('../db/governance-tasks.repo');
+      const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
       const dueDate = new Date(event.nextOccurrence || now);
       const assignees = event.attendees && event.attendees.length > 0 ? event.attendees : [null];
       for (const assigneeId of assignees) {
@@ -374,10 +376,9 @@ router.post('/:id/run', async (req: Request, res: Response) => {
           updatedAt: now.toISOString(),
           completedAt: null,
         };
-        governanceTasks.push(task);
+        await governanceTasksRepo.create(task);
         createdTaskIds.push(task.id);
       }
-      saveStore('governanceTasks', governanceTasks);
     } catch (err) {
       logger.warn({ err }, 'Could not auto-create governance tasks for calendar event run');
     }

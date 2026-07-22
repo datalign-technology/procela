@@ -219,15 +219,20 @@ through that entity's repo. Split into two mergeable parts:
   Reads stay synchronous over the in-memory copy; writes are async. The old
   `brandingStoreArray` autosave entry is removed. `aiTemplateCache` stays
   in-memory (unmodeled, per PR 1).
-- **PR 7b (pending) — cross-entity foreign writes.** `dashboard.ts` `raciOverrides`
-  → repo (reads live in RACI-matrix helpers, so convert reads+writes together);
-  `data-lineage.ts` dbt mappings → repos plus its `dataAssets`/`dataQualityRules`
-  creates; and the governance-entity pushes in `agent-executions.ts`
-  (governancePolicies/mappings), `dama-roles.ts` / `governance-calendar.ts`
-  (governanceTasks), `connectors.ts` (dataAssets). The cascade `mappings.splice`
-  in `organizations.ts` / `process-catalog.ts` are JSON-mode cleanups that
-  Postgres FK cascades handle, and `demo-seed`/one-time migrations are boot/dev
-  tooling — both left as-is.
+- **PR 7b (done) — clean foreign-entity creates.** The routes that create a
+  *foreign* entity but whose own reads were already fine: `dama-roles.ts` +
+  `governance-calendar.ts` (governanceTasks) and `connectors.ts` (dataAssets) now
+  create through the target repository instead of `array.push` + `saveStore`.
+  (The governance-tasks repo is built lazily inside the handler to avoid a
+  circular-import init cycle.) The cascade `mappings.splice` in `organizations.ts`
+  / `process-catalog.ts` are JSON-mode cleanups Postgres FK cascades handle, and
+  `demo-seed` / one-time migrations are boot/dev tooling — all left as-is.
+- **PR 7c (pending) — entangled routes needing a fuller migration.**
+  `agent-executions.ts`, `data-lineage.ts`, and `dashboard.ts` mix reads of their
+  *own* still-array-backed entity with foreign writes, so converting only the
+  foreign write would leave reads on the stale array — they need a PR-3-style
+  route migration (own reads → repo too). This also covers wiring the PR-1
+  `raciOverrides` and dbt-mapping repos (their consumers live in those routes).
 
 **PR 8 — Migration script.** No `prisma/seed.ts` exists though `package.json`
 points at it. Model on `services/demo-seed.service.ts` (already inserts in

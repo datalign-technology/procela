@@ -5,6 +5,7 @@ import logger from '../lib/logger';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import { dataAssets } from './data-assets';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { createNotification } from './notifications';
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
 import { rateLimit } from '../middleware/rate-limit';
@@ -92,6 +93,8 @@ export const connectorEvents: StoredConnectorEvent[] = loadStore<StoredConnector
 registerStore('connectorEvents', connectorEvents);
 
 const connectorsRepo = getConnectorsRepository(connectors);
+// Foreign data-asset writes go through the repository (Postgres or JSON) — PR 7b.
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
 const connectorEventsRepo = getConnectorEventsRepository(connectorEvents);
 
 const router = Router();
@@ -365,13 +368,16 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
   const incoming = Array.isArray(req.body?.assets) ? req.body.assets : [];
   let created = 0;
   let updated = 0;
+  // Snapshot the assets once; new rows are pushed back in so a later same-name
+  // asset in this same batch still dedups against them (PR 7b).
+  const allAssets = await dataAssetsRepo.list();
   for (const a of incoming) {
     const name = String(a?.name || '').trim();
     if (!name) continue;
     const systemId = String(a?.systemId || '').trim();
     const rowCount = typeof a?.rowCount === 'number' ? a.rowCount : null;
     const lastWriteAt = typeof a?.lastWriteAt === 'string' ? a.lastWriteAt : null;
-    const existing = dataAssets.find((d) => d.orgId === row.orgId && d.name === name);
+    const existing = allAssets.find((d) => d.orgId === row.orgId && d.name === name);
     if (existing) {
       if (lastWriteAt) (existing as any).healthScoreAt = lastWriteAt;
       // Refresh a coarse health signal: 90 if recently written, 60
@@ -385,11 +391,12 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
       // Data Asset detail page.
       (existing as any).lastSyncedByConnectorId = row.id;
       (existing as any).lastSyncedAt = nowIso();
+      await dataAssetsRepo.update(existing.id, existing);
       updated++;
     } else {
       const now = nowIso();
       const fresh = lastWriteAt && (Date.now() - new Date(lastWriteAt).getTime()) < 24 * 60 * 60_000;
-      dataAssets.push({
+      const newAsset = {
         id: uuid(), orgId: row.orgId, name,
         description: String(a?.description || ''),
         systemId: systemId || row.systemIds[0] || '',
@@ -399,11 +406,12 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
         createdAt: now, updatedAt: now,
         lastSyncedByConnectorId: row.id,
         lastSyncedAt: now,
-      } as any);
+      } as any;
+      await dataAssetsRepo.create(newAsset);
+      allAssets.push(newAsset);
       created++;
     }
   }
-  saveStore('dataAssets', dataAssets);
   await connectorsRepo.update(row.id, { lastHeartbeatAt: nowIso(), updatedAt: nowIso() });
   await connectorEventsRepo.create({
     id: uuid(), connectorId: row.id, orgId: row.orgId,
