@@ -269,9 +269,21 @@ process-node systems/controls) migrate only to the extent an entity's own
 `create()` writes them — verify join coverage before relying on this for a
 data-carrying cutover, or take the fresh-org path.
 
-**PR 9 — Statelessness cleanup.** Once all consumers go through repos, gate the
-`loadStore` array hydration off in PG mode and retire the dead exports so an
-instance holds no per-process entity state.
+**PR 9 — Statelessness cleanup.**
+
+- **9a (done) — stale-read diagnostic.** In Postgres mode `loadStore` now returns
+  a Proxy that logs a one-time warning (with the calling site) the first time a
+  consumer reads the array — turning "which routes still read arrays?" into a
+  loud, self-reporting worklist. JSON mode returns the plain array unchanged
+  (inert for dev/test). `aiTemplateCache` is allow-listed (intentionally
+  in-memory). The Proxy is a faithful array (tested), so it never breaks a route
+  — an unconverted route keeps working (on stale/empty data) but now announces
+  itself in the logs.
+- **9b (pending) — act on the worklist + retire arrays.** Run against Postgres,
+  convert every route the diagnostic flags (agent-executions, data-lineage,
+  dashboard stats, and any others it surfaces) to its repository, then flip
+  `loadStore` in Postgres mode to return `[]` (no proxy) and retire the dead
+  module-level exports so an instance holds no per-process entity state.
 
 **PR 10 — Expand live-db CI.** Today the `test-backend-live-db` job runs only
 `live-db.test.ts`. Add real business-flow coverage (catalog CRUD, mapping,
