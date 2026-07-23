@@ -5,6 +5,7 @@ import logger from '../lib/logger';
 import { auditService } from '../services/audit.service';
 import { reconcileDbtManifest, DbtImportSummary } from './data-lineage';
 import { getDbtCloudConnectionsRepository } from '../db/dbt-cloud-connections.repo';
+import { hasDatabase } from '../db/prisma';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DBT CLOUD CONNECTIONS
@@ -56,13 +57,18 @@ registerStore('dbtCloudConnections', dbtCloudConnections);
 const dbtCloudConnectionsRepo = getDbtCloudConnectionsRepository(dbtCloudConnections);
 
 // Migrate v1 records that lack the polling fields. Defaults to NEVER so
-// existing connections aren't surprise-polled after the upgrade.
-let migratedDbtCloud = false;
-for (const c of dbtCloudConnections) {
-  if (c.pollFrequency === undefined) { (c as any).pollFrequency = 'NEVER'; migratedDbtCloud = true; }
-  if (c.nextPollAt === undefined) { (c as any).nextPollAt = null; migratedDbtCloud = true; }
+// existing connections aren't surprise-polled after the upgrade. JSON
+// mode only — Postgres rows always carry the columns (create sets them,
+// schema defaults them), and reading the boot array in PG mode would just
+// be a stale-store read.
+if (!hasDatabase()) {
+  let migratedDbtCloud = false;
+  for (const c of dbtCloudConnections) {
+    if (c.pollFrequency === undefined) { (c as any).pollFrequency = 'NEVER'; migratedDbtCloud = true; }
+    if (c.nextPollAt === undefined) { (c as any).nextPollAt = null; migratedDbtCloud = true; }
+  }
+  if (migratedDbtCloud) saveStore('dbtCloudConnections', dbtCloudConnections);
 }
-if (migratedDbtCloud) saveStore('dbtCloudConnections', dbtCloudConnections);
 
 const VALID_POLL_FREQUENCIES = ['NEVER', 'HOURLY', 'DAILY', 'WEEKLY'] as const;
 type PollFrequency = typeof VALID_POLL_FREQUENCIES[number];
@@ -99,8 +105,8 @@ function publicShape(c: DbtCloudConnection): Omit<DbtCloudConnection, 'token'> &
   return { ...rest, hasToken: !!token };
 }
 
-function requireConn(req: Request, res: Response): DbtCloudConnection | null {
-  const c = dbtCloudConnections.find((x) => x.id === req.params.id);
+async function requireConn(req: Request, res: Response): Promise<DbtCloudConnection | null> {
+  const c = await dbtCloudConnectionsRepo.get(String(req.params.id));
   if (!c) { res.status(404).json({ success: false, error: 'dbt Cloud connection not found' }); return null; }
   return c;
 }
@@ -110,7 +116,7 @@ function requireConn(req: Request, res: Response): DbtCloudConnection | null {
 /** GET /api/v1/dbt-cloud-connections?orgId= */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query as Record<string, string | undefined>;
-  const filtered = orgId ? dbtCloudConnections.filter((c) => c.orgId === orgId) : dbtCloudConnections;
+  const filtered = await dbtCloudConnectionsRepo.list(orgId ? { orgId } : undefined);
   res.json({ success: true, data: filtered.map(publicShape) });
 });
 
@@ -150,7 +156,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PATCH /api/v1/dbt-cloud-connections/:id */
 router.patch('/:id', async (req: Request, res: Response) => {
-  const conn = requireConn(req, res);
+  const conn = await requireConn(req, res);
   if (!conn) return;
   const { name, host, accountId, jobId, token, pollFrequency } = req.body as Partial<DbtCloudConnection>;
   if (name !== undefined) conn.name = name.trim();
@@ -189,7 +195,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
  *  whether the run succeeds or fails so the UI can surface what
  *  happened on the next poll. */
 router.post('/:id/refresh', async (req: Request, res: Response) => {
-  const conn = requireConn(req, res);
+  const conn = await requireConn(req, res);
   if (!conn) return;
   const result = await performRefresh(conn, (req as any).user?.sub || null, 'manual');
   if (result.ok) {
@@ -250,7 +256,7 @@ async function performRefresh(
     conn.lastSummary = summary;
     conn.nextPollAt = computeNextPollAt(conn.pollFrequency, now);
     conn.updatedAt = conn.lastRunAt;
-    saveStore('dbtCloudConnections', dbtCloudConnections);
+    await dbtCloudConnectionsRepo.update(conn.id, conn);
 
     auditService.log(
       conn.orgId, actorUserId,
@@ -271,7 +277,7 @@ async function performRefresh(
     // manually for immediate retries.
     conn.nextPollAt = computeNextPollAt(conn.pollFrequency, now);
     conn.updatedAt = conn.lastRunAt;
-    saveStore('dbtCloudConnections', dbtCloudConnections);
+    await dbtCloudConnectionsRepo.update(conn.id, conn);
     logger.error({ connId: conn.id, err: msg, trigger }, 'dbt Cloud refresh failed');
     return { ok: false, error: msg };
   }
@@ -291,7 +297,7 @@ async function tickPollScheduler(): Promise<void> {
   scheduling = true;
   try {
     const now = new Date();
-    for (const conn of dbtCloudConnections) {
+    for (const conn of await dbtCloudConnectionsRepo.list()) {
       if (!conn.pollFrequency || conn.pollFrequency === 'NEVER') continue;
       const due = !conn.nextPollAt || new Date(conn.nextPollAt) <= now;
       if (!due) continue;

@@ -293,21 +293,23 @@ data-carrying cutover, or take the fresh-org path.
 
   | store | first call site | store | first call site |
   |-------|-----------------|-------|-----------------|
-  | agentExecutions | ~~agent-executions.ts~~ **done** | governanceGroups | governance-groups.ts:114 |
+  | agentExecutions | ~~agent-executions.ts~~ **done (9b.1)** | governanceGroups | governance-groups.ts:114 |
   | agents | agents.ts:47 | governancePolicies | governance-policies.ts:49 |
-  | analysisReports | analysis-reports.ts:45 | governanceTasks | governance-tasks.ts:168 |
+  | analysisReports | ~~analysis-reports.ts~~ **done (9b.2)** | governanceTasks | governance-tasks.ts:168 |
   | auditLogs | audit.service.ts:97 | mappings | org-scope.ts:135 † |
   | comments | comments.ts:76 | notifications | notifications.ts:59 |
   | connectionSystemLinks | systems.ts:211 | operationsManuals | org-scope.ts:135 † |
   | connections | connections.ts:127 | organizations | dashboard.ts:140 |
   | connectors | connectors.ts:182 | people | people.ts:331 |
   | damaRoles | dama-roles.ts:85 | processNodes | process-catalog.ts:280 |
-  | dataAssets | data-assets.ts:97 | reports | reports.ts:50 |
+  | dataAssets | data-assets.ts:97 | reports | ~~reports.ts~~ **done (9b.2)** |
   | dataDomains | data-domains.ts:36 | sops | org-scope.ts:135 † |
   | dataLineageLinks | data-lineage.ts:114 | suggestionDismissals | org-scope.ts:135 † |
-  | dbtCloudConnections | dbt-cloud-connections.ts:61 | syncConnections | sync-connections.ts:141 |
-  | decisionRights | decision-rights.ts:83 | systems | systems.ts:106 |
+  | dbtCloudConnections | ~~dbt-cloud-connections.ts~~ **done (9b.2)** | syncConnections | sync-connections.ts:141 |
+  | decisionRights | ~~decision-rights.ts~~ **done (9b.2)** | systems | systems.ts:106 |
   | flowRelationships | dashboard.ts:63 | | |
+
+  **Progress: 5 / 29 stores converted.** Remaining: 24.
 
   † Four stores (`mappings`, `sops`, `operationsManuals`, `suggestionDismissals`)
   surface *inside* the shared `filterByOrgScope()` helper — their owning routes
@@ -327,6 +329,20 @@ data-carrying cutover, or take the fresh-org path.
     behaviour unchanged (repo wraps the same array), full suite green.
     *Deferred to their own line items:* the promote handler's foreign writes to
     `governancePolicies` / `mappings` (those stores' own conversions).
+
+  - **9b.2 (done) — simple-leaf batch: `analysis-reports`, `reports`,
+    `decision-rights`, `dbt-cloud-connections`.** Four self-contained single-store
+    CRUD routes (no foreign-array reads of their own store). Each converted its
+    remaining list/get reads to its repository (writes already went through the
+    repo). Route-specific notes: `decision-rights`/seed now pre-fetches the org's
+    rights once and creates each via the repo (dropped the `push` + `saveStore`);
+    `dbt-cloud-connections` guarded its boot-time polling-field backfill to JSON
+    mode, made the `requireConn` helper async, and moved `performRefresh`'s two
+    saves + the scheduler tick's array scan onto the repo. Verified against a
+    **local Postgres**: create/list/seed round-trip through PG (e.g. decision-
+    rights create + seed → 11 rows in `decision_rights`; dbt token never leaked
+    via `publicShape`), and all four boot/traffic warnings are gone. tsc clean,
+    full suite green (890).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in

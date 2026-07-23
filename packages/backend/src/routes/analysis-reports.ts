@@ -41,15 +41,14 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query as Record<string, string | undefined>;
   const effectiveOrgId = orgId || DEV_ORG_ID;
-  const list = analysisReports
-    .filter((r) => r.orgId === effectiveOrgId)
+  const list = (await analysisReportsRepo.list({ orgId: effectiveOrgId }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   res.json({ success: true, data: list });
 });
 
 /** GET /api/v1/analysis-reports/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const r = analysisReports.find((r) => r.id === req.params.id);
+  const r = await analysisReportsRepo.get(String(req.params.id));
   if (!r) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   res.json({ success: true, data: r });
 });
@@ -73,8 +72,8 @@ router.post('/', async (req: Request, res: Response) => {
 
   // Soft uniqueness per (org, owner) — duplicates from typos are the
   // common failure mode; identical names from two different users coexist.
-  const collision = analysisReports.find((r) =>
-    r.orgId === effectiveOrgId && r.ownerId === ownerId &&
+  const collision = (await analysisReportsRepo.list({ orgId: effectiveOrgId })).find((r) =>
+    r.ownerId === ownerId &&
     r.name.trim().toLowerCase() === name.trim().toLowerCase(),
   );
   if (collision) {
@@ -101,7 +100,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PATCH /api/v1/analysis-reports/:id — rename, edit description, update config. */
 router.patch('/:id', async (req: Request, res: Response) => {
-  const r = analysisReports.find((r) => r.id === req.params.id);
+  const r = await analysisReportsRepo.get(String(req.params.id));
   if (!r) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const editorId = (req as any).user?.sub || null;
   if (r.ownerId && editorId && r.ownerId !== editorId) {
@@ -125,7 +124,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/analysis-reports/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const rec = analysisReports.find((r) => r.id === req.params.id);
+  const rec = await analysisReportsRepo.get(String(req.params.id));
   if (!rec) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const editorId = (req as any).user?.sub || null;
   if (rec.ownerId && editorId && rec.ownerId !== editorId) {
