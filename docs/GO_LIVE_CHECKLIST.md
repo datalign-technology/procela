@@ -18,19 +18,21 @@ customer.
   backend's environment (a real value, not the local `.env`).
 - [ ] **2. Apply migrations.** `npx prisma migrate deploy` from
   `packages/backend/` — one time per environment. CI does this per-run.
-- [ ] **3. JSON → Postgres data migration.** Write a one-shot script
-  that reads `.procela-data/*.json` and inserts through each repo. Not
-  built yet. Alternative: cut over on a fresh org — most customers
-  won't have JSON data to preserve.
-- [ ] **4. Cross-file consumers still read arrays.**
+- [x] ~~**3. JSON → Postgres data migration.**~~ **Done** (cutover PR 8).
+  `scripts/migrate-json-to-postgres.ts` reads `.procela-data/*.json` and
+  inserts through each repo in FK-tier order, idempotently; run via
+  `npm run db:migrate-json` (supports `--dry-run`).
+- [ ] **4. Cross-file consumers still read arrays (mostly done).**
   `services/scheduler`, `services/digest.service`,
-  `services/report-engine`, and `lib/org-scope` bypass the repos. On
-  Postgres they see empty in-memory arrays. Must be converted before a
-  Postgres cutover (multi-PR).
-- [ ] **5. Auth cutover.** `services/scim` and `routes/auth*` weren't
-  migrated — separate subsystem. If you're using Cognito / Azure AD,
-  wire the OIDC/SAML provider config via env vars; the code already
-  supports it.
+  `services/report-engine`, and `lib/org-scope` are **converted** (cutover
+  PRs 4/5/6). The remaining gap is the long-tail routes the PR 9a stale-read
+  diagnostic flags (agent-executions, data-lineage, dashboard-stats) —
+  tracked as **PR 9b**, the last cutover step. Once 9b lands, `loadStore`
+  returns `[]` in Postgres mode and the dead arrays are retired.
+- [x] ~~**5. Auth cutover.**~~ **Done** (cutover PRs 3a–3e). `services/scim`,
+  `routes/auth*`, account-lockout, refresh tokens, MFA/WebAuthn, and the
+  auth-providers config are all repo-backed and async. Cognito / Azure AD
+  OIDC/SAML provider config is still wired via env vars (see #10).
 
 ## Environment / secrets — per environment
 
@@ -83,9 +85,11 @@ customer.
   `npm audit` currently shows 7 vulnerabilities to review.
 - [ ] **23. DR runbook.** How to restore from backup, rotate a
   compromised API key, and roll back a migration.
-- [ ] **24. Real Postgres integration test in CI.** The live-DB job
-  we shipped runs one file (`live-db.test.ts`). Expand it to real
-  business-flow coverage against Postgres.
+- [x] ~~**24. Real Postgres integration test in CI.**~~ **Done** (cutover
+  PR 10). `live-db.test.ts` now carries a `live-db business flows` suite that
+  drives the converted services (report-engine join, org-scope cascade,
+  settings round-trip) against real Postgres, on top of the per-repository
+  round-trips. Runs in CI's `test-backend-live-db` job.
 
 ## Roadmap items still ahead of go-live
 
