@@ -17,6 +17,7 @@ import { people } from './people';
 import { auditService } from '../services/audit.service';
 import { createNotification } from './notifications';
 import { getAgentExecutionsRepository } from '../db/agent-executions.repo';
+import { hasDatabase } from '../db/prisma';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agent Executions — an AI agent actually PERFORMING a governance activity.
@@ -82,8 +83,10 @@ const agentExecutionsRepo = getAgentExecutionsRepository(agentExecutions);
 
 // One-time normalisation: existing records pre-date the promotedDocumentId
 // field. Treat undefined as null so the rest of the code can rely on the
-// field being present.
-{
+// field being present. JSON mode only — Postgres rows always carry the
+// column (create() sets it, and the schema defaults it), and reading the
+// boot-time array in Postgres mode would just be a stale-store read.
+if (!hasDatabase()) {
   let backfilled = 0;
   for (const e of agentExecutions) {
     if (!('promotedDocumentId' in e)) { (e as StoredAgentExecution).promotedDocumentId = null; backfilled++; }
@@ -99,11 +102,10 @@ const router = Router();
 /** GET /api/v1/agent-executions — list executions with optional filters */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, agentId, activityId } = req.query;
-  let filtered = [...agentExecutions];
+  let filtered = await agentExecutionsRepo.list(
+    typeof orgId === 'string' && orgId ? { orgId } : undefined,
+  );
 
-  if (orgId) {
-    filtered = filtered.filter((e) => e.orgId === orgId);
-  }
   if (agentId) {
     filtered = filtered.filter((e) => e.agentId === agentId);
   }
@@ -119,7 +121,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/agent-executions/:id — get single execution */
 router.get('/:id', async (req: Request, res: Response) => {
-  const exec = agentExecutions.find((e) => e.id === req.params.id);
+  const exec = await agentExecutionsRepo.get(String(req.params.id));
   if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
   res.json({ success: true, data: exec });
 });
@@ -295,7 +297,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PATCH /api/v1/agent-executions/:id/review — approve or reject a draft. */
 router.patch('/:id/review', async (req: Request, res: Response) => {
-  const exec = agentExecutions.find((e) => e.id === req.params.id);
+  const exec = await agentExecutionsRepo.get(String(req.params.id));
   if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
   const { reviewStatus, reviewedBy } = req.body;
   if (!REVIEW_STATUSES.includes(reviewStatus)) {
@@ -328,7 +330,7 @@ router.patch('/:id/review', async (req: Request, res: Response) => {
  *   - reviewedBy — stamped on the execution if provided.
  */
 router.post('/:id/promote', async (req: Request, res: Response) => {
-  const exec = agentExecutions.find((e) => e.id === req.params.id);
+  const exec = await agentExecutionsRepo.get(String(req.params.id));
   if (!exec) { res.status(404).json({ success: false, error: 'Execution not found' }); return; }
   if (exec.status !== 'SUCCESS') {
     res.status(400).json({ success: false, error: `Cannot promote a draft from a ${exec.status} execution — only SUCCESS drafts can be promoted.` });
@@ -401,7 +403,7 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
   exec.reviewedBy = (typeof reviewedBy === 'string' && reviewedBy) || exec.reviewedBy || 'Unknown';
   exec.reviewedAt = now;
   exec.promotedDocumentId = doc.id;
-  saveStore('agentExecutions', agentExecutions);
+  await agentExecutionsRepo.update(exec.id, exec);
 
   logger.info({ executionId: exec.id, documentId: doc.id, documentCode: doc.code, activityId: exec.activityId }, 'Promoted agent draft to governance document');
   const userIdHeader = (req as Request & { user?: { id?: string } }).user?.id || null;
@@ -414,11 +416,16 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/agent-executions/all — delete all executions */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = agentExecutions.length;
-  agentExecutions.splice(0, agentExecutions.length);
-  saveStore('agentExecutions', agentExecutions);
-  logger.info({ count }, 'Deleted all agent executions');
-  res.json({ success: true, deleted: count });
+  // Repository-backed so it clears Postgres in DB mode (and the JSON
+  // array in file mode). No bulk-delete on the shared Repository
+  // interface, so list-then-delete each — this endpoint is a rare admin
+  // "clear all" action, not a hot path.
+  const all = await agentExecutionsRepo.list();
+  for (const e of all) {
+    await agentExecutionsRepo.delete(e.id);
+  }
+  logger.info({ count: all.length }, 'Deleted all agent executions');
+  res.json({ success: true, deleted: all.length });
 });
 
 export default router;

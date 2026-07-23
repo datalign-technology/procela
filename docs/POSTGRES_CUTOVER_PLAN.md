@@ -279,11 +279,54 @@ data-carrying cutover, or take the fresh-org path.
   in-memory). The Proxy is a faithful array (tested), so it never breaks a route
   — an unconverted route keeps working (on stale/empty data) but now announces
   itself in the logs.
-- **9b (pending) — act on the worklist + retire arrays.** Run against Postgres,
-  convert every route the diagnostic flags (agent-executions, data-lineage,
-  dashboard stats, and any others it surfaces) to its repository, then flip
-  `loadStore` in Postgres mode to return `[]` (no proxy) and retire the dead
-  module-level exports so an instance holds no per-process entity state.
+- **9b (in progress) — act on the worklist + retire arrays.** Run against
+  Postgres, convert every route the diagnostic flags to its repository, then
+  flip `loadStore` in Postgres mode to return `[]` (no proxy) and retire the
+  dead module-level exports so an instance holds no per-process entity state.
+  Multi-increment (like PR 7) — the diagnostic's live worklist below is larger
+  than the three routes originally guessed: most route *list handlers* still
+  read arrays even though every entity's repo exists and is proven.
+
+  **The live worklist (booted the backend against a real Postgres, drove
+  traffic, collected the one-time warnings).** 29 stores still have a direct
+  array read, each at a precise call site:
+
+  | store | first call site | store | first call site |
+  |-------|-----------------|-------|-----------------|
+  | agentExecutions | ~~agent-executions.ts~~ **done** | governanceGroups | governance-groups.ts:114 |
+  | agents | agents.ts:47 | governancePolicies | governance-policies.ts:49 |
+  | analysisReports | analysis-reports.ts:45 | governanceTasks | governance-tasks.ts:168 |
+  | auditLogs | audit.service.ts:97 | mappings | org-scope.ts:135 † |
+  | comments | comments.ts:76 | notifications | notifications.ts:59 |
+  | connectionSystemLinks | systems.ts:211 | operationsManuals | org-scope.ts:135 † |
+  | connections | connections.ts:127 | organizations | dashboard.ts:140 |
+  | connectors | connectors.ts:182 | people | people.ts:331 |
+  | damaRoles | dama-roles.ts:85 | processNodes | process-catalog.ts:280 |
+  | dataAssets | data-assets.ts:97 | reports | reports.ts:50 |
+  | dataDomains | data-domains.ts:36 | sops | org-scope.ts:135 † |
+  | dataLineageLinks | data-lineage.ts:114 | suggestionDismissals | org-scope.ts:135 † |
+  | dbtCloudConnections | dbt-cloud-connections.ts:61 | syncConnections | sync-connections.ts:141 |
+  | decisionRights | decision-rights.ts:83 | systems | systems.ts:106 |
+  | flowRelationships | dashboard.ts:63 | | |
+
+  † Four stores (`mappings`, `sops`, `operationsManuals`, `suggestionDismissals`)
+  surface *inside* the shared `filterByOrgScope()` helper — their owning routes
+  pass a stale array into it. Fix is in each owning route, not the helper.
+
+  Each store is independent work; the `loadStore → []` flip is the *last* step,
+  only safe once the table above is empty.
+
+  - **9b.1 (done) — `agent-executions`.** Self-contained (sole live reader of the
+    `agentExecutions` array; `agent-schedules` imports only `runAgentExecution`,
+    and `index.ts`'s autosave closure is inert in PG mode). Converted all six
+    handlers to `agentExecutionsRepo` (list/get/update/delete), guarded the
+    boot-time `promotedDocumentId` backfill to JSON mode (Postgres rows always
+    carry the column). Verified against a **local Postgres**: list/get read from
+    PG, review + delete-all write to PG, and the `agentExecutions` boot warning
+    is gone. PG mapping already covered by the live-db round-trip suite; JSON
+    behaviour unchanged (repo wraps the same array), full suite green.
+    *Deferred to their own line items:* the promote handler's foreign writes to
+    `governancePolicies` / `mappings` (those stores' own conversions).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
