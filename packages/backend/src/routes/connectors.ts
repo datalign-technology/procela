@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomBytes, randomInt, createHash } from 'crypto';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import { dataAssets } from './data-assets';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
@@ -152,14 +152,14 @@ function freshnessFor(row: StoredConnector): StoredConnector['status'] {
 // Connector-token middleware — used by the agent-side endpoints.
 // The admin-side endpoints continue to use the standard authenticateToken
 // from index.ts and are mounted under the same /connectors prefix.
-function requireConnectorToken(req: Request, res: Response, next: () => void): void {
+async function requireConnectorToken(req: Request, res: Response, next: () => void): Promise<void> {
   const header = req.header('authorization') || '';
   const m = header.match(/^Bearer\s+(\S+)$/i);
   if (!m) { res.status(401).json({ success: false, error: 'connector token required' }); return; }
   const provided = m[1];
   if (!provided.startsWith('pct_')) { res.status(401).json({ success: false, error: 'not a connector token' }); return; }
   const hash = hashToken(provided);
-  const row = connectors.find((c) => c.tokenHash === hash && c.status !== 'REVOKED');
+  const row = (await connectorsRepo.list()).find((c) => c.tokenHash === hash && c.status !== 'REVOKED');
   if (!row) { res.status(401).json({ success: false, error: 'invalid or revoked connector token' }); return; }
   (req as any).connector = row;
   next();
@@ -178,8 +178,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
   try {
     const { orgId } = req.query;
     const oid = (orgId as string | undefined) || req.user?.orgId;
-    const rows = connectors
-      .filter((c) => !oid || c.orgId === oid)
+    const rows = (await connectorsRepo.list(oid ? { orgId: oid } : undefined))
       .map((c) => {
         try {
           return {
@@ -245,7 +244,7 @@ router.post('/pair/start', authenticateToken, async (req: AuthenticatedRequest, 
  *  surfaces name + systemIds; everything else (token, freshness,
  *  agentVersion) is set by the agent or by lifecycle events. */
 router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const row = connectors.find((c) => c.id === req.params.id);
+  const row = await connectorsRepo.get(String(req.params.id));
   if (!row) { res.status(404).json({ success: false, error: 'connector not found' }); return; }
   const before = { name: row.name, systemIds: [...row.systemIds] };
   const patch: Partial<StoredConnector> = {};
@@ -274,7 +273,7 @@ router.patch('/:id', authenticateToken, async (req: AuthenticatedRequest, res: R
  *  the row sticks around for audit, but the token is dead and no
  *  further heartbeats are accepted. */
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const row = connectors.find((c) => c.id === req.params.id);
+  const row = await connectorsRepo.get(String(req.params.id));
   if (!row) { res.status(404).json({ success: false, error: 'connector not found' }); return; }
   await connectorsRepo.update(row.id, {
     status: 'REVOKED',
@@ -291,7 +290,7 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
  *  Reverse chronological, capped at 200. Drives the Activity tab on
  *  the connector detail drawer. */
 router.get('/:id/events', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const events = connectorEvents
+  const events = (await connectorEventsRepo.list())
     .filter((e) => e.connectorId === req.params.id)
     .sort((a, b) => b.ts.localeCompare(a.ts))
     .slice(0, 200);
@@ -307,7 +306,7 @@ router.post('/pair/claim', pairClaimLimiter, pairClaimHourLimiter, async (req: R
   const code = String(req.body?.code || '').trim();
   const agentVersion = String(req.body?.agentVersion || '').trim();
   if (!code) { res.status(400).json({ success: false, error: 'code is required' }); return; }
-  const row = connectors.find((c) => c.pairingCode === code);
+  const row = (await connectorsRepo.list()).find((c) => c.pairingCode === code);
   if (!row) { res.status(404).json({ success: false, error: 'pairing code not found' }); return; }
   if (!row.pairingCodeExpiresAt || new Date(row.pairingCodeExpiresAt).getTime() < Date.now()) {
     res.status(410).json({ success: false, error: 'pairing code expired — start a new pair' });
@@ -425,9 +424,9 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
  *  Lifts the silent connectors into OFFLINE state and writes one
  *  notification per transition. Exposed so the test suite can drive
  *  it directly without waiting on a real timer. */
-export function scanForOfflineConnectors(): { transitioned: number } {
+export async function scanForOfflineConnectors(): Promise<{ transitioned: number }> {
   let transitioned = 0;
-  for (const row of connectors) {
+  for (const row of await connectorsRepo.list()) {
     if (row.status === 'REVOKED') continue;
     if (!row.lastHeartbeatAt) continue;
     const live = freshnessFor(row);
@@ -435,6 +434,7 @@ export function scanForOfflineConnectors(): { transitioned: number } {
       row.status = 'OFFLINE';
       row.updatedAt = nowIso();
       transitioned++;
+      await connectorsRepo.update(row.id, { status: 'OFFLINE', updatedAt: row.updatedAt });
       createNotification({
         orgId: row.orgId,
         type: 'WARNING',
@@ -445,7 +445,6 @@ export function scanForOfflineConnectors(): { transitioned: number } {
       logger.warn({ connectorId: row.id, name: row.name }, 'Connector marked OFFLINE');
     }
   }
-  if (transitioned > 0) saveStore('connectors', connectors);
   return { transitioned };
 }
 

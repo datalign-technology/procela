@@ -10,6 +10,7 @@ import { glossaryTerms } from './business-glossary';
 import { connections } from './connections';
 import logger from '../lib/logger';
 import { getSyncConnectionsRepository } from '../db/sync-connections.repo';
+import { hasDatabase } from '../db/prisma';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,15 +137,20 @@ const updateSyncConnectionBodySchema = z.object({
 });
 
 // Backfill connectionId on legacy rows so consumers can rely on the
-// field existing. null = inline (no saved-connection reference).
-let connectionIdMigrated = false;
-for (const sc of syncConnections) {
-  if (sc.connectionId === undefined) {
-    sc.connectionId = null;
-    connectionIdMigrated = true;
+// field existing. null = inline (no saved-connection reference). JSON
+// mode only — Postgres rows always carry the column (create sets it,
+// schema defaults it), and reading the boot array in PG mode would just
+// be a stale-store read.
+if (!hasDatabase()) {
+  let connectionIdMigrated = false;
+  for (const sc of syncConnections) {
+    if (sc.connectionId === undefined) {
+      sc.connectionId = null;
+      connectionIdMigrated = true;
+    }
   }
+  if (connectionIdMigrated) saveStore('syncConnections', syncConnections);
 }
-if (connectionIdMigrated) saveStore('syncConnections', syncConnections);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -394,10 +400,9 @@ const router = Router();
 /** GET /api/v1/sync-connections — list all, supports ?orgId= and ?targetEntity= filters */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, targetEntity } = req.query;
-  let filtered = syncConnections;
-  if (orgId && typeof orgId === 'string') {
-    filtered = filtered.filter((sc) => sc.orgId === orgId);
-  }
+  let filtered = await syncConnectionsRepo.list(
+    orgId && typeof orgId === 'string' ? { orgId } : undefined,
+  );
   if (targetEntity && typeof targetEntity === 'string') {
     filtered = filtered.filter((sc) => sc.targetEntity === targetEntity);
   }
@@ -412,7 +417,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/sync-connections/:id — get single connection */
 router.get('/:id', async (req: Request, res: Response) => {
-  const sc = syncConnections.find((c) => c.id === req.params.id);
+  const sc = await syncConnectionsRepo.get(String(req.params.id));
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;
@@ -474,7 +479,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/sync-connections/:id — update connection */
 router.put('/:id', async (req: Request, res: Response) => {
-  const sc = syncConnections.find((c) => c.id === req.params.id);
+  const sc = await syncConnectionsRepo.get(String(req.params.id));
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;
@@ -539,7 +544,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/sync-connections/:id — delete connection */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = syncConnections.find((c) => c.id === req.params.id);
+  const removed = await syncConnectionsRepo.get(String(req.params.id));
   if (!removed) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;
@@ -551,7 +556,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 /** POST /api/v1/sync-connections/:id/run — execute sync now (manual trigger) */
 router.post('/:id/run', async (req: Request, res: Response) => {
-  const sc = syncConnections.find((c) => c.id === req.params.id);
+  const sc = await syncConnectionsRepo.get(String(req.params.id));
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;
@@ -662,7 +667,7 @@ router.post('/:id/run', async (req: Request, res: Response) => {
 
 /** GET /api/v1/sync-connections/:id/preview — dry run showing first 10 rows */
 router.get('/:id/preview', async (req: Request, res: Response) => {
-  const sc = syncConnections.find((c) => c.id === req.params.id);
+  const sc = await syncConnectionsRepo.get(String(req.params.id));
   if (!sc) {
     res.status(404).json({ success: false, error: 'Sync connection not found' });
     return;

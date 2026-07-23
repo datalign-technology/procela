@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { processNodes, flowRelationships, NODE_LEVELS, isGovernanceNode as isGovernanceProcess, type ProcessNode } from './process-catalog';
+import { processNodes, flowRelationshipsRepo, NODE_LEVELS, isGovernanceNode as isGovernanceProcess, type ProcessNode } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { mappings } from './mappings';
 import { systems } from './systems';
@@ -60,7 +60,7 @@ router.get('/stats', async (req: Request, res: Response) => {
   // Flows don't carry orgId — walk them via the (already-scoped) node
   // set so scope + domain filtering fall out naturally.
   const inScopeNodeIds = new Set(filteredNodes.map((n) => n.id));
-  const filteredFlows = flowRelationships.filter((f) => inScopeNodeIds.has(f.fromNodeId));
+  const filteredFlows = (await flowRelationshipsRepo.list()).filter((f) => inScopeNodeIds.has(f.fromNodeId));
 
   // Count by level
   const byLevel = Object.fromEntries(

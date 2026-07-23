@@ -260,7 +260,7 @@ describe('connector routes', () => {
   });
 
   describe('scanForOfflineConnectors', () => {
-    it('transitions a long-silent connector to OFFLINE and writes a notification', () => {
+    it('transitions a long-silent connector to OFFLINE and writes a notification', async () => {
       // Seed a row with an ancient heartbeat (well past the 4h
       // threshold).
       const ancient = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
@@ -278,7 +278,7 @@ describe('connector routes', () => {
         createdAt: ancient,
         updatedAt: ancient,
       });
-      const result = scanForOfflineConnectors();
+      const result = await scanForOfflineConnectors();
       assert.ok(result.transitioned >= 1);
       const row = connectors.find((c: any) => c.id === PREFIX + 'silent-conn');
       assert.strictEqual(row.status, 'OFFLINE');
