@@ -46,15 +46,13 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
   const orgId = String(req.query.orgId || '');
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
-  const data = reports
-    .filter((r) => r.orgId === orgId)
-    .map(stripDefinitionForList);
+  const data = (await reportsRepo.list({ orgId })).map(stripDefinitionForList);
   res.json({ success: true, data });
 });
 
 /** GET /api/v1/reports/:id — one report, full definition included. */
 router.get('/:id', async (req: Request, res: Response) => {
-  const report = reports.find((r) => r.id === String(req.params.id));
+  const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   res.json({ success: true, data: report });
 });
@@ -91,7 +89,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/reports/:id — update. */
 router.put('/:id', async (req: Request, res: Response) => {
-  const report = reports.find((r) => r.id === String(req.params.id));
+  const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   const { name, description, ownerId, visibility, definition } = req.body || {};
   const patch: Partial<StoredReport> = {};
@@ -121,7 +119,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 /** POST /api/v1/reports/:id/run — execute and return rows. */
 router.post('/:id/run', async (req: Request, res: Response) => {
-  const report = reports.find((r) => r.id === String(req.params.id));
+  const report = await reportsRepo.get(String(req.params.id));
   if (!report) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
   try {
     const result = await executeReport(report.definition, report.orgId);

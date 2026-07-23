@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
@@ -80,8 +80,9 @@ const router = Router();
 /** GET /api/v1/decision-rights — list (optional ?orgId= and ?category= filters) */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, category } = req.query;
-  let filtered = [...decisionRights];
-  if (orgId) filtered = filtered.filter((r) => r.orgId === orgId);
+  let filtered = await decisionRightsRepo.list(
+    typeof orgId === 'string' && orgId ? { orgId } : undefined,
+  );
   if (category) filtered = filtered.filter((r) => r.category === category);
 
   const enriched = filtered.map(enrichWithDeciderName);
@@ -90,7 +91,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/decision-rights/:id — single decision right */
 router.get('/:id', async (req: Request, res: Response) => {
-  const row = decisionRights.find((r) => r.id === req.params.id);
+  const row = await decisionRightsRepo.get(String(req.params.id));
   if (!row) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
   res.json({ success: true, data: enrichWithDeciderName(row) });
 });
@@ -141,7 +142,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/decision-rights/:id — update */
 router.put('/:id', async (req: Request, res: Response) => {
-  const row = decisionRights.find((r) => r.id === req.params.id);
+  const row = await decisionRightsRepo.get(String(req.params.id));
   if (!row) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
 
   const before = { ...row };
@@ -180,7 +181,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/decision-rights/:id — delete */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = decisionRights.find((r) => r.id === req.params.id);
+  const removed = await decisionRightsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Decision right not found' }); return; }
   await decisionRightsRepo.delete(removed.id);
   auditService.log(removed.orgId, null, 'DecisionRight', removed.id, 'DELETE', removed, null);
@@ -197,9 +198,14 @@ router.post('/seed', async (req: Request, res: Response) => {
   const created: StoredDecisionRight[] = [];
   let skipped = 0;
 
+  // Fetch the org's existing rights once; STANDARD_DECISIONS carry
+  // distinct decision strings, so no intra-batch duplicate can slip past
+  // this pre-fetch.
+  const existingForOrg = await decisionRightsRepo.list({ orgId });
+
   for (const seed of STANDARD_DECISIONS) {
-    const existing = decisionRights.find(
-      (r) => r.orgId === orgId && r.decision.toLowerCase() === seed.decision.toLowerCase(),
+    const existing = existingForOrg.find(
+      (r) => r.decision.toLowerCase() === seed.decision.toLowerCase(),
     );
     if (existing) { skipped++; continue; }
 
@@ -218,12 +224,11 @@ router.post('/seed', async (req: Request, res: Response) => {
       createdAt: now,
       updatedAt: now,
     };
-    decisionRights.push(row);
+    await decisionRightsRepo.create(row);
     created.push(row);
     auditService.log(orgId, null, 'DecisionRight', row.id, 'CREATE', null, row);
   }
 
-  saveStore('decisionRights', decisionRights);
   logger.info({ orgId, created: created.length, skipped }, 'Seeded standard decision rights');
 
   res.status(201).json({
