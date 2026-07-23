@@ -253,7 +253,7 @@ registerStore('suggestionDismissals', suggestionDismissals);
 const processNodesRepo = getProcessNodesRepository(processNodes);
 const flowRelationshipsRepo = getFlowRelationshipsRepository(flowRelationships);
 const processVersionsRepo = getProcessVersionsRepository(processVersions);
-const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
+export const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
 
 // Cached lazily so we don't have to import the governance-policies
 // route eagerly (that would drag its own module-load side effects into
@@ -264,9 +264,9 @@ function getGovernancePoliciesRepo() {
   return getGovernancePoliciesRepository(governancePolicies);
 }
 
-function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['kind']): Set<string> {
+async function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['kind']): Promise<Set<string>> {
   const out = new Set<string>();
-  for (const d of suggestionDismissals) {
+  for (const d of await suggestionDismissalsRepo.list()) {
     if (d.nodeId === nodeId && d.kind === kind) out.add(d.targetId);
   }
   return out;
@@ -1176,7 +1176,7 @@ router.get('/nodes/:id/validate', (req: Request, res: Response) => {
  *  system affinity. Always excludes assets already mapped to this
  *  node. ?limit=N caps the response (default 5); ?minScore=X drops
  *  candidates below the threshold (default 0.1). */
-router.get('/nodes/:id/asset-suggestions', (req: Request, res: Response) => {
+router.get('/nodes/:id/asset-suggestions', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) {
@@ -1195,7 +1195,7 @@ router.get('/nodes/:id/asset-suggestions', (req: Request, res: Response) => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { mappings } = require('./mappings');
   const orgAssets = dataAssets.filter((a: any) => a.orgId === node.orgId);
-  const dismissed = dismissedTargetsFor(node.id, 'asset');
+  const dismissed = await dismissedTargetsFor(node.id, 'asset');
   const ranked = rankSuggestions(
     { id: node.id, name: node.name, description: node.description, systemIds: node.systemIds },
     orgAssets,
@@ -1211,7 +1211,7 @@ router.get('/nodes/:id/asset-suggestions', (req: Request, res: Response) => {
  *  based on name/description overlap and "used by sibling steps".
  *  Excludes systems already declared by the node and any dismissed by
  *  the user. */
-router.get('/nodes/:id/system-suggestions', (req: Request, res: Response) => {
+router.get('/nodes/:id/system-suggestions', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) {
@@ -1225,7 +1225,7 @@ router.get('/nodes/:id/system-suggestions', (req: Request, res: Response) => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { systems } = require('./systems');
   const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
-  const dismissed = dismissedTargetsFor(node.id, 'system');
+  const dismissed = await dismissedTargetsFor(node.id, 'system');
   const data = rankSystemSuggestions(
     { id: node.id, parentId: node.parentId, name: node.name, description: node.description, systemIds: node.systemIds },
     orgSystems,
@@ -1241,7 +1241,7 @@ router.get('/nodes/:id/system-suggestions', (req: Request, res: Response) => {
  *  based on title/jobRole overlap, required-skill match, and ownership
  *  of any system the step already declares. Excludes the existing
  *  owner / responsible person and any dismissed by the user. */
-router.get('/nodes/:id/people-suggestions', (req: Request, res: Response) => {
+router.get('/nodes/:id/people-suggestions', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) {
@@ -1256,7 +1256,7 @@ router.get('/nodes/:id/people-suggestions', (req: Request, res: Response) => {
   const { systems } = require('./systems');
   const orgPeople = people.filter((p: any) => (p.orgIds || []).includes(node.orgId));
   const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
-  const dismissed = dismissedTargetsFor(node.id, 'person');
+  const dismissed = await dismissedTargetsFor(node.id, 'person');
   const data = rankPeopleSuggestions(
     {
       id: node.id,
@@ -1380,7 +1380,7 @@ router.post('/nodes/:id/suggestions/dismiss', async (req: Request, res: Response
     res.status(400).json({ success: false, error: 'targetId is required' });
     return;
   }
-  const existing = suggestionDismissals.find(
+  const existing = (await suggestionDismissalsRepo.list()).find(
     (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
   );
   if (existing) { res.json({ success: true, data: existing }); return; }
@@ -1404,7 +1404,7 @@ router.delete('/nodes/:id/suggestions/dismiss/:kind/:targetId', async (req: Requ
   const nodeId = param(req.params.id);
   const kind = param(req.params.kind);
   const targetId = param(req.params.targetId);
-  const removed = suggestionDismissals.find(
+  const removed = (await suggestionDismissalsRepo.list()).find(
     (d) => d.nodeId === nodeId && d.kind === kind && d.targetId === targetId,
   );
   if (!removed) { res.status(404).json({ success: false, error: 'Dismissal not found' }); return; }
@@ -1416,9 +1416,9 @@ router.delete('/nodes/:id/suggestions/dismiss/:kind/:targetId', async (req: Requ
 /** GET /nodes/:id/dismissed-suggestions — list dismissals for a node.
  *  Useful for an admin UI that wants to surface "hidden by user" rows
  *  so they can be restored. */
-router.get('/nodes/:id/dismissed-suggestions', (req: Request, res: Response) => {
+router.get('/nodes/:id/dismissed-suggestions', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
-  const rows = suggestionDismissals.filter((d) => d.nodeId === nodeId);
+  const rows = (await suggestionDismissalsRepo.list()).filter((d) => d.nodeId === nodeId);
   res.json({ success: true, data: rows });
 });
 

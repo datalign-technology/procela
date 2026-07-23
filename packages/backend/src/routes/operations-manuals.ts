@@ -273,13 +273,13 @@ const router = Router();
 /** GET /api/v1/operations-manuals — list with ?orgId= filter */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(operationsManuals, orgId as string | undefined);
+  const filtered = filterByOrgScope(await operationsManualsRepo.list(), orgId as string | undefined);
   res.json({ success: true, data: filtered });
 });
 
 /** GET /api/v1/operations-manuals/:id — single manual */
 router.get('/:id', async (req: Request, res: Response) => {
-  const manual = operationsManuals.find((m) => m.id === req.params.id);
+  const manual = await operationsManualsRepo.get(String(req.params.id));
   if (!manual) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
   res.json({ success: true, data: manual });
 });
@@ -316,7 +316,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/operations-manuals/:id — update any fields */
 router.put('/:id', async (req: Request, res: Response) => {
-  const manual = operationsManuals.find((m) => m.id === req.params.id);
+  const manual = await operationsManualsRepo.get(String(req.params.id));
   if (!manual) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
 
   const before = { ...manual };
@@ -342,7 +342,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/operations-manuals/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = operationsManuals.find((m) => m.id === req.params.id);
+  const removed = await operationsManualsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
   auditService.log(removed.orgId, null, 'OperationsManual', removed.id, 'DELETE', removed, null);
   await operationsManualsRepo.delete(removed.id);
@@ -359,10 +359,12 @@ router.post('/seed', async (req: Request, res: Response) => {
   const created: StoredOperationsManual[] = [];
   const skipped: string[] = [];
 
+  // Fetch the org's manuals once; STANDARD_MANUALS carry distinct
+  // roleTypes so no intra-batch duplicate can slip past this pre-fetch.
+  const existingForOrg = await operationsManualsRepo.list({ orgId });
+
   for (const tmpl of STANDARD_MANUALS) {
-    const exists = operationsManuals.some(
-      (m) => m.orgId === orgId && m.roleType === tmpl.roleType,
-    );
+    const exists = existingForOrg.some((m) => m.roleType === tmpl.roleType);
     if (exists) { skipped.push(tmpl.label); continue; }
 
     const manual: StoredOperationsManual = {

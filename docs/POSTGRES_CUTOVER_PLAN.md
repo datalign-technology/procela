@@ -298,22 +298,31 @@ data-carrying cutover, or take the fresh-org path.
   | analysisReports | ~~analysis-reports.ts~~ **done (9b.2)** | governanceTasks | governance-tasks.ts:168 |
   | auditLogs | audit.service.ts:97 | mappings | org-scope.ts:135 † |
   | comments | comments.ts:76 | notifications | notifications.ts:59 |
-  | connectionSystemLinks | systems.ts:211 | operationsManuals | org-scope.ts:135 † |
+  | connectionSystemLinks | systems.ts:211 | operationsManuals | ~~operations-manuals.ts~~ **done (9b.3)** |
   | connections | connections.ts:127 | organizations | dashboard.ts:140 |
   | connectors | connectors.ts:182 | people | people.ts:331 |
   | damaRoles | dama-roles.ts:85 | processNodes | process-catalog.ts:280 |
   | dataAssets | data-assets.ts:97 | reports | ~~reports.ts~~ **done (9b.2)** |
-  | dataDomains | data-domains.ts:36 | sops | org-scope.ts:135 † |
-  | dataLineageLinks | data-lineage.ts:114 | suggestionDismissals | org-scope.ts:135 † |
+  | dataDomains | data-domains.ts:36 | sops | org-scope.ts:135 † (aggregator-gated) |
+  | dataLineageLinks | data-lineage.ts:114 | suggestionDismissals | ~~process-catalog + dashboard~~ **done (9b.3)** |
   | dbtCloudConnections | ~~dbt-cloud-connections.ts~~ **done (9b.2)** | syncConnections | sync-connections.ts:141 |
   | decisionRights | ~~decision-rights.ts~~ **done (9b.2)** | systems | systems.ts:106 |
   | flowRelationships | dashboard.ts:63 | | |
 
-  **Progress: 5 / 29 stores converted.** Remaining: 24.
+  **Progress: 7 / 29 stores converted.** Remaining: 22.
 
-  † Four stores (`mappings`, `sops`, `operationsManuals`, `suggestionDismissals`)
-  surface *inside* the shared `filterByOrgScope()` helper — their owning routes
-  pass a stale array into it. Fix is in each owning route, not the helper.
+  † The `filterByOrgScope()` framing turned out too optimistic: the *first*
+  diagnostic hit for these stores was a `filterByOrgScope` call, but a store's
+  warning only clears once **every** reader of its array is converted — and the
+  real shared readers are the **generic aggregators**: `organizations.ts` (org
+  deletion-impact summary + export + reset read ~17 stores directly),
+  `dashboard.ts` `/stats`, `process-catalog`, `chat`, `search`,
+  `digest.service`, `gap-detection`, `enterprise-view`, `exports`, `docs`,
+  `analysis`. `mappings` alone is read in **16 files**. So `sops` (gated on the
+  `organizations.ts` aggregator) and `mappings` (16 files) are **not** isolable
+  leaf work — they belong to the aggregator phase. `operationsManuals` (single
+  reader) and `suggestionDismissals` (process-catalog + one dashboard line) were
+  cleanly isolable and are done.
 
   Each store is independent work; the `loadStore → []` flip is the *last* step,
   only safe once the table above is empty.
@@ -343,6 +352,23 @@ data-carrying cutover, or take the fresh-org path.
     rights create + seed → 11 rows in `decision_rights`; dbt token never leaked
     via `publicShape`), and all four boot/traffic warnings are gone. tsc clean,
     full suite green (890).
+
+  - **9b.3 (done) — the isolable `filterByOrgScope` stores: `operations-manuals`,
+    `suggestion-dismissals`.** Investigating "the filterByOrgScope four" surfaced
+    the aggregator finding above (see †). Of the four, only these two had a
+    bounded reader set and could be fully cleared:
+    - `operations-manuals` — single reader (its own route). Converted list
+      (`filterByOrgScope(await repo.list(), …)`), get/put/delete, and the seed
+      dup-check (pre-fetch once). Seed → 7 rows in `operations_manuals`.
+    - `suggestionDismissals` — read in `process-catalog` (the `dismissedTargetsFor`
+      helper, now async; three dismissal CRUD handlers) and one `dashboard` `/stats`
+      line. `process-catalog` now `export`s its `suggestionDismissalsRepo`; the
+      dashboard reader uses it via the existing lazy `require` (keeps JSON mode
+      wrapping the real array — passing `[]` to the factory would have read empty
+      in file mode). `/stats` + the three suggestion handlers made async.
+    Verified against a **local Postgres**: both readers work, and neither store
+    warns at boot or under traffic. `sops` and `mappings` deferred to the
+    aggregator phase (see †). tsc clean, full suite green (890).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
