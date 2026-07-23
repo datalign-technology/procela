@@ -395,6 +395,29 @@ data-carrying cutover, or take the fresh-org path.
     rows in PG, all readers work, and none of the four warn at boot or under
     traffic. tsc clean, full suite green (890).
 
+  **Aggregator phase.** The 19 remaining stores are all read by the generic
+  multi-store aggregators (see †), so they clear only once those aggregators
+  are converted. Unlike the leaf increments, converting one aggregator doesn't
+  make a store's warning disappear (the store has other readers) — the payoff is
+  (a) **correctness**: in Postgres mode these endpoints currently read empty boot
+  arrays and silently return wrong results, and (b) removing a shared reader so
+  each store drops toward its last one. Verification shifts from "warning gone"
+  to "endpoint reads/writes the right PG data + emits no stale read of its own."
+
+  - **9b.5a (done) — `organizations.ts` read aggregators: `/:id/impact`,
+    `/:id/snapshot`.** Both tally / export every entity in an org subtree across
+    ~16 foreign stores. Added a repo-backed `loadOrgScopeStores()` helper (a
+    registry of `{routePath, storeExport, repoPath, repoFactory}` per store; lazy
+    `require` avoids the import cycle, `make(arr).list()` reads Postgres in DB
+    mode and the wrapped array in JSON mode) and routed both endpoints through it;
+    the `organizations` tree itself now comes from `orgRepo.list()`. Both handlers
+    made async. Verified against a **local Postgres**: seeded a data-asset in an
+    org → `/impact` reports `dataAssets:1` and `/snapshot` includes it, read from
+    PG (pre-conversion both would read the empty boot array and report 0). tsc
+    clean, full suite green (890). *Deferred to 9b.5b:* the `DELETE /:id` cascade
+    (reads **and** deletes/moves/orphans the same 16 stores — higher blast radius,
+    its own PR).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
