@@ -418,6 +418,34 @@ data-carrying cutover, or take the fresh-org path.
     (reads **and** deletes/moves/orphans the same 16 stores — higher blast radius,
     its own PR).
 
+  - **9b.5b (done) — `organizations.ts` `DELETE /:id` cascade.** The subtree
+    deletion that removes descendant orgs and, per a `{actions}` body, deletes /
+    moves / orphans rows across the same 16 foreign stores — previously all direct
+    array `splice` + `saveStore`, i.e. **completely broken in Postgres mode** (it
+    mutated JSON files, deleting nothing from the DB). Rewrote it repo-backed:
+    - The subtree is computed locally from `orgRepo.list()` — `people.getDescendantOrgIds`
+      reads the stale org array (would return `[]` in PG mode, so the cascade would
+      only touch the root); reparent/delete of orgs now go through `orgRepo`.
+    - `applySingleOrg` / `applyMultiOrg` are now async and take a `Repository`
+      instead of a store array: `list()` once, then `delete()` / `update()` each
+      matched row (orphan rewrites `orgIds[]` and re-homes `orgId`). A new
+      `repoForStore(key)` accessor (same registry as the loader) hands each helper
+      its repo.
+    - The cross-reference cleanup (prune `governanceGroups.members`, delete
+      `damaRoles`/`mappings` by dangling FK, strip `dataDomains.dataAssetIds`) is
+      likewise repo-backed.
+    Verified against a **local Postgres** across every path — seeded an org
+    subtree + foreign rows directly in PG (the create endpoints that would seed
+    them are themselves unconverted aggregators — see below), then: descendant +
+    root org delete (3 orgs → 1), foreign single-org delete (`data_assets` → 0),
+    multi-org **orphan** rewriting a person's `person_orgs` join from `[child,
+    keeper]` to `[keeper]`, multi-org **move** re-homing a process node to a keeper
+    org, and cross-ref cleanup pruning a mapping whose data-asset was deleted.
+    tsc clean, full suite green (890). **`organizations.ts` is now fully
+    converted.** *Surfaced along the way:* `POST /organizations` and
+    `POST /data-assets` still validate against the stale org array (reject
+    PG-created parents/orgs), so they're on the aggregator worklist too.
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

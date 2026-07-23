@@ -6,6 +6,7 @@ import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { getOrganizationsRepository } from '../db/organizations.repo';
+import type { Repository } from '../db/repository';
 // Lazy-required inside handlers to avoid the circular import with
 // `routes/people` (which imports the `organizations` array from this file).
 // Using `require` at call-time ensures both modules are fully initialised
@@ -153,6 +154,23 @@ async function loadOrgScopeStores(): Promise<Record<string, any[]>> {
     } catch { out[s.key] = []; }
   }));
   return out;
+}
+
+// A single store's repository, keyed by the same registry. Used by the
+// DELETE /:id cascade to delete/move/orphan rows through the repo (so the
+// cascade actually mutates Postgres in DB mode, not stale JSON). Returns
+// null if the owning module isn't loaded. Type is `Repository<any>`
+// because the cascade operates uniformly on `orgId`/`orgIds` shapes.
+function repoForStore(key: string): Repository<any> | null {
+  const s = ORG_SCOPE_STORES.find((x) => x.key === key);
+  if (!s) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const arr = require(s.routePath)[s.storeExport] || [];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const make = require(s.repoPath)[s.repoFactory];
+    return make(arr) as Repository<any>;
+  } catch { return null; }
 }
 
 // ── Helpers ──
@@ -533,17 +551,28 @@ const ORPHAN_ELIGIBLE: ReadonlySet<CategoryKey> = new Set<CategoryKey>(['people'
 
 interface ApplyResult { deleted: number; moved: number; orphaned: number }
 
-router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
-  const org = organizations.find((o) => o.id === req.params.id);
+router.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const allOrgs = await orgRepo.list();
+  const org = allOrgs.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
-  const { canAccessOrg, getDescendantOrgIds } = accessHelpers();
+  const { canAccessOrg } = accessHelpers();
   if (!canAccessOrg(req.user, org.id)) {
     res.status(403).json({ success: false, error: 'You do not have access to this organization' });
     return;
   }
 
-  const subtreeIds = new Set<string>([org.id, ...getDescendantOrgIds(org.id)]);
-  const directChildIds = new Set(organizations.filter((o) => o.parentId === org.id).map((o) => o.id));
+  // Compute the subtree from the repo-loaded org tree, not the stale
+  // module array (people.getDescendantOrgIds reads that array, so it would
+  // return [] in Postgres mode and the cascade would only touch the root).
+  const descendantsOf = (parentId: string): string[] => {
+    const out: string[] = [];
+    for (const child of allOrgs.filter((o) => o.parentId === parentId)) {
+      out.push(child.id, ...descendantsOf(child.id));
+    }
+    return out;
+  };
+  const subtreeIds = new Set<string>([org.id, ...descendantsOf(org.id)]);
+  const directChildIds = new Set(allOrgs.filter((o) => o.parentId === org.id).map((o) => o.id));
 
   // Resolve and validate actions up front. An unspecified action defaults
   // to "delete" so callers that don't send a body get the original cascade.
@@ -574,7 +603,7 @@ router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
         res.status(400).json({ success: false, error: `Move target for "${key}" cannot be inside the deleted subtree` });
         return;
       }
-      if (!organizations.find((o) => o.id === a.targetOrgId)) {
+      if (!allOrgs.find((o) => o.id === a.targetOrgId)) {
         res.status(400).json({ success: false, error: `Move target organization for "${key}" not found` });
         return;
       }
@@ -597,18 +626,20 @@ router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
   let childOrgsMoved = 0;
   if (resolved.childOrgs.type === 'move') {
     // Reparent direct children only — descendants below them stay put.
-    for (const o of organizations) {
+    for (const o of allOrgs) {
       if (directChildIds.has(o.id)) {
-        o.parentId = resolved.childOrgs.targetOrgId!;
-        o.updatedAt = new Date().toISOString();
+        await orgRepo.update(o.id, {
+          parentId: resolved.childOrgs.targetOrgId!,
+          updatedAt: new Date().toISOString(),
+        });
         childOrgsMoved++;
       }
     }
   } else {
     // Delete every descendant; the root org is removed at the end.
-    for (let i = organizations.length - 1; i >= 0; i--) {
-      if (subtreeIds.has(organizations[i].id) && organizations[i].id !== org.id) {
-        organizations.splice(i, 1);
+    for (const o of allOrgs) {
+      if (subtreeIds.has(o.id) && o.id !== org.id) {
+        await orgRepo.delete(o.id);
         childOrgsDeleted++;
       }
     }
@@ -624,50 +655,50 @@ router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
   };
 
   // ── Helpers for applying actions ────────────────────────────────────────
-  const applySingleOrg = (
-    store: any[],
-    storeName: string,
+  // Both operate through the store's repository: read once via list(), then
+  // delete()/update() each matched row. In JSON mode the repo wraps the same
+  // in-memory array (so behaviour is unchanged); in Postgres mode the writes
+  // land in the database. A null repo (module not loaded) is a no-op.
+  const applySingleOrg = async (
+    repo: Repository<any> | null,
     action: CategoryAction,
     deletedSet?: Set<string>,
     orgField: string = 'orgId',
-  ): ApplyResult => {
+  ): Promise<ApplyResult> => {
     let deleted = 0, moved = 0;
-    if (action.type === 'delete') {
-      for (let i = store.length - 1; i >= 0; i--) {
-        if (removedOrgIds.has(store[i][orgField])) {
-          if (deletedSet) deletedSet.add(store[i].id);
-          store.splice(i, 1); deleted++;
-        }
-      }
-    } else if (action.type === 'move') {
-      for (const item of store) {
-        if (removedOrgIds.has(item[orgField])) {
-          item[orgField] = action.targetOrgId!;
-          if (item.updatedAt !== undefined) item.updatedAt = new Date().toISOString();
-          moved++;
-        }
+    if (!repo) return { deleted, moved, orphaned: 0 };
+    const rows = await repo.list();
+    for (const item of rows) {
+      if (!removedOrgIds.has(item[orgField])) continue;
+      if (action.type === 'delete') {
+        if (deletedSet) deletedSet.add(item.id);
+        await repo.delete(item.id); deleted++;
+      } else if (action.type === 'move') {
+        const patch: Record<string, any> = { [orgField]: action.targetOrgId! };
+        if (item.updatedAt !== undefined) patch.updatedAt = new Date().toISOString();
+        await repo.update(item.id, patch);
+        moved++;
       }
     }
-    if (deleted > 0 || moved > 0) saveStore(storeName, store);
     return { deleted, moved, orphaned: 0 };
   };
 
-  const applyMultiOrg = (
-    store: any[],
-    storeName: string,
+  const applyMultiOrg = async (
+    repo: Repository<any> | null,
     action: CategoryAction,
     deletedSet: Set<string>,
-  ): ApplyResult => {
+  ): Promise<ApplyResult> => {
     let deleted = 0, moved = 0, orphaned = 0;
-    for (let i = store.length - 1; i >= 0; i--) {
-      const item = store[i];
+    if (!repo) return { deleted, moved, orphaned };
+    const rows = await repo.list();
+    for (const item of rows) {
       const itemOrgIds: string[] = item.orgIds || [];
       const matched = itemOrgIds.some((id: string) => removedOrgIds.has(id))
         || (item.orgId !== undefined && removedOrgIds.has(item.orgId));
       if (!matched) continue;
 
       if (action.type === 'delete') {
-        deletedSet.add(item.id); store.splice(i, 1); deleted++;
+        deletedSet.add(item.id); await repo.delete(item.id); deleted++;
         continue;
       }
 
@@ -676,111 +707,109 @@ router.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
       if (action.type === 'move') {
         const target = action.targetOrgId!;
         if (!remaining.includes(target)) remaining.push(target);
-        item.orgIds = remaining;
-        if (item.orgId !== undefined && removedOrgIds.has(item.orgId)) item.orgId = target;
-        if (item.updatedAt !== undefined) item.updatedAt = new Date().toISOString();
+        const patch: Record<string, any> = { orgIds: remaining };
+        if (item.orgId !== undefined && removedOrgIds.has(item.orgId)) patch.orgId = target;
+        if (item.updatedAt !== undefined) patch.updatedAt = new Date().toISOString();
+        await repo.update(item.id, patch);
         moved++;
       } else { // orphan
         if (remaining.length === 0) {
           // No surviving org → delete row instead of leaving it homeless.
-          deletedSet.add(item.id); store.splice(i, 1); deleted++;
+          deletedSet.add(item.id); await repo.delete(item.id); deleted++;
         } else {
-          item.orgIds = remaining;
-          if (item.orgId !== undefined && removedOrgIds.has(item.orgId)) item.orgId = remaining[0];
-          if (item.updatedAt !== undefined) item.updatedAt = new Date().toISOString();
+          const patch: Record<string, any> = { orgIds: remaining };
+          if (item.orgId !== undefined && removedOrgIds.has(item.orgId)) patch.orgId = remaining[0];
+          if (item.updatedAt !== undefined) patch.updatedAt = new Date().toISOString();
+          await repo.update(item.id, patch);
           orphaned++;
         }
       }
     }
-    if (deleted > 0 || moved > 0 || orphaned > 0) saveStore(storeName, store);
     return { deleted, moved, orphaned };
   };
 
   const summary: Record<string, ApplyResult> = {};
 
   // ── Apply actions per category ──────────────────────────────────────────
-  try { summary.people           = applyMultiOrg(require('./people').people,                          'people',             resolved.people,            deletedIds.people); } catch {}
-  try { summary.processes        = applyMultiOrg(require('./process-catalog').processNodes,          'processNodes',       resolved.processes,         deletedIds.processNodes); } catch {}
-  try { summary.dataAssets       = applySingleOrg(require('./data-assets').dataAssets,                'dataAssets',         resolved.dataAssets,        deletedIds.dataAssets); } catch {}
-  try { summary.systems          = applySingleOrg(require('./systems').systems,                      'systems',            resolved.systems); } catch {}
-  try { summary.dataDomains      = applySingleOrg(require('./data-domains').dataDomains,             'dataDomains',        resolved.dataDomains,       deletedIds.dataDomains); } catch {}
-  try { summary.mappings         = applySingleOrg(require('./mappings').mappings,                    'mappings',           resolved.mappings); } catch {}
-  try { summary.governanceGroups = applySingleOrg(require('./governance-groups').governanceGroups,   'governanceGroups',   resolved.governanceGroups,  deletedIds.governanceGroups); } catch {}
-  try { summary.damaRoles        = applySingleOrg(require('./dama-roles').damaRoles,                 'damaRoles',          resolved.damaRoles, undefined, 'scopeId'); } catch {}
-  try { summary.tasks            = applySingleOrg(require('./governance-tasks').governanceTasks,     'governanceTasks',    resolved.tasks); } catch {}
-  try { summary.issues           = applySingleOrg(require('./governance-issues').governanceIssues,   'governanceIssues',   resolved.issues); } catch {}
-  try { summary.policies         = applySingleOrg(require('./governance-policies').governancePolicies, 'governancePolicies', resolved.policies); } catch {}
-  try { summary.controls         = applySingleOrg(require('./governance-controls').governanceControls, 'governanceControls', resolved.controls); } catch {}
-  try { summary.glossaryTerms    = applySingleOrg(require('./business-glossary').glossaryTerms,      'glossaryTerms',      resolved.glossaryTerms); } catch {}
-  try { summary.sops             = applySingleOrg(require('./sops').sops,                            'sops',               resolved.sops); } catch {}
-  try { summary.calendarEvents   = applySingleOrg(require('./governance-calendar').calendarEvents,   'calendarEvents',     resolved.calendarEvents); } catch {}
-  try { summary.decisionRights   = applySingleOrg(require('./decision-rights').decisionRights,       'decisionRights',     resolved.decisionRights); } catch {}
+  try { summary.people           = await applyMultiOrg(repoForStore('people'),             resolved.people,            deletedIds.people); } catch {}
+  try { summary.processes        = await applyMultiOrg(repoForStore('processNodes'),       resolved.processes,         deletedIds.processNodes); } catch {}
+  try { summary.dataAssets       = await applySingleOrg(repoForStore('dataAssets'),        resolved.dataAssets,        deletedIds.dataAssets); } catch {}
+  try { summary.systems          = await applySingleOrg(repoForStore('systems'),           resolved.systems); } catch {}
+  try { summary.dataDomains      = await applySingleOrg(repoForStore('dataDomains'),       resolved.dataDomains,       deletedIds.dataDomains); } catch {}
+  try { summary.mappings         = await applySingleOrg(repoForStore('mappings'),          resolved.mappings); } catch {}
+  try { summary.governanceGroups = await applySingleOrg(repoForStore('governanceGroups'),  resolved.governanceGroups,  deletedIds.governanceGroups); } catch {}
+  try { summary.damaRoles        = await applySingleOrg(repoForStore('damaRoles'),         resolved.damaRoles, undefined, 'scopeId'); } catch {}
+  try { summary.tasks            = await applySingleOrg(repoForStore('governanceTasks'),   resolved.tasks); } catch {}
+  try { summary.issues           = await applySingleOrg(repoForStore('governanceIssues'),  resolved.issues); } catch {}
+  try { summary.policies         = await applySingleOrg(repoForStore('governancePolicies'), resolved.policies); } catch {}
+  try { summary.controls         = await applySingleOrg(repoForStore('governanceControls'), resolved.controls); } catch {}
+  try { summary.glossaryTerms    = await applySingleOrg(repoForStore('glossaryTerms'),     resolved.glossaryTerms); } catch {}
+  try { summary.sops             = await applySingleOrg(repoForStore('sops'),              resolved.sops); } catch {}
+  try { summary.calendarEvents   = await applySingleOrg(repoForStore('calendarEvents'),    resolved.calendarEvents); } catch {}
+  try { summary.decisionRights   = await applySingleOrg(repoForStore('decisionRights'),    resolved.decisionRights); } catch {}
 
   // ── Cross-reference cleanup ─────────────────────────────────────────────
   // Anything physically deleted above leaves dangling IDs on surviving rows.
-  // Prune them so we don't ship the org with stale references.
+  // Prune them (through the repos) so we don't ship the org with stale refs.
   if (deletedIds.people.size > 0) {
     try {
-      const groups = require('./governance-groups').governanceGroups;
-      let changed = false;
-      for (const g of groups) {
-        if (!Array.isArray(g.members)) continue;
-        const before = g.members.length;
-        g.members = g.members.filter((m: any) => !deletedIds.people.has(m.personId));
-        if (g.members.length !== before) { changed = true; g.updatedAt = new Date().toISOString(); }
-      }
-      if (changed) saveStore('governanceGroups', groups);
-    } catch {}
-    try {
-      const damaRoles = require('./dama-roles').damaRoles;
-      let removed = 0;
-      for (let i = damaRoles.length - 1; i >= 0; i--) {
-        if (damaRoles[i].personId && deletedIds.people.has(damaRoles[i].personId)) {
-          damaRoles.splice(i, 1); removed++;
+      const gRepo = repoForStore('governanceGroups');
+      if (gRepo) {
+        for (const g of await gRepo.list()) {
+          if (!Array.isArray(g.members)) continue;
+          const members = g.members.filter((m: any) => !deletedIds.people.has(m.personId));
+          if (members.length !== g.members.length) {
+            await gRepo.update(g.id, { members, updatedAt: new Date().toISOString() });
+          }
         }
       }
-      if (removed > 0) saveStore('damaRoles', damaRoles);
+    } catch {}
+    try {
+      const dRepo = repoForStore('damaRoles');
+      if (dRepo) {
+        for (const r of await dRepo.list()) {
+          if (r.personId && deletedIds.people.has(r.personId)) await dRepo.delete(r.id);
+        }
+      }
     } catch {}
   }
 
   if (deletedIds.dataAssets.size > 0) {
     try {
-      const mappings = require('./mappings').mappings;
-      let removed = 0;
-      for (let i = mappings.length - 1; i >= 0; i--) {
-        if (deletedIds.dataAssets.has(mappings[i].dataAssetId)) { mappings.splice(i, 1); removed++; }
+      const mRepo = repoForStore('mappings');
+      if (mRepo) {
+        for (const m of await mRepo.list()) {
+          if (deletedIds.dataAssets.has(m.dataAssetId)) await mRepo.delete(m.id);
+        }
       }
-      if (removed > 0) saveStore('mappings', mappings);
     } catch {}
     try {
-      const domains = require('./data-domains').dataDomains;
-      let changed = false;
-      for (const d of domains) {
-        if (!Array.isArray(d.dataAssetIds)) continue;
-        const before = d.dataAssetIds.length;
-        d.dataAssetIds = d.dataAssetIds.filter((aid: string) => !deletedIds.dataAssets.has(aid));
-        if (d.dataAssetIds.length !== before) { changed = true; d.updatedAt = new Date().toISOString(); }
+      const ddRepo = repoForStore('dataDomains');
+      if (ddRepo) {
+        for (const d of await ddRepo.list()) {
+          if (!Array.isArray(d.dataAssetIds)) continue;
+          const dataAssetIds = d.dataAssetIds.filter((aid: string) => !deletedIds.dataAssets.has(aid));
+          if (dataAssetIds.length !== d.dataAssetIds.length) {
+            await ddRepo.update(d.id, { dataAssetIds, updatedAt: new Date().toISOString() });
+          }
+        }
       }
-      if (changed) saveStore('dataDomains', domains);
     } catch {}
   }
 
   if (deletedIds.processNodes.size > 0) {
     try {
-      const mappings = require('./mappings').mappings;
-      let removed = 0;
-      for (let i = mappings.length - 1; i >= 0; i--) {
-        if (deletedIds.processNodes.has(mappings[i].processStepId)) { mappings.splice(i, 1); removed++; }
+      const mRepo = repoForStore('mappings');
+      if (mRepo) {
+        for (const m of await mRepo.list()) {
+          if (deletedIds.processNodes.has(m.processStepId)) await mRepo.delete(m.id);
+        }
       }
-      if (removed > 0) saveStore('mappings', mappings);
     } catch {}
   }
 
   // Finally, remove the root org itself.
-  for (let i = organizations.length - 1; i >= 0; i--) {
-    if (organizations[i].id === org.id) { organizations.splice(i, 1); break; }
-  }
-  saveStore('organizations', organizations);
+  await orgRepo.delete(org.id);
 
   // Single summary audit entry — easier to scan than 16 separate lines.
   logger.info({
