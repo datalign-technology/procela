@@ -39,7 +39,7 @@ const router = Router();
  * systems and people are not domain-tagged so they remain unfiltered
  * — the dashboard treats those as cross-cutting.
  */
-router.get('/stats', (req: Request, res: Response) => {
+router.get('/stats', async (req: Request, res: Response) => {
   const { orgId, domain } = req.query;
   const oid = orgId as string | undefined;
   const dom = domain === 'OPERATIONAL' || domain === 'GOVERNANCE' ? domain : undefined;
@@ -111,9 +111,10 @@ router.get('/stats', (req: Request, res: Response) => {
   let dismissedSuggestions = 0;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { suggestionDismissals } = require('./process-catalog');
+    const { suggestionDismissalsRepo } = require('./process-catalog');
+    const rows = await suggestionDismissalsRepo.list();
     dismissedSuggestions = filterByOrgScope(
-      suggestionDismissals as Array<{ orgId: string }>, oid,
+      rows as Array<{ orgId: string }>, oid,
     ).length;
   } catch { /* store not loaded yet — leave at 0 */ }
 
