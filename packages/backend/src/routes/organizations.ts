@@ -111,6 +111,50 @@ registerStore('organizations', organizations);
 // individual handlers.
 const orgRepo = getOrganizationsRepository(organizations);
 
+// ── Repo-backed loader for the deletion-scope aggregators ──
+//
+// The /:id/impact and /:id/snapshot endpoints tally / export every entity
+// tied to an org subtree — ~16 foreign stores. Each is fetched through its
+// repository so these endpoints read Postgres in DB mode and the in-memory
+// array in JSON mode (the factory wraps the same array the route exports).
+// Lazy require() avoids the import cycle those route modules form with this
+// one; a module that isn't loaded yet degrades to [] exactly as the prior
+// defensive requires did.
+const ORG_SCOPE_STORES: ReadonlyArray<{
+  key: string; routePath: string; storeExport: string; repoPath: string; repoFactory: string;
+}> = [
+  { key: 'people',             routePath: './people',              storeExport: 'people',             repoPath: '../db/people.repo',              repoFactory: 'getPeopleRepository' },
+  { key: 'processNodes',       routePath: './process-catalog',     storeExport: 'processNodes',       repoPath: '../db/process-nodes.repo',       repoFactory: 'getProcessNodesRepository' },
+  { key: 'dataAssets',         routePath: './data-assets',         storeExport: 'dataAssets',         repoPath: '../db/data-assets.repo',         repoFactory: 'getDataAssetsRepository' },
+  { key: 'systems',            routePath: './systems',             storeExport: 'systems',            repoPath: '../db/systems.repo',             repoFactory: 'getSystemsRepository' },
+  { key: 'dataDomains',        routePath: './data-domains',        storeExport: 'dataDomains',        repoPath: '../db/data-domains.repo',        repoFactory: 'getDataDomainsRepository' },
+  { key: 'mappings',           routePath: './mappings',            storeExport: 'mappings',           repoPath: '../db/mappings.repo',            repoFactory: 'getMappingsRepository' },
+  { key: 'governanceGroups',   routePath: './governance-groups',   storeExport: 'governanceGroups',   repoPath: '../db/governance-groups.repo',   repoFactory: 'getGovernanceGroupsRepository' },
+  { key: 'damaRoles',          routePath: './dama-roles',          storeExport: 'damaRoles',          repoPath: '../db/dama-roles.repo',          repoFactory: 'getDamaRolesRepository' },
+  { key: 'governanceTasks',    routePath: './governance-tasks',    storeExport: 'governanceTasks',    repoPath: '../db/governance-tasks.repo',    repoFactory: 'getGovernanceTasksRepository' },
+  { key: 'governanceIssues',   routePath: './governance-issues',   storeExport: 'governanceIssues',   repoPath: '../db/governance-issues.repo',   repoFactory: 'getGovernanceIssuesRepository' },
+  { key: 'governancePolicies', routePath: './governance-policies', storeExport: 'governancePolicies', repoPath: '../db/governance-policies.repo', repoFactory: 'getGovernancePoliciesRepository' },
+  { key: 'governanceControls', routePath: './governance-controls', storeExport: 'governanceControls', repoPath: '../db/governance-controls.repo', repoFactory: 'getGovernanceControlsRepository' },
+  { key: 'glossaryTerms',      routePath: './business-glossary',   storeExport: 'glossaryTerms',      repoPath: '../db/glossary-terms.repo',      repoFactory: 'getGlossaryTermsRepository' },
+  { key: 'sops',               routePath: './sops',                storeExport: 'sops',               repoPath: '../db/sops.repo',                repoFactory: 'getSopsRepository' },
+  { key: 'calendarEvents',     routePath: './governance-calendar', storeExport: 'calendarEvents',     repoPath: '../db/calendar-events.repo',     repoFactory: 'getCalendarEventsRepository' },
+  { key: 'decisionRights',     routePath: './decision-rights',     storeExport: 'decisionRights',     repoPath: '../db/decision-rights.repo',     repoFactory: 'getDecisionRightsRepository' },
+];
+
+async function loadOrgScopeStores(): Promise<Record<string, any[]>> {
+  const out: Record<string, any[]> = {};
+  await Promise.all(ORG_SCOPE_STORES.map(async (s) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const arr = require(s.routePath)[s.storeExport] || [];
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const make = require(s.repoPath)[s.repoFactory];
+      out[s.key] = await make(arr).list();
+    } catch { out[s.key] = []; }
+  }));
+  return out;
+}
+
 // ── Helpers ──
 
 function buildTree(orgs: StoredOrg[]): any[] {
@@ -303,53 +347,29 @@ router.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
 
 /** DELETE /api/v1/organizations/:id */
 /** GET /api/v1/organizations/:id/impact — preview what deleting this org would affect */
-router.get('/:id/impact', (req: AuthenticatedRequest, res: Response) => {
-  const org = organizations.find((o) => o.id === req.params.id);
+router.get('/:id/impact', async (req: AuthenticatedRequest, res: Response) => {
+  const allOrgs = await orgRepo.list();
+  const org = allOrgs.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
 
   // Collect this org + all descendant org IDs
   const orgIds = new Set<string>([org.id]);
   const collectDescendants = (parentId: string) => {
-    for (const child of organizations.filter((o) => o.parentId === parentId)) {
+    for (const child of allOrgs.filter((o) => o.parentId === parentId)) {
       orgIds.add(child.id);
       collectDescendants(child.id);
     }
   };
   collectDescendants(org.id);
 
-  // Count associated data across all stores (defensive requires)
-  let people: any[] = [];
-  let processNodes: any[] = [];
-  let dataAssets: any[] = [];
-  let systems: any[] = [];
-  let dataDomains: any[] = [];
-  let mappings: any[] = [];
-  let governanceGroups: any[] = [];
-  let damaRoles: any[] = [];
-  let governanceTasks: any[] = [];
-  let governanceIssues: any[] = [];
-  let governancePolicies: any[] = [];
-  let governanceControls: any[] = [];
-  let glossaryTerms: any[] = [];
-  let sops: any[] = [];
-  let calendarEvents: any[] = [];
-  let decisionRights: any[] = [];
-  try { people = require('./people').people; } catch {}
-  try { processNodes = require('./process-catalog').processNodes; } catch {}
-  try { dataAssets = require('./data-assets').dataAssets; } catch {}
-  try { systems = require('./systems').systems; } catch {}
-  try { dataDomains = require('./data-domains').dataDomains; } catch {}
-  try { mappings = require('./mappings').mappings; } catch {}
-  try { governanceGroups = require('./governance-groups').governanceGroups; } catch {}
-  try { damaRoles = require('./dama-roles').damaRoles; } catch {}
-  try { governanceTasks = require('./governance-tasks').governanceTasks; } catch {}
-  try { governanceIssues = require('./governance-issues').governanceIssues; } catch {}
-  try { governancePolicies = require('./governance-policies').governancePolicies; } catch {}
-  try { governanceControls = require('./governance-controls').governanceControls; } catch {}
-  try { glossaryTerms = require('./business-glossary').glossaryTerms; } catch {}
-  try { sops = require('./sops').sops; } catch {}
-  try { calendarEvents = require('./governance-calendar').calendarEvents; } catch {}
-  try { decisionRights = require('./decision-rights').decisionRights; } catch {}
+  // Count associated data across all stores. Each is read through its
+  // repository (Postgres in DB mode, the in-memory array in JSON mode).
+  const {
+    people, processNodes, dataAssets, systems, dataDomains, mappings,
+    governanceGroups, damaRoles, governanceTasks, governanceIssues,
+    governancePolicies, governanceControls, glossaryTerms, sops,
+    calendarEvents, decisionRights,
+  } = await loadOrgScopeStores();
 
   const matchOrg = (item: any) => orgIds.has(item.orgId);
   const matchOrgIds = (item: any) => (item.orgIds || []).some((id: string) => orgIds.has(id));
@@ -367,7 +387,7 @@ router.get('/:id/impact', (req: AuthenticatedRequest, res: Response) => {
     return `${node?.name || '?'} → ${asset?.name || '?'}`;
   };
   const childOrgsList = [...orgIds].filter((id) => id !== org.id)
-    .map((id) => organizations.find((o) => o.id === id))
+    .map((id) => allOrgs.find((o) => o.id === id))
     .filter((o) => !!o);
 
   res.json({
@@ -417,8 +437,9 @@ router.get('/:id/impact', (req: AuthenticatedRequest, res: Response) => {
 // entity the delete would touch. Used by the "Export org snapshot"
 // button in the delete dialog so a user has a recovery archive
 // before they pull the trigger.
-router.get('/:id/snapshot', (req: AuthenticatedRequest, res: Response) => {
-  const org = organizations.find((o) => o.id === req.params.id);
+router.get('/:id/snapshot', async (req: AuthenticatedRequest, res: Response) => {
+  const allOrgs = await orgRepo.list();
+  const org = allOrgs.find((o) => o.id === req.params.id);
   if (!org) { res.status(404).json({ success: false, error: 'Organization not found' }); return; }
   const { canAccessOrg } = accessHelpers();
   if (!canAccessOrg(req.user, org.id)) {
@@ -427,33 +448,20 @@ router.get('/:id/snapshot', (req: AuthenticatedRequest, res: Response) => {
   }
   const orgIds = new Set<string>([org.id]);
   const walk = (parentId: string) => {
-    for (const child of organizations.filter((o) => o.parentId === parentId)) {
+    for (const child of allOrgs.filter((o) => o.parentId === parentId)) {
       orgIds.add(child.id); walk(child.id);
     }
   };
   walk(org.id);
 
-  // Defensive requires mirror the impact endpoint — keep both in
-  // sync if more categories are added.
-  const reqStore = (path: string, key: string): any[] => {
-    try { return require(path)[key] || []; } catch { return []; }
-  };
-  const people = reqStore('./people', 'people');
-  const processNodes = reqStore('./process-catalog', 'processNodes');
-  const dataAssets = reqStore('./data-assets', 'dataAssets');
-  const systems = reqStore('./systems', 'systems');
-  const dataDomains = reqStore('./data-domains', 'dataDomains');
-  const mappings = reqStore('./mappings', 'mappings');
-  const governanceGroups = reqStore('./governance-groups', 'governanceGroups');
-  const damaRoles = reqStore('./dama-roles', 'damaRoles');
-  const governanceTasks = reqStore('./governance-tasks', 'governanceTasks');
-  const governanceIssues = reqStore('./governance-issues', 'governanceIssues');
-  const governancePolicies = reqStore('./governance-policies', 'governancePolicies');
-  const governanceControls = reqStore('./governance-controls', 'governanceControls');
-  const glossaryTerms = reqStore('./business-glossary', 'glossaryTerms');
-  const sops = reqStore('./sops', 'sops');
-  const calendarEvents = reqStore('./governance-calendar', 'calendarEvents');
-  const decisionRights = reqStore('./decision-rights', 'decisionRights');
+  // Each store is read through its repository (Postgres in DB mode, the
+  // in-memory array in JSON mode) — mirrors the impact endpoint.
+  const {
+    people, processNodes, dataAssets, systems, dataDomains, mappings,
+    governanceGroups, damaRoles, governanceTasks, governanceIssues,
+    governancePolicies, governanceControls, glossaryTerms, sops,
+    calendarEvents, decisionRights,
+  } = await loadOrgScopeStores();
 
   const matchOrg = (item: any) => orgIds.has(item.orgId);
   const matchOrgIds = (item: any) => (item.orgIds || []).some((id: string) => orgIds.has(id));
@@ -468,7 +476,7 @@ router.get('/:id/snapshot', (req: AuthenticatedRequest, res: Response) => {
       // Every entity that would be touched by DELETE /:id (default
       // cascade). Re-importing this archive is not yet wired — the
       // file is a manual recovery aid for now.
-      organizations: organizations.filter((o) => orgIds.has(o.id)),
+      organizations: allOrgs.filter((o) => orgIds.has(o.id)),
       people: people.filter(matchOrgIds),
       processNodes: processNodes.filter((n: any) => (n.orgIds || []).some((id: string) => orgIds.has(id)) || orgIds.has(n.orgId)),
       dataAssets: dataAssets.filter(matchOrg),
