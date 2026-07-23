@@ -300,16 +300,17 @@ data-carrying cutover, or take the fresh-org path.
   | comments | comments.ts:76 | notifications | notifications.ts:59 |
   | connectionSystemLinks | systems.ts:211 | operationsManuals | ~~operations-manuals.ts~~ **done (9b.3)** |
   | connections | connections.ts:127 | organizations | dashboard.ts:140 |
-  | connectors | connectors.ts:182 | people | people.ts:331 |
+  | connectors | ~~connectors.ts~~ **done (9b.4)** | people | people.ts:331 |
   | damaRoles | dama-roles.ts:85 | processNodes | process-catalog.ts:280 |
   | dataAssets | data-assets.ts:97 | reports | ~~reports.ts~~ **done (9b.2)** |
   | dataDomains | data-domains.ts:36 | sops | org-scope.ts:135 † (aggregator-gated) |
   | dataLineageLinks | data-lineage.ts:114 | suggestionDismissals | ~~process-catalog + dashboard~~ **done (9b.3)** |
-  | dbtCloudConnections | ~~dbt-cloud-connections.ts~~ **done (9b.2)** | syncConnections | sync-connections.ts:141 |
+  | dbtCloudConnections | ~~dbt-cloud-connections.ts~~ **done (9b.2)** | syncConnections | ~~sync-connections.ts~~ **done (9b.4)** |
   | decisionRights | ~~decision-rights.ts~~ **done (9b.2)** | systems | systems.ts:106 |
-  | flowRelationships | dashboard.ts:63 | | |
+  | flowRelationships | ~~process-catalog + dashboard~~ **done (9b.4)** | (connectorEvents) | ~~connectors.ts~~ **done (9b.4, bonus)** |
 
-  **Progress: 7 / 29 stores converted.** Remaining: 22.
+  **Progress: 10 / 29 stores converted** (+ `connectorEvents`, a latent 30th the
+  original traffic sweep never triggered, cleared as a bonus). Remaining: 19.
 
   † The `filterByOrgScope()` framing turned out too optimistic: the *first*
   diagnostic hit for these stores was a `filterByOrgScope` call, but a store's
@@ -369,6 +370,30 @@ data-carrying cutover, or take the fresh-org path.
     Verified against a **local Postgres**: both readers work, and neither store
     warns at boot or under traffic. `sops` and `mappings` deferred to the
     aggregator phase (see †). tsc clean, full suite green (890).
+
+  - **9b.4 (done) — isolable-leaf sweep: `sync-connections`, `connectors`
+    (+ `connectorEvents`), `flowRelationships`.** Re-ran the reader-footprint
+    check (read-triggering methods only — `push`/`splice` don't trip the Proxy,
+    so `demo-seed`'s array writes never counted) to find stores with a bounded
+    reader set:
+    - `sync-connections` — single reader. Five id-`find`s → `repo.get`, list →
+      `repo.list({orgId})`, boot-time `connectionId` backfill guarded to JSON
+      mode. Create → 1 row in `sync_connections`.
+    - `connectors` — single reader. Token-lookup middleware (`requireConnectorToken`,
+      now async), list, three `find`s, and the exported `scanForOfflineConnectors`
+      (sync → async: reads via `repo.list()`, writes each transition via
+      `repo.update`; callers in `index.ts`'s offline-scan interval and the connector
+      test updated to await). Its `connectorEvents` reader (one handler) was cleared
+      in the same pass — a latent store the original traffic sweep never triggered.
+    - `flowRelationships` — read in six `process-catalog` sites (delete-all,
+      node-delete cascade, GET `/flows`, the POST `/flows` dup-check + cycle-BFS,
+      DELETE `/flows/:id`) and one `dashboard` `/stats` line. `process-catalog`
+      now `export`s its `flowRelationshipsRepo`; dashboard imports it. The POST
+      `/flows` handler fetches the flow set once and reuses it for both the
+      duplicate check and the cycle BFS. GET `/flows` made async.
+    Verified against a **local Postgres**: sync-connections + connectors create
+    rows in PG, all readers work, and none of the four warn at boot or under
+    traffic. tsc clean, full suite green (890).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in

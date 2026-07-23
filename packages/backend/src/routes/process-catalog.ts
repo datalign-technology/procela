@@ -251,7 +251,7 @@ export const suggestionDismissals: SuggestionDismissal[] =
 registerStore('suggestionDismissals', suggestionDismissals);
 
 const processNodesRepo = getProcessNodesRepository(processNodes);
-const flowRelationshipsRepo = getFlowRelationshipsRepository(flowRelationships);
+export const flowRelationshipsRepo = getFlowRelationshipsRepository(flowRelationships);
 const processVersionsRepo = getProcessVersionsRepository(processVersions);
 export const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
 
@@ -556,7 +556,7 @@ function validateSystemIds(value: unknown, res: Response): string[] | null {
 /** DELETE /all — delete all process nodes and flow relationships */
 router.delete('/all', async (_req: Request, res: Response) => {
   const nodeIds = processNodes.map((n) => n.id);
-  const flowIds = flowRelationships.map((f) => f.id);
+  const flowIds = (await flowRelationshipsRepo.list()).map((f) => f.id);
   const count = nodeIds.length;
   const flowCount = flowIds.length;
   // Every step is going away, so every mapping is now orphaned.
@@ -1110,7 +1110,7 @@ router.delete('/nodes/:id', async (req: Request, res: Response) => {
   }
 
   // Remove flow relationships involving deleted nodes
-  const flowsToRemove = flowRelationships.filter(
+  const flowsToRemove = (await flowRelationshipsRepo.list()).filter(
     (f) => idsToRemove.has(f.fromNodeId) || idsToRemove.has(f.toNodeId),
   );
   for (const f of flowsToRemove) {
@@ -1451,8 +1451,8 @@ router.get('/nodes/:id/history/:versionId', (req: Request, res: Response) => {
 // ── FLOW RELATIONSHIPS ──
 
 /** GET /flows — list all flows */
-router.get('/flows', (_req: Request, res: Response) => {
-  const enriched = flowRelationships.map((f) => ({
+router.get('/flows', async (_req: Request, res: Response) => {
+  const enriched = (await flowRelationshipsRepo.list()).map((f) => ({
     ...f,
     fromNode: findNode(f.fromNodeId),
     toNode: findNode(f.toNodeId),
@@ -1526,8 +1526,12 @@ router.post('/flows', async (req: Request, res: Response) => {
     return;
   }
 
+  // Fetch the flow set once; reused for the duplicate check and the
+  // cycle-detection BFS below.
+  const allFlows = await flowRelationshipsRepo.list();
+
   // Prevent duplicate flows
-  const existing = flowRelationships.find(
+  const existing = allFlows.find(
     (f) => f.fromNodeId === fromNodeId && f.toNodeId === toNodeId && f.type === (type || 'SEQUENCE')
   );
   if (existing) {
@@ -1561,7 +1565,7 @@ router.post('/flows', async (req: Request, res: Response) => {
       }
       if (visited.has(cur)) continue;
       visited.add(cur);
-      for (const f of flowRelationships) {
+      for (const f of allFlows) {
         if (f.fromNodeId === cur && f.type !== 'LOOP') queue.push(f.toNodeId);
       }
     }
@@ -1585,7 +1589,7 @@ router.post('/flows', async (req: Request, res: Response) => {
 
 /** DELETE /flows/:id — delete a flow relationship */
 router.delete('/flows/:id', async (req: Request, res: Response) => {
-  const flow = flowRelationships.find((f) => f.id === param(req.params.id));
+  const flow = (await flowRelationshipsRepo.list()).find((f) => f.id === param(req.params.id));
   if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
   await flowRelationshipsRepo.delete(flow.id);
   res.status(204).send();

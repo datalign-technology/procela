@@ -364,14 +364,16 @@ const OFFLINE_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 const offlineScanHandle = config.nodeEnv === 'test'
   ? null
   : setInterval(() => {
+      void (async () => {
       try {
-        const { transitioned } = scanForOfflineConnectors();
+        const { transitioned } = await scanForOfflineConnectors();
         if (transitioned > 0) {
           logger.info({ transitioned }, 'Offline-connector scan flipped silent rows');
         }
       } catch (err) {
         logger.error({ err }, 'Offline-connector scan threw');
       }
+      })();
     }, OFFLINE_SCAN_INTERVAL_MS);
 offlineScanHandle?.unref();
 
