@@ -16,6 +16,37 @@ import { loadStore, registerStore } from '../lib/persistence';
 import { getRaciOverridesRepository } from '../db/raci-overrides.repo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { OWNERSHIP_LEVELS, filterByOrgScope } from '../lib/org-scope';
+// Dashboard is a read aggregator: every handler tallies data across many
+// stores. Each store is read through its repository so the endpoints read
+// Postgres in DB mode and the in-memory array in JSON mode (the factory
+// wraps the same array these modules export). PR 9b.6.
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getOrganizationsRepository } from '../db/organizations.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
+import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
+import { getCalendarEventsRepository } from '../db/calendar-events.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const mappingsRepo = getMappingsRepository(mappings);
+const systemsRepo = getSystemsRepository(systems);
+const organizationsRepo = getOrganizationsRepository(organizations);
+const peopleRepo = getPeopleRepository(people);
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const governanceGroupsRepo = getGovernanceGroupsRepository(governanceGroups);
+const damaRolesRepo = getDamaRolesRepository(damaRoles);
+const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
+const governanceIssuesRepo = getGovernanceIssuesRepository(governanceIssues);
+const calendarEventsRepo = getCalendarEventsRepository(calendarEvents);
+const governancePoliciesRepo = getGovernancePoliciesRepository(governancePolicies);
 
 // ── RACI Overrides ──
 interface RaciOverride {
@@ -48,6 +79,14 @@ router.get('/stats', async (req: Request, res: Response) => {
   // backfill and frontend `passesLens` convention) so legacy rows
   // never silently disappear when the user picks the Operational lens.
   const nodeMatchesDomain = (n: ProcessNode) => !dom || (n.domain || 'OPERATIONAL') === dom;
+
+  // Read each store through its repository (Postgres in DB mode, the
+  // in-memory array in JSON mode). Local consts shadow the module-level
+  // array imports so the tallying logic below is unchanged.
+  const [processNodes, dataAssets, mappings, systems, people, dataDomains, organizations] = await Promise.all([
+    processNodesRepo.list(), dataAssetsRepo.list(), mappingsRepo.list(),
+    systemsRepo.list(), peopleRepo.list(), dataDomainsRepo.list(), organizationsRepo.list(),
+  ]);
 
   // filterByOrgScope walks both ancestors and descendants so a
   // division-scope dashboard includes company-level items rolled down
@@ -191,9 +230,14 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/dashboard/scorecard — Governance Maturity Scorecard */
-router.get('/scorecard', (req: Request, res: Response) => {
+router.get('/scorecard', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
+
+  const [processNodes, dataAssets, dataDomains, governanceGroups, people] = await Promise.all([
+    processNodesRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
+    governanceGroupsRepo.list(), peopleRepo.list(),
+  ]);
 
   const filteredNodes = filterByOrgScope(processNodes, oid);
   const filteredAssets = filterByOrgScope(dataAssets, oid);
@@ -314,6 +358,14 @@ router.get('/raci', async (req: Request, res: Response) => {
 
   // Manual RACI overrides, fetched once for the whole matrix build.
   const raciList = await raciRepo.list();
+
+  // Each store read through its repository (Postgres in DB mode, the
+  // in-memory array in JSON mode); local consts shadow the imports.
+  const [processNodes, people, damaRoles, governanceGroups, mappings, dataAssets, dataDomains, organizations] = await Promise.all([
+    processNodesRepo.list(), peopleRepo.list(), damaRolesRepo.list(),
+    governanceGroupsRepo.list(), mappingsRepo.list(), dataAssetsRepo.list(),
+    dataDomainsRepo.list(), organizationsRepo.list(),
+  ]);
 
   // Filter data by org. damaRoles keeps its bespoke filter — it uses
   // scopeType/scopeId rather than orgId/orgIds so filterByOrgScope
@@ -704,12 +756,17 @@ function flattenNodes(nodes: ProcessNode[]): ProcessNode[] {
   return out;
 }
 
-router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
+router.get('/my-items', async (req: AuthenticatedRequest, res: Response) => {
   const email = (req.user?.email || '').toLowerCase();
   if (!email) {
     res.json({ success: true, data: { person: null } });
     return;
   }
+
+  const [people, processNodes, dataAssets, dataDomains, governanceGroups, damaRoles, organizations] = await Promise.all([
+    peopleRepo.list(), processNodesRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
+    governanceGroupsRepo.list(), damaRolesRepo.list(), organizationsRepo.list(),
+  ]);
 
   const person = people.find((p) => p.email?.toLowerCase() === email);
   if (!person) {
@@ -834,7 +891,7 @@ router.get('/my-items', (req: AuthenticatedRequest, res: Response) => {
 const PRIORITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
-router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
+router.get('/my-dashboard', async (req: AuthenticatedRequest, res: Response) => {
   const email = (req.user?.email || '').toLowerCase();
   if (!email) {
     res.json({
@@ -854,6 +911,11 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
     });
     return;
   }
+
+  const [people, governanceTasks, governanceIssues, calendarEvents, governancePolicies, dataAssets, dataDomains] = await Promise.all([
+    peopleRepo.list(), governanceTasksRepo.list(), governanceIssuesRepo.list(),
+    calendarEventsRepo.list(), governancePoliciesRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
+  ]);
 
   const person = people.find((p) => p.email?.toLowerCase() === email);
   if (!person) {
@@ -1022,9 +1084,13 @@ router.get('/my-dashboard', (req: AuthenticatedRequest, res: Response) => {
  * GET /api/v1/dashboard/governance-status — check if governance framework
  * has been set up for the current org (processes, groups, domains).
  */
-router.get('/governance-status', (req: Request, res: Response) => {
+router.get('/governance-status', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const oid = orgId as string | undefined;
+
+  const [processNodes, governanceGroups, dataDomains] = await Promise.all([
+    processNodesRepo.list(), governanceGroupsRepo.list(), dataDomainsRepo.list(),
+  ]);
 
   // Check each component. filterByOrgScope handles the "no orgId set →
   // don't filter" case as well as the ancestor/descendant roll-up.

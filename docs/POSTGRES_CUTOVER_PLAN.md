@@ -446,6 +446,19 @@ data-carrying cutover, or take the fresh-org path.
     `POST /data-assets` still validate against the stale org array (reject
     PG-created parents/orgs), so they're on the aggregator worklist too.
 
+  - **9b.6 (done) — `dashboard.ts` (all 7 handlers).** The read aggregator behind
+    the dashboards: `stats`, `scorecard`, `raci`, `raci/override`, `my-items`,
+    `my-dashboard`, `governance-status` tally data across 13 stores. Added
+    module-level repo handles (`getXRepository(<importedArray>)` for each store),
+    then gave every handler a `Promise.all([...repo.list()])` at the top whose
+    local consts **shadow the array imports** — so each handler's tallying logic
+    is otherwise unchanged. The five sync handlers became async. Verified against
+    a **local Postgres**: all seven endpoints return 200 with **zero** dashboard
+    stale-read warnings, and `stats` reflects PG data (seeded a BRONZE asset →
+    `dataAssets:1, bronze:1`, where the pre-conversion path reported 0). tsc
+    clean, full suite green (890). (`flowRelationships` + `suggestionDismissals`
+    readers here were already converted in 9b.3/9b.4.)
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
