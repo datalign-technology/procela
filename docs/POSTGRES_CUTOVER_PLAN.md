@@ -570,6 +570,28 @@ data-carrying cutover, or take the fresh-org path.
     `people` read; the store stays flagged until its other file readers —
     systems/chat/exports/docs/comments/governance-*/data-quality — convert.)
 
+  - **9b.12 (done) — data-domains.ts entity route.** Writes already went
+    through `dataDomainsRepo`; converted the remaining stale-array *reads*:
+    every `dataDomains.find/filter/map` → `dataDomainsRepo.get/list`
+    (DELETE `/all`, GET `/`, `/summary`, `/:id`, `/:id/impact`, POST dup check,
+    PUT, PATCH `/bulk`, POST `/bulk-delete`); `enrichDomain` parameterised to
+    take the repo-loaded `people`/`dataAssets` lists (handlers pass
+    `Promise.all([...])`); the two `organizations.find(statusMode)` reads →
+    `getCachedOrgList()`; boot status-migration guarded behind `!hasDatabase()`.
+    **Circular-import trap fixed:** `people.ts` and `data-assets.ts` both
+    value-import `dataDomains` from this module, so it can be evaluated as a
+    side-effect of loading either — at which point their `people` / `dataAssets`
+    bindings are still in the temporal dead zone. Constructing
+    `getPeopleRepository(people)` at *module-init* read that TDZ binding and, via
+    the node `--test` loader, **hung** (`tenant-branding.test.ts` load, 0
+    subtests). Fixed by building both foreign repos **lazily**
+    (`peopleRepo()` / `dataAssetsRepo()` memoised on first call) so nothing reads
+    a cyclic binding until request time. Verified against a **local Postgres**
+    (18/18 checks): a PG-only "ghost" domain appears via `GET /` with `ownerName`
+    + asset name enriched from PG, `/summary` / `/:id` / `/impact` read PG,
+    DRAFT→ACTIVE persists, dup-check + bulk-delete + delete-all all hit PG.
+    tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

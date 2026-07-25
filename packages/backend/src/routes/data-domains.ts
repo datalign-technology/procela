@@ -1,14 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataAssets } from './data-assets';
-import { organizations } from './organizations';
 import { aiService } from '../services/ai.service';
 import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { hasDatabase } from '../db/prisma';
 
 export interface StoredDataDomain {
   id: string;
@@ -29,8 +31,21 @@ registerStore('dataDomains', dataDomains);
 
 const dataDomainsRepo = getDataDomainsRepository(dataDomains);
 
-// Migrate legacy statuses to DRAFT
-{
+// people.ts and data-assets.ts both value-import `dataDomains` from this
+// module, so this module can be evaluated as a side-effect of loading one of
+// them — at which point their `people` / `dataAssets` bindings are still in
+// the temporal dead zone. Reading either at module-init time (to construct a
+// repo) throws mid-cycle and, under the test loader, hangs. Build these repos
+// lazily instead: by the time any handler runs, both modules are fully
+// initialised.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+
+// Migrate legacy statuses to DRAFT. JSON mode only — in Postgres mode the
+// persisted rows already carry the canonical status shape.
+if (!hasDatabase()) {
   const legacy = new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
   let migrated = 0;
   for (const d of dataDomains) {
@@ -56,14 +71,18 @@ const ADVANCED_TRANSITIONS: Record<string, string[]> = {
 const SIMPLE_LOCKED = new Set(['ACTIVE', 'DEPRECATED']);
 const ADVANCED_LOCKED = new Set(['UNDER_REVIEW', 'APPROVED', 'ACTIVE', 'DEPRECATED']);
 
-function enrichDomain(domain: StoredDataDomain) {
-  const owner = domain.ownerId ? people.find((p) => p.id === domain.ownerId) : null;
+function enrichDomain(
+  domain: StoredDataDomain,
+  allPeople: typeof people,
+  allAssets: typeof dataAssets,
+) {
+  const owner = domain.ownerId ? allPeople.find((p) => p.id === domain.ownerId) : null;
   const stewards = domain.stewardIds
-    .map((sid) => people.find((p) => p.id === sid))
+    .map((sid) => allPeople.find((p) => p.id === sid))
     .filter(Boolean)
     .map((p) => ({ id: p!.id, name: p!.name }));
   const assets = domain.dataAssetIds
-    .map((aid) => dataAssets.find((a) => a.id === aid))
+    .map((aid) => allAssets.find((a) => a.id === aid))
     .filter(Boolean)
     .map((a) => ({ id: a!.id, name: a!.name }));
 
@@ -131,10 +150,10 @@ router.post('/generate', async (req: Request, res: Response) => {
 });
 
 router.delete('/all', async (_req: Request, res: Response) => {
-  const ids = dataDomains.map((d) => d.id);
-  const count = ids.length;
-  for (const id of ids) {
-    await dataDomainsRepo.delete(id);
+  const all = await dataDomainsRepo.list();
+  const count = all.length;
+  for (const d of all) {
+    await dataDomainsRepo.delete(d.id);
   }
   auditService.log('system', null, 'DataDomain', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all data domains');
@@ -144,15 +163,20 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/data-domains — list all (support ?orgId= filter) */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(dataDomains, orgId as string | undefined);
-  const enriched = filtered.map(enrichDomain);
+  const [allDomains, allPeople, allAssets] = await Promise.all([
+    dataDomainsRepo.list(),
+    peopleRepo().list(),
+    dataAssetsRepo().list(),
+  ]);
+  const filtered = filterByOrgScope(allDomains, orgId as string | undefined);
+  const enriched = filtered.map((d) => enrichDomain(d, allPeople, allAssets));
   res.json({ success: true, data: enriched });
 });
 
 /** GET /api/v1/data-domains/summary — coverage stats */
 router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(dataDomains, orgId as string | undefined);
+  const filtered = filterByOrgScope(await dataDomainsRepo.list(), orgId as string | undefined);
 
   const total = filtered.length;
   const governed = filtered.filter((d) => d.ownerId).length;
@@ -167,9 +191,13 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/data-domains/:id — single domain with enriched data */
 router.get('/:id', async (req: Request, res: Response) => {
-  const domain = dataDomains.find((d) => d.id === req.params.id);
+  const [domain, allPeople, allAssets] = await Promise.all([
+    dataDomainsRepo.get(String(req.params.id)),
+    peopleRepo().list(),
+    dataAssetsRepo().list(),
+  ]);
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
-  res.json({ success: true, data: enrichDomain(domain) });
+  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
 });
 
 /** POST /api/v1/data-domains — create */
@@ -178,7 +206,7 @@ router.post('/', async (req: Request, res: Response) => {
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
 
-  const duplicate = dataDomains.find(
+  const duplicate = (await dataDomainsRepo.list()).find(
     (d) => d.orgId === orgId && d.name.trim().toLowerCase() === name.trim().toLowerCase(),
   );
   if (duplicate) {
@@ -201,19 +229,20 @@ router.post('/', async (req: Request, res: Response) => {
     updatedAt: now,
   };
   await dataDomainsRepo.create(domain);
-  res.status(201).json({ success: true, data: enrichDomain(domain) });
+  const [allPeople, allAssets] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list()]);
+  res.status(201).json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
 });
 
 /** PUT /api/v1/data-domains/:id — update fields */
 router.put('/:id', async (req: Request, res: Response) => {
-  const domain = dataDomains.find((d) => d.id === req.params.id);
+  const domain = await dataDomainsRepo.get(String(req.params.id));
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
   const { name, description, ownerId, stewardIds, dataAssetIds, status, scopeDefinition } = req.body;
 
   const hasFieldEdits = name !== undefined || description !== undefined
     || ownerId !== undefined || stewardIds !== undefined || scopeDefinition !== undefined;
-  const domainOrg = organizations.find((o: any) => o.id === domain.orgId);
+  const domainOrg = getCachedOrgList().find((o) => o.id === domain.orgId) as any;
   const isAdvanced = domainOrg?.statusMode === 'advanced';
   const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;
   const transitionMap = isAdvanced ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
@@ -248,12 +277,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   domain.updatedAt = new Date().toISOString();
   await dataDomainsRepo.update(domain.id, domain);
 
-  res.json({ success: true, data: enrichDomain(domain) });
+  const [allPeople, allAssets] = await Promise.all([peopleRepo().list(), dataAssetsRepo().list()]);
+  res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
 });
 
 /** GET /api/v1/data-domains/:id/impact — preview what would be affected by deleting this domain */
 router.get('/:id/impact', async (req: Request, res: Response) => {
-  const domain = dataDomains.find((d) => d.id === req.params.id);
+  const domain = await dataDomainsRepo.get(String(req.params.id));
   if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
 
   res.json({
@@ -267,7 +297,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/data-domains/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = dataDomains.find((d) => d.id === req.params.id);
+  const removed = await dataDomainsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
   await dataDomainsRepo.delete(removed.id);
   res.status(204).send();
@@ -299,10 +329,10 @@ router.patch('/bulk', async (req: Request, res: Response) => {
   const skipped: Array<{ id: string; reason: string }> = [];
 
   for (const id of ids) {
-    const domain = dataDomains.find((d) => d.id === id);
+    const domain = await dataDomainsRepo.get(String(id));
     if (!domain) { skipped.push({ id, reason: 'not found' }); continue; }
 
-    const domainOrg = organizations.find((o: any) => o.id === domain.orgId);
+    const domainOrg = getCachedOrgList().find((o) => o.id === domain.orgId) as any;
     const isAdvanced = domainOrg?.statusMode === 'advanced';
     const lockedSet = isAdvanced ? ADVANCED_LOCKED : SIMPLE_LOCKED;
     const transitionMap = isAdvanced ? ADVANCED_TRANSITIONS : SIMPLE_TRANSITIONS;
@@ -345,7 +375,7 @@ router.post('/bulk-delete', async (req: Request, res: Response) => {
     return;
   }
   const idSet = new Set(ids);
-  const removed = dataDomains.filter((d) => idSet.has(d.id));
+  const removed = (await dataDomainsRepo.list()).filter((d) => idSet.has(d.id));
   for (const r of removed) {
     auditService.log('system', r.orgId, 'DataDomain', r.id, 'DELETE', r, null);
     await dataDomainsRepo.delete(r.id);
