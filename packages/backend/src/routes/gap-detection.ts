@@ -6,27 +6,56 @@ import { people } from './people';
 import { connections, systemIdsForConnection } from './connections';
 import { systems } from './systems';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
+// Gap detection is a read aggregator across 7 stores; each is read through
+// its repository so gaps are computed from Postgres in DB mode and the
+// in-memory array in JSON mode (the factory wraps the same array these
+// modules export). PR 9b.8.
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { mappings } from './mappings';
+
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const peopleRepo = getPeopleRepository(people);
+const connectionsRepo = getConnectionsRepository(connections);
+const systemsRepo = getSystemsRepository(systems);
+const mappingsRepo = getMappingsRepository(mappings);
 
 const router = Router();
 
 const MAPPABLE_LEVELS = new Set(['ACTIVITY', 'TASK', 'EXECUTION']);
 
-function findAncestorPath(nodeId: string): { valueStream?: string; process?: string; activity?: string } {
+// Takes the (repo-loaded) node set so it walks the same snapshot the
+// handler read, rather than the stale module array.
+function findAncestorPath(nodeId: string, nodes: typeof processNodes): { valueStream?: string; process?: string; activity?: string } {
   const result: Record<string, string> = {};
-  let current = processNodes.find((n) => n.id === nodeId);
+  let current = nodes.find((n) => n.id === nodeId);
   while (current) {
     const level = current.level.toLowerCase().replace('_', ' ');
     if (current.level === 'VALUE_STREAM') result.valueStream = current.name;
     else if (current.level === 'PROCESS') result.process = current.name;
     else if (current.level === 'SUBPROCESS') result.subProcess = current.name;
     if (!current.parentId) break;
-    current = processNodes.find((n) => n.id === current!.parentId);
+    current = nodes.find((n) => n.id === current!.parentId);
   }
   return result;
 }
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
+
+  // Each store read through its repository (Postgres in DB mode, the
+  // in-memory array in JSON mode); local consts shadow the imports.
+  const [processNodes, dataAssets, dataDomains, people, connections, systems, mappings] = await Promise.all([
+    processNodesRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
+    peopleRepo.list(), connectionsRepo.list(), systemsRepo.list(), mappingsRepo.list(),
+  ]);
 
   // Scope by org
   const nodes = orgId
@@ -42,9 +71,6 @@ router.get('/', (req: Request, res: Response) => {
     ? filterByOrgScope(dataDomains, orgId as string)
     : dataDomains;
 
-  // Load mappings lazily to avoid circular deps
-  let mappings: any[] = [];
-  try { mappings = require('./mappings').mappings || []; } catch { /* */ }
   const filteredMappings = orgId
     ? filterByOrgScope(mappings, orgId as string)
     : mappings;
@@ -56,7 +82,7 @@ router.get('/', (req: Request, res: Response) => {
   const unmappedSteps = nodes
     .filter((n) => MAPPABLE_LEVELS.has(n.level) && !mappedStepIds.has(n.id))
     .map((n) => {
-      const path = findAncestorPath(n.id);
+      const path = findAncestorPath(n.id, processNodes);
       return {
         id: n.id,
         name: n.name,

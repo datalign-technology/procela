@@ -468,6 +468,17 @@ data-carrying cutover, or take the fresh-org path.
     returns it (`type: system`), read from PG (pre-conversion: empty array, 0
     results); zero `search.ts` stale warnings. tsc clean, full suite green (890).
 
+  - **9b.8 (done) — `gap-detection.ts`.** A single `GET /` handler computing 11
+    gap categories across 7 stores (`processNodes`, `dataAssets`, `dataDomains`,
+    `people`, `connections`, `systems`, `mappings`). Same shadowing pattern; the
+    module-level `findAncestorPath` helper was parameterised to take the
+    repo-loaded node set (it read the `processNodes` import directly), and the
+    lazy `require('./mappings')` became a static import + repo handle (no cycle:
+    `mappings` imports only entity routes). Handler made async. Verified against a
+    **local Postgres**: seeded an unmapped BRONZE asset → `orphanedAssets:1,
+    unlinkedAssets:1`, read from PG (pre-conversion: 0); zero `gap-detection.ts`
+    stale warnings. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
