@@ -259,7 +259,7 @@ import { processNodes, flowRelationships, processVersions } from './routes/proce
 import { systems } from './routes/systems';
 import { dataAssets, dataAssetBindings, dataAssetColumns } from './routes/data-assets';
 import { organizations } from './routes/organizations';
-import { people } from './routes/people';
+import { people, initPeopleCache } from './routes/people';
 import { agents } from './routes/agents';
 import { mappings } from './routes/mappings';
 import { governanceGroups } from './routes/governance-groups';
@@ -398,6 +398,10 @@ const server = app.listen(PORT, () => {
   // Hydrate the org-scope cache from the repo so visibility filtering is
   // correct in Postgres mode (PR 4). No-op in JSON mode.
   initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));
+  // Hydrate the people cache so the sync access-control helpers
+  // (getVisibleOrgIds / canAccessOrg) see PG people in Postgres mode
+  // (PR 9b.11). No-op in JSON mode.
+  initPeopleCache().catch((err) => logger.error({ err }, 'initPeopleCache failed'));
   // Hydrate branding config from persistence (PR 7).
   initBranding().catch((err) => logger.error({ err }, 'initBranding failed'));
 });

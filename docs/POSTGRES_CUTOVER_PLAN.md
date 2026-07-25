@@ -552,6 +552,24 @@ data-carrying cutover, or take the fresh-org path.
     the new org yet — inherent to PR 4's cache, not a create bug (a boot-hydrated
     org creates assets immediately). tsc clean, full suite green (890).
 
+  - **9b.11 (done) — people cache (access control on Postgres).** The exported,
+    synchronous access-control helpers in `routes/people.ts` (`getVisibleOrgIds`
+    / `canAccessOrg`, called by auth middleware on every request) read the
+    `people` and `organizations` arrays directly. In Postgres mode both are the
+    empty boot array, so `getVisibleOrgIds` found no matching person → returned
+    `null` → **unrestricted** — i.e. every user saw everything (a security hole),
+    and org-scoped views leaked cross-tenant. Fixed by mirroring PR 4's org-scope
+    cache: a repo-hydrated **people cache** (`peopleSource()`, hydrated at boot
+    via `initPeopleCache()`, refreshed on a 5s TTL) plus a new exported
+    `getCachedOrgList()` on `lib/org-scope` so the same helpers read the hydrated
+    org list. The four helpers shadow the module arrays with the cached sources;
+    bodies unchanged. Verified against a **local Postgres**: a non-admin
+    `ORG_ADMIN` scoped to one division now correctly sees **only that division**
+    (pre-fix: all orgs, unrestricted); the dev super-admin stays unrestricted.
+    tsc clean, full suite green (890). (This clears people.ts's own remaining
+    `people` read; the store stays flagged until its other file readers —
+    systems/chat/exports/docs/comments/governance-*/data-quality — convert.)
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

@@ -53,6 +53,19 @@ function orgSource(): readonly OrgLike[] {
   return orgCache ?? organizations;
 }
 
+/**
+ * The full cached org list (StoredOrg, not the narrowed OrgLike) for callers
+ * that need names/etc. and do their own tree-walking — notably the exported
+ * access-control helpers in routes/people.ts, which must see PG orgs in DB
+ * mode. Same cache + TTL as orgSource(); returns the live array in JSON mode.
+ */
+export function getCachedOrgList(): readonly StoredOrg[] {
+  if (!hasDatabase()) return organizations;
+  if (orgCache && Date.now() - orgCacheAt <= ORG_CACHE_TTL_MS) return orgCache;
+  void refreshOrgScopeCache();
+  return orgCache ?? organizations;
+}
+
 // ── Pure scoping logic — operate on an explicit org list (exported for tests) ──
 
 export function ownershipLevelIn(orgs: readonly OrgLike[], orgId: string | null | undefined): boolean {
