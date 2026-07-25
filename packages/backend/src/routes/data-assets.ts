@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { hasDatabase } from '../db/prisma';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { aiService, SENSITIVITY_TAGS, SensitivityTag } from '../services/ai.service';
@@ -92,6 +93,21 @@ registerStore('dataAssets', dataAssets);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 const VALID_ORIGINS = ['MANUAL', 'GOVERNANCE_TEMPLATE', 'DISCOVERED', 'IMPORTED', 'SYNCED'] as const;
 
+// Migrate legacy `category` → `dataType`. The old enum mixed three axes
+// (use-case, content-type, stewardship); the new one is content-type only.
+// Module-scoped — also consumed by the create/update handlers below.
+const CATEGORY_TO_DATA_TYPE: Record<string, StoredDataAsset['dataType']> = {
+  OPERATIONAL: 'TRANSACTIONAL',
+  GOVERNANCE:  'METADATA',
+  MASTER:      'MASTER',
+  REFERENCE:   'REFERENCE',
+  ANALYTICAL:  'ANALYTICAL',
+};
+
+// JSON mode only — one-time boot migrations that rewrite legacy rows in
+// the in-memory array. Postgres rows carry the canonical shape, and reading
+// the boot array in PG mode would just be a stale-store read.
+if (!hasDatabase()) {
 // Migrate legacy `steward` string → `stewardIds[]`
 let migrated = false;
 for (const a of dataAssets) {
@@ -103,15 +119,6 @@ for (const a of dataAssets) {
   }
 }
 
-// Migrate legacy `category` → `dataType`. The old enum mixed three axes
-// (use-case, content-type, stewardship); the new one is content-type only.
-const CATEGORY_TO_DATA_TYPE: Record<string, StoredDataAsset['dataType']> = {
-  OPERATIONAL: 'TRANSACTIONAL',
-  GOVERNANCE:  'METADATA',
-  MASTER:      'MASTER',
-  REFERENCE:   'REFERENCE',
-  ANALYTICAL:  'ANALYTICAL',
-};
 for (const a of dataAssets) {
   if (!a.dataType && a.category && CATEGORY_TO_DATA_TYPE[a.category]) {
     a.dataType = CATEGORY_TO_DATA_TYPE[a.category];
@@ -143,6 +150,7 @@ for (const a of dataAssets) {
 }
 
 if (migrated) saveStore('dataAssets', dataAssets);
+}
 
 // Resolve free-text `owner` to a person id where the names match. Deferred
 // to next tick because people.ts and data-assets.ts import each other —
@@ -150,6 +158,7 @@ if (migrated) saveStore('dataAssets', dataAssets);
 // in the TDZ. Leaves the legacy string in place when no match is found
 // so the UI can still display it.
 function backfillOwnerPersonIds(): void {
+  if (hasDatabase()) return; // JSON-legacy backfill; PG rows carry ownerPersonId
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { people } = require('./people') as { people: { id: string; name: string }[] };
   let touched = false;
@@ -304,6 +313,7 @@ registerStore('dataAssetBindings', dataAssetBindings);
  * haven't been updated still work; new code should go through bindings.
  */
 function migrateLegacySourceFieldsToBindings(): void {
+  if (hasDatabase()) return; // JSON-legacy binding backfill; PG uses real binding rows
   let migrated = 0;
   const now = new Date().toISOString();
   for (const asset of dataAssets) {
@@ -484,9 +494,9 @@ const router = Router();
 
 /** DELETE /api/v1/data-assets/all — delete all data assets */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = dataAssets.length;
-  dataAssets.splice(0, dataAssets.length);
-  saveStore('dataAssets', dataAssets);
+  const allAssets = await dataAssetsRepo.list();
+  const count = allAssets.length;
+  for (const a of allAssets) await dataAssetsRepo.delete(a.id);
   // Wipe bindings alongside the assets they were pointing at.
   const bindingCount = dataAssetBindings.length;
   dataAssetBindings.splice(0, dataAssetBindings.length);
@@ -502,9 +512,9 @@ router.delete('/all', async (_req: Request, res: Response) => {
  *  cleanup or fresh process mapping. Scope by ?orgId like the main
  *  list. Each row is enriched with system name + suggested tier so
  *  the UI doesn't need a second round-trip. */
-router.get('/orphans', (req: Request, res: Response) => {
+router.get('/orphans', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(dataAssets, orgId as string | undefined);
+  const filtered = filterByOrgScope(await dataAssetsRepo.list(), orgId as string | undefined);
   const filteredSystems = filterByOrgScope(systems, orgId as string | undefined);
   const mappedAssetIds = new Set<string>();
   for (const m of mappings) if (m.dataAssetId) mappedAssetIds.add(m.dataAssetId);
@@ -531,9 +541,9 @@ router.get('/orphans', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-assets */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(dataAssets, orgId as string | undefined);
+  const filtered = filterByOrgScope(await dataAssetsRepo.list(), orgId as string | undefined);
   const filteredSystems = filterByOrgScope(systems, orgId as string | undefined);
 
   // Enrich each asset with domain, owner, steward and health info so the
@@ -621,8 +631,8 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/data-assets/:id/360 — full 360 view of a data asset */
-router.get('/:id/360', (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+router.get('/:id/360', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
   // Resolve system
@@ -685,8 +695,8 @@ router.get('/:id/360', (req: Request, res: Response) => {
 // as `{ id: "bindings" }` → 404.
 
 /** GET /api/v1/data-assets/:id/bindings — list bindings for an asset */
-router.get('/:id/bindings', (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+router.get('/:id/bindings', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const bindings = dataAssetBindings.filter((b) => b.dataAssetId === asset.id);
   res.json({ success: true, data: bindings });
@@ -702,7 +712,7 @@ router.get('/:id/bindings', (req: Request, res: Response) => {
  * If `isPrimary: true` is sent, any previously-primary binding is demoted.
  */
 router.post('/:id/bindings', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
   const parsed = createBindingBodySchema.safeParse(req.body);
@@ -764,7 +774,7 @@ router.post('/:id/bindings', async (req: Request, res: Response) => {
  * interaction the UI offers).
  */
 router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const binding = dataAssetBindings.find((b) => b.id === req.params.bindingId && b.dataAssetId === asset.id);
   if (!binding) { res.status(404).json({ success: false, error: 'Binding not found' }); return; }
@@ -802,7 +812,7 @@ router.put('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
  * asset still has a canonical location.
  */
 router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const idx = dataAssetBindings.findIndex((b) => b.id === req.params.bindingId && b.dataAssetId === asset.id);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Binding not found' }); return; }
@@ -824,8 +834,8 @@ router.delete('/:id/bindings/:bindingId', async (req: Request, res: Response) =>
 });
 
 /** GET /api/v1/data-assets/:id */
-router.get('/:id', (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+router.get('/:id', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   res.json({ success: true, data: asset });
 });
@@ -899,7 +909,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/data-assets/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
   const parsed = updateDataAssetBodySchema.safeParse(req.body);
@@ -965,7 +975,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/data-assets/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = dataAssets.find((a) => a.id === req.params.id);
+  const removed = await dataAssetsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   await dataAssetsRepo.delete(removed.id);
   // Cascade: delete this asset's bindings so they don't linger.
@@ -984,8 +994,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 /** GET /data-assets/:id/columns — list columns for an asset, enriched with
  *  per-column DQ rule summary (count, passing, failing, health score). */
-router.get('/:id/columns', (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+router.get('/:id/columns', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const cols = dataAssetColumns.filter((c) => c.dataAssetId === asset.id);
 
@@ -1025,7 +1035,7 @@ router.get('/:id/columns', (req: Request, res: Response) => {
 
 /** POST /data-assets/:id/columns — create a column */
 router.post('/:id/columns', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const parsed = createColumnBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -1083,7 +1093,7 @@ router.delete('/:id/columns/:colId', async (req: Request, res: Response) => {
  * up new columns without duplicating existing ones.
  */
 router.post('/:id/columns/auto-discover', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const binding = getPrimaryBinding(asset.id);
   if (!binding) {
@@ -1187,8 +1197,8 @@ function similarity(a: string, b: string): number {
   return Math.min(1, jaccard + sub);
 }
 
-router.get('/:id/suggest-source', (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+router.get('/:id/suggest-source', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -1301,8 +1311,8 @@ router.get('/:id/suggest-source', (req: Request, res: Response) => {
  *            Data), Responsible on 2 activities" in one line.
  *   domain — the domain owner + stewards (they always need to know).
  */
-router.get('/:id/impact', (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+router.get('/:id/impact', async (req: Request, res: Response) => {
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
   // Build a per-node ancestor breadcrumb.
@@ -1425,7 +1435,7 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 
 /** POST /api/v1/data-assets/:id/suggest-sensitivity */
 router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const cols = dataAssetColumns
     .filter((c) => c.dataAssetId === asset.id)
@@ -1448,7 +1458,7 @@ router.post('/:id/suggest-sensitivity', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/data-assets/:id/sensitivity */
 router.put('/:id/sensitivity', async (req: Request, res: Response) => {
-  const asset = dataAssets.find((a) => a.id === req.params.id);
+  const asset = await dataAssetsRepo.get(String(req.params.id));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
   const parsed = putSensitivityBodySchema.safeParse(req.body);
   if (!parsed.success) {

@@ -503,6 +503,21 @@ data-carrying cutover, or take the fresh-org path.
     longer warns (the file's two residual warnings are foreign reads —
     `connectionSystemLinks`, `mappings`). tsc clean, full suite green (890).
 
+  - **9b.9b (done) — `data-assets.ts` (`dataAssets` store).** 21 handlers; scoped
+    to the `dataAssets` store (its sub-stores `dataAssetBindings`/`dataAssetColumns`
+    weren't in the flagged set, and touching them would force the exported
+    `getPrimaryBinding`/`purgeBindingsForConnection` async — cross-module ripple
+    into `data-quality`/`connections` — so deferred). Converted the ~15 uniform
+    `dataAssets.find(id)` lookups to `dataAssetsRepo.get`, the two
+    `filterByOrgScope(dataAssets,…)` list handlers (list + orphans) to
+    `repo.list()`, and `DELETE /all` to list+delete; three boot migrations
+    (steward/dataType/health/origin backfills, `backfillOwnerPersonIds`,
+    `migrateLegacySourceFieldsToBindings`) guarded to JSON mode. Six sync handlers
+    made async. Verified against a **local Postgres**: create → list/get/orphans
+    all read PG (`count:1`); the `dataAssets` store no longer warns (the one
+    residual warning is a foreign `systems` read, tracked under systems). tsc
+    clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
