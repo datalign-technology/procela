@@ -275,7 +275,7 @@ router.get('/:id', async (req: AuthenticatedRequest, res: Response) => {
 router.post('/', async (req: AuthenticatedRequest, res: Response) => {
   const { name, parentId, type, industry, description, headCount } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
-  if (parentId && !organizations.find((o) => o.id === parentId)) {
+  if (parentId && !(await orgRepo.get(parentId))) {
     res.status(400).json({ success: false, error: 'Parent organization not found' });
     return;
   }

@@ -536,6 +536,22 @@ data-carrying cutover, or take the fresh-org path.
     create-path failure on PG — part of the create-endpoints worklist. tsc clean,
     full suite green (890).
 
+  - **9b.10 (done) — create-endpoints cluster.** The user-visible "can't create
+    anything on Postgres" breakage: create handlers validated the org against the
+    stale `organizations` array (empty in PG mode → every create with an org
+    parent/assignment 400s). Fixed the two raw-array validations:
+    `POST /organizations` parent-id check → `orgRepo.get(parentId)`;
+    `POST`/`PUT /people` assigned-org check → `organizationsRepo.list()` (added an
+    org-repo handle to people.ts). `POST /data-assets` already validates via
+    `isOwnershipLevel` (the PR 4 org-scope cache) and needs no change. Verified
+    against a **local Postgres** end-to-end: create top-level company → child
+    division (parent-id validated from PG) → person in the division → data-asset
+    in the company all succeed (orgs=2, people=1, assets=1). Note: the org-scope
+    cache is eventually-consistent (~5s TTL), so an org + data-asset created in
+    rapid succession can hit a brief window where `isOwnershipLevel` hasn't seen
+    the new org yet — inherent to PR 4's cache, not a create bug (a boot-hydrated
+    org creates assets immediately). tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
