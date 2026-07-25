@@ -6,6 +6,7 @@ import { getPeopleRepository } from '../db/people.repo';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
 import { getOrganizationsRepository } from '../db/organizations.repo';
+import { getCachedOrgList } from '../lib/org-scope';
 import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
 import { governanceGroups } from './governance-groups';
 import { processNodes } from './process-catalog';
@@ -173,6 +174,7 @@ export function publicPerson(p: StoredPerson): PublicPerson {
 // ── Org access resolution ──
 
 export function getDescendantOrgIds(orgId: string): string[] {
+  const organizations = getCachedOrgList();
   const ids: string[] = [];
   const children = organizations.filter((o) => o.parentId === orgId);
   for (const child of children) {
@@ -183,6 +185,7 @@ export function getDescendantOrgIds(orgId: string): string[] {
 }
 
 function getAncestorOrgs(orgId: string, levels: string[]): string[] {
+  const organizations = getCachedOrgList();
   const ids: string[] = [];
   let current = organizations.find((o) => o.id === orgId);
   while (current?.parentId) {
@@ -210,6 +213,7 @@ export function getRoleForOrg(person: StoredPerson, orgId?: string | null): stri
 }
 
 export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string; name: string; type: string; parentId: string | null }> {
+  const organizations = getCachedOrgList();
   const allWorkingOrgs = organizations.filter((o) => WORKING_LEVELS.includes(o.type));
 
   // SUPER_ADMIN: everything
@@ -289,7 +293,7 @@ export function getVisibleOrgIds(
   if (!user) return null;
   if (user.role === 'SUPER_ADMIN') return null;
 
-  const person = people.find(
+  const person = peopleSource().find(
     (p) => p.email.toLowerCase() === (user.email || '').toLowerCase(),
   );
   // No matching people record — dev fallback, unrestricted.
@@ -328,6 +332,38 @@ const peopleRepo = getPeopleRepository(people);
 // PG-created org is visible here — the raw `organizations` import is stale
 // boot-state under Postgres.
 const organizationsRepo = getOrganizationsRepository(organizations);
+
+// ── People source (Postgres cutover, PR 9b.11) ──
+//
+// The exported access-control helpers below (getVisibleOrgIds / canAccessOrg)
+// are called synchronously by auth middleware on every request across the
+// codebase, so they can't become async. Mirror lib/org-scope's org cache: in
+// JSON mode read the live `people` array; in Postgres mode serve a snapshot
+// hydrated at boot (initPeopleCache) and refreshed on a short TTL. The people
+// set is small, slowly-changing reference data — a few seconds of staleness is
+// acceptable, and the cache is only ever under-inclusive while cold (a missing
+// person maps to the unrestricted dev fallback, never to another user's scope).
+let peopleCache: StoredPerson[] | null = null;
+let peopleCacheAt = 0;
+const PEOPLE_CACHE_TTL_MS = 5000;
+
+/** Refresh the cached people snapshot from the repository. */
+export async function refreshPeopleCache(): Promise<void> {
+  peopleCache = await peopleRepo.list();
+  peopleCacheAt = Date.now();
+}
+
+/** Hydrate the cache at boot. No-op in JSON mode (the live array is the source). */
+export async function initPeopleCache(): Promise<void> {
+  if (hasDatabase()) await refreshPeopleCache();
+}
+
+function peopleSource(): StoredPerson[] {
+  if (!hasDatabase()) return people;
+  if (peopleCache && Date.now() - peopleCacheAt <= PEOPLE_CACHE_TTL_MS) return peopleCache;
+  void refreshPeopleCache();
+  return peopleCache ?? people;
+}
 
 // Migration: PROCESS_OWNER and DATA_STEWARD were legacy app-roles that
 // conflated platform permissions with governance accountability. They've
