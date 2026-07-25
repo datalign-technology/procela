@@ -9,6 +9,29 @@ import { mappings } from './mappings';
 import { connections } from './connections';
 import { glossaryTerms } from './business-glossary';
 import { filterByOrgScope } from '../lib/org-scope';
+// Global search is a read aggregator across 9 stores; each is read through
+// its repository so results come from Postgres in DB mode and the in-memory
+// array in JSON mode (the factory wraps the same array these modules export).
+// PR 9b.7.
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
+import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
+
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const systemsRepo = getSystemsRepository(systems);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const peopleRepo = getPeopleRepository(people);
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const governanceGroupsRepo = getGovernanceGroupsRepository(governanceGroups);
+const mappingsRepo = getMappingsRepository(mappings);
+const connectionsRepo = getConnectionsRepository(connections);
+const glossaryTermsRepo = getGlossaryTermsRepository(glossaryTerms);
 
 const router = Router();
 
@@ -81,7 +104,7 @@ function escapeRegex(s: string): string {
  *
  *  Returns up to GLOBAL_CAP ranked matches across the catalog. Each row
  *  carries a `path` the frontend can navigate to directly. */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
   const orgId = (req.query.orgId as string) || null;
 
@@ -89,6 +112,14 @@ router.get('/', (req: Request, res: Response) => {
     res.json({ success: true, data: { results: [], query: '' } });
     return;
   }
+
+  // Each store read through its repository; local consts shadow the
+  // module-level array imports so the scoring logic below is unchanged.
+  const [systems, dataAssets, processNodes, connections, people, dataDomains, governanceGroups, glossaryTerms, mappings] = await Promise.all([
+    systemsRepo.list(), dataAssetsRepo.list(), processNodesRepo.list(),
+    connectionsRepo.list(), peopleRepo.list(), dataDomainsRepo.list(),
+    governanceGroupsRepo.list(), glossaryTermsRepo.list(), mappingsRepo.list(),
+  ]);
 
   const out: SearchResult[] = [];
   const push = (candidates: SearchResult[]) => {

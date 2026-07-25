@@ -459,6 +459,15 @@ data-carrying cutover, or take the fresh-org path.
     clean, full suite green (890). (`flowRelationships` + `suggestionDismissals`
     readers here were already converted in 9b.3/9b.4.)
 
+  - **9b.7 (done) — `search.ts` (global Cmd-K search).** A single `GET /` handler
+    that scores a query across 9 stores (`systems`, `dataAssets`, `processNodes`,
+    `connections`, `people`, `dataDomains`, `governanceGroups`, `glossaryTerms`,
+    `mappings`). Added module-level repo handles + one `Promise.all` fetch at the
+    handler top (local consts shadow the imports); handler made async. Verified
+    against a **local Postgres**: seeded a "Zephyr SCADA" system → `?q=Zephyr`
+    returns it (`type: system`), read from PG (pre-conversion: empty array, 0
+    results); zero `search.ts` stale warnings. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
