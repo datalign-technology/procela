@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { hasDatabase } from '../db/prisma';
 import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
@@ -102,6 +103,11 @@ const VALID_INTEGRATION_FREQUENCY = [
 ] as const;
 const VALID_INTEGRATION_DIRECTION = ['INBOUND', 'OUTBOUND', 'BIDIRECTIONAL'] as const;
 
+// JSON mode only — these one-time boot migrations rewrite legacy rows in
+// the in-memory array. Postgres rows carry the canonical shape (create
+// sets it, schema defaults it), and reading the boot array in PG mode
+// would just be a stale-store read.
+if (!hasDatabase()) {
 let connectivityMigrated = false;
 for (const s of systems) {
   if (!s.connectivity) {
@@ -158,6 +164,7 @@ for (const s of systems) {
   integrationsMigrated = true;
 }
 if (connectivityMigrated || mechanismsMigrated || integrationsMigrated) saveStore('systems', systems);
+}
 
 // One-time prune of dangling system references on entities outside the
 // systems store. The system-delete handler clears these going forward,
@@ -172,6 +179,10 @@ if (connectivityMigrated || mechanismsMigrated || integrationsMigrated) saveStor
 // other side's `export const`. By the next tick every module is fully
 // loaded and the references are valid.
 process.nextTick(() => {
+  // JSON mode only — this prunes dangling cross-store references left in
+  // legacy JSON files. In Postgres mode referential integrity is enforced
+  // by FK constraints, and reading these boot arrays would be stale reads.
+  if (hasDatabase()) return;
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { dataAssets } = require('./data-assets') as typeof import('./data-assets');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -281,11 +292,11 @@ function resolveOwnership(sys: StoredSystem): {
 
 /** Resolve a stored integration's target into a display name so the UI
  *  can render the edge without its own per-row join. */
-function enrichIntegrations(sys: StoredSystem) {
+function enrichIntegrations(sys: StoredSystem, allSystems: StoredSystem[]) {
   return (sys.integrations || []).map((i) => ({
     ...i,
     targetSystemName: i.targetSystemId
-      ? systems.find((s) => s.id === i.targetSystemId)?.name || null
+      ? allSystems.find((s) => s.id === i.targetSystemId)?.name || null
       : null,
   }));
 }
@@ -293,12 +304,12 @@ function enrichIntegrations(sys: StoredSystem) {
 /** The inverse view: integrations OTHER systems declared pointing at
  *  this one. Derived, never stored — so a user only has to declare an
  *  edge from one side and both systems show the connection. */
-function referencedByIntegrations(sysId: string) {
+function referencedByIntegrations(sysId: string, allSystems: StoredSystem[]) {
   const out: Array<{
     systemId: string; systemName: string;
     interfaceType: string; frequency?: string; direction: string;
   }> = [];
-  for (const s of systems) {
+  for (const s of allSystems) {
     if (s.id === sysId) continue;
     for (const i of s.integrations || []) {
       if (i.targetSystemId !== sysId) continue;
@@ -313,14 +324,14 @@ function referencedByIntegrations(sysId: string) {
   return out;
 }
 
-function decorate(sys: StoredSystem) {
+function decorate(sys: StoredSystem, allSystems: StoredSystem[]) {
   const { ownerName, deputyOwnerName, custodianNames } = resolveOwnership(sys);
   return {
     ...sys,
     connectivity: sys.connectivity || 'INTEGRATED',
     connectionCount: profilesForSystem(sys.id).length,
     connectionStatus: rollupConnectionStatus(sys),
-    integrations: enrichIntegrations(sys),
+    integrations: enrichIntegrations(sys, allSystems),
     integrationCount: (sys.integrations || []).length,
     ownerName,
     deputyOwnerName,
@@ -330,8 +341,9 @@ function decorate(sys: StoredSystem) {
 
 /** DELETE /api/v1/systems/all — delete all systems */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = systems.length;
-  const ids = systems.map((s) => s.id);
+  const all = await systemsRepo.list();
+  const count = all.length;
+  const ids = all.map((s) => s.id);
   for (const id of ids) await systemsRepo.delete(id);
   auditService.log(DEV_ORG_ID, null, 'System', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all systems');
@@ -341,10 +353,11 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/systems */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(systems, orgId as string | undefined);
+  const all = await systemsRepo.list();
+  const filtered = filterByOrgScope(all, orgId as string | undefined);
   res.json({
     success: true,
-    data: filtered.map(decorate),
+    data: filtered.map((s) => decorate(s, all)),
     systemTypes: SYSTEM_TYPES,
     connectivityOptions: VALID_CONNECTIVITY,
     integrationMechanismOptions: VALID_INTEGRATION_MECHANISMS,
@@ -355,11 +368,12 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/systems/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const sys = systems.find((s) => s.id === req.params.id);
+  const all = await systemsRepo.list();
+  const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   res.json({
     success: true,
-    data: { ...decorate(sys), referencedByIntegrations: referencedByIntegrations(sys.id) },
+    data: { ...decorate(sys, all), referencedByIntegrations: referencedByIntegrations(sys.id, all) },
   });
 });
 
@@ -371,7 +385,8 @@ router.get('/:id', async (req: Request, res: Response) => {
  *  (owner, deputy, custodians). Used by the System detail modal's
  *  WhereUsed panel so all three layers are visible from one page. */
 router.get('/:id/360', async (req: Request, res: Response) => {
-  const sys = systems.find((s) => s.id === req.params.id);
+  const all = await systemsRepo.list();
+  const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
 
   // Lazy require to avoid systems → people → data-assets → systems cycle.
@@ -434,7 +449,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
-      system: { ...decorate(sys), referencedByIntegrations: referencedByIntegrations(sys.id) },
+      system: { ...decorate(sys, all), referencedByIntegrations: referencedByIntegrations(sys.id, all) },
       linkedConnections,
       assetsHere,
       dependentActivities,
@@ -455,6 +470,7 @@ router.get('/:id/360', async (req: Request, res: Response) => {
 function validateIntegrations(
   value: unknown,
   selfId: string,
+  allSystems: StoredSystem[],
 ): { ok: true; value: SystemIntegration[] } | { ok: false; error: string } {
   if (value === undefined) return { ok: true, value: [] };
   if (!Array.isArray(value)) return { ok: false, error: 'integrations must be an array' };
@@ -470,7 +486,7 @@ function validateIntegrations(
       if (targetSystemId === selfId) {
         return { ok: false, error: 'a system cannot integrate with itself' };
       }
-      if (!systems.some((s) => s.id === targetSystemId)) {
+      if (!allSystems.some((s) => s.id === targetSystemId)) {
         return { ok: false, error: `integration target "${targetSystemId}" is not a known system` };
       }
     }
@@ -515,7 +531,7 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
   const newId = uuid();
-  const integ = validateIntegrations(integrations, newId);
+  const integ = validateIntegrations(integrations, newId, await systemsRepo.list());
   if (!integ.ok) { res.status(400).json({ success: false, error: integ.error }); return; }
   const cleanedCustodians = Array.isArray(custodianIds)
     ? Array.from(new Set(custodianIds.filter((c) => typeof c === 'string' && c.trim())))
@@ -550,7 +566,8 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/systems/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const sys = systems.find((s) => s.id === req.params.id);
+  const all = await systemsRepo.list();
+  const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   const { name, description, systemType, businessCriticality, vendor, integrationPoints, connectivity, integrations, ownerPersonId, deputyOwnerId, custodianIds } = req.body;
   if (connectivity !== undefined && !VALID_CONNECTIVITY.includes(connectivity)) {
@@ -558,7 +575,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     return;
   }
   if (integrations !== undefined) {
-    const integ = validateIntegrations(integrations, sys.id);
+    const integ = validateIntegrations(integrations, sys.id, all);
     if (!integ.ok) { res.status(400).json({ success: false, error: integ.error }); return; }
     sys.integrations = integ.value.length > 0 ? integ.value : undefined;
   }
@@ -613,7 +630,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 /** GET /api/v1/systems/:id/impact — preview what would be affected by deleting this system */
 router.get('/:id/impact', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const sys = systems.find((s) => s.id === id);
+  const sys = await systemsRepo.get(id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
 
   const assetsCount = dataAssets.filter((a) => a.systemId === id).length;
@@ -626,7 +643,7 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/systems/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = systems.find((s) => s.id === req.params.id);
+  const removed = await systemsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   auditService.log(DEV_ORG_ID, null, 'System', removed.id, 'DELETE', removed, null);
   await systemsRepo.delete(removed.id);
@@ -645,7 +662,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
   // Cascade: drop any integration edge on a surviving system that
   // pointed at the deleted one, so the catalog has no dangling targets.
-  for (const s of systems) {
+  for (const s of await systemsRepo.list()) {
     if (!s.integrations || s.integrations.length === 0) continue;
     const kept = s.integrations.filter((i) => i.targetSystemId !== removed.id);
     if (kept.length !== s.integrations.length) {
@@ -741,10 +758,15 @@ router.post('/import', async (req: Request, res: Response) => {
     const skipped: string[] = [];
     const now = new Date().toISOString();
 
+    // Fetch existing systems once; append each created row so an
+    // intra-import duplicate (two CSV rows with the same name) is caught
+    // just as the prior per-row array scan did.
+    const existing = await systemsRepo.list();
+
     for (const row of rows) {
       if (!row.name) continue;
       // Skip duplicates — same name in same org
-      const existingDup = systems.find(
+      const existingDup = existing.find(
         (s) => s.name.toLowerCase() === row.name.toLowerCase() && s.orgId === orgId,
       );
       if (existingDup) {
@@ -758,6 +780,7 @@ router.post('/import', async (req: Request, res: Response) => {
         createdAt: now, updatedAt: now,
       };
       await systemsRepo.create(sys);
+      existing.push(sys);
       created.push(sys);
     }
 

@@ -479,6 +479,30 @@ data-carrying cutover, or take the fresh-org path.
     unlinkedAssets:1`, read from PG (pre-conversion: 0); zero `gap-detection.ts`
     stale warnings. tsc clean, full suite green (890).
 
+  **Entity routes (own list/read handlers).** The core entities' *write*
+  handlers were converted long ago, but their read handlers + boot migrations
+  still scan the arrays. Converting an entity's own route removes its single
+  biggest reader; the store fully clears once the remaining aggregators drop it
+  too. (Verification: the store no longer appears in the diagnostic when the
+  route is exercised; any residual warnings the file still emits are for
+  *foreign* stores it reads, tracked under those stores.)
+
+  - **9b.9a (done) — `systems.ts`.** Nine handlers + a helper chain
+    (`decorate` → `enrichIntegrations`/`referencedByIntegrations`, plus
+    `validateIntegrations`) that read the `systems` array. Parameterised the four
+    helpers to take the repo-loaded list; each handler fetches
+    `await systemsRepo.list()` (or `.get`) and threads it through. Two boot
+    migrations (the connectivity/integrations legacy rewrite and the
+    `process.nextTick` dangling-reference prune) guarded to JSON mode — Postgres
+    carries the canonical shape and enforces referential integrity via FKs. The
+    import dup-check pre-fetches once and appends created rows so intra-import
+    duplicates are still caught. Verified against a **local Postgres**: created
+    two systems (one integrating with the other) → list resolves the integration
+    target name from PG (`targetSystemName: "SysA"`) and `/:id/360` shows the
+    reverse edge (`referencedByIntegrations: ["SysB"]`); the `systems` store no
+    longer warns (the file's two residual warnings are foreign reads —
+    `connectionSystemLinks`, `mappings`). tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
