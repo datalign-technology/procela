@@ -5,6 +5,7 @@ import { hasDatabase } from '../db/prisma';
 import { getPeopleRepository } from '../db/people.repo';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
+import { getOrganizationsRepository } from '../db/organizations.repo';
 import { damaRoles, DAMA_ROLE_TYPES } from './dama-roles';
 import { governanceGroups } from './governance-groups';
 import { processNodes } from './process-catalog';
@@ -322,6 +323,11 @@ export const people: StoredPerson[] = loadStore<StoredPerson>('people');
 registerStore('people', people);
 
 const peopleRepo = getPeopleRepository(people);
+// Org existence is validated in the create/update paths through the org
+// repository (Postgres in DB mode, the in-memory array in JSON mode) so a
+// PG-created org is visible here — the raw `organizations` import is stale
+// boot-state under Postgres.
+const organizationsRepo = getOrganizationsRepository(organizations);
 
 // Migration: PROCESS_OWNER and DATA_STEWARD were legacy app-roles that
 // conflated platform permissions with governance accountability. They've
@@ -525,9 +531,9 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(409).json({ success: false, error: `A person with email "${email}" already exists.` });
     return;
   }
+  const knownOrgs = await organizationsRepo.list();
   for (const oid of assignedOrgIds) {
-    const org = organizations.find((o) => o.id === oid);
-    if (!org) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
+    if (!knownOrgs.find((o) => o.id === oid)) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
   }
   const now = new Date().toISOString();
   const person: StoredPerson = {
@@ -558,9 +564,9 @@ router.put('/:id', async (req: Request, res: Response) => {
   // Support both orgIds (array) and orgId (single, backward compat)
   const newOrgIds = orgIds || (orgId ? [orgId] : undefined);
   if (newOrgIds !== undefined) {
+    const knownOrgs = await organizationsRepo.list();
     for (const oid of newOrgIds) {
-      const org = organizations.find((o) => o.id === oid);
-      if (!org) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
+      if (!knownOrgs.find((o) => o.id === oid)) { res.status(400).json({ success: false, error: `Organization "${oid}" not found.` }); return; }
     }
     person.orgIds = newOrgIds;
   }
