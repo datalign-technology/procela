@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { hasDatabase } from '../db/prisma';
 import { getPeopleRepository } from '../db/people.repo';
 import { parseCsv } from '../lib/csv';
 import { organizations } from './organizations';
@@ -327,6 +328,10 @@ const peopleRepo = getPeopleRepository(people);
 // been replaced by the DAMA role model. Migrate anyone still carrying
 // the old values to EDITOR (closest equivalent permission set).
 const LEGACY_ROLES = new Set(['PROCESS_OWNER', 'DATA_STEWARD']);
+// JSON mode only — one-time boot migrations that rewrite legacy rows in the
+// in-memory array. Postgres rows carry the canonical shape, and reading the
+// boot array in PG mode would just be a stale-store read.
+if (!hasDatabase()) {
 let migrated = 0;
 for (const p of people) {
   if (LEGACY_ROLES.has(p.role)) {
@@ -351,13 +356,15 @@ if (skillBackfilled > 0) {
   saveStore('people', people);
   logger.info({ skillBackfilled }, 'Backfilled skillIds on existing people');
 }
+}
 
 const router = Router();
 
 /** DELETE /api/v1/people/all — delete all people */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = people.length;
-  const ids = people.map((p) => p.id);
+  const all = await peopleRepo.list();
+  const count = all.length;
+  const ids = all.map((p) => p.id);
   for (const id of ids) await peopleRepo.delete(id);
   logger.info({ count }, 'Deleted all people');
   res.json({ success: true, deleted: count });
@@ -369,10 +376,11 @@ router.delete('/all', async (_req: Request, res: Response) => {
  *    includeInactive   when "true", include soft-deleted records.
  *                      Defaults to false so the standard People page
  *                      stays clean. Admin views explicitly opt in. */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, includeInactive } = req.query;
   const includeDeactivated = String(includeInactive) === 'true';
-  let filtered = orgId ? people.filter((p) => p.orgIds.includes(orgId as string)) : people;
+  const allPeople = await peopleRepo.list();
+  let filtered = orgId ? allPeople.filter((p) => p.orgIds.includes(orgId as string)) : allPeople;
   if (!includeDeactivated) filtered = filtered.filter(isActive);
   // Build "Root / Parent / Child" for a single org id by walking up
   // parentId. Cached per request via the closure so a person assigned
@@ -410,8 +418,8 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/people/:id/360 — full 360 view of a person */
-router.get('/:id/360', (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+router.get('/:id/360', async (req: Request, res: Response) => {
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
   // Org assignments with resolved names
@@ -499,8 +507,8 @@ router.get('/:id/360', (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/people/:id */
-router.get('/:id', (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+router.get('/:id', async (req: Request, res: Response) => {
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   res.json({ success: true, data: publicPerson(person) });
 });
@@ -513,7 +521,7 @@ router.post('/', async (req: Request, res: Response) => {
   const assignedOrgIds: string[] = orgIds || (orgId ? [orgId] : []);
   if (assignedOrgIds.length === 0) { res.status(400).json({ success: false, error: 'At least one organization is required' }); return; }
   // Prevent duplicate emails
-  if (email && people.find((p) => p.email.toLowerCase() === email.toLowerCase())) {
+  if (email && (await peopleRepo.list()).find((p) => p.email.toLowerCase() === email.toLowerCase())) {
     res.status(409).json({ success: false, error: `A person with email "${email}" already exists.` });
     return;
   }
@@ -537,7 +545,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/people/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   const { name, email, role, title, jobRole, orgIds, orgId, accessibleOrgIds, skillIds } = req.body;
   if (name !== undefined) person.name = name;
@@ -562,9 +570,9 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 /** GET /api/v1/people/:id/impact — preview what would be affected by deleting this person */
-router.get('/:id/impact', (req: Request, res: Response) => {
+router.get('/:id/impact', async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const person = people.find((p) => p.id === id);
+  const person = await peopleRepo.get(id);
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
   const ownedProcesses = processNodes.filter((n) => n.ownerId === id).length;
@@ -586,7 +594,7 @@ router.get('/:id/impact', (req: Request, res: Response) => {
 
 /** DELETE /api/v1/people/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   const personId = person.id;
 
@@ -635,9 +643,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * in route modules don't pick up the on-disk scrub until reload.
  */
 router.post('/:id/forget', async (req: Request, res: Response) => {
-  const idx = people.findIndex((p) => p.id === String(req.params.id));
-  if (idx === -1) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
-  const person = people[idx];
+  const person = await peopleRepo.get(String(req.params.id));
+  if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
   const confirmExpected = `FORGET ${person.email}`;
   if ((req.body?.confirm || '') !== confirmExpected) {
@@ -683,7 +690,7 @@ router.post('/:id/forget', async (req: Request, res: Response) => {
  *  doesn't appear in the default People list. Reverse with the
  *  /reactivate endpoint below. */
 router.post('/:id/deactivate', async (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   if (person.active === false) {
     res.json({ success: true, data: publicPerson(person), message: 'Already deactivated' });
@@ -711,7 +718,7 @@ router.post('/:id/deactivate', async (req: Request, res: Response) => {
 
 /** POST /api/v1/people/:id/reactivate */
 router.post('/:id/reactivate', async (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === req.params.id);
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   if (person.active !== false) {
     res.json({ success: true, data: publicPerson(person), message: 'Already active' });
@@ -736,7 +743,7 @@ router.post('/:id/reactivate', async (req: Request, res: Response) => {
  * orgRoles via getRoleForOrg() at token-mint time.
  */
 router.put('/:id/org-role', async (req: Request, res: Response) => {
-  const person = people.find((p) => p.id === String(req.params.id));
+  const person = await peopleRepo.get(String(req.params.id));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   const { orgId, role } = req.body || {};
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
@@ -874,11 +881,16 @@ router.post('/import', async (req: Request, res: Response) => {
     const skipped: string[] = [];
     const now = new Date().toISOString();
 
+    // Fetch existing people once; append each created row so an
+    // intra-import duplicate email is caught just as the prior per-row
+    // array scan did.
+    const existingPeople = await peopleRepo.list();
+
     for (const row of rows) {
       if (!row.name) continue;
       // Skip duplicates by email
       if (row.email) {
-        const existing = people.find((p) => p.email.toLowerCase() === row.email!.toLowerCase());
+        const existing = existingPeople.find((p) => p.email.toLowerCase() === row.email!.toLowerCase());
         if (existing) {
           skipped.push(row.email);
           continue;
@@ -895,6 +907,7 @@ router.post('/import', async (req: Request, res: Response) => {
         createdAt: now, updatedAt: now,
       };
       await peopleRepo.create(person);
+      existingPeople.push(person);
       created.push(person);
     }
 

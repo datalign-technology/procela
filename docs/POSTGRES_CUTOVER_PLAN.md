@@ -518,6 +518,24 @@ data-carrying cutover, or take the fresh-org path.
     residual warning is a foreign `systems` read, tracked under systems). tsc
     clean, full suite green (890).
 
+  - **9b.9c (done, partial) — `people.ts` handler reads.** Converted the CRUD/list
+    handlers to repos: `DELETE /all`, `GET /`, `GET /:id`, `/:id/360`,
+    `/:id/impact`, `/:id/forget` (GDPR), and the create/import email-dup checks
+    (list-then-find; import prefetches once and appends created rows for
+    intra-import dedup). The two legacy boot migrations (role→EDITOR, skillIds
+    backfill) guarded to JSON mode. Verified against a **local Postgres** (person
+    seeded directly): `GET /`, `GET /:id`, `/impact` all read PG and
+    `publicPerson` still strips the password hash. **`people` is NOT yet fully
+    cleared** — its *exported, synchronous* access-control helpers
+    (`getVisibleOrgIds` / `canAccessOrg`, read on every request by auth middleware
+    across the codebase) still read the array (people.ts:291). Making them async
+    would ripple through the whole auth layer; the correct fix is a repo-hydrated
+    **people cache** mirroring PR 4's org-scope cache — a distinct, auth-sensitive
+    follow-up. Also surfaced: `POST /people` (like `POST /organizations` /
+    `/data-assets`) validates the org against the stale array and has a
+    create-path failure on PG — part of the create-endpoints worklist. tsc clean,
+    full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
