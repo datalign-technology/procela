@@ -10,6 +10,11 @@ import { governanceTasks } from './governance-tasks';
 import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
 import { dataDomains } from './data-domains';
 import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getAgentsRepository } from '../db/agents.repo';
+import { getSkillsRepository } from '../db/skills.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { hasDatabase } from '../db/prisma';
 
 export const DAMA_ROLE_TYPES = [
   // Executive/Strategic
@@ -79,8 +84,24 @@ registerStore('damaRoles', damaRoles);
 
 const damaRolesRepo = getDamaRolesRepository(damaRoles);
 
-// Backfill agentId/agentName on legacy records
-{
+// Foreign repos are built lazily. people.ts value-imports dama-roles, so this
+// module can be evaluated mid-cycle while the `people` binding is still in the
+// temporal dead zone — reading it at module-init to construct a repo would
+// throw and, under the test loader, hang. The others follow the same pattern
+// for uniformity (and future cycle-safety). Same rationale as the already-lazy
+// governanceTasksRepo below.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _agentsRepo: ReturnType<typeof getAgentsRepository> | null = null;
+const agentsRepo = () => (_agentsRepo ??= getAgentsRepository(agents));
+let _skillsRepo: ReturnType<typeof getSkillsRepository> | null = null;
+const skillsRepo = () => (_skillsRepo ??= getSkillsRepository(skills));
+let _dataDomainsRepo: ReturnType<typeof getDataDomainsRepository> | null = null;
+const dataDomainsRepo = () => (_dataDomainsRepo ??= getDataDomainsRepository(dataDomains));
+
+// Backfill agentId/agentName on legacy records. JSON mode only — Postgres rows
+// carry the canonical (null, not undefined) shape.
+if (!hasDatabase()) {
   let backfilled = 0;
   for (const r of damaRoles) {
     if (r.agentId === undefined) { (r as any).agentId = null; backfilled++; }
@@ -99,10 +120,10 @@ const damaRolesRepo = getDamaRolesRepository(damaRoles);
 // assignments need a lookup through the parent domain. Used by the
 // list / summary / per-person handlers so an `?orgId=` filter reaches
 // both kinds.
-function roleOrgId(r: StoredDamaRole): string | null {
+function roleOrgId(r: StoredDamaRole, domains: typeof dataDomains): string | null {
   if (r.scopeType === 'ORG') return r.scopeId;
   if (r.scopeType === 'DOMAIN') {
-    const d = dataDomains.find((dd) => dd.id === r.scopeId);
+    const d = domains.find((dd) => dd.id === r.scopeId);
     return d ? d.orgId : null;
   }
   return null;
@@ -112,10 +133,10 @@ const router = Router();
 
 /** DELETE /api/v1/dama-roles/all — delete all DAMA role assignments */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const ids = damaRoles.map((r) => r.id);
-  const count = ids.length;
-  for (const id of ids) {
-    await damaRolesRepo.delete(id);
+  const all = await damaRolesRepo.list();
+  const count = all.length;
+  for (const r of all) {
+    await damaRolesRepo.delete(r.id);
   }
   auditService.log('system', null, 'DamaRole', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all DAMA role assignments');
@@ -125,13 +146,19 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/dama-roles — list all (support ?orgId=, ?personId=, ?agentId= filters). Enrich with person/agent name. */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, personId, agentId } = req.query;
-  let filtered = [...damaRoles];
+  const [allRoles, allDomains, allPeople, allAgents] = await Promise.all([
+    damaRolesRepo.list(),
+    dataDomainsRepo().list(),
+    peopleRepo().list(),
+    agentsRepo().list(),
+  ]);
+  let filtered = allRoles;
 
   if (orgId) {
     // Include both ORG-scoped assignments for this org AND DOMAIN-
     // scoped assignments whose domain belongs to this org, so the
     // Governance Roles page sees both kinds when filtering by org.
-    filtered = filtered.filter((r) => roleOrgId(r) === orgId);
+    filtered = filtered.filter((r) => roleOrgId(r, allDomains) === orgId);
   }
   if (personId) {
     filtered = filtered.filter((r) => r.personId === personId);
@@ -141,8 +168,8 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   const enriched = filtered.map((r) => {
-    const person = r.personId ? people.find((p) => p.id === r.personId) : null;
-    const agent = r.agentId ? agents.find((a) => a.id === r.agentId) : null;
+    const person = r.personId ? allPeople.find((p) => p.id === r.personId) : null;
+    const agent = r.agentId ? allAgents.find((a) => a.id === r.agentId) : null;
     return {
       ...r,
       personName: person?.name || (r.personId ? 'Unknown' : null),
@@ -169,6 +196,12 @@ router.post('/', async (req: Request, res: Response) => {
   }
   if (!scopeId) { res.status(400).json({ success: false, error: 'scopeId is required' }); return; }
 
+  // The org this assignment belongs to. ORG-scoped stores the orgId in
+  // scopeId directly; DOMAIN-scoped resolves it through the parent domain
+  // (set in the validation branch below). Used for the onboarding tasks so
+  // their orgId is the real org, not the domain id.
+  let assignmentOrgId: string = scopeId;
+
   // Domain-scoped assignments are only allowed for roles that have a
   // per-domain meaning. Reject DOMAIN for org-only roles (CDO,
   // Governance Lead, etc.) so the catalog stays coherent.
@@ -180,8 +213,9 @@ router.post('/', async (req: Request, res: Response) => {
       });
       return;
     }
-    const domain = dataDomains.find((d) => d.id === scopeId);
+    const domain = await dataDomainsRepo().get(String(scopeId));
     if (!domain) { res.status(404).json({ success: false, error: 'Data domain not found' }); return; }
+    assignmentOrgId = domain.orgId;
   }
 
   // Accountability rule: only humans can hold roles in
@@ -196,20 +230,23 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  let person: typeof people[number] | undefined;
-  let agent: typeof agents[number] | undefined;
+  let person: (typeof people)[number] | null = null;
+  let agent: (typeof agents)[number] | null = null;
 
   if (personId) {
-    person = people.find((p) => p.id === personId);
+    person = await peopleRepo().get(String(personId));
     if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
   }
   if (agentId) {
-    agent = agents.find((a) => a.id === agentId);
+    agent = await agentsRepo().get(String(agentId));
     if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   }
 
+  // Load the existing assignments once for the duplicate + single-holder checks.
+  const existingRoles = await damaRolesRepo.list();
+
   // Prevent duplicate (same person/agent + roleType + scopeId)
-  const duplicate = damaRoles.find((r) => {
+  const duplicate = existingRoles.find((r) => {
     if (personId) return r.personId === personId && r.roleType === roleType && r.scopeId === scopeId;
     if (agentId) return r.agentId === agentId && r.roleType === roleType && r.scopeId === scopeId;
     return false;
@@ -226,7 +263,7 @@ router.post('/', async (req: Request, res: Response) => {
   // loudly so the caller surfaces the existing holder instead of
   // silently double-booking.
   if (SINGLE_HOLDER_ROLES.has(roleType)) {
-    const existing = damaRoles.find((r) => r.roleType === roleType && r.scopeId === scopeId);
+    const existing = existingRoles.find((r) => r.roleType === roleType && r.scopeId === scopeId);
     if (existing) {
       res.status(409).json({
         success: false,
@@ -268,7 +305,7 @@ router.post('/', async (req: Request, res: Response) => {
       const dueDate = new Date(now.getTime() + template.dueOffset * 24 * 60 * 60 * 1000);
       await governanceTasksRepo.create({
         id: uuid(),
-        orgId: scopeId,
+        orgId: assignmentOrgId,
         title: template.title,
         description: template.description,
         taskType: template.taskType as any,
@@ -300,7 +337,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/dama-roles/:id — remove assignment */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = damaRoles.find((r) => r.id === req.params.id);
+  const removed = await damaRolesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance role assignment not found' }); return; }
   await damaRolesRepo.delete(removed.id);
   res.status(204).send();
@@ -309,10 +346,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
 /** GET /api/v1/dama-roles/by-person/:personId — all DAMA roles for a person */
 router.get('/by-person/:personId', async (req: Request, res: Response) => {
   const personId = req.params.personId;
-  const person = people.find((p) => p.id === personId);
+  const person = await peopleRepo().get(String(personId));
   if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
 
-  const roles = damaRoles
+  const roles = (await damaRolesRepo.list())
     .filter((r) => r.personId === personId)
     .map((r) => ({ ...r, personName: person.name }));
 
@@ -322,10 +359,10 @@ router.get('/by-person/:personId', async (req: Request, res: Response) => {
 /** GET /api/v1/dama-roles/by-agent/:agentId — all DAMA roles for an agent */
 router.get('/by-agent/:agentId', async (req: Request, res: Response) => {
   const agentId = req.params.agentId;
-  const agent = agents.find((a) => a.id === agentId);
+  const agent = await agentsRepo().get(String(agentId));
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
 
-  const roles = damaRoles
+  const roles = (await damaRolesRepo.list())
     .filter((r) => r.agentId === agentId)
     .map((r) => ({ ...r, agentName: agent.name }));
 
@@ -345,12 +382,12 @@ router.get('/skill-match', async (req: Request, res: Response) => {
   let candidateSkillIds: string[] = [];
   let candidateName = '';
   if (candidateType === 'person') {
-    const person = people.find((p) => p.id === candidateId);
+    const person = await peopleRepo().get(String(candidateId));
     if (!person) { res.status(404).json({ success: false, error: 'Person not found' }); return; }
     candidateName = person.name;
     candidateSkillIds = (person as any).skillIds || [];
   } else if (candidateType === 'agent') {
-    const agent = agents.find((a) => a.id === candidateId);
+    const agent = await agentsRepo().get(String(candidateId));
     if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
     candidateName = agent.name;
     candidateSkillIds = agent.skillIds || [];
@@ -376,7 +413,8 @@ router.get('/skill-match', async (req: Request, res: Response) => {
   const expectedCategories = ROLE_SKILL_CATEGORIES[roleType as string] || ['GOVERNANCE'];
 
   // Get all skills for the org that match the expected categories
-  const orgSkills = orgId ? skills.filter((s) => s.orgId === orgId) : skills;
+  const allSkills = await skillsRepo().list();
+  const orgSkills = orgId ? allSkills.filter((s) => s.orgId === orgId) : allSkills;
   const expectedSkillIds = orgSkills
     .filter((s) => expectedCategories.includes(s.category))
     .map((s) => s.id);
@@ -412,9 +450,13 @@ router.get('/skill-match', async (req: Request, res: Response) => {
  *  summary cards and the table below them show consistent numbers. */
 router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  let filtered = [...damaRoles];
+  const [allRoles, allDomains] = await Promise.all([
+    damaRolesRepo.list(),
+    dataDomainsRepo().list(),
+  ]);
+  let filtered = allRoles;
   if (orgId) {
-    filtered = filtered.filter((r) => roleOrgId(r) === orgId);
+    filtered = filtered.filter((r) => roleOrgId(r, allDomains) === orgId);
   }
   const counts: Record<string, number> = {};
   for (const rt of DAMA_ROLE_TYPES) {

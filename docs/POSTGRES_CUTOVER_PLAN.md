@@ -592,6 +592,29 @@ data-carrying cutover, or take the fresh-org path.
     DRAFT→ACTIVE persists, dup-check + bulk-delete + delete-all all hit PG.
     tsc clean, full suite green (890).
 
+  - **9b.13 (done) — dama-roles.ts entity route.** Converted every
+    `damaRoles.find/filter/map` → `damaRolesRepo.get/list` (DELETE `/all`,
+    GET `/`, `/summary`, `/:id`, `/by-person`, `/by-agent`, POST dup +
+    single-holder checks) and the foreign reads that enrich/validate the route:
+    `people` / `agents` / `skills` / `dataDomains` `.find/.filter` →
+    their repos; `roleOrgId()` parameterised to take the loaded domains list.
+    Foreign repos built **lazily** (`peopleRepo()` etc.) — `people.ts`
+    value-imports `dama-roles`, so eager `getPeopleRepository(people)` at
+    module-init would hit the same TDZ-in-cycle hang as 9b.12; matches the
+    file's already-lazy `governanceTasksRepo`. Boot agentId/agentName backfill
+    guarded behind `!hasDatabase()`. **PG-only bug fixed:** a DOMAIN-scoped
+    steward assignment auto-creates onboarding tasks with `orgId: scopeId` — but
+    for DOMAIN scope `scopeId` is a *data-domain* id, so on Postgres the
+    `governance_tasks_orgId_fkey` FK rejected it and the whole POST failed (JSON
+    mode silently stored the wrong id). Now resolves the assignment's real org
+    (`domain.orgId` for DOMAIN, `scopeId` for ORG) and uses it for the tasks.
+    Verified against a **local Postgres** (25/25): create/list/enrich from PG,
+    a PG-only "ghost" role surfaces, DOMAIN-scope validates the domain in PG,
+    `?orgId=` resolves DOMAIN roles via the domain→org lookup, dup +
+    single-holder + people-only rules read PG, `by-person`/`by-agent`,
+    skill-match coverage off PG skills, steward onboarding tasks persist (4),
+    summary counts, delete `:id`/`all`. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
