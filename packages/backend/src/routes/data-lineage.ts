@@ -8,6 +8,8 @@ import { dataAssets } from './data-assets';
 import { dataQualityRules } from './data-quality';
 import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
 import { getAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
 
 export interface DataLineageLink {
   id: string;
@@ -27,6 +29,13 @@ export const dataLineageLinks: DataLineageLink[] = loadStore<DataLineageLink>('d
 registerStore('dataLineageLinks', dataLineageLinks);
 
 const dataLineageLinksRepo = getDataLineageLinksRepository(dataLineageLinks);
+
+// Foreign stores used to enrich lineage links with system/asset names. Built
+// lazily so nothing reads their bindings at module-init (cycle-safety).
+let _systemsRepo: ReturnType<typeof getSystemsRepository> | null = null;
+const systemsRepo = () => (_systemsRepo ??= getSystemsRepository(systems));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
 
 // ── Asset-level lineage edges ─────────────────────────────────────────────
 // The original DataLineageLink models system-to-system flows. For dbt
@@ -100,9 +109,9 @@ const router = Router();
 
 /** DELETE /api/v1/data-lineage/all — delete all lineage links */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = dataLineageLinks.length;
-  const ids = dataLineageLinks.map((l) => l.id);
-  for (const id of ids) await dataLineageLinksRepo.delete(id);
+  const all = await dataLineageLinksRepo.list();
+  const count = all.length;
+  for (const l of all) await dataLineageLinksRepo.delete(l.id);
   auditService.log(DEV_ORG_ID, null, 'DataLineageLink', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all data lineage links');
   res.json({ success: true, deleted: count });
@@ -111,12 +120,17 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/data-lineage — list all (support ?orgId= filter), enrich with system names and data asset name */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? dataLineageLinks.filter((l) => l.orgId === orgId) : dataLineageLinks;
+  const [allLinks, allSystems, allAssets] = await Promise.all([
+    dataLineageLinksRepo.list(),
+    systemsRepo().list(),
+    dataAssetsRepo().list(),
+  ]);
+  const filtered = orgId ? allLinks.filter((l) => l.orgId === orgId) : allLinks;
 
   const enriched = filtered.map((link) => {
-    const sourceSystem = systems.find((s) => s.id === link.sourceSystemId);
-    const targetSystem = systems.find((s) => s.id === link.targetSystemId);
-    const dataAsset = link.dataAssetId ? dataAssets.find((a) => a.id === link.dataAssetId) : null;
+    const sourceSystem = allSystems.find((s) => s.id === link.sourceSystemId);
+    const targetSystem = allSystems.find((s) => s.id === link.targetSystemId);
+    const dataAsset = link.dataAssetId ? allAssets.find((a) => a.id === link.dataAssetId) : null;
     return {
       ...link,
       sourceSystemName: sourceSystem?.name || '',
@@ -131,14 +145,19 @@ router.get('/', async (req: Request, res: Response) => {
 /** GET /api/v1/data-lineage/by-system/:systemId — get all lineage links involving a system */
 router.get('/by-system/:systemId', async (req: Request, res: Response) => {
   const { systemId } = req.params;
-  const links = dataLineageLinks.filter(
+  const [allLinks, allSystems, allAssets] = await Promise.all([
+    dataLineageLinksRepo.list(),
+    systemsRepo().list(),
+    dataAssetsRepo().list(),
+  ]);
+  const links = allLinks.filter(
     (l) => l.sourceSystemId === systemId || l.targetSystemId === systemId
   );
 
   const enriched = links.map((link) => {
-    const sourceSystem = systems.find((s) => s.id === link.sourceSystemId);
-    const targetSystem = systems.find((s) => s.id === link.targetSystemId);
-    const dataAsset = link.dataAssetId ? dataAssets.find((a) => a.id === link.dataAssetId) : null;
+    const sourceSystem = allSystems.find((s) => s.id === link.sourceSystemId);
+    const targetSystem = allSystems.find((s) => s.id === link.targetSystemId);
+    const dataAsset = link.dataAssetId ? allAssets.find((a) => a.id === link.dataAssetId) : null;
     return {
       ...link,
       sourceSystemName: sourceSystem?.name || '',
@@ -153,7 +172,12 @@ router.get('/by-system/:systemId', async (req: Request, res: Response) => {
 /** GET /api/v1/data-lineage/visualization — return data formatted for visualization */
 router.get('/visualization', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filteredLinks = orgId ? dataLineageLinks.filter((l) => l.orgId === orgId) : dataLineageLinks;
+  const [allLinks, allSystems, allAssets] = await Promise.all([
+    dataLineageLinksRepo.list(),
+    systemsRepo().list(),
+    dataAssetsRepo().list(),
+  ]);
+  const filteredLinks = orgId ? allLinks.filter((l) => l.orgId === orgId) : allLinks;
 
   // Collect unique system IDs from lineage links
   const systemIds = new Set<string>();
@@ -162,7 +186,7 @@ router.get('/visualization', async (req: Request, res: Response) => {
     systemIds.add(link.targetSystemId);
   });
 
-  const nodes = systems
+  const nodes = allSystems
     .filter((s) => systemIds.has(s.id))
     .map((s) => {
       const inbound = filteredLinks.filter((l) => l.targetSystemId === s.id).length;
@@ -177,7 +201,7 @@ router.get('/visualization', async (req: Request, res: Response) => {
     });
 
   const links = filteredLinks.map((link) => {
-    const dataAsset = link.dataAssetId ? dataAssets.find((a) => a.id === link.dataAssetId) : null;
+    const dataAsset = link.dataAssetId ? allAssets.find((a) => a.id === link.dataAssetId) : null;
     return {
       id: link.id,
       sourceSystemId: link.sourceSystemId,
@@ -222,7 +246,7 @@ router.get('/asset-edges', async (req: Request, res: Response) => {
 
 /** GET /api/v1/data-lineage/:id — single link */
 router.get('/:id', async (req: Request, res: Response) => {
-  const link = dataLineageLinks.find((l) => l.id === req.params.id);
+  const link = await dataLineageLinksRepo.get(String(req.params.id));
   if (!link) { res.status(404).json({ success: false, error: 'Lineage link not found' }); return; }
   res.json({ success: true, data: link });
 });
@@ -267,7 +291,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/data-lineage/:id — update */
 router.put('/:id', async (req: Request, res: Response) => {
-  const link = dataLineageLinks.find((l) => l.id === req.params.id);
+  const link = await dataLineageLinksRepo.get(String(req.params.id));
   if (!link) { res.status(404).json({ success: false, error: 'Lineage link not found' }); return; }
 
   const { sourceSystemId, targetSystemId, dataAssetId, description, flowType, frequency, status } = req.body;
@@ -304,7 +328,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/data-lineage/:id — delete */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = dataLineageLinks.find((l) => l.id === req.params.id);
+  const removed = await dataLineageLinksRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Lineage link not found' }); return; }
   auditService.log(DEV_ORG_ID, null, 'DataLineageLink', removed.id, 'DELETE', removed, null);
   await dataLineageLinksRepo.delete(removed.id);

@@ -683,6 +683,29 @@ data-carrying cutover, or take the fresh-org path.
     with distinct incrementing codes and is idempotent on re-seed, delete
     removes from PG. tsc clean, full suite green (890).
 
+  - **9b.18 (done) — data-lineage.ts (dataLineageLinks CRUD/read handlers).**
+    This file owns four stores (`dataLineageLinks`, `assetLineageEdges`,
+    `dbtAssetMappings`, `dbtTestMappings`) plus a heavy dbt-import reconciler
+    that also mutates foreign `dataAssets`/`dataQualityRules` arrays directly.
+    Scoped this increment to the `dataLineageLinks` HTTP handlers: every
+    `dataLineageLinks.find/filter/map` → `dataLineageLinksRepo.get/list`
+    (DELETE `/all`, GET `/`, `/by-system/:systemId`, `/visualization`, `/:id`,
+    PUT, DELETE) and the foreign `systems`/`dataAssets` enrichment reads in
+    those handlers → lazy `systemsRepo()` / `dataAssetsRepo()`. This clears
+    data-lineage.ts's own `dataLineageLinks` reads (the store stays flagged
+    until its other readers — `enterprise-view.ts` + an `index.ts` boot line —
+    convert). **Deliberately deferred to a dedicated dbt-import increment:** the
+    `/asset-edges` GET and `reconcileManifestInner` / `import-dbt` path, which
+    read+write `assetLineageEdges`, `dbtAssetMappings`, `dbtTestMappings` and
+    directly `push`/`splice`+`saveStore` the foreign `dataAssets` and
+    `dataQualityRules` arrays — that subsystem is coupled to the not-yet-
+    converted `dataQualityRules` store and warrants its own PR. Verified
+    against a **local Postgres** (19/19): create (+ same-source/target 400),
+    list with source/target/asset names enriched from PG, a PG-only "ghost"
+    link surfaces, `/by-system`, `/visualization` (nodes from PG systems,
+    inbound/outbound counts, asset names on links), `/:id`, PUT persists,
+    delete `:id`/`all`. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
