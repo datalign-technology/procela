@@ -1009,6 +1009,24 @@ data-carrying cutover, or take the fresh-org path.
       ownership; `/impact` counts off PG; and deleting a system cascade-removes
       its join-table links from PG while the connection itself survives. tsc
       clean, full suite green (890).
+  - **9b.33 (done) — process-catalog secondary foreign reads (suggestions +
+    data-graph).** process-catalog's own store (`processNodes`) was converted in
+    9b.19, but its four Phase-3 discovery endpoints still read foreign stores via
+    `require(...)` + `.filter` on the arrays: `GET /nodes/:id/asset-suggestions`
+    (dataAssets + mappings), `/system-suggestions` (systems),
+    `/people-suggestions` (people + systems), and `GET /data-graph` (dataAssets +
+    mappings + systems). In Postgres mode all four returned empty — no ranked
+    suggestions and an empty data map. Added lazy `dataAssetsRepo()` /
+    `mappingsRepo()` accessors (the module already had lazy `peopleRepo()` /
+    `systemsRepo()`) and switched each endpoint to `await repo.list()` +
+    in-memory filter/rank; `data-graph` became `async`. Verified against a
+    **local Postgres** (9/9): asset-suggestions ranks an unmapped PG asset while
+    correctly excluding the already-mapped one (proving both dataAssets *and*
+    mappings are read off PG), system/people-suggestions return off PG, and
+    data-graph surfaces the PG activity, the asset with its PG-resolved system
+    name, and the PG mapping edge. tsc clean, full suite green (890;
+    asset/system/people-suggestion + data-graph-routes + process-catalog-routes
+    33/33).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
