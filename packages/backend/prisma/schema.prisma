@@ -232,7 +232,11 @@ model ProcessNode {
   ownerId             String?          @db.Uuid
   status              String           @default("DRAFT")
   orderIndex          Int              @default(0)
-  activityId          String?          @db.Uuid
+  // Human-readable id (e.g. "VS-0001", "ACT-0042"), NOT a UUID — the app
+  // generates these per level. Originally mistyped as @db.Uuid, which made
+  // every process-node insert fail on Postgres; corrected to text in the
+  // 9b.19 cutover migration.
+  activityId          String?
   responsibleRole     String?
   responsiblePersonId String?          @db.Uuid
   // Rich documentation fields — kept nullable text so the UI's

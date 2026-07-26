@@ -706,6 +706,44 @@ data-carrying cutover, or take the fresh-org path.
     inbound/outbound counts, asset names on links), `/:id`, PUT persists,
     delete `:id`/`all`. tsc clean, full suite green (890).
 
+  - **9b.19 (done) — process-catalog.ts (the big one) + a schema fix.** The
+    largest route (~1950 lines): a heavily-mutated CRUD store read
+    synchronously through `findNode` / `getChildren` / `getDescendants` at ~35
+    sites, stateful per-level ID counters, 3 boot migrations, recursive tree
+    helpers, and 24 handlers. Per-handler parameterisation would have been huge
+    and risky, so `processNodes` uses a **source cache** like org-scope/people —
+    but because this module both reads *and* writes the store, each mutating
+    handler calls `refreshProcessNodesCache()` after its writes so
+    create-then-read in the same flow stays consistent (verified). Hydrated at
+    boot via `initProcessCatalog()` (wired into index.ts next to
+    `initOrgScope`/`initPeopleCache`), which also re-seeds the ID counters from
+    the DB so generated `activityId`s never collide. `findNode`/`getChildren`
+    read `nodeSource()`; the 3 boot migrations are `!hasDatabase()`-guarded;
+    `processVersions` (history + snapshot) and the two remaining
+    `flowRelationships` reads go through their repos; `organizations` reads →
+    `getCachedOrgList()`; and the reference validators
+    (`validatePersonId`/`validateSystemIds`/`cleanControlIds`) now check
+    `people`/`systems`/`governanceControls` via lazy repos so a create with
+    valid owner/systems/controls isn't rejected on PG. The PUT handler fetches
+    the node fresh from the repo so optimistic locking is correct.
+    **Schema bug fixed:** `ProcessNode.activityId` was typed `@db.Uuid` but the
+    app stores human-readable ids (`VS-0001`, `ACT-0042`) — so *every*
+    process-node insert failed on Postgres (the repo test only ever used
+    `activityId: null`, so CI never caught it). Migration
+    `20260726120000_pg_cutover_process_node_activity_id_text` widens the column
+    to text. Verified against a **local Postgres** (25/25): id counters from PG
+    (VS-0001 → VS-0002), create-then-read consistency, owner enrichment,
+    parent/system/control/person validation off PG, children+ancestry, a
+    PG-only "ghost" node surfacing, status transition writing a version
+    snapshot + version bump, `/history` off PG, optimistic-lock 409,
+    apply-template bulk create with incrementing VS orderIndex + tree, and
+    cascade delete. tsc clean, full suite green (890). **Deferred (documented):**
+    the secondary Phase-3 suggestion (`/nodes/:id/{asset,system,people}-suggestions`)
+    and `/data-graph` endpoints still lazy-require `dataAssets`/`mappings`/
+    `systems`/`people` for their foreign reads, and the governance-template's
+    `governancePolicies` dedup read — these belong to those stores' own
+    conversions (esp. the deferred 16-file `mappings` store).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

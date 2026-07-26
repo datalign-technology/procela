@@ -255,7 +255,7 @@ app.use(errorHandler);
 // ---------------------------------------------------------------------------
 // Auto-save persistence
 // ---------------------------------------------------------------------------
-import { processNodes, flowRelationships, processVersions } from './routes/process-catalog';
+import { processNodes, flowRelationships, processVersions, initProcessCatalog } from './routes/process-catalog';
 import { systems } from './routes/systems';
 import { dataAssets, dataAssetBindings, dataAssetColumns } from './routes/data-assets';
 import { organizations } from './routes/organizations';
@@ -402,6 +402,10 @@ const server = app.listen(PORT, () => {
   // (getVisibleOrgIds / canAccessOrg) see PG people in Postgres mode
   // (PR 9b.11). No-op in JSON mode.
   initPeopleCache().catch((err) => logger.error({ err }, 'initPeopleCache failed'));
+  // Hydrate the process-catalog node cache + ID counters so the synchronous
+  // tree helpers (findNode / getChildren / getDescendants) see PG nodes in
+  // Postgres mode (PR 9b.19). No-op in JSON mode.
+  initProcessCatalog().catch((err) => logger.error({ err }, 'initProcessCatalog failed'));
   // Hydrate branding config from persistence (PR 7).
   initBranding().catch((err) => logger.error({ err }, 'initBranding failed'));
 });
