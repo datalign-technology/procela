@@ -765,6 +765,22 @@ data-carrying cutover, or take the fresh-org path.
     write (foreign `processNodes`) — it self-heals via process-catalog's
     `cleanControlIds` pruning, so it's left as a documented PG no-op.
 
+  - **9b.21 (done) — governance-tasks.ts (CRUD).** Third of the governance
+    cluster. Converted the HTTP CRUD read paths: `filterByOrgScope(governanceTasks, …)`
+    in list/summary → `filterByOrgScope(await repo.list(), …)`; `:id`/PUT/DELETE
+    `.find` → `repo.get`; and `enrichTask` parameterised onto a repo-loaded
+    `people` list (lazy repo) for assignee names. Verified against a **local
+    Postgres** (14/14): create with assignee enriched from PG, list + status/
+    assignee filters + org-scope, a PG-only "ghost" task surfacing, summary,
+    `:id`, status transition (IN_PROGRESS→COMPLETED sets completedAt), delete.
+    tsc clean, full suite green (890). **Deferred (documented):**
+    `sweepOverdueTasks` — the exported, synchronous overdue-notification helper
+    called by the scheduler and by 13 sync test call-sites that push into and
+    assert against the live `governanceTasks` array — still reads/writes the
+    array. Converting it to async/repo would rewrite that sync test contract;
+    it's a scheduler concern (like `createNotification`), left for a focused
+    follow-up, so the store stays flagged until then.
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

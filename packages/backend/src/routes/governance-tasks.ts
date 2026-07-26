@@ -8,6 +8,7 @@ import { people } from './people';
 import { createNotification } from './notifications';
 import logger from '../lib/logger';
 import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
+import { getPeopleRepository } from '../db/people.repo';
 
 const TASK_TYPES = [
   'STEWARDSHIP',
@@ -103,6 +104,10 @@ registerStore('governanceTasks', governanceTasks);
 
 const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
 
+// people is a foreign store — lazy repo (cycle-safe) for assignee enrichment.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+
 // Request-body schemas — Zod at the API boundary. Enum checks + type
 // guarantees fall out of the parse so downstream code can drop the
 // `.includes(x as any)` runtime checks and use the typed body directly.
@@ -135,8 +140,11 @@ const updateTaskBodySchema = z.object({
   resolution: z.string().nullable().optional(),
 });
 
-function enrichTask(task: StoredGovernanceTask): StoredGovernanceTask & { assigneeName: string | null } {
-  const assignee = task.assigneeId ? people.find((p) => p.id === task.assigneeId) : null;
+function enrichTask(
+  task: StoredGovernanceTask,
+  allPeople: typeof people,
+): StoredGovernanceTask & { assigneeName: string | null } {
+  const assignee = task.assigneeId ? allPeople.find((p) => p.id === task.assigneeId) : null;
   return {
     ...task,
     assigneeName: assignee?.name || null,
@@ -213,7 +221,7 @@ router.post('/sweep-overdue', async (req: Request, res: Response) => {
 /** GET /api/v1/governance-tasks/summary */
 router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(governanceTasks, orgId as string | undefined);
+  const filtered = filterByOrgScope(await governanceTasksRepo.list(), orgId as string | undefined);
 
   const byStatus: Record<string, number> = {};
   const byPriority: Record<string, number> = {};
@@ -235,21 +243,22 @@ router.get('/summary', async (req: Request, res: Response) => {
 /** GET /api/v1/governance-tasks */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, assigneeId, taskType, priority } = req.query;
-  let filtered = filterByOrgScope(governanceTasks, orgId as string | undefined);
+  let filtered = filterByOrgScope(await governanceTasksRepo.list(), orgId as string | undefined);
 
   if (status) filtered = filtered.filter((t) => t.status === status);
   if (assigneeId) filtered = filtered.filter((t) => t.assigneeId === assigneeId);
   if (taskType) filtered = filtered.filter((t) => t.taskType === taskType);
   if (priority) filtered = filtered.filter((t) => t.priority === priority);
 
-  res.json({ success: true, data: filtered.map(enrichTask) });
+  const allPeople = await peopleRepo().list();
+  res.json({ success: true, data: filtered.map((t) => enrichTask(t, allPeople)) });
 });
 
 /** GET /api/v1/governance-tasks/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const task = governanceTasks.find((t) => t.id === req.params.id);
+  const task = await governanceTasksRepo.get(String(req.params.id));
   if (!task) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
-  res.json({ success: true, data: enrichTask(task) });
+  res.json({ success: true, data: enrichTask(task, await peopleRepo().list()) });
 });
 
 /** POST /api/v1/governance-tasks */
@@ -287,12 +296,12 @@ router.post('/', async (req: Request, res: Response) => {
   await governanceTasksRepo.create(task);
   auditService.log(task.orgId, null, 'GovernanceTask', task.id, 'CREATE', null, task);
   logger.info({ taskId: task.id, title: task.title, taskType: task.taskType }, 'Created governance task');
-  res.status(201).json({ success: true, data: enrichTask(task) });
+  res.status(201).json({ success: true, data: enrichTask(task, await peopleRepo().list()) });
 });
 
 /** PUT /api/v1/governance-tasks/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const task = governanceTasks.find((t) => t.id === req.params.id);
+  const task = await governanceTasksRepo.get(String(req.params.id));
   if (!task) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
 
   const parsed = updateTaskBodySchema.safeParse(req.body);
@@ -358,12 +367,12 @@ router.put('/:id', async (req: Request, res: Response) => {
   await governanceTasksRepo.update(task.id, task);
   auditService.log(task.orgId, null, 'GovernanceTask', task.id, 'UPDATE', before, task);
   logger.info({ taskId: task.id, title: task.title }, 'Updated governance task');
-  res.json({ success: true, data: enrichTask(task) });
+  res.json({ success: true, data: enrichTask(task, await peopleRepo().list()) });
 });
 
 /** DELETE /api/v1/governance-tasks/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = governanceTasks.find((t) => t.id === req.params.id);
+  const removed = await governanceTasksRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance task not found' }); return; }
   auditService.log(removed.orgId, null, 'GovernanceTask', removed.id, 'DELETE', removed, null);
   await governanceTasksRepo.delete(removed.id);
