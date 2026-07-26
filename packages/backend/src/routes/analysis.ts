@@ -7,7 +7,30 @@ import { people } from './people';
 import { damaRoles } from './dama-roles';
 import { connections, connectionSystemLinks } from './connections';
 import { mappings } from './mappings';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDamaRolesRepository } from '../db/dama-roles.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
+import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
 import { getVisibleOrgScope } from '../lib/org-scope';
+
+// Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays.
+// This analytics route is read-only; each request loads fresh snapshots.
+const systemsRepo = getSystemsRepository(systems);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const dataAssetBindingsRepo = getDataAssetBindingsRepository(dataAssetBindings);
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const peopleRepo = getPeopleRepository(people);
+const damaRolesRepo = getDamaRolesRepository(damaRoles);
+const connectionsRepo = getConnectionsRepository(connections);
+const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
+const mappingsRepo = getMappingsRepository(mappings);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ANALYSIS — cube-style pivot engine.
@@ -40,13 +63,17 @@ const ALL_DIMS: Dim[] = ['systems', 'dataAssets', 'domains', 'processes', 'roles
 const UNK = '__UNK__';
 
 // Per-dimension labelling — turns an id into something the user can read.
-function makeLookups() {
-  const sys = new Map(systems.map((s) => [s.id, s.name]));
-  const ass = new Map(dataAssets.map((a) => [a.id, a.name]));
-  const dom = new Map(dataDomains.map((d) => [d.id, d.name]));
-  const proc = new Map(processNodes.map((p) => [p.id, p.name]));
-  const ppl = new Map(people.map((p) => [p.id, p.name]));
-  const conn = new Map(connections.map((c) => [c.id, c.name]));
+async function makeLookups() {
+  const [allSystems, allAssets, allDomains, allNodes, allPeople, allConns] = await Promise.all([
+    systemsRepo.list(), dataAssetsRepo.list(), dataDomainsRepo.list(),
+    processNodesRepo.list(), peopleRepo.list(), connectionsRepo.list(),
+  ]);
+  const sys = new Map(allSystems.map((s) => [s.id, s.name]));
+  const ass = new Map(allAssets.map((a) => [a.id, a.name]));
+  const dom = new Map(allDomains.map((d) => [d.id, d.name]));
+  const proc = new Map(allNodes.map((p) => [p.id, p.name]));
+  const ppl = new Map(allPeople.map((p) => [p.id, p.name]));
+  const conn = new Map(allConns.map((c) => [c.id, c.name]));
   // Roles are special — the "id" is the role type string itself.
   const roleLabel = (t: string) => t;
   /** Map a raw ref to the id that should appear in the pivot key. Real
@@ -108,7 +135,12 @@ function emit(facts: Fact[], f: Fact): void { facts.push(f); }
 // Build the fact table for a given org scope. Each asset produces one
 // fact per (system,domain,owner,steward) combination so the pivot can
 // count ownership the way users expect.
-function buildFacts(orgId: string | undefined): Fact[] {
+async function buildFacts(orgId: string | undefined): Promise<Fact[]> {
+  const [allDomains, allAssets, allMappings, allRoles, allSysLinks, allBindings, allNodes, allSystems] = await Promise.all([
+    dataDomainsRepo.list(), dataAssetsRepo.list(), mappingsRepo.list(),
+    damaRolesRepo.list(), connectionSystemLinksRepo.list(), dataAssetBindingsRepo.list(),
+    processNodesRepo.list(), systemsRepo.list(),
+  ]);
   const scope = orgId ? getVisibleOrgScope(orgId) : null;
   const inOrg = <T extends { orgId?: string; orgIds?: string[] }>(x: T): boolean => {
     if (!scope) return true;
@@ -120,7 +152,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   // Build a domain-lookup for each asset (data domains hold an array of
   // assetIds, not the other way around).
   const assetDomain = new Map<string, string>();
-  for (const d of dataDomains) {
+  for (const d of allDomains) {
     if (!inOrg(d)) continue;
     for (const aid of d.dataAssetIds) assetDomain.set(aid, d.id);
   }
@@ -131,7 +163,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   // One fact per (asset, owner|stewardId|nullPerson). Lets the pivot
   // attribute a single asset to multiple owners without double-counting
   // the system or domain in cells where 'people' is not on either axis.
-  for (const a of dataAssets) {
+  for (const a of allAssets) {
     if (!inOrg(a)) continue;
     const domainId = assetDomain.get(a.id);
     const peopleRefs = [a.ownerPersonId, ...(a.stewardIds || [])].filter(Boolean) as string[];
@@ -153,8 +185,8 @@ function buildFacts(orgId: string | undefined): Fact[] {
   // ── Process step ↔ asset mappings ─────────────────────────────────────
   // Each mapping links a process step to an asset; through the asset we
   // also learn the system and (via domain lookup) the domain.
-  const assetById = new Map(dataAssets.map((a) => [a.id, a]));
-  for (const m of mappings) {
+  const assetById = new Map(allAssets.map((a) => [a.id, a]));
+  for (const m of allMappings) {
     if (!inOrg(m)) continue;
     if (!m.dataAssetId) continue; // skip policy / attachment-shaped rows
     const asset = assetById.get(m.dataAssetId);
@@ -173,7 +205,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   // ── DAMA role assignments ─────────────────────────────────────────────
   // Two refs only — roleType (which doubles as the role id) and the
   // person/agent holding it. Pivots like "Roles × People" run on this.
-  for (const r of damaRoles) {
+  for (const r of allRoles) {
     const subjectId = r.personId || r.agentId || '';
     if (!subjectId) continue;
     emit(facts, {
@@ -187,7 +219,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   }
 
   // ── Connection ↔ system links ────────────────────────────────────────
-  for (const l of connectionSystemLinks) {
+  for (const l of allSysLinks) {
     if (!inOrg(l)) continue;
     emit(facts, {
       factId: `sys-conn:${l.id}`,
@@ -199,7 +231,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   // ── Connection-driven asset bindings ─────────────────────────────────
   // Captures (connection, dataAsset, system) — answers "which connections
   // feed which assets in which system?"
-  for (const b of dataAssetBindings) {
+  for (const b of allBindings) {
     if (!inOrg(b)) continue;
     const asset = assetById.get(b.dataAssetId);
     emit(facts, {
@@ -215,7 +247,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   }
 
   // ── Process owners ───────────────────────────────────────────────────
-  for (const p of processNodes) {
+  for (const p of allNodes) {
     if (!inOrg(p)) continue;
     if (!p.ownerId) continue;
     emit(facts, {
@@ -226,7 +258,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   }
 
   // ── System owners + deputies ─────────────────────────────────────────
-  for (const s of systems) {
+  for (const s of allSystems) {
     if (!inOrg(s)) continue;
     if (s.ownerPersonId) {
       emit(facts, {
@@ -245,7 +277,7 @@ function buildFacts(orgId: string | undefined): Fact[] {
   }
 
   // ── Domain owners + stewards ─────────────────────────────────────────
-  for (const d of dataDomains) {
+  for (const d of allDomains) {
     if (!inOrg(d)) continue;
     if (d.ownerId) {
       emit(facts, {
@@ -338,7 +370,7 @@ router.get('/dimensions', (_req, res) => {
 // Group facts by composite (rowKey1, rowKey2, ..., colKey1, colKey2, ...)
 // where each axis carries up to MAX_DIMS_PER_AXIS dimensions. Single-dim
 // pivots collapse to the same code path with one-element key arrays.
-router.post('/cube', (req: Request, res: Response) => {
+router.post('/cube', async (req: Request, res: Response) => {
   const body = (req.body || {}) as CubeRequest;
   const { orgId } = body;
   const filters = body.filters || [];
@@ -378,8 +410,7 @@ router.post('/cube', (req: Request, res: Response) => {
     seen.add(d);
   }
 
-  const facts = buildFacts(orgId);
-  const lookups = makeLookups();
+  const [facts, lookups] = await Promise.all([buildFacts(orgId), makeLookups()]);
 
   // Apply filters first — narrows the fact table before grouping.
   let filtered = facts;
@@ -554,16 +585,15 @@ router.post('/cube', (req: Request, res: Response) => {
 // POST /api/v1/analysis/drill — resolve a list of fact ids into the
 // underlying entity records so the drill-down panel can render names,
 // owners, status, etc. The client passes the factIds the cube returned.
-router.post('/drill', (req: Request, res: Response) => {
+router.post('/drill', async (req: Request, res: Response) => {
   const body = (req.body || {}) as { orgId?: string; factIds?: string[] };
   const ids = new Set(body.factIds || []);
   if (ids.size === 0) {
     res.json({ success: true, data: [] });
     return;
   }
-  const facts = buildFacts(body.orgId);
+  const [facts, lookups] = await Promise.all([buildFacts(body.orgId), makeLookups()]);
   const matched = facts.filter((f) => ids.has(f.factId));
-  const lookups = makeLookups();
 
   const enriched = matched.map((f) => ({
     factId: f.factId,
