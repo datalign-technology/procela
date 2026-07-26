@@ -7,7 +7,11 @@ import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
 import { getProcessVersionsRepository } from '../db/process-versions.repo';
 import { getSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
-import { getVisibleOrgScope, getAncestorOrgIds } from '../lib/org-scope';
+import { getPeopleRepository } from '../db/people.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
+import { hasDatabase } from '../db/prisma';
+import { getVisibleOrgScope, getAncestorOrgIds, getCachedOrgList } from '../lib/org-scope';
 import { auditService } from '../services/audit.service';
 import { rankSuggestions } from '../services/asset-suggestion.service';
 import { rankSystemSuggestions } from '../services/system-suggestion.service';
@@ -17,7 +21,6 @@ import { rankPeopleSuggestions } from '../services/people-suggestion.service';
 // arrays lazily via require() at request time — by then the cycle
 // has resolved and the exports are populated.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-import { organizations } from './organizations';
 import { people } from './people';
 import { createNotification } from './notifications';
 
@@ -255,6 +258,47 @@ export const flowRelationshipsRepo = getFlowRelationshipsRepository(flowRelation
 const processVersionsRepo = getProcessVersionsRepository(processVersions);
 export const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
 
+// Foreign stores read here for reference-validation / enrichment. Lazy repos
+// so nothing reads their bindings at module-init (cycle-safety). `systems` is
+// lazy-required to avoid the process-catalog ↔ systems import cycle.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _systemsRepo: ReturnType<typeof getSystemsRepository> | null = null;
+const systemsRepo = () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  (_systemsRepo ??= getSystemsRepository(require('./systems').systems));
+let _governanceControlsRepo: ReturnType<typeof getGovernanceControlsRepository> | null = null;
+const governanceControlsRepo = () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  (_governanceControlsRepo ??= getGovernanceControlsRepository(require('./governance-controls').governanceControls));
+
+// ── processNodes source cache (Postgres cutover) ──
+// process-catalog reads processNodes synchronously through findNode /
+// getChildren / getDescendants at ~35 sites. In JSON mode those read the live
+// array; in Postgres mode they read a repo-hydrated snapshot — hydrated at
+// boot via initProcessCatalog() and refreshed after every write in this file,
+// with a short TTL as a backstop. Because this module both reads and writes
+// the store, each mutating handler calls refreshProcessNodesCache() after its
+// writes so a write-then-read in the same flow stays consistent.
+let processNodesCache: ProcessNode[] | null = null;
+let processNodesCacheAt = 0;
+const PROCESS_NODES_TTL_MS = 5000;
+export async function refreshProcessNodesCache(): Promise<void> {
+  processNodesCache = await processNodesRepo.list();
+  processNodesCacheAt = Date.now();
+}
+export async function initProcessCatalog(): Promise<void> {
+  if (!hasDatabase()) return;
+  await refreshProcessNodesCache();
+  reseedLevelCounters(processNodesCache ?? []);
+}
+function nodeSource(): ProcessNode[] {
+  if (!hasDatabase()) return processNodes;
+  if (processNodesCache && Date.now() - processNodesCacheAt <= PROCESS_NODES_TTL_MS) return processNodesCache;
+  void refreshProcessNodesCache();
+  return processNodesCache ?? processNodes;
+}
+
 // Cached lazily so we don't have to import the governance-policies
 // route eagerly (that would drag its own module-load side effects into
 // this file's boot). Used only by /apply-governance-template.
@@ -276,7 +320,8 @@ async function dismissedTargetsFor(nodeId: string, kind: SuggestionDismissal['ki
 // Pre-existing nodes have no `domain`. Resolve it once from the
 // value-stream-ancestor name (the old heuristic), persist, and from
 // then on every detection reads the field instead of matching strings.
-{
+// JSON mode only — Postgres rows already carry the canonical `domain`.
+if (!hasDatabase()) {
   const byId = new Map(processNodes.map((n) => [n.id, n]));
   const rootDomain = (n: ProcessNode): 'GOVERNANCE' | 'OPERATIONAL' => {
     let cur: ProcessNode | undefined = n;
@@ -316,15 +361,22 @@ const ID_PREFIXES: Record<string, string> = {
 };
 
 const levelCounters: Record<string, number> = {};
-for (const [level, prefix] of Object.entries(ID_PREFIXES)) {
-  const existing = processNodes
-    .filter((n) => n.level === level && n.activityId)
-    .map((n) => {
-      const m = n.activityId?.match(new RegExp(`^${prefix}-(\\d+)$`));
-      return m ? parseInt(m[1], 10) : 0;
-    });
-  levelCounters[level] = existing.length > 0 ? Math.max(...existing) : 0;
+// Seed the per-level ID counters from the current node set. Called at module
+// load with the boot array (JSON mode) and again from initProcessCatalog with
+// the hydrated cache (Postgres mode), so generated activityIds never collide
+// with rows already in the database.
+function reseedLevelCounters(nodes: ProcessNode[]): void {
+  for (const [level, prefix] of Object.entries(ID_PREFIXES)) {
+    const existing = nodes
+      .filter((n) => n.level === level && n.activityId)
+      .map((n) => {
+        const m = n.activityId?.match(new RegExp(`^${prefix}-(\\d+)$`));
+        return m ? parseInt(m[1], 10) : 0;
+      });
+    levelCounters[level] = existing.length > 0 ? Math.max(...existing) : 0;
+  }
 }
+reseedLevelCounters(processNodes);
 
 function generateNodeId(level: string): string {
   const prefix = ID_PREFIXES[level];
@@ -333,8 +385,8 @@ function generateNodeId(level: string): string {
   return `${prefix}-${String(levelCounters[level]).padStart(4, '0')}`;
 }
 
-// Backfill existing nodes that lack a readable ID
-{
+// Backfill existing nodes that lack a readable ID. JSON mode only.
+if (!hasDatabase()) {
   let backfilled = 0;
   for (const node of processNodes) {
     if (!node.activityId && ID_PREFIXES[node.level]) {
@@ -348,8 +400,8 @@ function generateNodeId(level: string): string {
   }
 }
 
-// Migrate legacy statuses (PROPOSED, UNDER_REVIEW, APPROVED) to DRAFT
-{
+// Migrate legacy statuses (PROPOSED, UNDER_REVIEW, APPROVED) to DRAFT. JSON mode only.
+if (!hasDatabase()) {
   const legacyStatuses = new Set(['PROPOSED', 'UNDER_REVIEW', 'APPROVED']);
   let migrated = 0;
   for (const node of processNodes) {
@@ -371,7 +423,7 @@ function param(val: string | string[]): string {
 }
 
 function findNode(id: string): ProcessNode | undefined {
-  return processNodes.find((n) => n.id === id);
+  return nodeSource().find((n) => n.id === id);
 }
 
 // Business-continuity tiers, exported so the frontend picker and the
@@ -381,16 +433,14 @@ export const CRITICALITY_TIERS = ['TIER_1', 'TIER_2', 'TIER_3', 'TIER_4'] as con
 // Drop any controlIds pointing at controls that don't exist. Silent
 // filter so a stale reference lingering on an activity gets pruned on
 // the next save instead of surfacing as a dangling id in the UI.
-function cleanControlIds(ids: unknown): string[] {
+async function cleanControlIds(ids: unknown): Promise<string[]> {
   if (!Array.isArray(ids)) return [];
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { governanceControls } = require('./governance-controls') as typeof import('./governance-controls');
-  const known = new Set(governanceControls.map((c) => c.id));
+  const known = new Set((await governanceControlsRepo().list()).map((c) => c.id));
   return Array.from(new Set(ids.filter((id): id is string => typeof id === 'string' && known.has(id))));
 }
 
 function getChildren(parentId: string): ProcessNode[] {
-  return processNodes
+  return nodeSource()
     .filter((n) => n.parentId === parentId)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 }
@@ -507,32 +557,28 @@ const router = Router();
  *  null to clear. Returns { ok: true, value: id | null } where null
  *  means "clear", or { ok: false } after writing a 400. Lazy-required
  *  to avoid the process-catalog ↔ people cycle. */
-function validatePersonId(
+async function validatePersonId(
   value: unknown,
   res: Response,
-): { ok: true; value: string | null } | { ok: false } {
+): Promise<{ ok: true; value: string | null } | { ok: false }> {
   if (value === '' || value === null) return { ok: true, value: null };
   if (typeof value !== 'string' || !value.trim()) {
     res.status(400).json({ success: false, error: 'personId must be a string id (or empty to clear)' });
     return { ok: false };
   }
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { people } = require('./people') as { people: Array<{ id: string }> };
-  if (!people.some((p) => p.id === value)) {
+  if (!(await peopleRepo().get(value))) {
     res.status(400).json({ success: false, error: `Unknown person id "${value}"` });
     return { ok: false };
   }
   return { ok: true, value };
 }
 
-function validateSystemIds(value: unknown, res: Response): string[] | null {
+async function validateSystemIds(value: unknown, res: Response): Promise<string[] | null> {
   if (!Array.isArray(value)) {
     res.status(400).json({ success: false, error: 'systemIds must be an array' });
     return null;
   }
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { systems } = require('./systems') as { systems: Array<{ id: string }> };
-  const known = new Set(systems.map((s) => s.id));
+  const known = new Set((await systemsRepo().list()).map((s) => s.id));
   const out: string[] = [];
   const seen = new Set<string>();
   for (const id of value) {
@@ -555,7 +601,7 @@ function validateSystemIds(value: unknown, res: Response): string[] | null {
 
 /** DELETE /all — delete all process nodes and flow relationships */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const nodeIds = processNodes.map((n) => n.id);
+  const nodeIds = (await processNodesRepo.list()).map((n) => n.id);
   const flowIds = (await flowRelationshipsRepo.list()).map((f) => f.id);
   const count = nodeIds.length;
   const flowCount = flowIds.length;
@@ -567,6 +613,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
   for (const id of nodeIds) {
     await processNodesRepo.delete(id);
   }
+  if (hasDatabase()) await refreshProcessNodesCache();
   const mappingsRemoved = cascadeDeleteMappings(allStepIds);
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', '*', 'DELETE_ALL', null, { count, flowCount, mappingsRemoved });
   logger.info({ count, flowCount, mappingsRemoved }, 'Deleted all process nodes and flow relationships');
@@ -574,8 +621,10 @@ router.delete('/all', async (_req: Request, res: Response) => {
 });
 
 /** GET / — list all nodes as flat list + tree + metadata */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
+  const allNodes = nodeSource();
+  const allPeople = await peopleRepo().list();
   // Governance content is defined once at the top of the org tree
   // (company / enterprise level) and applies everywhere below it —
   // divisions are subject to it but don't own it. Before this
@@ -593,7 +642,7 @@ router.get('/', (req: Request, res: Response) => {
     ? (() => {
         const scope = getVisibleOrgScope(orgId as string)!;
         const ancestors = getAncestorOrgIds(orgId as string) ?? new Set<string>();
-        return processNodes.filter((n) => {
+        return allNodes.filter((n) => {
           const inScope = scope.has(n.orgId) || n.orgIds.some((id) => scope.has(id));
           if (!inScope) return false;
           if (!includeAncestorGovernance && n.domain === 'GOVERNANCE' && ancestors.has(n.orgId)) {
@@ -602,11 +651,11 @@ router.get('/', (req: Request, res: Response) => {
           return true;
         });
       })()
-    : processNodes;
+    : allNodes;
   const valueStreams = filtered.filter((n) => n.level === 'VALUE_STREAM');
   // Enrich with owner names so the frontend can display them inline
   const enriched = filtered.map((n) => {
-    const ownerName = n.ownerId ? people.find((p) => p.id === n.ownerId)?.name || null : null;
+    const ownerName = n.ownerId ? allPeople.find((p) => p.id === n.ownerId)?.name || null : null;
     return { ...n, ownerName };
   });
   res.json({
@@ -628,7 +677,7 @@ router.get('/', (req: Request, res: Response) => {
 
 /** GET /value-streams — backward-compatible: return value streams with nested tree */
 router.get('/value-streams', (_req: Request, res: Response) => {
-  const vsNodes = processNodes.filter((n) => n.level === 'VALUE_STREAM');
+  const vsNodes = nodeSource().filter((n) => n.level === 'VALUE_STREAM');
   const result = vsNodes.map((vs) => ({
     ...vs,
     children: buildTree(getDescendants(vs.id).concat()),
@@ -684,8 +733,9 @@ router.post('/nodes', async (req: Request, res: Response) => {
     }
     // Validate org level — value streams only at company/division
     const orgIds = req.body.orgIds || [DEV_ORG_ID];
+    const knownOrgs = getCachedOrgList();
     for (const oid of orgIds) {
-      const org = organizations.find((o) => o.id === oid);
+      const org = knownOrgs.find((o) => o.id === oid);
       if (org && !VALUE_STREAM_ORG_LEVELS.includes(org.type)) {
         res.status(400).json({
           success: false,
@@ -718,7 +768,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
   // referenced an unknown system id.
   const cleanedSystemIds = systemIds === undefined
     ? undefined
-    : validateSystemIds(systemIds, res);
+    : await validateSystemIds(systemIds, res);
   if (cleanedSystemIds === null) return;
 
   // Responsible Person — only allowed at the activity / task level
@@ -726,14 +776,19 @@ router.post('/nodes', async (req: Request, res: Response) => {
   // the backend just verifies the id resolves to a real person.
   let cleanedResponsiblePersonId: string | null | undefined = undefined;
   if (responsiblePersonId !== undefined) {
-    const v = validatePersonId(responsiblePersonId, res);
+    const v = await validatePersonId(responsiblePersonId, res);
     if (!v.ok) return;
     cleanedResponsiblePersonId = v.value;
   }
 
+  const allNodes = nodeSource();
   const siblings = parentId
-    ? processNodes.filter((n) => n.parentId === parentId)
-    : processNodes.filter((n) => n.level === 'VALUE_STREAM');
+    ? allNodes.filter((n) => n.parentId === parentId)
+    : allNodes.filter((n) => n.level === 'VALUE_STREAM');
+
+  const cleanedControlIds = Array.isArray(controlIds) && controlIds.length
+    ? await cleanControlIds(controlIds)
+    : [];
 
   const now = new Date().toISOString();
   // A child node belongs to whatever domain its parent does; a new
@@ -771,13 +826,14 @@ router.post('/nodes', async (req: Request, res: Response) => {
     ...(typeof rtoHours === 'number' && rtoHours >= 0 ? { rtoHours } : {}),
     ...(successMeasure ? { successMeasure } : {}),
     ...(slaTarget ? { slaTarget } : {}),
-    ...(Array.isArray(controlIds) && controlIds.length ? { controlIds: cleanControlIds(controlIds) } : {}),
+    ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
     updatedAt: now,
   };
 
   await processNodesRepo.create(node);
+  if (hasDatabase()) await refreshProcessNodesCache();
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'CREATE', null, node);
   logger.info({ level, name, parentId }, 'Created process node');
 
@@ -790,7 +846,7 @@ router.post('/nodes', async (req: Request, res: Response) => {
 
 /** PUT /nodes/:id — update a node */
 router.put('/nodes/:id', async (req: Request, res: Response) => {
-  const node = findNode(param(req.params.id));
+  const node = (await processNodesRepo.get(param(req.params.id))) ?? undefined;
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
@@ -850,7 +906,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     || successMeasure !== undefined || slaTarget !== undefined
     || controlIds !== undefined;
   // Resolve org's status mode to determine which transitions/locks apply
-  const nodeOrg = organizations.find((o) => o.id === node.orgId);
+  const nodeOrg = getCachedOrgList().find((o) => o.id === node.orgId) as any;
   const mode = nodeOrg?.statusMode || 'simple';
   const lockedSet = mode === 'advanced' ? ADVANCED_LOCKED : mode === 'review' ? REVIEW_LOCKED : SIMPLE_LOCKED;
   const transitionMap = mode === 'advanced' ? ADVANCED_TRANSITIONS : mode === 'review' ? REVIEW_TRANSITIONS : SIMPLE_TRANSITIONS;
@@ -875,7 +931,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (inputsOutputs !== undefined) node.inputsOutputs = inputsOutputs;
   if (responsibleRole !== undefined) node.responsibleRole = responsibleRole;
   if (responsiblePersonId !== undefined) {
-    const v = validatePersonId(responsiblePersonId, res);
+    const v = await validatePersonId(responsiblePersonId, res);
     if (!v.ok) return;
     node.responsiblePersonId = v.value;
   }
@@ -886,7 +942,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (estimatedDuration !== undefined) node.estimatedDuration = estimatedDuration;
   if (requiredSkillIds !== undefined) node.requiredSkillIds = Array.isArray(requiredSkillIds) ? requiredSkillIds : [];
   if (systemIds !== undefined) {
-    const cleaned = validateSystemIds(systemIds, res);
+    const cleaned = await validateSystemIds(systemIds, res);
     if (cleaned === null) return;
     node.systemIds = cleaned.length > 0 ? cleaned : undefined;
   }
@@ -917,7 +973,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   if (slaTarget !== undefined) node.slaTarget = slaTarget || undefined;
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
-      ? cleanControlIds(controlIds)
+      ? await cleanControlIds(controlIds)
       : undefined;
   }
 
@@ -932,7 +988,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
       return;
     }
     // Status is changing — create a version snapshot before applying the change
-    const existingVersions = processVersions.filter((v) => v.nodeId === node.id);
+    const existingVersions = (await processVersionsRepo.list()).filter((v) => v.nodeId === node.id);
     const nextVersion = existingVersions.length > 0
       ? Math.max(...existingVersions.map((v) => v.version)) + 1
       : 1;
@@ -1090,6 +1146,7 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
   node.version = (node.version ?? 1) + 1;
 
   await processNodesRepo.update(node.id, node);
+  if (hasDatabase()) await refreshProcessNodesCache();
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', node.id, 'UPDATE', null, node);
   res.json({ success: true, data: node });
 });
@@ -1108,6 +1165,7 @@ router.delete('/nodes/:id', async (req: Request, res: Response) => {
   for (const id of idsToRemove) {
     await processNodesRepo.delete(id);
   }
+  if (hasDatabase()) await refreshProcessNodesCache();
 
   // Remove flow relationships involving deleted nodes
   const flowsToRemove = (await flowRelationshipsRepo.list()).filter(
@@ -1158,6 +1216,7 @@ router.post('/nodes/:id/clone', async (req: Request, res: Response) => {
   }));
 
   for (const c of cloned) await processNodesRepo.create(c);
+  if (hasDatabase()) await refreshProcessNodesCache();
   auditService.log(DEV_ORG_ID, null, 'ProcessNode', cloned[0].id, 'CLONE', null, { sourceId: source.id, count: cloned.length });
   logger.info({ sourceId: source.id, clonedRoot: cloned[0].id, count: cloned.length }, 'Cloned process node tree');
 
@@ -1229,7 +1288,7 @@ router.get('/nodes/:id/system-suggestions', async (req: Request, res: Response) 
   const data = rankSystemSuggestions(
     { id: node.id, parentId: node.parentId, name: node.name, description: node.description, systemIds: node.systemIds },
     orgSystems,
-    processNodes,
+    nodeSource(),
     dismissed,
     { limit, minScore },
   );
@@ -1299,10 +1358,11 @@ router.get('/data-graph', (req: Request, res: Response) => {
   const inScope = (n: { orgId: string; orgIds: string[] }) =>
     !scope || scope.has(n.orgId) || (n.orgIds || []).some((id) => scope.has(id));
 
+  const allNodes = nodeSource();
   const parentNameById = new Map<string, string>();
-  for (const n of processNodes) parentNameById.set(n.id, n.name);
+  for (const n of allNodes) parentNameById.set(n.id, n.name);
 
-  const activities = processNodes
+  const activities = allNodes
     .filter((n) => n.level === 'ACTIVITY' && inScope(n))
     .filter((n) => includeGov || !isGovernanceNode(n))
     .map((n) => ({
@@ -1425,12 +1485,12 @@ router.get('/nodes/:id/dismissed-suggestions', async (req: Request, res: Respons
 // ── VERSION HISTORY ──
 
 /** GET /nodes/:id/history — returns all versions for a node, newest first */
-router.get('/nodes/:id/history', (req: Request, res: Response) => {
+router.get('/nodes/:id/history', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const node = findNode(nodeId);
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
-  const versions = processVersions
+  const versions = (await processVersionsRepo.list())
     .filter((v) => v.nodeId === nodeId)
     .sort((a, b) => b.version - a.version);
 
@@ -1438,11 +1498,11 @@ router.get('/nodes/:id/history', (req: Request, res: Response) => {
 });
 
 /** GET /nodes/:id/history/:versionId — returns a specific version */
-router.get('/nodes/:id/history/:versionId', (req: Request, res: Response) => {
+router.get('/nodes/:id/history/:versionId', async (req: Request, res: Response) => {
   const nodeId = param(req.params.id);
   const versionId = param(req.params.versionId);
 
-  const version = processVersions.find((v) => v.id === versionId && v.nodeId === nodeId);
+  const version = (await processVersionsRepo.list()).find((v) => v.id === versionId && v.nodeId === nodeId);
   if (!version) { res.status(404).json({ success: false, error: 'Version not found' }); return; }
 
   res.json({ success: true, data: version });
@@ -1468,12 +1528,13 @@ router.get('/flows', async (_req: Request, res: Response) => {
  *  Activity detail doesn't need to run a second lookup and doesn't
  *  need the full node list in local state to render.
  */
-router.get('/flows/by-node/:nodeId', (req: Request, res: Response) => {
+router.get('/flows/by-node/:nodeId', async (req: Request, res: Response) => {
   const nodeId = param(req.params.nodeId);
-  const outgoing = flowRelationships
+  const allFlows = await flowRelationshipsRepo.list();
+  const outgoing = allFlows
     .filter((f) => f.fromNodeId === nodeId)
     .map((f) => ({ ...f, other: nodeSummary(f.toNodeId) }));
-  const incoming = flowRelationships
+  const incoming = allFlows
     .filter((f) => f.toNodeId === nodeId)
     .map((f) => ({ ...f, other: nodeSummary(f.fromNodeId) }));
   res.json({
@@ -1609,6 +1670,9 @@ router.post('/apply-template', async (req: Request, res: Response) => {
 
     const created: ProcessNode[] = [];
     const now = new Date().toISOString();
+    // Base order index for new value streams; increments per VS in this batch
+    // (the store/cache isn't refreshed mid-loop, so derive it locally).
+    let vsOrderIndex = nodeSource().filter((n) => n.level === 'VALUE_STREAM').length;
 
     for (const tvs of templateStreams) {
       // Create Value Stream node
@@ -1616,7 +1680,7 @@ router.post('/apply-template', async (req: Request, res: Response) => {
         id: uuid(), parentId: null, level: 'VALUE_STREAM',
         name: tvs.name, description: tvs.description || `Generated from ${industry} template`,
         activityId: generateNodeId('VALUE_STREAM'), status: 'DRAFT',
-        orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
+        orderIndex: vsOrderIndex++,
         orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
         version: 1, domain: 'OPERATIONAL',
         ...(tvs.purpose ? { purpose: tvs.purpose } : {}),
@@ -1701,8 +1765,9 @@ router.post('/apply-template', async (req: Request, res: Response) => {
       }
     }
 
+    if (hasDatabase()) await refreshProcessNodesCache();
     logger.info({ count: created.length, industry }, 'Applied template with universal hierarchy');
-    res.status(201).json({ success: true, data: created, tree: buildTree(processNodes) });
+    res.status(201).json({ success: true, data: created, tree: buildTree(nodeSource()) });
   } catch (err) {
     logger.error({ err }, 'Apply template failed');
     res.status(500).json({ success: false, error: 'Failed to apply template' });
@@ -1722,19 +1787,20 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
   // is an enterprise function, not per-division. Walk up from the
   // requested org to find the root company.
   let companyOrgId = requestOrgId || DEV_ORG_ID;
-  let current = organizations.find((o) => o.id === companyOrgId);
+  const knownOrgs = getCachedOrgList();
+  let current = knownOrgs.find((o) => o.id === companyOrgId);
   while (current?.parentId) {
-    current = organizations.find((o) => o.id === current!.parentId);
+    current = knownOrgs.find((o) => o.id === current!.parentId);
     if (current) companyOrgId = current.id;
   }
   const templateOrgId = companyOrgId;
 
   // Check if governance processes already exist anywhere in the company
-  const existing = processNodes.filter((n) =>
+  const existing = nodeSource().filter((n) =>
     n.level === 'VALUE_STREAM' && n.orgId === templateOrgId && isGovernanceNode(n),
   );
   if (existing.length > 0) {
-    const companyName = organizations.find((o) => o.id === templateOrgId)?.name || templateOrgId;
+    const companyName = knownOrgs.find((o) => o.id === templateOrgId)?.name || templateOrgId;
     res.json({ success: true, data: [], message: `Governance processes already exist at ${companyName}. Delete them to regenerate.` });
     return;
   }
@@ -1830,7 +1896,7 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
       id: uuid(), parentId: null, level: 'VALUE_STREAM',
       name: tvs.name, description: tvs.description,
       activityId: generateNodeId('VALUE_STREAM'), status: 'DRAFT',
-      orderIndex: processNodes.filter((n) => n.level === 'VALUE_STREAM').length,
+      orderIndex: nodeSource().filter((n) => n.level === 'VALUE_STREAM').length,
       orgId: templateOrgId, orgIds: [templateOrgId], ownerId: null,
       version: 1, domain: 'GOVERNANCE',
       purpose: tvs.purpose, businessOutcome: tvs.businessOutcome,
@@ -1879,6 +1945,7 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
       }
     }
   }
+  if (hasDatabase()) await refreshProcessNodesCache();
 
   // ── Seed governance documents (Charter, Policies, Standards, ACL) ──
   // The old governance template created 15 "Data Assets" as
@@ -1943,7 +2010,7 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
     logger.error({ err }, 'Failed to seed governance documents (non-fatal)');
   }
   logger.info({ created: created.length, orgId: templateOrgId }, 'Applied governance process template');
-  const companyName = organizations.find((o) => o.id === templateOrgId)?.name || '';
+  const companyName = getCachedOrgList().find((o) => o.id === templateOrgId)?.name || '';
   res.status(201).json({ success: true, data: created, message: `Created ${created.length} governance process nodes at ${companyName} (company level)` });
 });
 
