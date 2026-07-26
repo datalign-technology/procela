@@ -6,6 +6,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import logger from '../lib/logger';
 import { getSopsRepository } from '../db/sops.repo';
+import { getPeopleRepository } from '../db/people.repo';
 
 // ── Types ──
 
@@ -55,12 +56,17 @@ registerStore('sops', sops);
 
 const sopsRepo = getSopsRepository(sops);
 
+// people is a foreign store; build its repo lazily so nothing reads the
+// `people` binding at module-init (cycle-safety, matching the 9b conversions).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+
 // ── Helpers ──
 
-function generateCode(): string {
+function generateCode(allSops: StoredSop[]): string {
   // Find the highest existing SOP-### and increment, so deletes don't cause collisions.
   let max = 0;
-  for (const s of sops) {
+  for (const s of allSops) {
     const m = /^SOP-(\d+)$/.exec(s.code || '');
     if (m) {
       const n = parseInt(m[1], 10);
@@ -70,16 +76,16 @@ function generateCode(): string {
   return `SOP-${String(max + 1).padStart(3, '0')}`;
 }
 
-function resolveOwnerName(ownerPersonId: string | null): string | null {
+function resolveOwnerName(ownerPersonId: string | null, allPeople: typeof people): string | null {
   if (!ownerPersonId) return null;
-  const person = people.find((p) => p.id === ownerPersonId);
+  const person = allPeople.find((p) => p.id === ownerPersonId);
   return person?.name || null;
 }
 
-function enrichSop(s: StoredSop): any {
+function enrichSop(s: StoredSop, allPeople: typeof people): any {
   return {
     ...s,
-    ownerName: resolveOwnerName(s.ownerPersonId),
+    ownerName: resolveOwnerName(s.ownerPersonId, allPeople),
     stepCount: Array.isArray(s.steps) ? s.steps.length : 0,
   };
 }
@@ -212,7 +218,8 @@ const router = Router();
 /** GET /api/v1/sops — list with filters */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, category, role, status } = req.query;
-  let filtered = filterByOrgScope(sops, orgId as string | undefined);
+  const [allSops, allPeople] = await Promise.all([sopsRepo.list(), peopleRepo().list()]);
+  let filtered = filterByOrgScope(allSops, orgId as string | undefined);
 
   if (category) filtered = filtered.filter((s) => s.category === category);
   if (status) filtered = filtered.filter((s) => s.status === status);
@@ -222,14 +229,14 @@ router.get('/', async (req: Request, res: Response) => {
     );
   }
 
-  res.json({ success: true, data: filtered.map(enrichSop) });
+  res.json({ success: true, data: filtered.map((s) => enrichSop(s, allPeople)) });
 });
 
 /** GET /api/v1/sops/:id — single SOP */
 router.get('/:id', async (req: Request, res: Response) => {
-  const sop = sops.find((s) => s.id === req.params.id);
+  const [sop, allPeople] = await Promise.all([sopsRepo.get(String(req.params.id)), peopleRepo().list()]);
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
-  res.json({ success: true, data: enrichSop(sop) });
+  res.json({ success: true, data: enrichSop(sop, allPeople) });
 });
 
 /** POST /api/v1/sops — create */
@@ -252,10 +259,11 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   const now = new Date().toISOString();
+  const allSops = await sopsRepo.list();
   const sop: StoredSop = {
     id: uuid(),
     orgId,
-    code: generateCode(),
+    code: generateCode(allSops),
     title,
     purpose: purpose || '',
     category: (category as Category) || 'OTHER',
@@ -273,12 +281,12 @@ router.post('/', async (req: Request, res: Response) => {
   await sopsRepo.create(sop);
   auditService.log(sop.orgId, null, 'Sop', sop.id, 'CREATE', null, sop);
   logger.info({ sopId: sop.id, code: sop.code, title: sop.title }, 'Created SOP');
-  res.status(201).json({ success: true, data: enrichSop(sop) });
+  res.status(201).json({ success: true, data: enrichSop(sop, await peopleRepo().list()) });
 });
 
 /** PUT /api/v1/sops/:id — update. Bumps version when steps change. */
 router.put('/:id', async (req: Request, res: Response) => {
-  const sop = sops.find((s) => s.id === req.params.id);
+  const sop = await sopsRepo.get(String(req.params.id));
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
 
   const before = { ...sop, steps: [...sop.steps] };
@@ -319,12 +327,12 @@ router.put('/:id', async (req: Request, res: Response) => {
   await sopsRepo.update(sop.id, sop);
   auditService.log(sop.orgId, null, 'Sop', sop.id, 'UPDATE', before, sop);
   logger.info({ sopId: sop.id, code: sop.code, version: sop.version }, 'Updated SOP');
-  res.json({ success: true, data: enrichSop(sop) });
+  res.json({ success: true, data: enrichSop(sop, await peopleRepo().list()) });
 });
 
 /** DELETE /api/v1/sops/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = sops.find((s) => s.id === req.params.id);
+  const removed = await sopsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
   auditService.log(removed.orgId, null, 'Sop', removed.id, 'DELETE', removed, null);
   await sopsRepo.delete(removed.id);
@@ -344,8 +352,12 @@ router.post('/seed', async (req: Request, res: Response) => {
   const created: StoredSop[] = [];
   const skipped: string[] = [];
 
+  // Prefetch once; append created rows so per-SOP `generateCode` and the
+  // existence check both account for SOPs created earlier in this same seed.
+  const allSops = await sopsRepo.list();
+
   for (const tmpl of STANDARD_SOPS) {
-    const exists = sops.some(
+    const exists = allSops.some(
       (s) => s.orgId === orgId && s.title.toLowerCase() === tmpl.title.toLowerCase(),
     );
     if (exists) { skipped.push(tmpl.title); continue; }
@@ -353,7 +365,7 @@ router.post('/seed', async (req: Request, res: Response) => {
     const sop: StoredSop = {
       id: uuid(),
       orgId,
-      code: generateCode(),
+      code: generateCode(allSops),
       title: tmpl.title,
       purpose: tmpl.purpose,
       category: tmpl.category,
@@ -369,15 +381,17 @@ router.post('/seed', async (req: Request, res: Response) => {
     };
     await sopsRepo.create(sop);
     created.push(sop);
+    allSops.push(sop);
     auditService.log(sop.orgId, null, 'Sop', sop.id, 'CREATE', null, sop);
   }
 
   logger.info({ orgId, created: created.length, skipped: skipped.length }, 'Seeded standard SOPs');
 
+  const allPeople = await peopleRepo().list();
   res.json({
     success: true,
     data: {
-      created: created.map(enrichSop),
+      created: created.map((s) => enrichSop(s, allPeople)),
       skipped,
     },
   });
