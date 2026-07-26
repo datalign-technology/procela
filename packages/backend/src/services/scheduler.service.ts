@@ -86,7 +86,7 @@ async function shouldFireWeeklyDigest(nowMs: number): Promise<boolean> {
 
 async function tick(): Promise<void> {
   try {
-    const overdue = sweepOverdueTasks();
+    const overdue = await sweepOverdueTasks();
     if (overdue.fired.length > 0) {
       logger.info({ fired: overdue.fired.length }, 'Scheduler: overdue sweep fired');
     }

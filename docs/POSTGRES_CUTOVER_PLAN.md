@@ -933,6 +933,26 @@ data-carrying cutover, or take the fresh-org path.
     the synchronous `pauseAgentsForMissingOwner`, which reads the un-converted
     `agents` store — belongs to the agents-cluster cutover) and
     `sweepOverdueTasks` (governance-tasks scheduler + 13 sync test call-sites).
+  - **9b.30 (done) — deferred sync helper: `sweepOverdueTasks`.** Second of the
+    deferred governance helpers. The overdue-task sweep — driven by the
+    `/sweep-overdue` route and the once-a-minute `scheduler.service` tick —
+    iterated the `governanceTasks` array, stamped `overdueNotifiedAt` /
+    `updatedAt` in place and `saveStore`'d, so in Postgres mode it swept an empty
+    list and never notified. Made it `async`: scans `await governanceTasksRepo.list()`,
+    and each fired task's `overdueNotifiedAt` + `updatedAt` are persisted via
+    `governanceTasksRepo.update`. `createNotification` stays a plain call
+    (PG-aware). Both callers now `await` — the route handler and
+    `scheduler.service`'s `tick()` (already async). The overdue-sweep test's 10
+    call-sites were awaited (the `it` callbacks were already `async`); the
+    in-place `task.dueDate` / `overdueNotifiedAt` mutations in the "re-arms" case
+    still work because `jsonRepository.list()` returns live element references
+    and `update` does `Object.assign` on the same object. Dropped the now-dead
+    `saveStore` import. Verified against a **local Postgres** (7/7): a sweep over
+    four seeded tasks fires for exactly the two overdue active ones, stamps
+    `overdueNotifiedAt` back to the DB, persists one WARNING notification per
+    fired task, and a second sweep is idempotent (fires 0, no duplicate
+    notifications). tsc clean, full suite green (890). *Still deferred:*
+    `openAgentOwnershipIssue` (agents-cluster cutover).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
