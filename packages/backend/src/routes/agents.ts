@@ -2,10 +2,12 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { parseCsv } from '../lib/csv';
-import { organizations } from './organizations';
 import { people } from './people';
+import { getCachedOrgList } from '../lib/org-scope';
 import logger from '../lib/logger';
+import { hasDatabase } from '../db/prisma';
 import { getAgentsRepository } from '../db/agents.repo';
+import { getPeopleRepository } from '../db/people.repo';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Agents — non-human actors (AI models, service accounts, pipelines, bots)
@@ -40,9 +42,15 @@ export const agents: StoredAgent[] = loadStore<StoredAgent>('agents');
 registerStore('agents', agents);
 
 const agentsRepo = getAgentsRepository(agents);
+// people is a value-import from a module that (transitively) cycles back
+// here, so binding the repo eagerly reads `people` in the TDZ at boot.
+// Lazy accessor defers the read to first call, after both modules init.
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
 
-// Backfill skillIds on legacy records that lack the field
-{
+// Backfill skillIds on legacy records that lack the field. JSON-store
+// migration only — in Postgres mode the columns are non-null by schema.
+if (!hasDatabase()) {
   let backfilled = 0;
   for (const a of agents) {
     if (!Array.isArray(a.skillIds)) {
@@ -76,9 +84,9 @@ const agentsRepo = getAgentsRepository(agents);
 //        to sweep every agent whose owner just went away.
 // ──────────────────────────────────────────────────────────────────────────
 
-function hasValidOwner(ownerPersonId: string | undefined): boolean {
+async function hasValidOwner(ownerPersonId: string | undefined): Promise<boolean> {
   if (!ownerPersonId) return false;
-  const person = people.find((p) => p.id === ownerPersonId);
+  const person = await peopleRepo().get(ownerPersonId);
   if (!person) return false;
   if ((person as any).active === false) return false;
   return true;
@@ -108,14 +116,15 @@ export interface AgentPauseResult {
  * out too (used by the person-delete cascade — the reference would be
  * dangling otherwise).
  */
-export function pauseAgentsForMissingOwner(
+export async function pauseAgentsForMissingOwner(
   personId: string,
   reason: string,
   opts: { clearOwnerReference?: boolean } = {},
-): AgentPauseResult[] {
+): Promise<AgentPauseResult[]> {
   const paused: AgentPauseResult[] = [];
   const now = new Date().toISOString();
-  const affected = agents.filter(
+  const allAgents = await agentsRepo.list();
+  const affected = allAgents.filter(
     (a) => a.ownerPersonId === personId && a.status === 'ACTIVE',
   );
   if (affected.length === 0) return paused;
@@ -131,17 +140,21 @@ export function pauseAgentsForMissingOwner(
     agent.updatedAt = now;
     let issueId: string | null = null;
     try {
-      issueId = openAgentOwnershipIssue({
+      issueId = await openAgentOwnershipIssue({
         agent,
         reason,
       });
     } catch (err) {
       logger.warn({ err, agentId: agent.id }, 'Failed to open ownership issue on agent auto-pause');
     }
+    await agentsRepo.update(agent.id, {
+      status: agent.status,
+      ownerPersonId: agent.ownerPersonId,
+      updatedAt: agent.updatedAt,
+    });
     paused.push({ agentId: agent.id, agentName: agent.name, issueId });
     logger.info({ agentId: agent.id, personId, reason }, 'Agent auto-paused for missing owner');
   }
-  saveStore('agents', agents);
   return paused;
 }
 
@@ -149,9 +162,9 @@ const router = Router();
 
 /** DELETE /api/v1/agents/all — delete all agents */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = agents.length;
-  agents.splice(0, agents.length);
-  saveStore('agents', agents);
+  const all = await agentsRepo.list();
+  const count = all.length;
+  for (const a of all) await agentsRepo.delete(a.id);
   logger.info({ count }, 'Deleted all agents');
   res.json({ success: true, deleted: count });
 });
@@ -159,7 +172,8 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/agents — list, optionally filtered by ?orgId= */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? agents.filter((a) => a.orgIds.includes(orgId as string)) : agents;
+  const all = await agentsRepo.list();
+  const filtered = orgId ? all.filter((a) => a.orgIds.includes(orgId as string)) : all;
   res.json({
     success: true,
     data: filtered,
@@ -170,7 +184,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/agents/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const agent = agents.find((a) => a.id === req.params.id);
+  const agent = await agentsRepo.get(String(req.params.id));
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   res.json({ success: true, data: agent });
 });
@@ -184,8 +198,9 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(400).json({ success: false, error: 'At least one organization is required' });
     return;
   }
+  const orgList = getCachedOrgList();
   for (const oid of assignedOrgIds) {
-    if (!organizations.find((o) => o.id === oid)) {
+    if (!orgList.find((o) => o.id === oid)) {
       res.status(400).json({ success: false, error: `Organization "${oid}" not found.` });
       return;
     }
@@ -197,7 +212,7 @@ router.post('/', async (req: Request, res: Response) => {
   // invariant and stops CSV imports from bulk-activating everything.
   const requestedStatus = AGENT_STATUSES.includes(status) ? status : 'PAUSED';
   // Invariant: reject explicit ACTIVE without a valid responsible person.
-  if (requestedStatus === 'ACTIVE' && !hasValidOwner(ownerPersonId)) {
+  if (requestedStatus === 'ACTIVE' && !(await hasValidOwner(ownerPersonId))) {
     res.status(400).json({ success: false, error: OWNERLESS_MSG });
     return;
   }
@@ -222,7 +237,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/agents/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const agent = agents.find((a) => a.id === req.params.id);
+  const agent = await agentsRepo.get(String(req.params.id));
   if (!agent) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   const { orgIds, name, agentType, description, provider, status, ownerPersonId, skillIds, instructions } = req.body;
 
@@ -232,7 +247,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   // client-side too so this branch only fires on API misuse.
   const explicitlyActivating = status === 'ACTIVE';
   const nextOwner = ownerPersonId !== undefined ? ownerPersonId : agent.ownerPersonId;
-  if (explicitlyActivating && !hasValidOwner(nextOwner)) {
+  if (explicitlyActivating && !(await hasValidOwner(nextOwner))) {
     res.status(400).json({ success: false, error: OWNERLESS_MSG });
     return;
   }
@@ -250,8 +265,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'orgIds must be a non-empty array' });
       return;
     }
+    const orgList = getCachedOrgList();
     for (const oid of orgIds) {
-      if (!organizations.find((o) => o.id === oid)) {
+      if (!orgList.find((o) => o.id === oid)) {
         res.status(400).json({ success: false, error: `Organization "${oid}" not found.` });
         return;
       }
@@ -264,13 +280,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   // here we do the safe thing — auto-pause and open a governance issue
   // — and tell the caller what happened via `cascade`.
   let cascade: { autoPaused: true; issueId: string | null } | null = null;
-  if (agent.status === 'ACTIVE' && !hasValidOwner(agent.ownerPersonId)) {
+  if (agent.status === 'ACTIVE' && !(await hasValidOwner(agent.ownerPersonId))) {
     agent.status = 'PAUSED';
     let issueId: string | null = null;
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { openAgentOwnershipIssue } = require('./governance-issues') as typeof import('./governance-issues');
-      issueId = openAgentOwnershipIssue({
+      issueId = await openAgentOwnershipIssue({
         agent,
         reason: 'Responsible person cleared while agent was active',
       });
@@ -288,7 +304,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/agents/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const existing = agents.find((a) => a.id === req.params.id);
+  const existing = await agentsRepo.get(String(req.params.id));
   if (!existing) { res.status(404).json({ success: false, error: 'Agent not found' }); return; }
   await agentsRepo.delete(existing.id);
   res.status(204).send();
@@ -304,7 +320,7 @@ router.post('/import', async (req: Request, res: Response) => {
   try {
     const { orgId, agents: agentList, csv } = req.body;
     if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required for import' }); return; }
-    const org = organizations.find((o) => o.id === orgId);
+    const org = getCachedOrgList().find((o) => o.id === orgId);
     if (!org) { res.status(400).json({ success: false, error: 'Organization not found' }); return; }
 
     let rows: Array<{ name: string; agentType?: string; provider?: string; description?: string }> = [];

@@ -210,15 +210,16 @@ export interface StoredGovernanceIssue {
  * Idempotent per (agentId, still-open) — a duplicate open ownership
  * issue for the same agent is a bug we don't want.
  */
-export function openAgentOwnershipIssue(input: {
+export async function openAgentOwnershipIssue(input: {
   agent: { id: string; name: string; orgIds: string[] };
   reason: string;
-}): string | null {
+}): Promise<string | null> {
   const { agent, reason } = input;
   const orgId = agent.orgIds[0];
   if (!orgId) return null;
 
-  const existing = governanceIssues.find(
+  const allIssues = await governanceIssuesRepo.list();
+  const existing = allIssues.find(
     (i) => i.linkedAgentId === agent.id && !TERMINAL_STATUSES.has(i.status),
   );
   if (existing) return existing.id;
@@ -244,8 +245,7 @@ export function openAgentOwnershipIssue(input: {
     linkedRuleId: null,
     linkedAgentId: agent.id,
   };
-  governanceIssues.push(newIssue);
-  saveStore('governanceIssues', governanceIssues);
+  await governanceIssuesRepo.create(newIssue);
   auditService.log(orgId, null, 'GovernanceIssue', newIssue.id, 'AUTO_CREATED', null, {
     linkedAgentId: agent.id,
     reason,
