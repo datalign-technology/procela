@@ -7,8 +7,20 @@ import { dataAssets } from './data-assets';
 import { systems } from './systems';
 import { mappings } from './mappings';
 import { people } from './people';
-import { getVisibleOrgScope } from '../lib/org-scope';
+import { getVisibleOrgScope, getCachedOrgList } from '../lib/org-scope';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getPeopleRepository } from '../db/people.repo';
 import logger from '../lib/logger';
+
+// Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays.
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const systemsRepo = getSystemsRepository(systems);
+const mappingsRepo = getMappingsRepository(mappings);
+const peopleRepo = getPeopleRepository(people);
 
 // ──────────────────────────────────────────────────────────────────────────
 // Exports — server-rendered, downloadable artefacts for compliance and
@@ -41,7 +53,7 @@ function buildContext(orgIdQuery: string | undefined): ReportContext {
   const scope = orgId ? getVisibleOrgScope(orgId) : null;
   let orgName = 'All Organizations';
   if (orgId) {
-    orgName = organizations.find((o) => o.id === orgId)?.name || 'Organization';
+    orgName = getCachedOrgList().find((o) => o.id === orgId)?.name || 'Organization';
   }
   return { orgId, orgName, scope };
 }
@@ -56,13 +68,16 @@ function inScope<T extends { orgId?: string; orgIds?: string[] }>(scope: Set<str
 /** Build the markdown body of the executive report. Kept pure so it
  *  can be reused for an email digest, an in-app rich-text preview,
  *  or a snapshot fixture without re-deriving the numbers. */
-export function buildExecutiveReportMarkdown(ctx: ReportContext): string {
-  const visibleNodes = processNodes.filter((n) => inScope(ctx.scope, n));
-  const visibleAssets = dataAssets.filter((a) => inScope(ctx.scope, a));
-  const visibleSystems = systems.filter((s) => inScope(ctx.scope, s));
+export async function buildExecutiveReportMarkdown(ctx: ReportContext): Promise<string> {
+  const [allNodes, allAssets, allSystems, allMappings, allPeople] = await Promise.all([
+    processNodesRepo.list(), dataAssetsRepo.list(), systemsRepo.list(), mappingsRepo.list(), peopleRepo.list(),
+  ]);
+  const visibleNodes = allNodes.filter((n) => inScope(ctx.scope, n));
+  const visibleAssets = allAssets.filter((a) => inScope(ctx.scope, a));
+  const visibleSystems = allSystems.filter((s) => inScope(ctx.scope, s));
   const activitiesAll = visibleNodes.filter((n) => n.level === 'ACTIVITY');
-  const mappedActivityIds = new Set(mappings.map((m) => m.processStepId));
-  const mappedAssetIds = new Set(mappings.filter((m) => m.dataAssetId).map((m) => m.dataAssetId));
+  const mappedActivityIds = new Set(allMappings.map((m) => m.processStepId));
+  const mappedAssetIds = new Set(allMappings.filter((m) => m.dataAssetId).map((m) => m.dataAssetId));
   const orphanAssets = visibleAssets.filter((a) => !mappedAssetIds.has(a.id));
   const tierCounts = visibleAssets.reduce((acc, a) => {
     acc[a.governanceTier] = (acc[a.governanceTier] || 0) + 1;
@@ -94,7 +109,7 @@ export function buildExecutiveReportMarkdown(ctx: ReportContext): string {
   lines.push(`- Activities: **${activities}**`);
   lines.push(`- Systems: **${visibleSystems.length}**`);
   lines.push(`- Data assets: **${visibleAssets.length}**`);
-  lines.push(`- Mappings: **${mappings.length}**`);
+  lines.push(`- Mappings: **${allMappings.length}**`);
   lines.push('');
 
   lines.push(`## Coverage signals`);
@@ -135,7 +150,7 @@ export function buildExecutiveReportMarkdown(ctx: ReportContext): string {
     lines.push(`## Recent activity`);
     lines.push('');
     for (const e of recent) {
-      const who = e.userId ? people.find((p) => p.id === e.userId)?.name || e.userId : 'system';
+      const who = e.userId ? allPeople.find((p) => p.id === e.userId)?.name || e.userId : 'system';
       lines.push(`- ${e.timestamp.slice(0, 16).replace('T', ' ')} · **${who}** · ${e.action} ${e.entityType}`);
     }
     lines.push('');
@@ -150,7 +165,7 @@ export function buildExecutiveReportMarkdown(ctx: ReportContext): string {
 router.get('/executive.pdf', async (req: Request, res: Response) => {
   try {
     const ctx = buildContext(req.query.orgId as string | undefined);
-    const markdown = buildExecutiveReportMarkdown(ctx);
+    const markdown = await buildExecutiveReportMarkdown(ctx);
     const buffer = await renderMarkdownToPdf(markdown, {
       title: 'Procela Executive Report',
       subtitle: ctx.orgName,
@@ -169,9 +184,9 @@ router.get('/executive.pdf', async (req: Request, res: Response) => {
 /** GET /api/v1/exports/executive.md — same report, as raw markdown.
  *  Useful for snapshot testing and for piping into other tools (Slack,
  *  email, copy-paste into a doc). Same scope semantics. */
-router.get('/executive.md', (req: Request, res: Response) => {
+router.get('/executive.md', async (req: Request, res: Response) => {
   const ctx = buildContext(req.query.orgId as string | undefined);
-  const markdown = buildExecutiveReportMarkdown(ctx);
+  const markdown = await buildExecutiveReportMarkdown(ctx);
   res.type('text/markdown; charset=utf-8');
   res.send(markdown);
 });

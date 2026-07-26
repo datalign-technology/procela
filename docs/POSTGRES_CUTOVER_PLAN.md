@@ -834,6 +834,22 @@ data-carrying cutover, or take the fresh-org path.
     PG; enterprise-view emits process/system/asset/person nodes and the
     asset→system edge from PG. tsc clean, full suite green (890).
 
+  - **9b.25 (done) — exports.ts (executive report aggregator).**
+    `buildExecutiveReportMarkdown` read processNodes/dataAssets/systems/mappings/
+    people synchronously to render the executive PDF/markdown. Made it async and
+    repo-backed (loads the five stores via `Promise.all`); `buildContext`'s org
+    lookup moved to `getCachedOrgList()`. Both handlers (`/executive.pdf`,
+    `/executive.md`) await it, and the exported function's 3 sync test call-sites
+    were made `async`/`await`. The audit-log "recent activity" section still uses
+    `auditService.getAll` (the deferred `auditLogs` store). Verified against a
+    **local Postgres** (7/7): the rendered markdown's catalog counts (value
+    streams, systems, 2 data assets, 2 orphans, Gold/Bronze tier mix) and the
+    org name all come from PG. tsc clean, full suite green (890).
+    (**digest** needed no work — `digest.service` already reads `gapSnapshots`
+    via its repo and takes processNodes/dataAssets/mappings by injection, and
+    both callers — `routes/digest.ts` and `scheduler.service.ts` — already load
+    those via repos, done in PR 6.)
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

@@ -130,21 +130,21 @@ describe('Exports + audit CSV routes', () => {
   });
 
   describe('buildExecutiveReportMarkdown', () => {
-    it('produces a header + the catalog counts for the scope', () => {
-      const md = buildExecutiveReportMarkdown({ orgId, orgName: 'Export Co', scope: new Set([orgId]) });
+    it('produces a header + the catalog counts for the scope', async () => {
+      const md = await buildExecutiveReportMarkdown({ orgId, orgName: 'Export Co', scope: new Set([orgId]) });
       assert.match(md, /^# Executive Report/);
       assert.match(md, /\*\*Organization:\*\* Export Co/);
       assert.match(md, /Value streams: \*\*1\*\*/);
       assert.match(md, /Activities: \*\*1\*\*/);
       assert.match(md, /Data assets: \*\*2\*\*/);
     });
-    it('surfaces the orphan asset by name in the orphan list', () => {
-      const md = buildExecutiveReportMarkdown({ orgId, orgName: 'Export Co', scope: new Set([orgId]) });
+    it('surfaces the orphan asset by name in the orphan list', async () => {
+      const md = await buildExecutiveReportMarkdown({ orgId, orgName: 'Export Co', scope: new Set([orgId]) });
       assert.match(md, /Orphan asset/);
       assert.match(md, /Orphan data assets \(no process references them\): \*\*1\*\*/);
     });
-    it('summarises the governance tier mix', () => {
-      const md = buildExecutiveReportMarkdown({ orgId, orgName: 'Export Co', scope: new Set([orgId]) });
+    it('summarises the governance tier mix', async () => {
+      const md = await buildExecutiveReportMarkdown({ orgId, orgName: 'Export Co', scope: new Set([orgId]) });
       assert.match(md, /Gold: \*\*1\*\*/);
       assert.match(md, /Bronze: \*\*1\*\*/);
     });
