@@ -912,6 +912,27 @@ data-carrying cutover, or take the fresh-org path.
     inserted directly into Postgres appearing via the API, and DELETE removing
     it — all off the DB. tsc clean, full suite green (890; dq-routes +
     dq-issue-sync 10/10).
+  - **9b.29 (done) — deferred sync helper: `syncDataQualityIssueForRule`.**
+    First of the three deferred governance auto-issue helpers, now unblocked
+    because its only production caller — data-quality's `runRuleNow` — became
+    async in 9b.28. The helper opened/updated/resolved a governance issue by
+    `governanceIssues.find`/`.push` + `saveStore` and read `dataAssets.find` /
+    `dataDomains.find` directly, so in Postgres mode the DQ engine's auto-issues
+    never appeared. Made it `async`: the linked-issue lookup runs over
+    `await governanceIssuesRepo.list()`; the asset and domain resolution use the
+    module's existing lazy `dataAssetsRepo()` / `dataDomainsRepo()`; open →
+    `repo.create`, resolve/bump → `repo.update`. `createNotification` stays a
+    plain call (already PG-aware — fire-and-forget `notificationsRepo.create`
+    when `hasDatabase()`). `runRuleNow` now `await`s it; the dq-issue-sync test's
+    8 synchronous call-sites (6 `it` blocks) were made `async`/`await`. Verified
+    against a **local Postgres** (6/6): a FAILING rule opens exactly one HIGH
+    `DATA_QUALITY` issue routed to the PG-resolved domain steward, a second
+    FAILING run is idempotent (no duplicate), and a PASSING run auto-resolves it
+    with `resolutionSummary` + `closedAt` written to the DB. tsc clean, full
+    suite green (890). *Still deferred:* `openAgentOwnershipIssue` (nested inside
+    the synchronous `pauseAgentsForMissingOwner`, which reads the un-converted
+    `agents` store — belongs to the agents-cluster cutover) and
+    `sweepOverdueTasks` (governance-tasks scheduler + 13 sync test call-sites).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in

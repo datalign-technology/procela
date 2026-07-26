@@ -65,8 +65,8 @@ describe('syncDataQualityIssueForRule', () => {
     }
   });
 
-  it('creates a HIGH-severity issue when the rule enters FAILING', () => {
-    syncDataQualityIssueForRule({
+  it('creates a HIGH-severity issue when the rule enters FAILING', async () => {
+    await syncDataQualityIssueForRule({
       id: ruleId, orgId, dataAssetId: assetId,
       name: 'Completeness — customer_id',
       currentScore: 60, threshold: 95, status: 'FAILING',
@@ -81,8 +81,8 @@ describe('syncDataQualityIssueForRule', () => {
     assert.strictEqual(issue.assignedTo, stewardId, 'assignee should be the domain steward');
   });
 
-  it('creates a MEDIUM-severity issue when the rule enters WARNING', () => {
-    syncDataQualityIssueForRule({
+  it('creates a MEDIUM-severity issue when the rule enters WARNING', async () => {
+    await syncDataQualityIssueForRule({
       id: ruleId, orgId, dataAssetId: assetId,
       name: 'Timeliness — last_updated',
       currentScore: 88, threshold: 95, status: 'WARNING',
@@ -92,8 +92,8 @@ describe('syncDataQualityIssueForRule', () => {
     assert.strictEqual(issue.severity, 'MEDIUM');
   });
 
-  it('fires an ACTION notification to the assignee on first creation', () => {
-    syncDataQualityIssueForRule({
+  it('fires an ACTION notification to the assignee on first creation', async () => {
+    await syncDataQualityIssueForRule({
       id: ruleId, orgId, dataAssetId: assetId,
       name: 'Completeness — customer_id',
       currentScore: 60, threshold: 95, status: 'FAILING',
@@ -103,18 +103,18 @@ describe('syncDataQualityIssueForRule', () => {
     assert.match(n.title, /DQ failing:/);
   });
 
-  it('is idempotent — a second FAILING run does not duplicate the issue', () => {
-    syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 60, threshold: 95, status: 'FAILING' });
-    syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 55, threshold: 95, status: 'FAILING' });
+  it('is idempotent — a second FAILING run does not duplicate the issue', async () => {
+    await syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 60, threshold: 95, status: 'FAILING' });
+    await syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 55, threshold: 95, status: 'FAILING' });
     const matches = governanceIssues.filter((i: any) => i.linkedRuleId === ruleId);
     assert.strictEqual(matches.length, 1, 'exactly one issue after two failing runs');
   });
 
-  it('closes the linked issue when the rule recovers to PASSING', () => {
+  it('closes the linked issue when the rule recovers to PASSING', async () => {
     // First: create the issue by failing.
-    syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 60, threshold: 95, status: 'FAILING' });
+    await syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 60, threshold: 95, status: 'FAILING' });
     // Then: rule recovers.
-    syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 98, threshold: 95, status: 'PASSING' });
+    await syncDataQualityIssueForRule({ id: ruleId, orgId, dataAssetId: assetId, name: 'rule', currentScore: 98, threshold: 95, status: 'PASSING' });
     const issue = governanceIssues.find((i: any) => i.linkedRuleId === ruleId);
     assert.ok(issue);
     assert.strictEqual(issue.status, 'RESOLVED');
@@ -122,9 +122,9 @@ describe('syncDataQualityIssueForRule', () => {
     assert.ok(issue.closedAt);
   });
 
-  it('is a no-op when there is no dataAssetId', () => {
+  it('is a no-op when there is no dataAssetId', async () => {
     const before = governanceIssues.length;
-    syncDataQualityIssueForRule({ id: ruleId, orgId, name: 'rule', currentScore: 50, threshold: 95, status: 'FAILING' });
+    await syncDataQualityIssueForRule({ id: ruleId, orgId, name: 'rule', currentScore: 50, threshold: 95, status: 'FAILING' });
     assert.strictEqual(governanceIssues.length, before, 'no issue when the rule has no target asset');
   });
 });

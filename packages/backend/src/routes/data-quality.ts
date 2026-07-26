@@ -586,7 +586,7 @@ async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRu
   // one on FAILING/WARNING, closes it on recovery. Idempotent —
   // safe to call every run. Wrapped in try/catch so a governance
   // subsystem hiccup doesn't take the DQ engine down with it.
-  try { syncDataQualityIssueForRule(rule); }
+  try { await syncDataQualityIssueForRule(rule); }
   catch (err) { logger.error({ err, ruleId: rule.id }, 'Failed to sync governance issue for DQ rule'); }
 
   return { engineResult: result, assetHealth: newAssetHealth };

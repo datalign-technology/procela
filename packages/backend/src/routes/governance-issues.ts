@@ -60,7 +60,7 @@ const TERMINAL_STATUSES = new Set(['RESOLVED', 'CLOSED', 'WONT_FIX']);
  * Kept as a plain function (not a router) so the DQ scheduler can
  * import it directly without pulling the whole router graph.
  */
-export function syncDataQualityIssueForRule(rule: {
+export async function syncDataQualityIssueForRule(rule: {
   id: string;
   orgId: string;
   dataAssetId?: string;
@@ -69,14 +69,15 @@ export function syncDataQualityIssueForRule(rule: {
   threshold?: number;
   status?: string;
   dimension?: string;
-}): void {
+}): Promise<void> {
   if (!rule.dataAssetId) return;
   const status = rule.status;
-  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+  const asset = await dataAssetsRepo().get(rule.dataAssetId);
   if (!asset) return;
 
-  // Find an existing open issue linked to this rule.
-  const existing = governanceIssues.find(
+  // Find an existing open issue linked to this rule (Postgres or JSON).
+  const allIssues = await governanceIssuesRepo.list();
+  const existing = allIssues.find(
     (i) => i.linkedRuleId === rule.id && !TERMINAL_STATUSES.has(i.status),
   );
 
@@ -88,7 +89,12 @@ export function syncDataQualityIssueForRule(rule: {
     existing.resolutionSummary = `DQ rule recovered — score ${rule.currentScore ?? '?'} meets threshold ${rule.threshold ?? '?'}.`;
     existing.closedAt = now;
     existing.updatedAt = now;
-    saveStore('governanceIssues', governanceIssues);
+    await governanceIssuesRepo.update(existing.id, {
+      status: existing.status,
+      resolutionSummary: existing.resolutionSummary,
+      closedAt: existing.closedAt,
+      updatedAt: existing.updatedAt,
+    });
     auditService.log(rule.orgId, null, 'GovernanceIssue', existing.id, 'AUTO_RESOLVED', null, { linkedRuleId: rule.id });
     if (existing.assignedTo) {
       createNotification({
@@ -111,14 +117,19 @@ export function syncDataQualityIssueForRule(rule: {
     existing.description = `${rule.name || 'DQ rule'} is ${status.toLowerCase()} on ${asset.name} — score ${rule.currentScore ?? '?'} against threshold ${rule.threshold ?? '?'}.`;
     existing.severity = status === 'FAILING' ? 'HIGH' : 'MEDIUM';
     existing.updatedAt = now;
-    saveStore('governanceIssues', governanceIssues);
+    await governanceIssuesRepo.update(existing.id, {
+      description: existing.description,
+      severity: existing.severity,
+      updatedAt: existing.updatedAt,
+    });
     return;
   }
 
   // Pick the assignee. Domain steward > domain owner > asset owner.
   // (Domain-level accountability matches DAMA: steward executes,
   // owner is accountable; asset owner is the operational fallback.)
-  const domain = dataDomains.find((d) => d.dataAssetIds?.includes(asset.id));
+  const allDomains = await dataDomainsRepo().list();
+  const domain = allDomains.find((d) => d.dataAssetIds?.includes(asset.id));
   let assignedTo: string | null = null;
   if (domain?.stewardIds && domain.stewardIds.length > 0) assignedTo = domain.stewardIds[0];
   else if (domain?.ownerId) assignedTo = domain.ownerId;
@@ -143,8 +154,7 @@ export function syncDataQualityIssueForRule(rule: {
     closedAt: null,
     linkedRuleId: rule.id,
   };
-  governanceIssues.push(newIssue);
-  saveStore('governanceIssues', governanceIssues);
+  await governanceIssuesRepo.create(newIssue);
   auditService.log(rule.orgId, null, 'GovernanceIssue', newIssue.id, 'AUTO_CREATED', null, { linkedRuleId: rule.id, severity: newIssue.severity });
   logger.info({ ruleId: rule.id, issueId: newIssue.id, severity: newIssue.severity }, 'DQ auto-issue created');
 
