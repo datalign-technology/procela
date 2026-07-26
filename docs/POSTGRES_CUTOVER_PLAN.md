@@ -615,6 +615,23 @@ data-carrying cutover, or take the fresh-org path.
     skill-match coverage off PG skills, steward onboarding tasks persist (4),
     summary counts, delete `:id`/`all`. tsc clean, full suite green (890).
 
+  - **9b.14 (done) — comments.ts entity route.** Converted every
+    `comments.find/filter` → `commentsRepo.get/list` (GET `/`, the parent
+    lookup in POST, PATCH, DELETE); the foreign `people.filter/.find` reads in
+    `parseMentions` / `dispatchMentionNotifications` / the POST author lookup
+    are parameterised to take a repo-loaded people list (`peopleRepo()`, lazy);
+    the v0-field boot migration is guarded behind `!hasDatabase()`. Verified
+    against a **local Postgres** (15/15): author + @mention resolve from PG
+    people, a PG-only "ghost" comment surfaces via `GET /`, reply threading
+    reads the parent from PG (incl. reply-to-reply collapse + wrong-entity
+    reject), edit is author-only and persists, soft-delete blanks the body in
+    PG. tsc clean, full suite green (890). **Known foreign gap (out of scope):**
+    the @mention path calls `createNotification` from `notifications.ts`, which
+    is still a stale-array writer (`notifications.push` + `saveStore`) — so in
+    Postgres mode mention notifications don't yet reach the DB. That's the
+    `notifications` store's own conversion (its reads already go through the
+    repo; only the create path lags); comments dispatches correctly.
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
