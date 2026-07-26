@@ -953,6 +953,34 @@ data-carrying cutover, or take the fresh-org path.
     fired task, and a second sweep is idempotent (fires 0, no duplicate
     notifications). tsc clean, full suite green (890). *Still deferred:*
     `openAgentOwnershipIssue` (agents-cluster cutover).
+  - **9b.31 (done) — agents cluster + `openAgentOwnershipIssue` (last deferred
+    helper).** The third deferred governance helper couldn't be converted in
+    isolation: its only callers live inside `agents.ts`'s synchronous
+    `pauseAgentsForMissingOwner`, which read the still-array-backed `agents`
+    store, so converting the helper alone would leave the pause-cascade reading
+    an empty list in Postgres mode. Converted the whole cluster:
+      * **agents.ts** — writes already went through `agentsRepo`; converted the
+        reads. `GET /`, `GET /:id`, `PUT /:id`, `DELETE /:id`, `DELETE /all`
+        load/mutate via the repo; `hasValidOwner` became `async` and reads the
+        responsible person through a **lazy** `peopleRepo()` accessor (eager
+        binding tripped the documented circular-import TDZ — `people`
+        value-import in the TDZ at boot; the lazy accessor defers the read).
+        `pauseAgentsForMissingOwner` is now `async`: `agentsRepo.list()` →
+        filter ACTIVE-owned-by-person → per agent `await openAgentOwnershipIssue`
+        + `agentsRepo.update`. The three `organizations.find` validations moved to
+        `getCachedOrgList()`; the legacy skillIds/instructions backfill is now
+        guarded `if (!hasDatabase())`.
+      * **governance-issues.ts** — `openAgentOwnershipIssue` is `async`: dedup
+        lookup over `await governanceIssuesRepo.list()`, open → `repo.create`.
+      * **people.ts** — the DELETE and deactivate cascade call-sites now `await`
+        `pauseAgentsForMissingOwner`.
+    Verified against a **local Postgres** (8/8): create an ACTIVE agent with a
+    valid PG owner, reject ACTIVE with no owner (invariant reads people off PG),
+    list/`:id` reads, and the full cascade — deactivating the responsible person
+    auto-pauses the agent **in PG** and opens exactly one HIGH `OWNERSHIP`
+    governance issue **in PG**. tsc clean, full suite green (890;
+    agents + agent-owner-invariant + dq-issue-sync 25/25). **All three deferred
+    governance sync helpers are now repository-backed.**
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in

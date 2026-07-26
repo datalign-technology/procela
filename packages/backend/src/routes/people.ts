@@ -647,7 +647,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // "unknown person" fallback in every list view.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { pauseAgentsForMissingOwner } = require('./agents') as typeof import('./agents');
-  const pausedAgents = pauseAgentsForMissingOwner(
+  const pausedAgents = await pauseAgentsForMissingOwner(
     personId,
     'Responsible person was deleted',
     { clearOwnerReference: true },
@@ -749,7 +749,7 @@ router.post('/:id/deactivate', async (req: Request, res: Response) => {
   // even if it doesn't auto-resume the agent).
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { pauseAgentsForMissingOwner } = require('./agents') as typeof import('./agents');
-  const pausedAgents = pauseAgentsForMissingOwner(
+  const pausedAgents = await pauseAgentsForMissingOwner(
     person.id,
     'Responsible person was deactivated',
     { clearOwnerReference: false },
