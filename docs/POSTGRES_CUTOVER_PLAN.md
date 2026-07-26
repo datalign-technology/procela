@@ -849,6 +849,22 @@ data-carrying cutover, or take the fresh-org path.
     via its repo and takes processNodes/dataAssets/mappings by injection, and
     both callers — `routes/digest.ts` and `scheduler.service.ts` — already load
     those via repos, done in PR 6.)
+  - **9b.26 (done) — analysis.ts (cube/pivot aggregator).** The pivot engine
+    built its in-memory fact table and label lookups straight off the module
+    arrays (systems, dataAssets, dataAssetBindings, dataDomains, processNodes,
+    people, damaRoles, connections, connectionSystemLinks, mappings). Added the
+    ten repo factories and made both builders repo-backed: `makeLookups()` loads
+    six stores via `Promise.all` to build the id→label maps, and
+    `buildFacts(orgId)` loads eight stores the same way (including processNodes
+    and systems, which the owner-fact loops had still been reading directly).
+    Both are now `async`; the `/cube` and `/drill` handlers became `async` and
+    `await Promise.all([buildFacts(...), makeLookups()])`. `/dimensions` is
+    static metadata and needed no change. Verified against a **local Postgres**
+    (8/8): a Systems × Data Assets pivot and a Systems × People ownership pivot
+    both read the seeded rows off PG, drill resolved a fact id back to
+    label-enriched refs, and a data asset inserted directly into Postgres showed
+    up in a subsequent cube call (fresh snapshot per request). tsc clean, full
+    suite green (890).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
