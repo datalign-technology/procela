@@ -7,9 +7,36 @@ import { filterByOrgScope, isOwnershipLevel } from '../lib/org-scope';
 import { parseCsv } from '../lib/csv';
 import logger from '../lib/logger';
 import { dataAssets } from './data-assets';
-import { connections, connectionSystemLinks, connectionsForSystem } from './connections';
+import { connections, connectionSystemLinks } from './connections';
 import { mappings } from './mappings';
 import { getSystemsRepository } from '../db/systems.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
+import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+
+// Foreign-store repos, lazily bound — the systems route is imported by
+// most of the catalog graph, so eager binding of a value-imported store
+// would read it in the circular-import TDZ at boot. Each accessor defers
+// construction to first call, after the cycle has settled. people /
+// processNodes are require()d here (never top-imported) for the same
+// reason the rest of this file lazy-requires them.
+let _connsRepo: ReturnType<typeof getConnectionsRepository> | null = null;
+const connsRepo = () => (_connsRepo ??= getConnectionsRepository(connections));
+let _linksRepo: ReturnType<typeof getConnectionSystemLinksRepository> | null = null;
+const linksRepo = () => (_linksRepo ??= getConnectionSystemLinksRepository(connectionSystemLinks));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+let _mappingsRepo: ReturnType<typeof getMappingsRepository> | null = null;
+const mappingsRepo = () => (_mappingsRepo ??= getMappingsRepository(mappings));
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(require('./people').people));
+let _processNodesRepo: ReturnType<typeof getProcessNodesRepository> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const processNodesRepo = () => (_processNodesRepo ??= getProcessNodesRepository(require('./process-catalog').processNodes));
 
 export interface SystemIntegration {
   id: string;
@@ -246,17 +273,25 @@ const router = Router();
  * systems return their connectivity verbatim so the absent connection
  * isn't treated as missing.
  */
-function profilesForSystem(systemId: string) {
+function profilesForSystem(
+  systemId: string,
+  allConns: typeof connections,
+  allLinks: typeof connectionSystemLinks,
+) {
   // Connection↔system is many-to-many via the join table — the sole
   // source of truth now that the legacy single `systemId` is retired.
-  const linkedIds = new Set(connectionsForSystem(systemId));
-  return connections.filter((c) => linkedIds.has(c.id));
+  const linkedIds = new Set(
+    allLinks.filter((l) => l.systemId === systemId).map((l) => l.connectionId),
+  );
+  return allConns.filter((c) => linkedIds.has(c.id));
 }
 
 function rollupConnectionStatus(
   sys: StoredSystem,
+  allConns: typeof connections,
+  allLinks: typeof connectionSystemLinks,
 ): 'CONNECTED' | 'ERROR' | 'UNTESTED' | 'NOT_CONNECTED' | 'MANUAL' | 'EXTERNAL' {
-  const profiles = profilesForSystem(sys.id);
+  const profiles = profilesForSystem(sys.id, allConns, allLinks);
   if (profiles.length === 0) {
     if (sys.connectivity === 'MANUAL') return 'MANUAL';
     if (sys.connectivity === 'EXTERNAL') return 'EXTERNAL';
@@ -267,25 +302,26 @@ function rollupConnectionStatus(
   return 'UNTESTED';
 }
 
-/** Resolve owner + custodian person ids to display names. Lazy
- *  require to avoid a systems → people → data-assets → systems
- *  circular import; the people store is fully initialised by the
- *  time any HTTP request lands on this handler. */
-function resolveOwnership(sys: StoredSystem): {
+/** Resolve owner + custodian person ids to display names off a
+ *  pre-loaded people snapshot (Postgres or JSON). The caller loads
+ *  people once per request and passes it in so a list of N systems
+ *  doesn't fan out into N store reads. */
+function resolveOwnership(
+  sys: StoredSystem,
+  allPeople: Array<{ id: string; name: string }>,
+): {
   ownerName: string | null;
   deputyOwnerName: string | null;
   custodianNames: string[];
 } {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { people } = require('./people') as { people: { id: string; name: string }[] };
   const ownerName = sys.ownerPersonId
-    ? people.find((p) => p.id === sys.ownerPersonId)?.name || null
+    ? allPeople.find((p) => p.id === sys.ownerPersonId)?.name || null
     : null;
   const deputyOwnerName = sys.deputyOwnerId
-    ? people.find((p) => p.id === sys.deputyOwnerId)?.name || null
+    ? allPeople.find((p) => p.id === sys.deputyOwnerId)?.name || null
     : null;
   const custodianNames = (sys.custodianIds || [])
-    .map((id) => people.find((p) => p.id === id)?.name)
+    .map((id) => allPeople.find((p) => p.id === id)?.name)
     .filter((n): n is string => !!n);
   return { ownerName, deputyOwnerName, custodianNames };
 }
@@ -324,13 +360,19 @@ function referencedByIntegrations(sysId: string, allSystems: StoredSystem[]) {
   return out;
 }
 
-function decorate(sys: StoredSystem, allSystems: StoredSystem[]) {
-  const { ownerName, deputyOwnerName, custodianNames } = resolveOwnership(sys);
+function decorate(
+  sys: StoredSystem,
+  allSystems: StoredSystem[],
+  allPeople: Array<{ id: string; name: string }>,
+  allConns: typeof connections,
+  allLinks: typeof connectionSystemLinks,
+) {
+  const { ownerName, deputyOwnerName, custodianNames } = resolveOwnership(sys, allPeople);
   return {
     ...sys,
     connectivity: sys.connectivity || 'INTEGRATED',
-    connectionCount: profilesForSystem(sys.id).length,
-    connectionStatus: rollupConnectionStatus(sys),
+    connectionCount: profilesForSystem(sys.id, allConns, allLinks).length,
+    connectionStatus: rollupConnectionStatus(sys, allConns, allLinks),
     integrations: enrichIntegrations(sys, allSystems),
     integrationCount: (sys.integrations || []).length,
     ownerName,
@@ -353,11 +395,13 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/systems */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const all = await systemsRepo.list();
+  const [all, allPeople, allConns, allLinks] = await Promise.all([
+    systemsRepo.list(), peopleRepo().list(), connsRepo().list(), linksRepo().list(),
+  ]);
   const filtered = filterByOrgScope(all, orgId as string | undefined);
   res.json({
     success: true,
-    data: filtered.map((s) => decorate(s, all)),
+    data: filtered.map((s) => decorate(s, all, allPeople, allConns, allLinks)),
     systemTypes: SYSTEM_TYPES,
     connectivityOptions: VALID_CONNECTIVITY,
     integrationMechanismOptions: VALID_INTEGRATION_MECHANISMS,
@@ -368,12 +412,17 @@ router.get('/', async (req: Request, res: Response) => {
 
 /** GET /api/v1/systems/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const all = await systemsRepo.list();
+  const [all, allPeople, allConns, allLinks] = await Promise.all([
+    systemsRepo.list(), peopleRepo().list(), connsRepo().list(), linksRepo().list(),
+  ]);
   const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
   res.json({
     success: true,
-    data: { ...decorate(sys, all), referencedByIntegrations: referencedByIntegrations(sys.id, all) },
+    data: {
+      ...decorate(sys, all, allPeople, allConns, allLinks),
+      referencedByIntegrations: referencedByIntegrations(sys.id, all),
+    },
   });
 });
 
@@ -385,26 +434,21 @@ router.get('/:id', async (req: Request, res: Response) => {
  *  (owner, deputy, custodians). Used by the System detail modal's
  *  WhereUsed panel so all three layers are visible from one page. */
 router.get('/:id/360', async (req: Request, res: Response) => {
-  const all = await systemsRepo.list();
+  const [all, allPeople, allConns, allLinks, allAssets, allMappings, allNodes] = await Promise.all([
+    systemsRepo.list(), peopleRepo().list(), connsRepo().list(), linksRepo().list(),
+    dataAssetsRepo().list(), mappingsRepo().list(), processNodesRepo().list(),
+  ]);
   const sys = all.find((s) => s.id === req.params.id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
 
-  // Lazy require to avoid systems → people → data-assets → systems cycle.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { people } = require('./people') as { people: { id: string; name: string; title?: string }[] };
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { processNodes } = require('./process-catalog') as typeof import('./process-catalog');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { mappings } = require('./mappings') as typeof import('./mappings');
-
-  const linkedConnections = profilesForSystem(sys.id).map((c) => ({
+  const linkedConnections = profilesForSystem(sys.id, allConns, allLinks).map((c) => ({
     id: c.id,
     name: c.name,
     connectionType: c.connectionType,
     status: c.status,
   }));
 
-  const assetsHere = dataAssets
+  const assetsHere = allAssets
     .filter((a) => a.systemId === sys.id)
     .map((a) => ({
       id: a.id,
@@ -418,16 +462,16 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   const assetIdSet = new Set(assetsHere.map((a) => a.id));
   const seenActivity = new Set<string>();
   const dependentActivities: Array<{ id: string; name: string; path: string }> = [];
-  for (const m of mappings) {
+  for (const m of allMappings) {
     if (!m.dataAssetId || !assetIdSet.has(m.dataAssetId)) continue;
     if (seenActivity.has(m.processStepId)) continue;
     seenActivity.add(m.processStepId);
-    const node = processNodes.find((n) => n.id === m.processStepId);
+    const node = allNodes.find((n) => n.id === m.processStepId);
     if (!node) continue;
     const parts: string[] = [node.name];
     let current = node;
     while (current.parentId) {
-      const parent = processNodes.find((n) => n.id === current.parentId);
+      const parent = allNodes.find((n) => n.id === current.parentId);
       if (!parent) break;
       parts.unshift(parent.name);
       current = parent;
@@ -436,20 +480,23 @@ router.get('/:id/360', async (req: Request, res: Response) => {
   }
 
   const ownerName = sys.ownerPersonId
-    ? people.find((p) => p.id === sys.ownerPersonId)?.name || null
+    ? allPeople.find((p) => p.id === sys.ownerPersonId)?.name || null
     : null;
   const deputyOwnerName = sys.deputyOwnerId
-    ? people.find((p) => p.id === sys.deputyOwnerId)?.name || null
+    ? allPeople.find((p) => p.id === sys.deputyOwnerId)?.name || null
     : null;
   const custodianRefs = (sys.custodianIds || [])
-    .map((id) => people.find((p) => p.id === id))
-    .filter((p): p is { id: string; name: string; title?: string } => !!p)
-    .map((p) => ({ id: p.id, name: p.name, title: p.title || null }));
+    .map((id) => allPeople.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .map((p) => ({ id: p.id, name: p.name, title: (p as { title?: string }).title || null }));
 
   res.json({
     success: true,
     data: {
-      system: { ...decorate(sys, all), referencedByIntegrations: referencedByIntegrations(sys.id, all) },
+      system: {
+        ...decorate(sys, all, allPeople, allConns, allLinks),
+        referencedByIntegrations: referencedByIntegrations(sys.id, all),
+      },
       linkedConnections,
       assetsHere,
       dependentActivities,
@@ -633,10 +680,13 @@ router.get('/:id/impact', async (req: Request, res: Response) => {
   const sys = await systemsRepo.get(id);
   if (!sys) { res.status(404).json({ success: false, error: 'System not found' }); return; }
 
-  const assetsCount = dataAssets.filter((a) => a.systemId === id).length;
-  const connectionsCount = profilesForSystem(id).length;
-  const assetIds = new Set(dataAssets.filter((a) => a.systemId === id).map((a) => a.id));
-  const mappingsCount = mappings.filter((m) => !!m.dataAssetId && assetIds.has(m.dataAssetId)).length;
+  const [allAssets, allConns, allLinks, allMappings] = await Promise.all([
+    dataAssetsRepo().list(), connsRepo().list(), linksRepo().list(), mappingsRepo().list(),
+  ]);
+  const assetsCount = allAssets.filter((a) => a.systemId === id).length;
+  const connectionsCount = profilesForSystem(id, allConns, allLinks).length;
+  const assetIds = new Set(allAssets.filter((a) => a.systemId === id).map((a) => a.id));
+  const mappingsCount = allMappings.filter((m) => !!m.dataAssetId && assetIds.has(m.dataAssetId)).length;
 
   res.json({ success: true, data: { assets: assetsCount, connections: connectionsCount, mappings: mappingsCount } });
 });
@@ -651,15 +701,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
   // system. The connections themselves keep existing — they may still
   // serve other systems, and a connection with zero links is a valid
   // "unassigned" state captured by gap detection. Cross-store (owned by
-  // connections route) — direct-array-access + saveStore per rules.
-  let removedLinks = 0;
-  for (let i = connectionSystemLinks.length - 1; i >= 0; i--) {
-    if (connectionSystemLinks[i].systemId === removed.id) {
-      connectionSystemLinks.splice(i, 1);
-      removedLinks++;
-    }
-  }
-  if (removedLinks > 0) saveStore('connectionSystemLinks', connectionSystemLinks);
+  // connections route) — routed through the join-table repo.
+  const allLinks = await linksRepo().list();
+  const victims = allLinks.filter((l) => l.systemId === removed.id);
+  for (const l of victims) await linksRepo().delete(l.id);
+  const removedLinks = victims.length;
   // Cascade: drop any integration edge on a surviving system that
   // pointed at the deleted one, so the catalog has no dangling targets.
   for (const s of await systemsRepo.list()) {
