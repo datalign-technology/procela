@@ -9,6 +9,8 @@ import { getSuggestionDismissalsRepository } from '../db/suggestion-dismissals.r
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { getSystemsRepository } from '../db/systems.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
 import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
 import { hasDatabase } from '../db/prisma';
 import { getVisibleOrgScope, getAncestorOrgIds, getCachedOrgList } from '../lib/org-scope';
@@ -267,6 +269,14 @@ let _systemsRepo: ReturnType<typeof getSystemsRepository> | null = null;
 const systemsRepo = () =>
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   (_systemsRepo ??= getSystemsRepository(require('./systems').systems));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  (_dataAssetsRepo ??= getDataAssetsRepository(require('./data-assets').dataAssets));
+let _mappingsRepo: ReturnType<typeof getMappingsRepository> | null = null;
+const mappingsRepo = () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  (_mappingsRepo ??= getMappingsRepository(require('./mappings').mappings));
 let _governanceControlsRepo: ReturnType<typeof getGovernanceControlsRepository> | null = null;
 const governanceControlsRepo = () =>
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -1246,19 +1256,18 @@ router.get('/nodes/:id/asset-suggestions', async (req: Request, res: Response) =
   const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
   const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
-  // Resolve the foreign stores at request time. Static imports here
-  // would race against the data-assets / mappings → process-catalog
-  // import cycle.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { dataAssets } = require('./data-assets');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { mappings } = require('./mappings');
-  const orgAssets = dataAssets.filter((a: any) => a.orgId === node.orgId);
+  // Resolve the foreign stores through their repositories (Postgres or
+  // JSON) at request time — the lazy accessors avoid the data-assets /
+  // mappings → process-catalog import cycle.
+  const [allAssets, allMappings] = await Promise.all([
+    dataAssetsRepo().list(), mappingsRepo().list(),
+  ]);
+  const orgAssets = allAssets.filter((a: any) => a.orgId === node.orgId);
   const dismissed = await dismissedTargetsFor(node.id, 'asset');
   const ranked = rankSuggestions(
     { id: node.id, name: node.name, description: node.description, systemIds: node.systemIds },
     orgAssets,
-    mappings,
+    allMappings,
     { limit, minScore },
   );
   const data = ranked.filter((r) => !dismissed.has(r.assetId));
@@ -1281,9 +1290,8 @@ router.get('/nodes/:id/system-suggestions', async (req: Request, res: Response) 
   const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
   const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { systems } = require('./systems');
-  const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
+  const allSystems = await systemsRepo().list();
+  const orgSystems = allSystems.filter((s: any) => s.orgId === node.orgId);
   const dismissed = await dismissedTargetsFor(node.id, 'system');
   const data = rankSystemSuggestions(
     { id: node.id, parentId: node.parentId, name: node.name, description: node.description, systemIds: node.systemIds },
@@ -1311,10 +1319,11 @@ router.get('/nodes/:id/people-suggestions', async (req: Request, res: Response) 
   const minScoreRaw = parseFloat(String(req.query.minScore ?? ''));
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : undefined;
   const minScore = Number.isFinite(minScoreRaw) ? Math.max(0, Math.min(1, minScoreRaw)) : undefined;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { systems } = require('./systems');
-  const orgPeople = people.filter((p: any) => (p.orgIds || []).includes(node.orgId));
-  const orgSystems = systems.filter((s: any) => s.orgId === node.orgId);
+  const [allPeople, allSystems] = await Promise.all([
+    peopleRepo().list(), systemsRepo().list(),
+  ]);
+  const orgPeople = allPeople.filter((p: any) => (p.orgIds || []).includes(node.orgId));
+  const orgSystems = allSystems.filter((s: any) => s.orgId === node.orgId);
   const dismissed = await dismissedTargetsFor(node.id, 'person');
   const data = rankPeopleSuggestions(
     {
@@ -1344,16 +1353,13 @@ router.get('/nodes/:id/people-suggestions', async (req: Request, res: Response) 
  *  can colour or weight them. Excludes governance-domain activities
  *  by default since the data map is an operational view; pass
  *  ?includeGovernance=1 to opt them in. */
-router.get('/data-graph', (req: Request, res: Response) => {
+router.get('/data-graph', async (req: Request, res: Response) => {
   const { orgId } = req.query;
   const includeGov = req.query.includeGovernance === '1' || req.query.includeGovernance === 'true';
   const scope = orgId ? getVisibleOrgScope(orgId as string) : null;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { dataAssets } = require('./data-assets');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { mappings } = require('./mappings');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { systems } = require('./systems');
+  const [dataAssets, mappings, systems] = await Promise.all([
+    dataAssetsRepo().list(), mappingsRepo().list(), systemsRepo().list(),
+  ]);
 
   const inScope = (n: { orgId: string; orgIds: string[] }) =>
     !scope || scope.has(n.orgId) || (n.orgIds || []).some((id) => scope.has(id));
