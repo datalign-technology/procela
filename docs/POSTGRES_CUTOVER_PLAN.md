@@ -666,6 +666,23 @@ data-carrying cutover, or take the fresh-org path.
     industry terms in PG, bulk update/delete and CSV/JSON import (with dedup)
     all hit PG. tsc clean, full suite green (890).
 
+  - **9b.17 (done) — sops.ts entity route.** Writes already used `sopsRepo`;
+    converted every `sops.find/filter/some` → `sopsRepo.get/list` (GET `/`,
+    `/:id`, PUT, DELETE, `/seed`). Two module-level helpers that read arrays
+    were parameterised: `generateCode(allSops)` (scans existing SOP-### codes
+    for the next number) and `resolveOwnerName(id, allPeople)` /
+    `enrichSop(s, allPeople)` (foreign `people` read, via lazy `peopleRepo()`).
+    POST and `/seed` load the SOP list from the repo for code generation; the
+    seed loop appends each created SOP to that list so per-SOP `generateCode`
+    and the title-existence check both see rows created earlier in the same
+    batch. No boot migration in this file. Verified against a **local
+    Postgres** (18/18): create yields SOP-001 with owner enriched from PG, a
+    second create reads the prior code from PG → SOP-002, a PG-only "ghost"
+    SOP surfaces, category/status/role filters read PG, `/:id`, PUT bumps
+    version on a step change and persists, `/seed` creates 5 standard SOPs
+    with distinct incrementing codes and is idempotent on re-seed, delete
+    removes from PG. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
