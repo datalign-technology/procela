@@ -1,13 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { startBackgroundSweep } from '../lib/background-timer';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
-import { dataAssets, getPrimaryBinding } from './data-assets';
-import { connections } from './connections';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
+import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
+import { dataAssets, dataAssetBindings, StoredDataAsset, StoredDataAssetBinding } from './data-assets';
+import { connections, ConnectionProfile } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
 import {
   evaluateRule,
@@ -82,20 +85,36 @@ function computeNextRunAt(freq: ScheduleFrequency, from: string | Date): string 
   return new Date(fromDate.getTime() + ms).toISOString();
 }
 
+/** Resolve an asset's primary binding from a pre-loaded binding list —
+ *  a store-agnostic mirror of data-assets' getPrimaryBinding so this
+ *  route can work off a Postgres snapshot instead of the module array. */
+function primaryBindingFrom(bindings: StoredDataAssetBinding[], assetId: string): StoredDataAssetBinding | undefined {
+  const own = bindings.filter((b) => b.dataAssetId === assetId);
+  return own.find((b) => b.isPrimary) || own[0];
+}
+
 /**
  * Build the DescribeContext for a rule by looking up its Data Asset and the
- * source connection. Returns an empty context when the asset / connection
- * can't be resolved so placeholders are used in the rendered definition.
+ * source connection in the supplied (already-loaded) snapshots. Returns an
+ * empty context when the asset / connection can't be resolved so
+ * placeholders are used in the rendered definition. Kept synchronous — the
+ * caller loads the stores once and passes them in, so a per-rule enrich
+ * loop doesn't fan out into N round-trips.
  */
-function contextForRule(rule: DataQualityRule): DescribeContext {
-  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+function contextForRule(
+  rule: DataQualityRule,
+  assets: StoredDataAsset[],
+  conns: ConnectionProfile[],
+  bindings: StoredDataAssetBinding[],
+): DescribeContext {
+  const asset = assets.find((a) => a.id === rule.dataAssetId);
   if (!asset) return {};
   // Prefer the asset's primary binding. Fall back to the legacy shadow
   // fields (`asset.sourceConnectionId` etc.) so pre-binding rows still
   // resolve correctly until they're migrated.
-  const binding = getPrimaryBinding(asset.id);
+  const binding = primaryBindingFrom(bindings, asset.id);
   const connId = binding?.connectionId || asset.sourceConnectionId;
-  const conn = connId ? connections.find((c) => c.id === connId) : undefined;
+  const conn = connId ? conns.find((c) => c.id === connId) : undefined;
   return {
     connectionType: conn?.connectionType,
     storageType: conn?.config?.storageType,
@@ -109,7 +128,13 @@ function contextForRule(rule: DataQualityRule): DescribeContext {
 export const dataQualityRules: DataQualityRule[] = loadStore<DataQualityRule>('dataQualityRules');
 registerStore('dataQualityRules', dataQualityRules);
 
+// Repositories — read Postgres when DATABASE_URL is set, else the JSON
+// arrays. This route owns dataQualityRules (CRUD + scheduler) and reads
+// dataAssets / connections / bindings as foreign context.
 const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const connectionsRepo = getConnectionsRepository(connections);
+const dataAssetBindingsRepo = getDataAssetBindingsRepository(dataAssetBindings);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const QUALITY_DIMENSIONS = ['COMPLETENESS', 'ACCURACY', 'TIMELINESS', 'CONSISTENCY', 'UNIQUENESS', 'VALIDITY'];
@@ -124,9 +149,9 @@ const router = Router();
 
 /** DELETE /api/v1/data-quality/all — delete all rules */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = dataQualityRules.length;
-  const ids = dataQualityRules.map((r) => r.id);
-  for (const id of ids) await dataQualityRulesRepo.delete(id);
+  const all = await dataQualityRulesRepo.list();
+  const count = all.length;
+  for (const rule of all) await dataQualityRulesRepo.delete(rule.id);
   auditService.log(DEV_ORG_ID, null, 'DataQualityRule', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all data quality rules');
   res.json({ success: true, deleted: count });
@@ -135,14 +160,17 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/data-quality — list all (support ?orgId= and ?dataAssetId= filters), enrich with asset name */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, dataAssetId } = req.query;
-  let filtered = dataQualityRules;
+  const [allRules, allAssets, allConns, allBindings] = await Promise.all([
+    dataQualityRulesRepo.list(), dataAssetsRepo.list(), connectionsRepo.list(), dataAssetBindingsRepo.list(),
+  ]);
+  let filtered = allRules;
   if (orgId) filtered = filterByOrgScope(filtered, orgId as string);
   if (dataAssetId) filtered = filtered.filter((r) => r.dataAssetId === dataAssetId);
 
   const enriched = filtered.map((rule) => {
-    const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+    const asset = allAssets.find((a) => a.id === rule.dataAssetId);
     const definition = rule.ruleType
-      ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule))
+      ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule, allAssets, allConns, allBindings))
       : null;
     return {
       ...rule,
@@ -157,7 +185,8 @@ router.get('/', async (req: Request, res: Response) => {
 /** GET /api/v1/data-quality/summary — overall quality stats */
 router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(dataQualityRules, orgId as string | undefined);
+  const allRules = await dataQualityRulesRepo.list();
+  const filtered = filterByOrgScope(allRules, orgId as string | undefined);
 
   const totalRules = filtered.length;
   const passingCount = filtered.filter((r) => r.status === 'PASSING').length;
@@ -195,12 +224,15 @@ router.get('/summary', async (req: Request, res: Response) => {
 /** GET /api/v1/data-quality/by-asset/:assetId — all rules for a data asset */
 router.get('/by-asset/:assetId', async (req: Request, res: Response) => {
   const { assetId } = req.params;
-  const rules = dataQualityRules.filter((r) => r.dataAssetId === assetId);
+  const [allRules, allAssets, allConns, allBindings] = await Promise.all([
+    dataQualityRulesRepo.list(), dataAssetsRepo.list(), connectionsRepo.list(), dataAssetBindingsRepo.list(),
+  ]);
+  const rules = allRules.filter((r) => r.dataAssetId === assetId);
 
   const enriched = rules.map((rule) => {
-    const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+    const asset = allAssets.find((a) => a.id === rule.dataAssetId);
     const definition = rule.ruleType
-      ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule))
+      ? describeRule(rule.ruleType, rule.parameters || {}, contextForRule(rule, allAssets, allConns, allBindings))
       : null;
     return { ...rule, dataAssetName: asset?.name || '', definition };
   });
@@ -211,10 +243,11 @@ router.get('/by-asset/:assetId', async (req: Request, res: Response) => {
 /** POST /api/v1/data-quality/compute-health/:assetId — compute weighted health score */
 router.post('/compute-health/:assetId', async (req: Request, res: Response) => {
   const { assetId } = req.params;
-  const asset = dataAssets.find((a) => a.id === assetId);
+  const asset = await dataAssetsRepo.get(String(assetId));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
-  const rules = dataQualityRules.filter((r) => r.dataAssetId === assetId);
+  const allRules = await dataQualityRulesRepo.list();
+  const rules = allRules.filter((r) => r.dataAssetId === assetId);
   if (rules.length === 0) {
     res.json({ success: true, data: { assetId, healthScore: asset.healthScore, rulesCount: 0, message: 'No rules defined for this asset' } });
     return;
@@ -225,9 +258,8 @@ router.post('/compute-health/:assetId', async (req: Request, res: Response) => {
   const healthScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
 
   // Update the data asset's healthScore
-  asset.healthScore = healthScore;
-  asset.updatedAt = new Date().toISOString();
-  saveStore('dataAssets', dataAssets);
+  const updatedAt = new Date().toISOString();
+  await dataAssetsRepo.update(asset.id, { healthScore, updatedAt });
 
   res.json({
     success: true,
@@ -262,11 +294,14 @@ router.get('/templates', async (req: Request, res: Response) => {
   // legacy shadow fields for un-migrated rows.
   let ctx: DescribeContext = {};
   if (assetId) {
-    const asset = dataAssets.find((a) => a.id === assetId);
+    const asset = await dataAssetsRepo.get(String(assetId));
     if (asset) {
-      const binding = getPrimaryBinding(asset.id);
+      const [allConns, allBindings] = await Promise.all([
+        connectionsRepo.list(), dataAssetBindingsRepo.list(),
+      ]);
+      const binding = primaryBindingFrom(allBindings, asset.id);
       const connId = binding?.connectionId || asset.sourceConnectionId;
-      const conn = connId ? connections.find((c) => c.id === connId) : undefined;
+      const conn = connId ? allConns.find((c) => c.id === connId) : undefined;
       ctx = {
         connectionType: conn?.connectionType,
         storageType: conn?.config?.storageType,
@@ -299,19 +334,22 @@ router.get('/templates', async (req: Request, res: Response) => {
 /** POST /api/v1/data-quality/run-all/:assetId — run every typed rule for an asset */
 router.post('/run-all/:assetId', async (req: Request, res: Response) => {
   const { assetId } = req.params;
-  const asset = dataAssets.find((a) => a.id === assetId);
+  const asset = await dataAssetsRepo.get(String(assetId));
   if (!asset) { res.status(404).json({ success: false, error: 'Data asset not found' }); return; }
 
-  const assetRules = dataQualityRules.filter((r) => r.dataAssetId === assetId && r.ruleType);
+  const allRules = await dataQualityRulesRepo.list();
+  const assetRules = allRules.filter((r) => r.dataAssetId === assetId && r.ruleType);
   if (assetRules.length === 0) {
     res.json({ success: true, data: { ran: 0, results: [], assetHealth: asset.healthScore ?? 0 } });
     return;
   }
 
   const results: { ruleId: string; name: string; passRate: number; simulated: boolean; status: string }[] = [];
+  let assetHealth = asset.healthScore ?? 0;
   for (const rule of assetRules) {
-    const out = runRuleNow(rule);
+    const out = await runRuleNow(rule);
     if (out) {
+      assetHealth = out.assetHealth;
       results.push({
         ruleId: rule.id,
         name: rule.name,
@@ -327,14 +365,14 @@ router.post('/run-all/:assetId', async (req: Request, res: Response) => {
     data: {
       ran: results.length,
       results,
-      assetHealth: asset.healthScore ?? 0,
+      assetHealth,
     },
   });
 });
 
 /** GET /api/v1/data-quality/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const rule = dataQualityRules.find((r) => r.id === req.params.id);
+  const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
   res.json({ success: true, data: rule });
 });
@@ -360,7 +398,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   // If no explicit orgId, inherit from the owning asset so rules always
   // live in the same tenant as the asset they measure.
-  const ownerAsset = dataAssets.find((a) => a.id === dataAssetId);
+  const ownerAsset = await dataAssetsRepo.get(dataAssetId);
   const resolvedOrgId = orgId || ownerAsset?.orgId || DEV_ORG_ID;
 
   const now = new Date().toISOString();
@@ -399,7 +437,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/data-quality/:id — update rule */
 router.put('/:id', async (req: Request, res: Response) => {
-  const rule = dataQualityRules.find((r) => r.id === req.params.id);
+  const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
 
   const { dataAssetId, dimension, name, description, threshold, currentScore, weight,
@@ -457,7 +495,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/data-quality/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = dataQualityRules.find((r) => r.id === req.params.id);
+  const removed = await dataQualityRulesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
   auditService.log(DEV_ORG_ID, null, 'DataQualityRule', removed.id, 'DELETE', removed, null);
   await dataQualityRulesRepo.delete(removed.id);
@@ -473,14 +511,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * a clearly-labelled simulated result.
  */
 router.post('/:id/run', async (req: Request, res: Response) => {
-  const rule = dataQualityRules.find((r) => r.id === req.params.id);
+  const rule = await dataQualityRulesRepo.get(String(req.params.id));
   if (!rule) { res.status(404).json({ success: false, error: 'Quality rule not found' }); return; }
   if (!rule.ruleType) {
     res.status(400).json({ success: false, error: 'This rule has no ruleType — it was created as a manual score rather than a typed DQ rule.' });
     return;
   }
 
-  const result = runRuleNow(rule);
+  const result = await runRuleNow(rule);
   if (!result) { res.status(404).json({ success: false, error: 'Linked data asset not found' }); return; }
   res.json({ success: true, data: result.engineResult });
 });
@@ -493,11 +531,11 @@ router.post('/:id/run', async (req: Request, res: Response) => {
  *
  * Returns null if the linked asset can't be found (orphaned rule).
  */
-function runRuleNow(rule: DataQualityRule): { engineResult: RuleRunResult; assetHealth: number } | null {
-  const asset = dataAssets.find((a) => a.id === rule.dataAssetId);
+async function runRuleNow(rule: DataQualityRule): Promise<{ engineResult: RuleRunResult; assetHealth: number } | null> {
+  const asset = await dataAssetsRepo.get(rule.dataAssetId);
   if (!asset) return null;
 
-  const conn = asset.sourceConnectionId ? connections.find((c) => c.id === asset.sourceConnectionId) : undefined;
+  const conn = asset.sourceConnectionId ? await connectionsRepo.get(asset.sourceConnectionId) : undefined;
 
   const result = evaluateRule(rule.ruleType!, rule.parameters || {}, {
     connectionType: conn?.connectionType,
@@ -517,17 +555,23 @@ function runRuleNow(rule: DataQualityRule): { engineResult: RuleRunResult; asset
   if (rule.scheduleFrequency && rule.scheduleFrequency !== 'NEVER') {
     rule.nextRunAt = computeNextRunAt(rule.scheduleFrequency as ScheduleFrequency, result.ranAt);
   }
-  saveStore('dataQualityRules', dataQualityRules);
+  await dataQualityRulesRepo.update(rule.id, {
+    lastRun: rule.lastRun,
+    currentScore: rule.currentScore,
+    lastMeasured: rule.lastMeasured,
+    status: rule.status,
+    updatedAt: rule.updatedAt,
+    nextRunAt: rule.nextRunAt,
+  });
 
   // Auto-recompute the asset's health score from the weighted average.
-  const assetRules = dataQualityRules.filter((r) => r.dataAssetId === asset.id);
+  const allRules = await dataQualityRulesRepo.list();
+  const assetRules = allRules.filter((r) => r.dataAssetId === asset.id);
   const totalWeight = assetRules.reduce((sum, r) => sum + r.weight, 0);
   const weightedSum = assetRules.reduce((sum, r) => sum + r.currentScore * r.weight, 0);
   const newAssetHealth = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
   if (asset.healthScore !== newAssetHealth) {
-    asset.healthScore = newAssetHealth;
-    asset.updatedAt = result.ranAt;
-    saveStore('dataAssets', dataAssets);
+    await dataAssetsRepo.update(asset.id, { healthScore: newAssetHealth, updatedAt: result.ranAt });
   }
 
   auditService.log(rule.orgId, null, 'DataQualityRule', rule.id, 'RUN', null, {
@@ -556,19 +600,20 @@ function runRuleNow(rule: DataQualityRule): { engineResult: RuleRunResult; asset
 // is unref'd so it doesn't keep test processes alive when the only
 // thing pinning the event loop is the scheduler.
 const SCHEDULER_TICK_MS = 60 * 1000;
-function tickScheduler(): void {
+async function tickScheduler(): Promise<void> {
   const now = new Date();
-  for (const rule of dataQualityRules) {
+  const rules = await dataQualityRulesRepo.list();
+  for (const rule of rules) {
     if (!rule.ruleType) continue;
     if (!rule.scheduleFrequency || rule.scheduleFrequency === 'NEVER') continue;
     const due = !rule.nextRunAt || new Date(rule.nextRunAt) <= now;
     if (!due) continue;
-    try { runRuleNow(rule); }
+    try { await runRuleNow(rule); }
     catch (err) {
       logger.error({ err, ruleId: rule.id }, 'Scheduled DQ rule run failed');
     }
   }
 }
-startBackgroundSweep(tickScheduler, SCHEDULER_TICK_MS);
+startBackgroundSweep(() => { void tickScheduler(); }, SCHEDULER_TICK_MS);
 
 export default router;
