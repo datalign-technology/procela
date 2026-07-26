@@ -7,6 +7,8 @@ import { people } from './people';
 import { createNotification } from './notifications';
 import { auditService } from '../services/audit.service';
 import { getCommentsRepository } from '../db/comments.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { hasDatabase } from '../db/prisma';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMENTS
@@ -52,6 +54,12 @@ registerStore('comments', comments);
 
 const commentsRepo = getCommentsRepository(comments);
 
+// people is a foreign store; build its repo lazily so nothing reads the
+// `people` binding at module-init (keeps this module cycle-safe, matching the
+// pattern used across the 9b conversions).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+
 // Request-body schemas — Zod at the API boundary. Shape checks fall out
 // of the parse so downstream code can use the typed body directly.
 const createCommentBodySchema = z.object({
@@ -71,15 +79,18 @@ const patchCommentBodySchema = z.object({
 });
 
 // One-time migration of v0 comments that lack the new fields. Idempotent;
-// runs once per process boot.
-let migrated = false;
-for (const c of comments) {
-  if (c.parentId === undefined) { (c as any).parentId = null; migrated = true; }
-  if (c.mentions === undefined) { (c as any).mentions = []; migrated = true; }
-  if (c.updatedAt === undefined) { (c as any).updatedAt = c.createdAt; migrated = true; }
-  if (c.deletedAt === undefined) { (c as any).deletedAt = null; migrated = true; }
+// runs once per process boot. JSON mode only — Postgres rows carry the
+// canonical column shape already.
+if (!hasDatabase()) {
+  let migrated = false;
+  for (const c of comments) {
+    if (c.parentId === undefined) { (c as any).parentId = null; migrated = true; }
+    if (c.mentions === undefined) { (c as any).mentions = []; migrated = true; }
+    if (c.updatedAt === undefined) { (c as any).updatedAt = c.createdAt; migrated = true; }
+    if (c.deletedAt === undefined) { (c as any).deletedAt = null; migrated = true; }
+  }
+  if (migrated) saveStore('comments', comments);
 }
-if (migrated) saveStore('comments', comments);
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
@@ -88,8 +99,8 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 // org that anchors at that position and ends at a word boundary. Returns
 // deduped personIds.
 
-function parseMentions(body: string, orgId: string): string[] {
-  const orgPeople = people.filter((p) => p.orgIds?.includes(orgId));
+function parseMentions(body: string, orgId: string, allPeople: typeof people): string[] {
+  const orgPeople = allPeople.filter((p) => p.orgIds?.includes(orgId));
   const mentioned = new Set<string>();
   for (let i = 0; i < body.length; i++) {
     if (body[i] !== '@') continue;
@@ -127,10 +138,11 @@ function dispatchMentionNotifications(
   comment: StoredComment,
   mentionsToNotify: string[],
   entityLabel: string,
+  allPeople: typeof people,
 ): void {
   for (const personId of mentionsToNotify) {
     if (personId === comment.userId) continue;  // never notify on self-mention
-    const person = people.find((p) => p.id === personId);
+    const person = allPeople.find((p) => p.id === personId);
     if (!person) continue;
     createNotification({
       orgId: comment.orgId,
@@ -153,7 +165,7 @@ router.get('/', async (req: Request, res: Response) => {
     return;
   }
   const effectiveOrgId = orgId || DEV_ORG_ID;
-  const filtered = comments
+  const filtered = (await commentsRepo.list())
     .filter((c) => c.entityType === entityType && c.entityId === entityId && c.orgId === effectiveOrgId)
     // Oldest-first reads more naturally for threaded conversations.
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -177,7 +189,7 @@ router.post('/', async (req: Request, res: Response) => {
   // tree never goes deeper than one level.
   let resolvedParentId: string | null = null;
   if (parentId) {
-    const parent = comments.find((c) => c.id === parentId);
+    const parent = await commentsRepo.get(String(parentId));
     if (!parent) { res.status(400).json({ success: false, error: 'parent comment not found' }); return; }
     if (parent.entityType !== entityType || parent.entityId !== entityId) {
       res.status(400).json({ success: false, error: 'parent comment belongs to a different entity' });
@@ -186,8 +198,9 @@ router.post('/', async (req: Request, res: Response) => {
     resolvedParentId = parent.parentId ?? parent.id;
   }
 
+  const allPeople = await peopleRepo().list();
   const authorPersonId = (req as any).user?.sub || null;
-  const author = authorPersonId ? people.find((p) => p.id === authorPersonId) : null;
+  const author = authorPersonId ? allPeople.find((p) => p.id === authorPersonId) : null;
   const resolvedAuthorName = author?.name || userName || (req as any).user?.name || 'Unknown';
 
   const now = new Date().toISOString();
@@ -200,7 +213,7 @@ router.post('/', async (req: Request, res: Response) => {
     userId: author?.id || authorPersonId,
     userName: resolvedAuthorName,
     content: content.trim(),
-    mentions: parseMentions(content, effectiveOrgId),
+    mentions: parseMentions(content, effectiveOrgId, allPeople),
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
@@ -226,7 +239,7 @@ router.post('/', async (req: Request, res: Response) => {
   );
 
   if (comment.mentions.length > 0) {
-    dispatchMentionNotifications(comment, comment.mentions, entityLabel || `${entityType} ${entityId}`);
+    dispatchMentionNotifications(comment, comment.mentions, entityLabel || `${entityType} ${entityId}`, allPeople);
   }
 
   res.status(201).json({ success: true, data: comment });
@@ -236,7 +249,7 @@ router.post('/', async (req: Request, res: Response) => {
  *  edit. Newly-added mentions fire notifications; previously-mentioned
  *  people aren't re-notified. */
 router.patch('/:id', async (req: Request, res: Response) => {
-  const c = comments.find((c) => c.id === req.params.id);
+  const c = await commentsRepo.get(String(req.params.id));
   if (!c) { res.status(404).json({ success: false, error: 'Comment not found' }); return; }
   if (c.deletedAt) { res.status(409).json({ success: false, error: 'Comment is deleted' }); return; }
 
@@ -254,7 +267,8 @@ router.patch('/:id', async (req: Request, res: Response) => {
     return;
   }
 
-  const newMentions = parseMentions(content, c.orgId);
+  const allPeople = await peopleRepo().list();
+  const newMentions = parseMentions(content, c.orgId, allPeople);
   const addedMentions = newMentions.filter((m) => !c.mentions.includes(m));
   c.content = content.trim();
   c.mentions = newMentions;
@@ -262,7 +276,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
   await commentsRepo.update(c.id, { content: c.content, mentions: c.mentions, updatedAt: c.updatedAt });
 
   if (addedMentions.length > 0) {
-    dispatchMentionNotifications(c, addedMentions, entityLabel || `${c.entityType} ${c.entityId}`);
+    dispatchMentionNotifications(c, addedMentions, entityLabel || `${c.entityType} ${c.entityId}`, allPeople);
   }
   auditService.log(
     c.orgId, c.userId, 'Comment', c.id, 'UPDATE',
@@ -274,7 +288,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/comments/:id — soft delete (keeps thread structure) */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const c = comments.find((c) => c.id === req.params.id);
+  const c = await commentsRepo.get(String(req.params.id));
   if (!c) { res.status(404).json({ success: false, error: 'Comment not found' }); return; }
   c.deletedAt = new Date().toISOString();
   c.content = '';
