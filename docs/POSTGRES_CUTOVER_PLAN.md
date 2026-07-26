@@ -632,6 +632,23 @@ data-carrying cutover, or take the fresh-org path.
     `notifications` store's own conversion (its reads already go through the
     repo; only the create path lags); comments dispatches correctly.
 
+  - **9b.15 (done) — notifications.ts (closes the 9b.14 gap).** The read
+    endpoints already used `notificationsRepo`; this converts the write paths.
+    `createNotification` (the sync helper ~14 inline call sites across 8 files
+    depend on — several in non-async loops) keeps its synchronous signature and
+    now branches: JSON mode pushes + saves as before; **Postgres mode persists
+    through the repo as a fire-and-forget write** (`void repo.create().catch(log)`)
+    — notifications are non-critical and eventually-consistent, the object is
+    still returned synchronously, and awaiting would force every caller to
+    change. GET `/count` reads via `repo.list()`; PUT `/read-all` and DELETE
+    `/all` branch (JSON keeps the single bulk array-write + one save; Postgres
+    issues a repo `update`/`delete` per row). Verified against a **local
+    Postgres** (15/15): `POST /` and the `createNotification` helper both reach
+    PG (helper polled, since fire-and-forget), a PG-only "ghost" surfaces via
+    `GET /` newest-first, `/count` + `?unreadOnly=` read PG, `:id/read` and
+    `read-all` mark PG rows, `:id`/`all` delete from PG. tsc clean, full suite
+    green (890). This fully clears the `notifications` store.
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

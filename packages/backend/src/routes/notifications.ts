@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { getNotificationsRepository } from '../db/notifications.repo';
+import { hasDatabase } from '../db/prisma';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATION CENTER
@@ -32,9 +33,12 @@ const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 // ── Helper: create a notification (used internally by other features) ──
 //
 // This helper stays synchronous so the many callers across the codebase
-// (audit, comments, digest, etc.) can keep calling it inline. The direct
-// push + saveStore path is functionally equivalent to
-// notificationsRepo.create() on the JSON backend.
+// (audit, comments, digest, etc.) can keep calling it inline. In JSON mode it
+// pushes + saves. In Postgres mode it persists through the repository as a
+// fire-and-forget write (awaiting would force ~14 inline call sites — several
+// in non-async loops — to change): notifications are non-critical and
+// eventually-consistent, the object is still returned synchronously, and a
+// write failure is logged rather than swallowed.
 
 export function createNotification(opts: {
   orgId?: string;
@@ -56,8 +60,13 @@ export function createNotification(opts: {
     createdAt: new Date().toISOString(),
   };
 
-  notifications.push(notification);
-  saveStore('notifications', notifications);
+  if (hasDatabase()) {
+    void notificationsRepo.create(notification).catch((err) =>
+      logger.error({ err, id: notification.id }, 'Failed to persist notification'));
+  } else {
+    notifications.push(notification);
+    saveStore('notifications', notifications);
+  }
   logger.info({ type: notification.type, title: notification.title }, 'Notification created');
 
   return notification;
@@ -82,7 +91,8 @@ router.get('/', async (_req: Request, res: Response) => {
 
 /** GET /count — returns { unread: number } */
 router.get('/count', async (_req: Request, res: Response) => {
-  const unread = notifications.filter((n) => !n.read).length;
+  const all = await notificationsRepo.list();
+  const unread = all.filter((n) => !n.read).length;
   res.json({ success: true, data: { unread } });
 });
 
@@ -97,10 +107,18 @@ router.put('/:id/read', async (req: Request, res: Response) => {
   res.json({ success: true, data: updated });
 });
 
-/** PUT /read-all — mark all notifications as read. Bulk write — this
- *  handler still mutates the array directly + saves once at the end
- *  rather than issuing N repo.update() calls. */
+/** PUT /read-all — mark all notifications as read. In JSON mode this stays a
+ *  single bulk array-write + one save; in Postgres mode it issues a repo
+ *  update per still-unread row. */
 router.put('/read-all', async (_req: Request, res: Response) => {
+  if (hasDatabase()) {
+    const all = await notificationsRepo.list();
+    for (const n of all) {
+      if (!n.read) await notificationsRepo.update(n.id, { read: true });
+    }
+    res.json({ success: true, data: { updated: all.length } });
+    return;
+  }
   for (const n of notifications) {
     n.read = true;
   }
@@ -108,9 +126,16 @@ router.put('/read-all', async (_req: Request, res: Response) => {
   res.json({ success: true, data: { updated: notifications.length } });
 });
 
-/** DELETE /all — clear every notification. Bulk write — same reasoning
- *  as read-all above. */
+/** DELETE /all — clear every notification. JSON mode splices the array;
+ *  Postgres mode deletes each row through the repo. */
 router.delete('/all', async (_req: Request, res: Response) => {
+  if (hasDatabase()) {
+    const all = await notificationsRepo.list();
+    for (const n of all) await notificationsRepo.delete(n.id);
+    logger.info({ count: all.length }, 'Cleared all notifications');
+    res.json({ success: true, deleted: all.length });
+    return;
+  }
   const count = notifications.length;
   notifications.splice(0, notifications.length);
   saveStore('notifications', notifications);
