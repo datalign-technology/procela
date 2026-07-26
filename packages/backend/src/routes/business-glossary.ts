@@ -1,14 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
-import { filterByOrgScope } from '../lib/org-scope';
+import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
 import { parseCsv } from '../lib/csv';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { people } from './people';
 import { dataDomains } from './data-domains';
-import { organizations } from './organizations';
 import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
 
 export interface StoredGlossaryTerm {
   id: string;
@@ -33,12 +34,24 @@ export const glossaryTerms: StoredGlossaryTerm[] = loadStore<StoredGlossaryTerm>
 registerStore('glossaryTerms', glossaryTerms);
 const glossaryTermsRepo = getGlossaryTermsRepository(glossaryTerms);
 
+// Foreign stores — build their repos lazily so nothing reads the `people` /
+// `dataDomains` bindings at module-init (cycle-safety, matching the 9b
+// conversions).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _dataDomainsRepo: ReturnType<typeof getDataDomainsRepository> | null = null;
+const dataDomainsRepo = () => (_dataDomainsRepo ??= getDataDomainsRepository(dataDomains));
+
 const VALID_STATUSES = ['DRAFT', 'PROPOSED', 'APPROVED', 'DEPRECATED'] as const;
 const VALID_CATEGORIES = ['BUSINESS', 'TECHNICAL', 'REGULATORY', 'METRIC', 'GENERAL'] as const;
 
-function enrichTerm(term: StoredGlossaryTerm) {
-  const owner = term.ownerPersonId ? people.find((p) => p.id === term.ownerPersonId) : null;
-  const domain = term.domainId ? dataDomains.find((d) => d.id === term.domainId) : null;
+function enrichTerm(
+  term: StoredGlossaryTerm,
+  allPeople: typeof people,
+  allDomains: typeof dataDomains,
+) {
+  const owner = term.ownerPersonId ? allPeople.find((p) => p.id === term.ownerPersonId) : null;
+  const domain = term.domainId ? allDomains.find((d) => d.id === term.domainId) : null;
   return {
     ...term,
     ownerName: owner?.name || null,
@@ -147,7 +160,12 @@ const router = Router();
 /** GET /api/v1/business-glossary — list with filters */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, category, domainId, search } = req.query;
-  let filtered = filterByOrgScope(glossaryTerms, orgId as string | undefined);
+  const [allTerms, allPeople, allDomains] = await Promise.all([
+    glossaryTermsRepo.list(),
+    peopleRepo().list(),
+    dataDomainsRepo().list(),
+  ]);
+  let filtered = filterByOrgScope(allTerms, orgId as string | undefined);
 
   if (status && typeof status === 'string') {
     filtered = filtered.filter((t) => t.status === status);
@@ -168,14 +186,14 @@ router.get('/', async (req: Request, res: Response) => {
     );
   }
 
-  const enriched = filtered.map(enrichTerm);
+  const enriched = filtered.map((t) => enrichTerm(t, allPeople, allDomains));
   res.json({ success: true, data: enriched });
 });
 
 /** GET /api/v1/business-glossary/summary — aggregate stats */
 router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(glossaryTerms, orgId as string | undefined);
+  const filtered = filterByOrgScope(await glossaryTermsRepo.list(), orgId as string | undefined);
 
   const total = filtered.length;
   const approved = filtered.filter((t) => t.status === 'APPROVED').length;
@@ -201,12 +219,16 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/business-glossary/:id — single term */
 router.get('/:id', async (req: Request, res: Response) => {
-  const term = glossaryTerms.find((t) => t.id === req.params.id);
+  const [term, allPeople, allDomains] = await Promise.all([
+    glossaryTermsRepo.get(String(req.params.id)),
+    peopleRepo().list(),
+    dataDomainsRepo().list(),
+  ]);
   if (!term) {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
     return;
   }
-  res.json({ success: true, data: enrichTerm(term) });
+  res.json({ success: true, data: enrichTerm(term, allPeople, allDomains) });
 });
 
 /** POST /api/v1/business-glossary — create */
@@ -226,7 +248,7 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const duplicate = glossaryTerms.find(
+  const duplicate = (await glossaryTermsRepo.list()).find(
     (t) => t.orgId === orgId && t.term.trim().toLowerCase() === term.trim().toLowerCase(),
   );
   if (duplicate) {
@@ -257,12 +279,13 @@ router.post('/', async (req: Request, res: Response) => {
   await glossaryTermsRepo.create(newTerm);
   auditService.log('system', orgId, 'GlossaryTerm', newTerm.id, 'CREATE', null, newTerm);
   logger.info({ id: newTerm.id, term: newTerm.term }, 'Created glossary term');
-  res.status(201).json({ success: true, data: enrichTerm(newTerm) });
+  const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
+  res.status(201).json({ success: true, data: enrichTerm(newTerm, allPeople, allDomains) });
 });
 
 /** PUT /api/v1/business-glossary/:id — update */
 router.put('/:id', async (req: Request, res: Response) => {
-  const existing = glossaryTerms.find((t) => t.id === req.params.id);
+  const existing = await glossaryTermsRepo.get(String(req.params.id));
   if (!existing) {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
     return;
@@ -276,7 +299,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   } = req.body;
 
   if (term !== undefined && term.trim().toLowerCase() !== existing.term.trim().toLowerCase()) {
-    const duplicate = glossaryTerms.find(
+    const duplicate = (await glossaryTermsRepo.list()).find(
       (t) => t.id !== existing.id
         && t.orgId === existing.orgId
         && t.term.trim().toLowerCase() === term.trim().toLowerCase(),
@@ -303,12 +326,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   await glossaryTermsRepo.update(existing.id, existing);
   auditService.log('system', existing.orgId, 'GlossaryTerm', existing.id, 'UPDATE', before, existing);
   logger.info({ id: existing.id, term: existing.term }, 'Updated glossary term');
-  res.json({ success: true, data: enrichTerm(existing) });
+  const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
+  res.json({ success: true, data: enrichTerm(existing, allPeople, allDomains) });
 });
 
 /** DELETE /api/v1/business-glossary/:id — delete */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = glossaryTerms.find((t) => t.id === req.params.id);
+  const removed = await glossaryTermsRepo.get(String(req.params.id));
   if (!removed) {
     res.status(404).json({ success: false, error: 'Glossary term not found' });
     return;
@@ -331,7 +355,7 @@ router.post('/seed', async (req: Request, res: Response) => {
   const created: StoredGlossaryTerm[] = [];
 
   // Look up the org's industry to include industry-specific terms
-  const org = organizations.find((o: any) => o.id === orgId);
+  const org = getCachedOrgList().find((o) => o.id === orgId) as any;
   const industry = org?.industry || '';
   const industryTerms = Object.entries(INDUSTRY_TERMS).find(
     ([key]) => industry.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(industry.toLowerCase()),
@@ -339,7 +363,9 @@ router.post('/seed', async (req: Request, res: Response) => {
   const allSeeds = [...SEED_TERMS, ...(industryTerms ? industryTerms[1] : [])];
 
   // Filter out terms that already exist
-  const existingNames = new Set(glossaryTerms.filter((t) => t.orgId === orgId).map((t) => t.term.trim().toLowerCase()));
+  const existingNames = new Set(
+    (await glossaryTermsRepo.list()).filter((t) => t.orgId === orgId).map((t) => t.term.trim().toLowerCase()),
+  );
   const available = allSeeds.filter((s) => !existingNames.has(s.term.trim().toLowerCase()));
 
   // Preview mode: return available terms without creating
@@ -387,9 +413,10 @@ router.post('/seed', async (req: Request, res: Response) => {
     logger.info({ orgId, count: created.length, industry }, 'Seeded glossary terms');
   }
 
+  const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
   res.status(201).json({
     success: true,
-    data: created.map(enrichTerm),
+    data: created.map((t) => enrichTerm(t, allPeople, allDomains)),
     seeded: created.length,
     industry: industryTerms ? industryTerms[0] : null,
   });
@@ -419,7 +446,7 @@ router.patch('/bulk', async (req: Request, res: Response) => {
   const skipped: string[] = [];
 
   for (const id of ids) {
-    const t = glossaryTerms.find((x) => x.id === id);
+    const t = await glossaryTermsRepo.get(String(id));
     if (!t) { skipped.push(id); continue; }
     const before = { ...t };
     if (updates.status !== undefined && (VALID_STATUSES as readonly string[]).includes(updates.status)) t.status = updates.status;
@@ -450,7 +477,7 @@ router.post('/bulk-delete', async (req: Request, res: Response) => {
     return;
   }
   const idSet = new Set(ids);
-  const removed = glossaryTerms.filter((t) => idSet.has(t.id));
+  const removed = (await glossaryTermsRepo.list()).filter((t) => idSet.has(t.id));
   for (const r of removed) {
     auditService.log('system', r.orgId, 'GlossaryTerm', r.id, 'DELETE', r, null);
     await glossaryTermsRepo.delete(r.id);
@@ -541,9 +568,13 @@ router.post('/import', async (req: Request, res: Response) => {
     const skipped: string[] = [];
     const now = new Date().toISOString();
 
+    // Prefetch existing terms once; append created rows as we go so
+    // duplicates *within* the same import batch are still caught.
+    const existingTerms = await glossaryTermsRepo.list();
+
     for (const row of rows) {
       if (!row.term || !row.term.trim()) continue;
-      const dup = glossaryTerms.find(
+      const dup = existingTerms.find(
         (t) => t.orgId === orgId && t.term.trim().toLowerCase() === row.term.trim().toLowerCase(),
       );
       if (dup) { skipped.push(row.term); continue; }
@@ -575,15 +606,17 @@ router.post('/import', async (req: Request, res: Response) => {
       };
       await glossaryTermsRepo.create(newTerm);
       created.push(newTerm);
+      existingTerms.push(newTerm);
     }
 
     if (created.length > 0) {
       auditService.log('system', orgId, 'GlossaryTerm', '*', 'IMPORT', null, { count: created.length, skipped: skipped.length });
     }
     logger.info({ created: created.length, skipped: skipped.length, orgId }, 'Imported glossary terms');
+    const [allPeople, allDomains] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list()]);
     res.status(201).json({
       success: true,
-      data: created.map(enrichTerm),
+      data: created.map((t) => enrichTerm(t, allPeople, allDomains)),
       skipped: skipped.length,
       message: skipped.length > 0 ? `Imported ${created.length} terms; skipped ${skipped.length} duplicate${skipped.length !== 1 ? 's' : ''}.` : `Imported ${created.length} terms.`,
     });

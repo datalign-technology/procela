@@ -649,6 +649,23 @@ data-carrying cutover, or take the fresh-org path.
     `read-all` mark PG rows, `:id`/`all` delete from PG. tsc clean, full suite
     green (890). This fully clears the `notifications` store.
 
+  - **9b.16 (done) — business-glossary.ts entity route.** Writes already used
+    `glossaryTermsRepo`; converted every `glossaryTerms.find/filter` →
+    `glossaryTermsRepo.get/list` across all 10 handlers (GET `/`, `/summary`,
+    `/:id`, POST + PUT dup checks, DELETE, `/seed`, PATCH `/bulk`, POST
+    `/bulk-delete`, POST `/import`). `enrichTerm` parameterised to take the
+    repo-loaded `people`/`dataDomains` lists (lazy `peopleRepo()` /
+    `dataDomainsRepo()`); the `/seed` org-industry lookup switched from the
+    stale `organizations` array to `getCachedOrgList()`; the `/import` loop
+    prefetches the term list once and appends created rows so intra-batch
+    duplicates are still caught. No boot migration in this file. Verified
+    against a **local Postgres** (25/25): create with owner + domain enriched
+    from PG, dup 409 off PG, list + status/category/domain/search filters read
+    PG, a PG-only "ghost" term surfaces, `/summary`, `/:id`, PUT persist, seed
+    resolves the org's Healthcare industry via the org-scope cache and creates
+    industry terms in PG, bulk update/delete and CSV/JSON import (with dedup)
+    all hit PG. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
