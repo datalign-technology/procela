@@ -865,6 +865,26 @@ data-carrying cutover, or take the fresh-org path.
     label-enriched refs, and a data asset inserted directly into Postgres showed
     up in a subsequent cube call (fresh snapshot per request). tsc clean, full
     suite green (890).
+  - **9b.27 (done) — chat.ts (AI-assistant catalog snapshot).** The two
+    exported builders that pack the assistant's grounding context read ~14
+    module arrays synchronously — `buildOrgSnapshot` (processNodes, dataAssets,
+    systems, mappings, people, dataDomains, glossaryTerms, governancePolicies,
+    governanceIssues, governanceTasks, dataQualityRules, connections,
+    connectionSystemLinks, suggestionDismissals) and `buildEntityIndex`
+    (processNodes, systems, dataAssets, people). In Postgres mode both would
+    have handed Claude an empty catalog. Added the fourteen repo factories; both
+    builders are now `async` and load every store once via `Promise.all` before
+    the in-memory `filterByOrgScope`/tree-walk logic runs. The direct
+    `organizations.find` org lookup in both handlers moved to
+    `getCachedOrgList()`. `/chat` and `/chat/stream` await the builders; the
+    chat-routes test's 17 synchronous builder call-sites were made
+    `async`/`await`. Verified against a **local Postgres** (8/8): the snapshot
+    and entity index both render a PG-only org's systems/assets/catalog, and a
+    data asset inserted directly into Postgres appears in a later snapshot. tsc
+    clean, full suite green (890). This completes the aggregator cluster —
+    control-tower, enterprise-view, exports, analysis and chat all read
+    Postgres; digest was already repo-backed (PR 6) and docs.ts serves static
+    markdown (no store reads).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
