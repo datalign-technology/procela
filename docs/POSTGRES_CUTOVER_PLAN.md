@@ -981,6 +981,34 @@ data-carrying cutover, or take the fresh-org path.
     governance issue **in PG**. tsc clean, full suite green (890;
     agents + agent-owner-invariant + dq-issue-sync 25/25). **All three deferred
     governance sync helpers are now repository-backed.**
+  - **9b.32 (done) — systems.ts foreign-store reads (decoration + 360 + impact
+    + delete cascade).** The systems store itself was already repo-backed, but
+    the per-system *decoration* read two foreign stores off the module arrays —
+    `resolveOwnership` (people → owner / deputy / custodian names) and
+    `profilesForSystem` / `rollupConnectionStatus` (connections + the
+    connection↔system join table → connection count + status pill). In Postgres
+    mode every system therefore showed blank owners and `NOT_CONNECTED`
+    regardless of real data. Converted the whole route's foreign reads:
+      * Added lazy foreign-repo accessors (`connsRepo`, `linksRepo`,
+        `dataAssetsRepo`, `mappingsRepo`, `peopleRepo`, `processNodesRepo`) —
+        lazy for the same circular-import-TDZ reason as elsewhere; `people` /
+        `processNodes` are `require()`d inside the accessor rather than
+        top-imported.
+      * `profilesForSystem`, `rollupConnectionStatus`, `resolveOwnership` and
+        `decorate` now take pre-loaded snapshots (the join is done in memory);
+        `connectionsForSystem` was inlined so the join table is read once.
+      * `GET /`, `GET /:id`, `GET /:id/360` and `GET /:id/impact` load the stores
+        they need once via `Promise.all` and thread them through; `/360`'s
+        people / dataAssets / mappings / processNodes reads were converted too.
+      * `DELETE /:id`'s connection↔system-link cascade now runs through
+        `linksRepo().delete` instead of `splice` + `saveStore`.
+      The boot prune block was already `hasDatabase()`-guarded. Verified against
+      a **local Postgres** (12/12): list + detail decoration resolve owner name
+      from PG people and `CONNECTED` status from PG connections+links; `/360`
+      surfaces the linked connection, the asset that lives here, and PG-resolved
+      ownership; `/impact` counts off PG; and deleting a system cascade-removes
+      its join-table links from PG while the connection itself survives. tsc
+      clean, full suite green (890).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
