@@ -256,13 +256,13 @@ describe('chat routes + buildOrgSnapshot', () => {
   });
 
   describe('buildOrgSnapshot', () => {
-    it('returns undefined when the org has no nodes/assets/systems at all', () => {
-      assert.strictEqual(buildOrgSnapshot('this-org-does-not-exist'), undefined);
-      assert.strictEqual(buildOrgSnapshot(''), undefined);
+    it('returns undefined when the org has no nodes/assets/systems at all', async () => {
+      assert.strictEqual(await buildOrgSnapshot('this-org-does-not-exist'), undefined);
+      assert.strictEqual(await buildOrgSnapshot(''), undefined);
     });
 
-    it('includes the catalog tree, systems and assets sections', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('includes the catalog tree, systems and assets sections', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.ok(out, 'snapshot should be non-empty for a populated org');
       assert.match(out!, /## PROCESS CATALOG/);
       assert.match(out!, /Patient care VS/);
@@ -274,14 +274,14 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.match(out!, /Patient encounter records/);
     });
 
-    it('includes the activity → system declarations (Phase 3 signal)', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('includes the activity → system declarations (Phase 3 signal)', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## ACTIVITY → SYSTEM \(declared\)/);
       assert.match(out!, /"Look up patient record" runs on: Epic EHR/);
     });
 
-    it('includes asset-shaped mappings and excludes orphans from the coverage section', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('includes asset-shaped mappings and excludes orphans from the coverage section', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## PROCESS COVERAGE/);
       assert.match(out!, /"Look up patient record" consumes "Patient encounter records"/);
       // The orphan asset's name appears in the catalog list — but it
@@ -291,8 +291,8 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.ok(!/Unused billing ledger/.test(cov), 'orphan should not appear as a coverage edge');
     });
 
-    it('surfaces orphan assets and dismissal count in KNOWN GAPS', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('surfaces orphan assets and dismissal count in KNOWN GAPS', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## KNOWN GAPS/);
       // Two orphans in scope: the child's "Unused billing ledger"
       // and the parent-inherited "Corporate finance ledger", both
@@ -310,45 +310,45 @@ describe('chat routes + buildOrgSnapshot', () => {
     // filterByOrgScope) exposed it. Aligning the snapshot with the
     // same helper fixed the mismatch. Assets/systems/etc. owned
     // above the current scope must now appear in the snapshot.
-    it('walks up to ancestors — parent-owned rows appear when scoping to a child', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('walks up to ancestors — parent-owned rows appear when scoping to a child', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /Corporate DW/, 'parent-owned system should appear in the child scope snapshot');
       assert.match(out!, /Corporate finance ledger/, 'parent-owned asset should appear in the child scope snapshot');
     });
 
-    it('walks down to descendants — child-owned rows appear when scoping to the parent', () => {
-      const out = buildOrgSnapshot(parentOrgId);
+    it('walks down to descendants — child-owned rows appear when scoping to the parent', async () => {
+      const out = await buildOrgSnapshot(parentOrgId);
       assert.ok(out, 'parent snapshot should render even if the parent has no direct rows');
       assert.match(out!, /Epic EHR/, 'child-owned system should appear in the parent scope snapshot');
       assert.match(out!, /Patient encounter records/, 'child-owned asset should appear in the parent scope snapshot');
     });
 
-    it('includes the business glossary section with approved terms', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('includes the business glossary section with approved terms', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## BUSINESS GLOSSARY/);
       assert.match(out!, /Encounter: A patient visit/);
     });
 
-    it('includes governance documents with code + name + type', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('includes governance documents with code + name + type', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## GOVERNANCE DOCUMENTS/);
       assert.match(out!, /\[POL-001\] Data classification policy \(policy/);
     });
 
-    it('lists open governance issues (severity + target)', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('lists open governance issues (severity + target)', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## OPEN GOVERNANCE ISSUES/);
       assert.match(out!, /Missing steward for billing ledger.*severity:high.*asset:Unused billing ledger/s);
     });
 
-    it('lists open governance tasks with priority + assignee', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('lists open governance tasks with priority + assignee', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## OPEN GOVERNANCE TASKS/);
       assert.match(out!, /Assign steward to billing ledger.*priority:high.*unassigned/s);
     });
 
-    it('summarises data quality and lists failing rules', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('summarises data quality and lists failing rules', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## DATA QUALITY/);
       assert.match(out!, /Summary: 0 passing, 1 failing\/warning/);
       assert.match(out!, /Encounter records completeness.*failing.*score:82\/95/s);
@@ -359,8 +359,8 @@ describe('chat routes + buildOrgSnapshot', () => {
     // snapshot didn't include data connections at all. The section
     // must name the connection AND every system it's linked to
     // via connectionSystemLinks so the AI can answer join questions.
-    it('lists data connections with their linked systems', () => {
-      const out = buildOrgSnapshot(orgId);
+    it('lists data connections with their linked systems', async () => {
+      const out = await buildOrgSnapshot(orgId);
       assert.match(out!, /## DATA CONNECTIONS/);
       assert.match(out!, /Systems\.csv \(file storage, status:connected, systems:Epic EHR, Systems_2\)/);
     });
@@ -410,8 +410,8 @@ describe('chat routes + buildOrgSnapshot', () => {
   });
 
   describe('buildEntityIndex', () => {
-    it('emits entries for activities, processes, systems, assets and people', () => {
-      const idx = buildEntityIndex(orgId);
+    it('emits entries for activities, processes, systems, assets and people', async () => {
+      const idx = await buildEntityIndex(orgId);
       const names = idx.map((r: any) => r.name);
       assert.ok(names.includes('Look up patient record'), 'activity should appear');
       assert.ok(names.includes('Schedule appointment'), 'process should appear');
@@ -419,15 +419,15 @@ describe('chat routes + buildOrgSnapshot', () => {
       assert.ok(names.includes('Patient encounter records'), 'asset should appear');
       assert.ok(names.includes('Unused billing ledger'), 'orphan asset should appear');
     });
-    it('sorts longest name first so the client matches "Customer Billing Master" before "Customer"', () => {
-      const idx = buildEntityIndex(orgId);
+    it('sorts longest name first so the client matches "Customer Billing Master" before "Customer"', async () => {
+      const idx = await buildEntityIndex(orgId);
       for (let i = 1; i < idx.length; i++) {
         assert.ok(idx[i - 1].name.length >= idx[i].name.length,
           `entries should be sorted longest-first; got ${idx[i - 1].name} before ${idx[i].name}`);
       }
     });
-    it('emits a url that points back to the entity\'s page', () => {
-      const idx = buildEntityIndex(orgId);
+    it('emits a url that points back to the entity\'s page', async () => {
+      const idx = await buildEntityIndex(orgId);
       const sys = idx.find((r: any) => r.name === 'Epic EHR');
       assert.ok(sys);
       assert.match(sys!.url, /^\/systems\?id=/);
@@ -436,8 +436,8 @@ describe('chat routes + buildOrgSnapshot', () => {
       const act = idx.find((r: any) => r.name === 'Look up patient record');
       assert.match(act!.url, /^\/processes\?node=/);
     });
-    it('returns an empty list when orgId is empty', () => {
-      assert.deepStrictEqual(buildEntityIndex(''), []);
+    it('returns an empty list when orgId is empty', async () => {
+      assert.deepStrictEqual(await buildEntityIndex(''), []);
     });
   });
 

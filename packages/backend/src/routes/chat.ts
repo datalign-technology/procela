@@ -6,7 +6,6 @@ import { processNodes, suggestionDismissals } from './process-catalog';
 import { dataAssets } from './data-assets';
 import { systems } from './systems';
 import { mappings } from './mappings';
-import { organizations } from './organizations';
 import { people } from './people';
 import { dataDomains } from './data-domains';
 import { glossaryTerms } from './business-glossary';
@@ -15,7 +14,38 @@ import { governanceIssues } from './governance-issues';
 import { governanceTasks } from './governance-tasks';
 import { dataQualityRules } from './data-quality';
 import { connections, connectionSystemLinks } from './connections';
-import { filterByOrgScope } from '../lib/org-scope';
+import { filterByOrgScope, getCachedOrgList } from '../lib/org-scope';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getGlossaryTermsRepository } from '../db/glossary-terms.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
+import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
+import { getConnectionsRepository } from '../db/connections.repo';
+import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
+import { getSuggestionDismissalsRepository } from '../db/suggestion-dismissals.repo';
+
+// Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays.
+// The AI snapshot is read-only; each request loads a fresh catalog picture.
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const systemsRepo = getSystemsRepository(systems);
+const mappingsRepo = getMappingsRepository(mappings);
+const peopleRepo = getPeopleRepository(people);
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const glossaryTermsRepo = getGlossaryTermsRepository(glossaryTerms);
+const governancePoliciesRepo = getGovernancePoliciesRepository(governancePolicies);
+const governanceIssuesRepo = getGovernanceIssuesRepository(governanceIssues);
+const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
+const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
+const connectionsRepo = getConnectionsRepository(connections);
+const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
+const suggestionDismissalsRepo = getSuggestionDismissalsRepository(suggestionDismissals);
 
 const router = Router();
 
@@ -30,10 +60,23 @@ const MAX_TREE_LINES = 150;
 const MAX_ASSET_LINES = 100;
 const MAX_MAPPING_LINES = 120;
 
-export function buildOrgSnapshot(orgId: string): string | undefined {
+export async function buildOrgSnapshot(orgId: string): Promise<string | undefined> {
   if (!orgId) return undefined;
 
-  const org = organizations.find((o) => o.id === orgId);
+  // Load every store (Postgres or JSON) once, then filter in memory.
+  const [
+    allNodes, allAssets, allSystems, allMappings, allPeople, allDomains,
+    allTerms, allPolicies, allIssues, allTasks, allDqRules, allConns,
+    allSysLinks, allDismissals,
+  ] = await Promise.all([
+    processNodesRepo.list(), dataAssetsRepo.list(), systemsRepo.list(),
+    mappingsRepo.list(), peopleRepo.list(), dataDomainsRepo.list(),
+    glossaryTermsRepo.list(), governancePoliciesRepo.list(), governanceIssuesRepo.list(),
+    governanceTasksRepo.list(), dataQualityRulesRepo.list(), connectionsRepo.list(),
+    connectionSystemLinksRepo.list(), suggestionDismissalsRepo.list(),
+  ]);
+
+  const org = getCachedOrgList().find((o) => o.id === orgId);
   // Use the same visibility rules the rest of the app enforces:
   // walk up to ancestors (a division sees company-level policies,
   // systems, assets) AND down to descendants (a company user sees
@@ -45,18 +88,18 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   // Utilities parent). filterByOrgScope is the shared helper every
   // scoped route uses; keeping the chat snapshot on that same
   // filter is the only way the two stay in sync.
-  const nodes = filterByOrgScope(processNodes, orgId);
-  const assets = filterByOrgScope(dataAssets, orgId);
-  const sys = filterByOrgScope(systems, orgId);
-  const maps = filterByOrgScope(mappings, orgId);
-  const ppl = filterByOrgScope(people, orgId);
-  const domains = filterByOrgScope(dataDomains, orgId);
-  const terms = filterByOrgScope(glossaryTerms, orgId);
-  const policies = filterByOrgScope(governancePolicies, orgId);
-  const issues = filterByOrgScope(governanceIssues, orgId);
-  const tasks = filterByOrgScope(governanceTasks, orgId);
-  const dqRules = filterByOrgScope(dataQualityRules, orgId);
-  const conns = filterByOrgScope(connections, orgId);
+  const nodes = filterByOrgScope(allNodes, orgId);
+  const assets = filterByOrgScope(allAssets, orgId);
+  const sys = filterByOrgScope(allSystems, orgId);
+  const maps = filterByOrgScope(allMappings, orgId);
+  const ppl = filterByOrgScope(allPeople, orgId);
+  const domains = filterByOrgScope(allDomains, orgId);
+  const terms = filterByOrgScope(allTerms, orgId);
+  const policies = filterByOrgScope(allPolicies, orgId);
+  const issues = filterByOrgScope(allIssues, orgId);
+  const tasks = filterByOrgScope(allTasks, orgId);
+  const dqRules = filterByOrgScope(allDqRules, orgId);
+  const conns = filterByOrgScope(allConns, orgId);
 
   if (nodes.length === 0 && assets.length === 0 && sys.length === 0) return undefined;
 
@@ -111,7 +154,7 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   if (conns.length > 0) {
     lines.push('', '## DATA CONNECTIONS');
     conns.slice(0, MAX_CONNECTIONS).forEach((c) => {
-      const linkedSysIds = connectionSystemLinks
+      const linkedSysIds = allSysLinks
         .filter((l) => l.connectionId === c.id)
         .map((l) => l.systemId);
       const linkedNames = linkedSysIds
@@ -206,7 +249,7 @@ export function buildOrgSnapshot(orgId: string): string | undefined {
   // told Procela to stop suggesting. Informational — useful when the
   // assistant is asked "why isn't X being suggested for Y" because
   // the answer is often "you dismissed it".
-  const dismissalsInOrg = (suggestionDismissals || []).filter((d) => d.orgId === orgId).length;
+  const dismissalsInOrg = (allDismissals || []).filter((d) => d.orgId === orgId).length;
   lines.push('', '## KNOWN GAPS');
   lines.push(`  - Activities with no data mapped (${unmappedActivities.length}): `
     + (unmappedActivities.slice(0, 25).map((n) => n.name).join('; ') || 'none'));
@@ -342,10 +385,13 @@ export interface EntityIndexEntry {
   kind: 'activity' | 'process' | 'system' | 'asset' | 'person';
   url: string;
 }
-export function buildEntityIndex(orgId: string): EntityIndexEntry[] {
+export async function buildEntityIndex(orgId: string): Promise<EntityIndexEntry[]> {
   if (!orgId) return [];
+  const [allNodes, allSystems, allAssets, allPeople] = await Promise.all([
+    processNodesRepo.list(), systemsRepo.list(), dataAssetsRepo.list(), peopleRepo.list(),
+  ]);
   const rows: EntityIndexEntry[] = [];
-  for (const n of processNodes) {
+  for (const n of allNodes) {
     if (n.orgId !== orgId && !n.orgIds?.includes(orgId)) continue;
     if (n.level === 'ACTIVITY') {
       rows.push({ name: n.name, kind: 'activity', url: `/processes?node=${n.id}` });
@@ -353,15 +399,15 @@ export function buildEntityIndex(orgId: string): EntityIndexEntry[] {
       rows.push({ name: n.name, kind: 'process', url: `/processes?node=${n.id}` });
     }
   }
-  for (const s of systems) {
+  for (const s of allSystems) {
     if (s.orgId !== orgId) continue;
     rows.push({ name: s.name, kind: 'system', url: `/systems?id=${s.id}` });
   }
-  for (const a of dataAssets) {
+  for (const a of allAssets) {
     if (a.orgId !== orgId) continue;
     rows.push({ name: a.name, kind: 'asset', url: `/data-assets?id=${a.id}` });
   }
-  for (const p of people) {
+  for (const p of allPeople) {
     if (!p.orgIds?.includes(orgId)) continue;
     rows.push({ name: p.name, kind: 'person', url: `/people?id=${p.id}` });
   }
@@ -416,16 +462,16 @@ router.post('/', async (req: Request, res: Response) => {
     }));
 
     const orgId: string = orgContext?.orgId ?? '';
-    const org = orgId ? organizations.find((o) => o.id === orgId) : undefined;
+    const org = orgId ? getCachedOrgList().find((o) => o.id === orgId) : undefined;
     const context = {
       orgId,
       orgName: org?.name ?? orgContext?.orgName ?? 'Unknown',
       industry: org?.industry || orgContext?.industry || 'General',
     };
 
-    const snapshot = buildOrgSnapshot(orgId);
+    const snapshot = await buildOrgSnapshot(orgId);
     const reply = await aiService.chat(chatMessages, context, snapshot);
-    const entities = buildEntityIndex(orgId);
+    const entities = await buildEntityIndex(orgId);
 
     res.json({ success: true, data: { reply, entities } });
   } catch (err) {
@@ -493,13 +539,13 @@ router.post('/stream', async (req: Request, res: Response) => {
       content: m.content,
     }));
     const orgId: string = orgContext?.orgId ?? '';
-    const org = orgId ? organizations.find((o) => o.id === orgId) : undefined;
+    const org = orgId ? getCachedOrgList().find((o) => o.id === orgId) : undefined;
     const context = {
       orgId,
       orgName: org?.name ?? orgContext?.orgName ?? 'Unknown',
       industry: org?.industry || orgContext?.industry || 'General',
     };
-    const snapshot = buildOrgSnapshot(orgId);
+    const snapshot = await buildOrgSnapshot(orgId);
 
     for await (const chunk of aiService.chatStream(chatMessages, context, snapshot)) {
       send('chunk', { text: chunk });
@@ -507,7 +553,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     // Entity index lands once at the end of the stream. The frontend
     // uses it to convert entity-name mentions in the final reply into
     // clickable links pointing back at the catalog.
-    send('entities', buildEntityIndex(orgId));
+    send('entities', await buildEntityIndex(orgId));
     send('done', { ok: true });
     res.end();
   } catch (err: any) {
