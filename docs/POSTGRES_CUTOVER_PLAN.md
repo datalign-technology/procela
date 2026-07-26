@@ -781,6 +781,22 @@ data-carrying cutover, or take the fresh-org path.
     it's a scheduler concern (like `createNotification`), left for a focused
     follow-up, so the store stays flagged until then.
 
+  - **9b.22 (done) — governance-issues.ts (CRUD).** Fourth of the cluster; same
+    shape as governance-tasks. Converted the HTTP CRUD reads: summary/list
+    `filterByOrgScope(governanceIssues, …)` → `await repo.list()`; `:id`/PUT/
+    DELETE `.find` → `repo.get`; and `enrichIssue` parameterised onto repo-loaded
+    `people`/`dataDomains`/`dataAssets` lists (lazy repos) for reporter/assignee/
+    domain/asset names. Verified against a **local Postgres** (15/15): create
+    with reporter+domain+asset enriched from PG, list + severity/domain filters
+    + org scope, a PG-only "ghost" issue surfacing, summary, `:id`, terminal
+    status transition setting `closedAt`, delete. tsc clean, full suite green
+    (890). **Deferred (documented):** the two exported sync auto-issue helpers
+    `syncDataQualityIssueForRule` (called by the DQ engine/scheduler) and
+    `openAgentOwnershipIssue` (called by the agents route) still
+    `governanceIssues.find`/`.push` + `saveStore` the array — same sync-helper +
+    caller/test coupling as `sweepOverdueTasks`; deferred to a focused
+    follow-up, so the store stays flagged.
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

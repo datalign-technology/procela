@@ -10,6 +10,9 @@ import { dataAssets } from './data-assets';
 import { createNotification } from './notifications';
 import logger from '../lib/logger';
 import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
 
 const ISSUE_TYPES = [
   'METADATA',
@@ -246,6 +249,14 @@ registerStore('governanceIssues', governanceIssues);
 
 const governanceIssuesRepo = getGovernanceIssuesRepository(governanceIssues);
 
+// Foreign stores for enrichment — lazy repos (cycle-safe).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _dataDomainsRepo: ReturnType<typeof getDataDomainsRepository> | null = null;
+const dataDomainsRepo = () => (_dataDomainsRepo ??= getDataDomainsRepository(dataDomains));
+let _dataAssetsRepo: ReturnType<typeof getDataAssetsRepository> | null = null;
+const dataAssetsRepo = () => (_dataAssetsRepo ??= getDataAssetsRepository(dataAssets));
+
 // Request-body schemas at the API boundary. See governance-tasks
 // for the rationale.
 const createIssueBodySchema = z.object({
@@ -275,11 +286,16 @@ const updateIssueBodySchema = z.object({
   resolutionSummary: z.string().nullable().optional(),
 });
 
-function enrichIssue(issue: StoredGovernanceIssue): StoredGovernanceIssue & { reporterName: string | null; assigneeName: string | null; domainName: string | null; dataAssetName: string | null } {
-  const reporter = issue.reportedBy ? people.find((p) => p.id === issue.reportedBy) : null;
-  const assignee = issue.assignedTo ? people.find((p) => p.id === issue.assignedTo) : null;
-  const domain = issue.domainId ? dataDomains.find((d) => d.id === issue.domainId) : null;
-  const asset = issue.dataAssetId ? dataAssets.find((a) => a.id === issue.dataAssetId) : null;
+function enrichIssue(
+  issue: StoredGovernanceIssue,
+  allPeople: typeof people,
+  allDomains: typeof dataDomains,
+  allAssets: typeof dataAssets,
+): StoredGovernanceIssue & { reporterName: string | null; assigneeName: string | null; domainName: string | null; dataAssetName: string | null } {
+  const reporter = issue.reportedBy ? allPeople.find((p) => p.id === issue.reportedBy) : null;
+  const assignee = issue.assignedTo ? allPeople.find((p) => p.id === issue.assignedTo) : null;
+  const domain = issue.domainId ? allDomains.find((d) => d.id === issue.domainId) : null;
+  const asset = issue.dataAssetId ? allAssets.find((a) => a.id === issue.dataAssetId) : null;
   return {
     ...issue,
     reporterName: reporter?.name || null,
@@ -294,7 +310,7 @@ const router = Router();
 /** GET /api/v1/governance-issues/summary */
 router.get('/summary', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = filterByOrgScope(governanceIssues, orgId as string | undefined);
+  const filtered = filterByOrgScope(await governanceIssuesRepo.list(), orgId as string | undefined);
 
   const byStatus: Record<string, number> = {};
   const bySeverity: Record<string, number> = {};
@@ -319,7 +335,7 @@ router.get('/summary', async (req: Request, res: Response) => {
 /** GET /api/v1/governance-issues */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId, status, severity, issueType, assignedTo, domainId } = req.query;
-  let filtered = filterByOrgScope(governanceIssues, orgId as string | undefined);
+  let filtered = filterByOrgScope(await governanceIssuesRepo.list(), orgId as string | undefined);
 
   if (status) filtered = filtered.filter((i) => i.status === status);
   if (severity) filtered = filtered.filter((i) => i.severity === severity);
@@ -327,14 +343,16 @@ router.get('/', async (req: Request, res: Response) => {
   if (assignedTo) filtered = filtered.filter((i) => i.assignedTo === assignedTo);
   if (domainId) filtered = filtered.filter((i) => i.domainId === domainId);
 
-  res.json({ success: true, data: filtered.map(enrichIssue) });
+  const [allPeople, allDomains, allAssets] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list(), dataAssetsRepo().list()]);
+  res.json({ success: true, data: filtered.map((i) => enrichIssue(i, allPeople, allDomains, allAssets)) });
 });
 
 /** GET /api/v1/governance-issues/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const issue = governanceIssues.find((i) => i.id === req.params.id);
+  const issue = await governanceIssuesRepo.get(String(req.params.id));
   if (!issue) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
-  res.json({ success: true, data: enrichIssue(issue) });
+  const [allPeople, allDomains, allAssets] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list(), dataAssetsRepo().list()]);
+  res.json({ success: true, data: enrichIssue(issue, allPeople, allDomains, allAssets) });
 });
 
 /** POST /api/v1/governance-issues */
@@ -371,12 +389,13 @@ router.post('/', async (req: Request, res: Response) => {
   await governanceIssuesRepo.create(issue);
   auditService.log(issue.orgId, null, 'GovernanceIssue', issue.id, 'CREATE', null, issue);
   logger.info({ issueId: issue.id, title: issue.title, issueType: issue.issueType }, 'Created governance issue');
-  res.status(201).json({ success: true, data: enrichIssue(issue) });
+  const [allPeople, allDomains, allAssets] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list(), dataAssetsRepo().list()]);
+  res.status(201).json({ success: true, data: enrichIssue(issue, allPeople, allDomains, allAssets) });
 });
 
 /** PUT /api/v1/governance-issues/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const issue = governanceIssues.find((i) => i.id === req.params.id);
+  const issue = await governanceIssuesRepo.get(String(req.params.id));
   if (!issue) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
 
   const parsed = updateIssueBodySchema.safeParse(req.body);
@@ -416,12 +435,13 @@ router.put('/:id', async (req: Request, res: Response) => {
   await governanceIssuesRepo.update(issue.id, issue);
   auditService.log(issue.orgId, null, 'GovernanceIssue', issue.id, 'UPDATE', before, issue);
   logger.info({ issueId: issue.id, title: issue.title }, 'Updated governance issue');
-  res.json({ success: true, data: enrichIssue(issue) });
+  const [allPeople, allDomains, allAssets] = await Promise.all([peopleRepo().list(), dataDomainsRepo().list(), dataAssetsRepo().list()]);
+  res.json({ success: true, data: enrichIssue(issue, allPeople, allDomains, allAssets) });
 });
 
 /** DELETE /api/v1/governance-issues/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = governanceIssues.find((i) => i.id === req.params.id);
+  const removed = await governanceIssuesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance issue not found' }); return; }
   auditService.log(removed.orgId, null, 'GovernanceIssue', removed.id, 'DELETE', removed, null);
   await governanceIssuesRepo.delete(removed.id);
