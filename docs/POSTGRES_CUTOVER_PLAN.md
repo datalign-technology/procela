@@ -1027,6 +1027,19 @@ data-carrying cutover, or take the fresh-org path.
     name, and the PG mapping edge. tsc clean, full suite green (890;
     asset/system/people-suggestion + data-graph-routes + process-catalog-routes
     33/33).
+  - **9b.34 (done) — data-quality `columnName` lookup (9b.28 gap close-out).**
+    The one foreign read deferred when data-quality was converted in 9b.28: the
+    `POST /` create handler resolved a column-scoped rule's display `columnName`
+    with an inline `require('./data-assets').dataAssetColumns.find(...)`, so in
+    Postgres mode a column-scoped rule was stored with a blank column name.
+    Added a `dataAssetColumnsRepo` (the `data-asset-columns.repo` already
+    existed) and hoisted the lookup to `await dataAssetColumnsRepo.get(columnId)`
+    before the rule object is built. Verified against a **local Postgres** (3/3):
+    creating a rule with a `columnId` resolves `columnName` from the PG
+    `data_asset_columns` table and persists it. tsc clean, full suite green
+    (890). This closes the last small foreign-read gap in the data-quality
+    route. **Index autosave** needed no work — the JSON autosave timer and
+    shutdown flush in `index.ts` are already gated on `!hasDatabase()`.
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in

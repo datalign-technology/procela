@@ -9,7 +9,8 @@ import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getDataAssetBindingsRepository } from '../db/data-asset-bindings.repo';
-import { dataAssets, dataAssetBindings, StoredDataAsset, StoredDataAssetBinding } from './data-assets';
+import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
+import { dataAssets, dataAssetBindings, dataAssetColumns, StoredDataAsset, StoredDataAssetBinding } from './data-assets';
 import { connections, ConnectionProfile } from './connections';
 import { syncDataQualityIssueForRule } from './governance-issues';
 import {
@@ -135,6 +136,7 @@ const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
 const connectionsRepo = getConnectionsRepository(connections);
 const dataAssetBindingsRepo = getDataAssetBindingsRepository(dataAssetBindings);
+const dataAssetColumnsRepo = getDataAssetColumnsRepository(dataAssetColumns);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const QUALITY_DIMENSIONS = ['COMPLETENESS', 'ACCURACY', 'TIMELINESS', 'CONSISTENCY', 'UNIQUENESS', 'VALIDITY'];
@@ -401,18 +403,20 @@ router.post('/', async (req: Request, res: Response) => {
   const ownerAsset = await dataAssetsRepo.get(dataAssetId);
   const resolvedOrgId = orgId || ownerAsset?.orgId || DEV_ORG_ID;
 
+  // Resolve column name for display convenience (Postgres or JSON).
+  let columnName: string | undefined;
+  if (columnId) {
+    const col = await dataAssetColumnsRepo.get(String(columnId));
+    if (col) columnName = col.columnName;
+  }
+
   const now = new Date().toISOString();
   const rule: DataQualityRule = {
     id: uuid(),
     orgId: resolvedOrgId,
     dataAssetId,
     ...(columnId ? { columnId } : {}),
-    ...(columnId ? (() => {
-      // Resolve column name for display convenience.
-      const { dataAssetColumns } = require('./data-assets');
-      const col = dataAssetColumns.find((c: any) => c.id === columnId);
-      return col ? { columnName: col.columnName } : {};
-    })() : {}),
+    ...(columnName ? { columnName } : {}),
     dimension: validDimension,
     name,
     description: description || '',
