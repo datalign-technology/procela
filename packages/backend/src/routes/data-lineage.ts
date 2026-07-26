@@ -1,15 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
 import logger from '../lib/logger';
 import { systems } from './systems';
 import { dataAssets } from './data-assets';
-import { dataQualityRules } from './data-quality';
 import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
 import { getAssetLineageEdgesRepository } from '../db/asset-lineage-edges.repo';
 import { getSystemsRepository } from '../db/systems.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
+import { getDbtAssetMappingsRepository, getDbtTestMappingsRepository } from '../db/dbt-mappings.repo';
 
 export interface DataLineageLink {
   id: string;
@@ -99,6 +100,16 @@ interface DbtTestMapping {
 export const dbtTestMappings: DbtTestMapping[] =
   loadStore<DbtTestMapping>('dbtTestMappings');
 registerStore('dbtTestMappings', dbtTestMappings);
+
+// Repos for the dbt-import reconcile. The mapping repos are org-keyed
+// (composite key, not {id}); dataQualityRules is lazy-required to avoid the
+// data-lineage ↔ data-quality import cycle.
+const dbtAssetMappingsRepo = getDbtAssetMappingsRepository(dbtAssetMappings);
+const dbtTestMappingsRepo = getDbtTestMappingsRepository(dbtTestMappings);
+let _dataQualityRulesRepo: ReturnType<typeof getDataQualityRulesRepository> | null = null;
+const dataQualityRulesRepo = () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  (_dataQualityRulesRepo ??= getDataQualityRulesRepository(require('./data-quality').dataQualityRules));
 
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
@@ -226,11 +237,14 @@ router.get('/visualization', async (req: Request, res: Response) => {
  *  matches 'asset-edges' as an :id and returns a 404. */
 router.get('/asset-edges', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  const filtered = orgId ? assetLineageEdges.filter((e) => e.orgId === orgId) : assetLineageEdges;
+  const [allEdges, allAssets] = await Promise.all([
+    assetLineageEdgesRepo.list(), dataAssetsRepo().list(),
+  ]);
+  const filtered = orgId ? allEdges.filter((e) => e.orgId === orgId) : allEdges;
   const now = Date.now();
   const enriched = filtered.map((e) => {
-    const src = dataAssets.find((a) => a.id === e.sourceAssetId);
-    const tgt = dataAssets.find((a) => a.id === e.targetAssetId);
+    const src = allAssets.find((a) => a.id === e.sourceAssetId);
+    const tgt = allAssets.find((a) => a.id === e.targetAssetId);
     const ageMs = now - new Date(e.lastSeenAt).getTime();
     const isStale = e.source === 'dbt' && ageMs > STALE_AFTER_MS;
     return {
@@ -480,23 +494,35 @@ async function reconcileManifestInner(
   let assetsMatched = 0;
   const now = new Date().toISOString();
 
+  // Load the stores this reconcile fans out into (Postgres or JSON). The
+  // mapping repos are already org-scoped; dataAssets / dataQualityRules
+  // are loaded whole and kept as mutable working copies so rows created
+  // earlier in the loop are visible to later iterations (exact-name match,
+  // rule dedup) before they've been re-read from the store.
+  const [allAssets, assetMappings, testMappings, allRules] = await Promise.all([
+    dataAssetsRepo().list(),
+    dbtAssetMappingsRepo.list(effectiveOrgId),
+    dbtTestMappingsRepo.list(effectiveOrgId),
+    dataQualityRulesRepo().list(),
+  ]);
+
   for (const node of flat) {
     const uid = node.unique_id!;
     const friendlyName = friendlyAssetName(node);
 
     // a) Prior dbt mapping
-    const existingMapping = dbtAssetMappings.find(
+    const existingMapping = assetMappings.find(
       (m) => m.dbtUniqueId === uid && m.orgId === effectiveOrgId,
     );
     let assetId: string | null = null;
-    if (existingMapping && dataAssets.find((a) => a.id === existingMapping.assetId)) {
+    if (existingMapping && allAssets.find((a) => a.id === existingMapping.assetId)) {
       assetId = existingMapping.assetId;
       assetsMatched++;
     }
 
     // b) Exact-name match against existing org assets
     if (!assetId && friendlyName) {
-      const match = dataAssets.find(
+      const match = allAssets.find(
         (a) => a.orgId === effectiveOrgId
           && a.name.trim().toLowerCase() === friendlyName.trim().toLowerCase(),
       );
@@ -509,7 +535,7 @@ async function reconcileManifestInner(
     // c) Create new asset
     if (!assetId) {
       const id = uuid();
-      dataAssets.push({
+      const asset = {
         id,
         orgId: effectiveOrgId,
         name: friendlyName || uid,
@@ -522,16 +548,21 @@ async function reconcileManifestInner(
         origin: 'DISCOVERED',
         createdAt: now,
         updatedAt: now,
-      } as any);
+      } as any;
+      allAssets.push(asset);           // visible to later name-match iterations
+      await dataAssetsRepo().create(asset);
       assetId = id;
       assetsCreated++;
     }
 
     // Persist the mapping so this node finds the same asset next time.
     if (!existingMapping) {
-      dbtAssetMappings.push({ dbtUniqueId: uid, assetId, orgId: effectiveOrgId });
+      const mapping = { dbtUniqueId: uid, assetId, orgId: effectiveOrgId };
+      assetMappings.push(mapping);
+      await dbtAssetMappingsRepo.upsert(mapping);
     } else if (existingMapping.assetId !== assetId) {
       existingMapping.assetId = assetId;  // mapping repaired (e.g. matched to a new asset after the old was deleted)
+      await dbtAssetMappingsRepo.upsert(existingMapping);
     }
     uidToAssetId.set(uid, assetId);
   }
@@ -545,6 +576,15 @@ async function reconcileManifestInner(
   let edgesCreated = 0;
   let edgesTouched = 0;
 
+  // Load the org's existing dbt edges once (Postgres or JSON) — the
+  // per-edge lookup and the prune below both read this snapshot instead of
+  // the module array (which is empty in Postgres mode). Newly-created edges
+  // don't need to be added here: within one manifest each sourceRef is
+  // unique (declaredKeys dedups), and the prune only touches pre-existing
+  // edges absent from declaredKeys.
+  const existingDbtEdges = (await assetLineageEdgesRepo.list())
+    .filter((e) => e.orgId === effectiveOrgId && e.source === 'dbt');
+
   for (const node of flat) {
     const uid = node.unique_id!;
     const targetAssetId = uidToAssetId.get(uid);
@@ -555,11 +595,7 @@ async function reconcileManifestInner(
       if (!sourceAssetId || sourceAssetId === targetAssetId) continue;
       const key = `${uid}->${depUid}`;
       declaredKeys.add(key);
-      const existing = assetLineageEdges.find(
-        (e) => e.orgId === effectiveOrgId
-          && e.source === 'dbt'
-          && e.sourceRef === key,
-      );
+      const existing = existingDbtEdges.find((e) => e.sourceRef === key);
       if (existing) {
         existing.lastSeenAt = now;
         // Repair if the dbt mapping moved the endpoint to a different asset.
@@ -592,9 +628,7 @@ async function reconcileManifestInner(
   // (delete splices in place) but relying on that would make future
   // Postgres divergence surprising. Materialise up front.
   const edgesToDelete: string[] = [];
-  for (const e of assetLineageEdges) {
-    if (e.orgId !== effectiveOrgId) continue;
-    if (e.source !== 'dbt') continue;
+  for (const e of existingDbtEdges) {
     if (!e.sourceRef || !declaredKeys.has(e.sourceRef)) {
       edgesToDelete.push(e.id);
     }
@@ -640,11 +674,11 @@ async function reconcileManifestInner(
     const ruleName = `${friendlyTestName} (dbt)`;
     const description = `Auto-derived from dbt test \`${node.name || uid}\`. Edit to refine.`;
 
-    const existing = dbtTestMappings.find(
+    const existing = testMappings.find(
       (m) => m.dbtUniqueId === uid && m.orgId === effectiveOrgId,
     );
     let rule = existing
-      ? dataQualityRules.find((r) => r.id === existing.ruleId)
+      ? allRules.find((r) => r.id === existing.ruleId)
       : undefined;
 
     if (rule) {
@@ -653,10 +687,15 @@ async function reconcileManifestInner(
       rule.dataAssetId = targetAssetId;
       rule.columnName = columnName ?? rule.columnName;
       rule.updatedAt = now;
+      await dataQualityRulesRepo().update(rule.id, {
+        dataAssetId: rule.dataAssetId,
+        columnName: rule.columnName,
+        updatedAt: rule.updatedAt,
+      });
       dqRulesTouched++;
     } else {
       const ruleId = uuid();
-      dataQualityRules.push({
+      const newRule = {
         id: ruleId,
         orgId: effectiveOrgId,
         dataAssetId: targetAssetId,
@@ -667,14 +706,18 @@ async function reconcileManifestInner(
         threshold: 100,
         currentScore: 0,
         weight: 1,
-        status: 'NOT_MEASURED',
+        status: 'NOT_MEASURED' as const,
         lastMeasured: null,
         ruleType: mapping.ruleType,
         templateId: `dbt:${testName}`,
         createdAt: now,
         updatedAt: now,
-      });
-      dbtTestMappings.push({ dbtUniqueId: uid, ruleId, orgId: effectiveOrgId });
+      };
+      allRules.push(newRule);
+      await dataQualityRulesRepo().create(newRule);
+      const testMapping = { dbtUniqueId: uid, ruleId, orgId: effectiveOrgId };
+      testMappings.push(testMapping);
+      await dbtTestMappingsRepo.upsert(testMapping);
       dqRulesCreated++;
     }
   }
@@ -683,23 +726,19 @@ async function reconcileManifestInner(
   // Only rules tied to a mapping in dbtTestMappings (so user-created
   // rules are never touched).
   let dqRulesRemoved = 0;
-  for (let i = dbtTestMappings.length - 1; i >= 0; i--) {
-    const m = dbtTestMappings[i];
-    if (m.orgId !== effectiveOrgId) continue;
-    if (declaredTestUids.has(m.dbtUniqueId)) continue;
-    const ruleIdx = dataQualityRules.findIndex((r) => r.id === m.ruleId);
-    if (ruleIdx >= 0) {
-      dataQualityRules.splice(ruleIdx, 1);
-      dqRulesRemoved++;
-    }
-    dbtTestMappings.splice(i, 1);
+  // Snapshot the stale mappings first, then delete through the repos —
+  // the rule delete and the mapping remove each persist on their own.
+  const staleTestMappings = testMappings.filter(
+    (m) => m.orgId === effectiveOrgId && !declaredTestUids.has(m.dbtUniqueId),
+  );
+  for (const m of staleTestMappings) {
+    if (await dataQualityRulesRepo().delete(m.ruleId)) dqRulesRemoved++;
+    await dbtTestMappingsRepo.remove(effectiveOrgId, m.dbtUniqueId);
   }
-
-  saveStore('dataAssets', dataAssets);
-  saveStore('dbtAssetMappings', dbtAssetMappings);
-  // assetLineageEdges is written per-mutation via assetLineageEdgesRepo.
-  saveStore('dataQualityRules', dataQualityRules);
-  saveStore('dbtTestMappings', dbtTestMappings);
+  // All four stores are persisted per-mutation through their repositories
+  // (dataAssets / dataQualityRules via create+update+delete, the mapping
+  // side-tables via upsert+remove, edges via assetLineageEdgesRepo). No
+  // whole-store saveStore needed.
 
   auditService.log(
     effectiveOrgId,
