@@ -57,10 +57,10 @@ function userName(userId: string | null): string | null {
  *    userId       - scope to actions taken by one person
  *    limit        - cap result size (default 100)
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId, entityType, entityId, userId, limit } = req.query as Record<string, string | undefined>;
 
-  let entries = auditService.getAll(orgId);
+  let entries = await auditService.getAll(orgId);
 
   if (entityType && entityId) {
     entries = entries.filter((e) =>
@@ -97,9 +97,9 @@ router.get('/', (req: Request, res: Response) => {
  *  userId). No limit by default — pass ?limit=N if you want one. The
  *  enriched entityName / userName columns are included so the CSV is
  *  human-readable without joining against the catalog. */
-router.get('/export.csv', (req: Request, res: Response) => {
+router.get('/export.csv', async (req: Request, res: Response) => {
   const { orgId, entityType, entityId, userId, limit } = req.query as Record<string, string | undefined>;
-  let entries = auditService.getAll(orgId);
+  let entries = await auditService.getAll(orgId);
   if (entityType && entityId) {
     entries = entries.filter((e) =>
       e.entityType.toLowerCase() === entityType.toLowerCase() && e.entityId === entityId);
@@ -141,8 +141,8 @@ router.get('/export.csv', (req: Request, res: Response) => {
  *  so an admin can investigate. Legacy entries written before the
  *  chain was added break at position 0 (no hash to verify); that's a
  *  one-time break and doesn't recur once the log rolls forward. */
-router.get('/verify', (_req: Request, res: Response) => {
-  const result = auditService.verifyChain();
+router.get('/verify', async (_req: Request, res: Response) => {
+  const result = await auditService.verifyChain();
   res.json({ success: true, data: result });
 });
 

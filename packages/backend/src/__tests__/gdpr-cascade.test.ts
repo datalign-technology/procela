@@ -55,7 +55,7 @@ describe('gdpr.service — erasePersonReferences', () => {
     replaceArray(auditLogs, []);
   });
 
-  it('scrubs single-ref fields (ownerId, stewardId) for the target person', () => {
+  it('scrubs single-ref fields (ownerId, stewardId) for the target person', async () => {
     const TARGET = 'person-to-forget';
     writeFixture('dataAssets', [
       { id: 'a1', name: 'Customer Master', ownerId: TARGET, stewardId: 'someone-else' },
@@ -63,7 +63,7 @@ describe('gdpr.service — erasePersonReferences', () => {
       { id: 'a3', name: 'Unrelated',       ownerId: 'untouched', stewardId: 'untouched' },
     ]);
 
-    const report = erasePersonReferences(TARGET);
+    const report = await erasePersonReferences(TARGET);
     assert.ok(report.storesScanned >= 1);
     assert.ok(report.rowsModified >= 2);
 
@@ -76,7 +76,7 @@ describe('gdpr.service — erasePersonReferences', () => {
     assert.strictEqual(after[2].stewardId, 'untouched');
   });
 
-  it('removes the target from multi-ref array fields (stewardIds, memberIds)', () => {
+  it('removes the target from multi-ref array fields (stewardIds, memberIds)', async () => {
     const TARGET = 'person-to-forget';
     writeFixture('dataDomains', [
       { id: 'd1', name: 'Customer', stewardIds: [TARGET, 'keep-1', 'keep-2'] },
@@ -86,7 +86,7 @@ describe('gdpr.service — erasePersonReferences', () => {
       { id: 'g1', name: 'Council', memberIds: ['keep-a', TARGET, 'keep-b'] },
     ]);
 
-    erasePersonReferences(TARGET);
+    await erasePersonReferences(TARGET);
 
     const domains = readFixture<{ id: string; stewardIds: string[] }>('dataDomains');
     assert.deepStrictEqual(domains[0].stewardIds, ['keep-1', 'keep-2']);
@@ -96,7 +96,7 @@ describe('gdpr.service — erasePersonReferences', () => {
     assert.deepStrictEqual(groups[0].memberIds, ['keep-a', 'keep-b']);
   });
 
-  it('removes rows whose authorId IS the target (authored comments)', () => {
+  it('removes rows whose authorId IS the target (authored comments)', async () => {
     const TARGET = 'person-to-forget';
     writeFixture('comments', [
       { id: 'c1', authorId: TARGET,     body: 'mine' },
@@ -104,14 +104,14 @@ describe('gdpr.service — erasePersonReferences', () => {
       { id: 'c3', authorId: TARGET,     body: 'mine again' },
     ]);
 
-    const report = erasePersonReferences(TARGET);
+    const report = await erasePersonReferences(TARGET);
     assert.ok(report.rowsRemoved >= 2);
 
     const after = readFixture<{ id: string }>('comments');
     assert.deepStrictEqual(after.map((r) => r.id), ['c2']);
   });
 
-  it('leaves stores that have no reference to the target untouched', () => {
+  it('leaves stores that have no reference to the target untouched', async () => {
     const TARGET = 'person-to-forget';
     const untouched = [
       { id: 's1', name: 'Salesforce', ownerId: 'someone-else' },
@@ -119,13 +119,13 @@ describe('gdpr.service — erasePersonReferences', () => {
     ];
     writeFixture('systems', untouched);
 
-    erasePersonReferences(TARGET);
+    await erasePersonReferences(TARGET);
 
     const after = readFixture('systems');
     assert.deepStrictEqual(after, untouched);
   });
 
-  it('skips the auditLogs file (handled separately via tombstone + rechain)', () => {
+  it('skips the auditLogs file (handled separately via tombstone + rechain)', async () => {
     const TARGET = 'person-to-forget';
     // Seed real-ish entries via auditService so they get hashes.
     auditService.log('org-1', TARGET,         'Person', 'p1', 'CREATE');
@@ -136,11 +136,11 @@ describe('gdpr.service — erasePersonReferences', () => {
       JSON.stringify(auditLogs, null, 2),
     );
 
-    const report = erasePersonReferences(TARGET);
+    const report = await erasePersonReferences(TARGET);
     // auditLogs in-memory should have the userId replaced by [deleted].
     assert.strictEqual(auditLogs[0].userId, '[deleted]');
     // Chain integrity preserved.
-    assert.strictEqual(auditService.verifyChain().valid, true);
+    assert.strictEqual((await auditService.verifyChain()).valid, true);
     // The auditLogs file should NOT be reported in storesScanned (handled separately).
     // We don't assert on the exact count, but reading the file back, the
     // userId for the target should now be [deleted] (because redactPerson()
@@ -152,14 +152,14 @@ describe('gdpr.service — erasePersonReferences', () => {
     assert.ok(report.auditEntriesRedacted >= 1);
   });
 
-  it('does not touch the people store (caller handles row removal)', () => {
+  it('does not touch the people store (caller handles row removal)', async () => {
     const TARGET = 'person-to-forget';
     writeFixture('people', [
       { id: TARGET, name: 'Target', email: 't@x.io' },
       { id: 'other', name: 'Other', email: 'o@x.io' },
     ]);
 
-    erasePersonReferences(TARGET);
+    await erasePersonReferences(TARGET);
 
     // people.json should be untouched by the cascade — the route
     // handler in routes/people.ts is responsible for splicing the
@@ -169,25 +169,25 @@ describe('gdpr.service — erasePersonReferences', () => {
     assert.ok(people.find((p) => p.id === TARGET), 'cascade should not delete from people store');
   });
 
-  it('returns a useful summary report', () => {
+  it('returns a useful summary report', async () => {
     const TARGET = 'person-to-forget';
     writeFixture('dataAssets', [{ id: 'a1', ownerId: TARGET }]);
     writeFixture('comments', [{ id: 'c1', authorId: TARGET }]);
     writeFixture('systems', [{ id: 's1', ownerId: 'other' }]); // unmodified
 
-    const report = erasePersonReferences(TARGET);
+    const report = await erasePersonReferences(TARGET);
     assert.ok(report.storesScanned >= 3);
     assert.ok(report.storesModified >= 2, `expected >=2 modified, got ${report.storesModified}`);
     assert.ok(report.rowsRemoved >= 1, 'authored comment dropped');
     assert.ok(report.rowsModified >= 1, 'ownership scrubbed');
   });
 
-  it('handles a corrupted store file gracefully (skips, does not throw)', () => {
+  it('handles a corrupted store file gracefully (skips, does not throw)', async () => {
     const TARGET = 'person-to-forget';
     fs.writeFileSync(path.join(DATA_DIR, 'broken.json'), '{{not-json');
     writeFixture('dataAssets', [{ id: 'a1', ownerId: TARGET }]);
 
-    const report = erasePersonReferences(TARGET);
+    const report = await erasePersonReferences(TARGET);
     // Cascade survived the bad file and still scrubbed the good one.
     const after = readFixture<{ id: string; ownerId: string | null }>('dataAssets');
     assert.strictEqual(after[0].ownerId, null);

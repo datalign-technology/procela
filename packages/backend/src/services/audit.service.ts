@@ -1,6 +1,8 @@
 import { createHash } from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { hasDatabase } from '../db/prisma';
+import { getAuditLogsRepository } from '../db/audit-logs.repo';
 import logger from '../lib/logger';
 
 export interface AuditLogEntry {
@@ -138,6 +140,11 @@ export function bootstrapHashChain(entries: AuditLogEntry[], opts: BootstrapOpti
 }
 
 (function runBootstrapAtBoot() {
+  // JSON mode only — the bootstrap re-hashes the legacy JSON ledger. In
+  // Postgres mode the chain lives in the audit_logs table; there is no
+  // boot array to re-hash, and initAuditChain() seeds the tail cursor
+  // from the DB instead.
+  if (hasDatabase()) return;
   try {
     const result = bootstrapHashChain(auditLogs);
     if (!result.mutated) return;
@@ -152,6 +159,34 @@ export function bootstrapHashChain(entries: AuditLogEntry[], opts: BootstrapOpti
     throw err;
   }
 })();
+
+// Repository — Postgres when DATABASE_URL is set, else the JSON array.
+const auditLogsRepo = getAuditLogsRepository(auditLogs);
+
+// In-memory chain cursor: the entryHash of the most recent entry. New
+// entries link to it. Kept in memory so log() can compute + advance the
+// chain synchronously (deterministic ordering) while the actual write is
+// fire-and-forget — the same durability model createNotification uses.
+// Seeded synchronously from the JSON array here (covers JSON mode + the
+// test suite); re-seeded from Postgres by initAuditChain() at boot.
+function deriveTailHash(entries: AuditLogEntry[]): string {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const h = entries[i].entryHash;
+    if (h) return h;
+  }
+  return '';
+}
+let tailHash = deriveTailHash(auditLogs);
+
+/** Seed the in-memory chain cursor from Postgres at boot. No-op in JSON
+ *  mode (the cursor is already seeded from the loaded array). Call this
+ *  in the boot sequence, alongside the other cache initialisers. */
+export async function initAuditChain(): Promise<void> {
+  if (!hasDatabase()) return;
+  const all = await auditLogsRepo.list();
+  tailHash = all.length ? (all[all.length - 1].entryHash || '') : '';
+  logger.info({ entries: all.length }, 'Audit chain cursor seeded from Postgres');
+}
 
 // Standalone variant of computeEntryHash that takes the entry
 // directly. Used by the bootstrap pass since `computeEntryHash` is
@@ -202,17 +237,6 @@ function computeEntryHash(prevHash: string, e: Omit<AuditLogEntry, 'prevHash' | 
   return createHash('sha256').update(prevHash + fingerprintContent(e)).digest('hex');
 }
 
-/** Tail hash — the entryHash of the most recent entry. New entries
- *  link to this; callers can also use it as a "log was at state X"
- *  receipt. */
-function getTailHash(): string {
-  for (let i = auditLogs.length - 1; i >= 0; i--) {
-    const h = auditLogs[i].entryHash;
-    if (h) return h;
-  }
-  return '';
-}
-
 export const auditService = {
   log(
     orgId: string,
@@ -234,23 +258,33 @@ export const auditService = {
       after,
       timestamp: new Date().toISOString(),
     };
-    const prevHash = getTailHash();
-    const entry: AuditLogEntry = {
-      ...base,
-      prevHash,
-      entryHash: computeEntryHash(prevHash, base),
-    };
-    auditLogs.push(entry);
-    saveStore('auditLogs', auditLogs);
+    // Compute + advance the chain synchronously so concurrent calls can't
+    // fork it, then persist. The tail source is mode-dependent:
+    //   - JSON mode: derive from the array. It's the source of truth, is
+    //     mutated synchronously by repo.create below, and is reset by the
+    //     test store-isolation helper — so no cross-test cursor leak.
+    //   - Postgres mode: use the in-memory cursor (seeded from the DB tail
+    //     by initAuditChain at boot), since we can't read PG synchronously
+    //     inside this sync fire-and-forget method.
+    const prevHash = hasDatabase() ? tailHash : deriveTailHash(auditLogs);
+    const entryHash = computeEntryHash(prevHash, base);
+    const entry: AuditLogEntry = { ...base, prevHash, entryHash };
+    if (hasDatabase()) tailHash = entryHash;
+    // In JSON mode repo.create pushes to the array synchronously (its body
+    // has no await), so a test reading the array right after log() sees it;
+    // in Postgres mode the insert is fire-and-forget with error logging.
+    void auditLogsRepo.create(entry).catch((err) =>
+      logger.error({ err, id: entry.id }, 'Failed to persist audit entry'));
     logger.info({ entityType, entityId, action }, `[Audit] ${action} ${entityType}`);
   },
 
-  getAll(orgId?: string): AuditLogEntry[] {
-    return orgId ? auditLogs.filter((l) => l.orgId === orgId) : auditLogs;
+  async getAll(orgId?: string): Promise<AuditLogEntry[]> {
+    return auditLogsRepo.list(orgId ? { orgId } : undefined);
   },
 
-  getByEntity(entityType: string, entityId: string): AuditLogEntry[] {
-    return auditLogs.filter((l) => l.entityType === entityType && l.entityId === entityId);
+  async getByEntity(entityType: string, entityId: string): Promise<AuditLogEntry[]> {
+    const all = await auditLogsRepo.list();
+    return all.filter((l) => l.entityType === entityType && l.entityId === entityId);
   },
 
   /** Walk the chain and report any breaks. A break is either
@@ -262,15 +296,18 @@ export const auditService = {
    *  of the first bad entry (or -1 when clean). Legacy entries
    *  without entryHash break the chain at their position by design
    *  — once you see one, every count after is suspect. */
-  verifyChain(): { valid: boolean; brokenAt: number; total: number; reason?: string } {
+  async verifyChain(): Promise<{ valid: boolean; brokenAt: number; total: number; reason?: string }> {
+    // Load the ledger in insertion order (repo.list orders by timestamp
+    // asc) and walk it — same semantics whether it lives in JSON or PG.
+    const entries = await auditLogsRepo.list();
     let expectedPrev = '';
-    for (let i = 0; i < auditLogs.length; i++) {
-      const e = auditLogs[i];
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
       if (!e.entryHash) {
-        return { valid: false, brokenAt: i, total: auditLogs.length, reason: 'entry missing hash (legacy or stripped)' };
+        return { valid: false, brokenAt: i, total: entries.length, reason: 'entry missing hash (legacy or stripped)' };
       }
       if ((e.prevHash || '') !== expectedPrev) {
-        return { valid: false, brokenAt: i, total: auditLogs.length, reason: 'prevHash does not match previous entry' };
+        return { valid: false, brokenAt: i, total: entries.length, reason: 'prevHash does not match previous entry' };
       }
       const recomputed = computeEntryHash(expectedPrev, {
         id: e.id, orgId: e.orgId, userId: e.userId,
@@ -278,11 +315,11 @@ export const auditService = {
         before: e.before, after: e.after, timestamp: e.timestamp,
       });
       if (recomputed !== e.entryHash) {
-        return { valid: false, brokenAt: i, total: auditLogs.length, reason: 'recomputed entryHash mismatch — content tampered' };
+        return { valid: false, brokenAt: i, total: entries.length, reason: 'recomputed entryHash mismatch — content tampered' };
       }
       expectedPrev = e.entryHash;
     }
-    return { valid: true, brokenAt: -1, total: auditLogs.length };
+    return { valid: true, brokenAt: -1, total: entries.length };
   },
 
   /** Tombstone audit entries authored by a specific person. Replaces
@@ -292,10 +329,15 @@ export const auditService = {
    *  the action history other regulators care about) but we strip
    *  the personal identifier. Re-chains the hashes from the first
    *  modified entry onward so the chain stays verifiable. */
-  redactPerson(personId: string): number {
+  async redactPerson(personId: string): Promise<number> {
+    // Load the whole ledger in insertion order, scrub, re-chain the tail,
+    // and persist the modified rows back through the repository. Works
+    // against JSON (mutates the shared array) or Postgres (repo.update
+    // per row) transparently.
+    const entries = await auditLogsRepo.list();
     let firstModifiedIdx = -1;
-    for (let i = 0; i < auditLogs.length; i++) {
-      const e = auditLogs[i];
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
       let changed = false;
       if (e.userId === personId) { e.userId = '[deleted]'; changed = true; }
       const scrub = (obj: object | null): object | null => {
@@ -314,20 +356,26 @@ export const auditService = {
     // Rebuild the hash chain from firstModifiedIdx onwards so the
     // verifier still passes against the redacted log. Entries before
     // that point are untouched.
-    let prev = firstModifiedIdx > 0 ? (auditLogs[firstModifiedIdx - 1].entryHash || '') : '';
+    let prev = firstModifiedIdx > 0 ? (entries[firstModifiedIdx - 1].entryHash || '') : '';
     let rehashed = 0;
-    for (let i = firstModifiedIdx; i < auditLogs.length; i++) {
-      const e = auditLogs[i];
+    for (let i = firstModifiedIdx; i < entries.length; i++) {
+      const e = entries[i];
       e.prevHash = prev;
       e.entryHash = computeEntryHash(prev, {
         id: e.id, orgId: e.orgId, userId: e.userId,
         entityType: e.entityType, entityId: e.entityId, action: e.action,
         before: e.before, after: e.after, timestamp: e.timestamp,
       });
+      await auditLogsRepo.update(e.id, {
+        userId: e.userId, before: e.before, after: e.after,
+        prevHash: e.prevHash, entryHash: e.entryHash,
+      });
       prev = e.entryHash;
       rehashed++;
     }
-    saveStore('auditLogs', auditLogs);
+    // The tail entry's hash changed — advance the in-memory cursor so the
+    // next log() links to the redacted chain, not the stale one.
+    tailHash = prev;
     return rehashed;
   },
 };

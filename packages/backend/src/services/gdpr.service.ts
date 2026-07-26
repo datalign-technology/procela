@@ -105,7 +105,7 @@ interface CascadeReport {
 /** Run the full right-to-be-forgotten cascade for the given personId.
  *  Caller is responsible for deleting the Person record from the
  *  people store — this function handles every other store. */
-export function erasePersonReferences(personId: string): CascadeReport {
+export async function erasePersonReferences(personId: string): Promise<CascadeReport> {
   const report: CascadeReport = {
     storesScanned: 0, storesModified: 0, rowsRemoved: 0, rowsModified: 0,
     auditEntriesRedacted: 0, storesReloaded: [],
@@ -155,7 +155,7 @@ export function erasePersonReferences(personId: string): CascadeReport {
     }
   }
 
-  report.auditEntriesRedacted = auditService.redactPerson(personId);
+  report.auditEntriesRedacted = await auditService.redactPerson(personId);
   // After the disk writes settle, splice the in-memory arrays in
   // every registered store back in line with the file content. Stores
   // that didn't opt in to the registry still see the on-disk scrub,

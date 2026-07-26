@@ -265,7 +265,7 @@ import { mappings } from './routes/mappings';
 import { governanceGroups } from './routes/governance-groups';
 import { damaRoles } from './routes/dama-roles';
 import { dataDomains } from './routes/data-domains';
-import { auditLogs } from './services/audit.service';
+import { auditLogs, initAuditChain } from './services/audit.service';
 import { tags } from './routes/tags';
 import { comments } from './routes/comments';
 import { notifications } from './routes/notifications';
@@ -406,6 +406,10 @@ const server = app.listen(PORT, () => {
   // tree helpers (findNode / getChildren / getDescendants) see PG nodes in
   // Postgres mode (PR 9b.19). No-op in JSON mode.
   initProcessCatalog().catch((err) => logger.error({ err }, 'initProcessCatalog failed'));
+  // Seed the audit hash-chain cursor from Postgres so new entries link to
+  // the persisted tail rather than an empty chain (PR 9b.35). No-op in
+  // JSON mode.
+  initAuditChain().catch((err) => logger.error({ err }, 'initAuditChain failed'));
   // Hydrate branding config from persistence (PR 7).
   initBranding().catch((err) => logger.error({ err }, 'initBranding failed'));
 });

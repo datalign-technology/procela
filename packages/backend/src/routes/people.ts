@@ -711,7 +711,7 @@ router.post('/:id/forget', async (req: Request, res: Response) => {
   // delete handler cold.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { erasePersonReferences } = require('../services/gdpr.service') as typeof import('../services/gdpr.service');
-  const report = erasePersonReferences(person.id);
+  const report = await erasePersonReferences(person.id);
 
   res.json({
     success: true,
