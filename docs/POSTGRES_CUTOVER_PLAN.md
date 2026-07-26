@@ -885,6 +885,33 @@ data-carrying cutover, or take the fresh-org path.
     control-tower, enterprise-view, exports, analysis and chat all read
     Postgres; digest was already repo-backed (PR 6) and docs.ts serves static
     markdown (no store reads).
+  - **9b.28 (done) — data-quality.ts (DQ rules CRUD + summary + scheduler).**
+    Not a read-only aggregator — this route *owns* the `dataQualityRules` store
+    and runs a once-a-minute rule scheduler — but every read and every
+    find-then-mutate write went through the module array, so in Postgres mode
+    the DQ dashboards were empty and the run/update paths 404'd. Converted the
+    whole surface: the read handlers (`GET /`, `/summary`, `/by-asset/:id`,
+    `/:id`, `/templates`) load via `dataQualityRulesRepo` (plus dataAssets /
+    connections / dataAssetBindings for enrichment) instead of the arrays; the
+    write handlers (`POST /`, `PUT /:id`, `DELETE /:id`, `DELETE /all`) resolve
+    the row with `repo.get`/`repo.list` before `repo.update`/`repo.delete`;
+    `compute-health` reads the rules + asset from the repos and writes the new
+    `healthScore` back with `dataAssetsRepo.update`. The core `runRuleNow`
+    (shared by `/:id/run`, `/run-all/:assetId` and the scheduler tick) is now
+    `async` — it loads the asset + connection from the repos, persists the run
+    result via `repo.update`, recomputes the weighted asset health from a fresh
+    `repo.list`, and writes it back via `dataAssetsRepo.update`; `tickScheduler`
+    iterates `repo.list()`. `contextForRule` / `getPrimaryBinding` were replaced
+    with a store-agnostic `primaryBindingFrom(bindings, …)` that works off a
+    loaded snapshot. The `syncDataQualityIssueForRule` governance-sync helper
+    stays as-is (already-documented deferred item — it reads the governanceIssues
+    array), and the `dataAssetColumns` column-name lookup in `POST /` is left to
+    the data-assets cutover. Verified against a **local Postgres** (13/13):
+    create→persist, list/summary/by-asset/get reads, PUT persisting
+    score+status, compute-health writing asset health back to PG, a rule
+    inserted directly into Postgres appearing via the API, and DELETE removing
+    it — all off the DB. tsc clean, full suite green (890; dq-routes +
+    dq-issue-sync 10/10).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
