@@ -797,6 +797,28 @@ data-carrying cutover, or take the fresh-org path.
     caller/test coupling as `sweepOverdueTasks`; deferred to a focused
     follow-up, so the store stays flagged.
 
+  - **9b.23 (done) — governance-groups.ts (last of the cluster, fully
+    cleared).** The most write-heavy of the five: it used `.push`/`.splice` +
+    `saveStore` throughout, not just `.find` reads. Converted every handler to
+    the repo — DELETE `/all` (list+delete loop), GET `/` (list + `buildTree`),
+    `generate-template` (prefetch org groups once, `repo.create` per template
+    row, append to the local list so intra-batch parent lookups + the response
+    tree stay correct), `:id` (member enrichment + parent/children off
+    repo-loaded `people`/`agents`/groups), `:id/recommendations` (org groups +
+    `dataDomains` via repos), POST (parent + council checks off `repo.list`),
+    PUT/DELETE (`repo.get`), and the member add/remove handlers (members live on
+    the group row, so each mutates `group.members` then `repo.update(group)`).
+    The delete-time **re-parent-children cascade** now issues a `repo.update`
+    per child instead of mutating the array. The two boot migrations (dedup +
+    member backfill) are `!hasDatabase()`-guarded. Foreign `people`/`agents`/
+    `dataDomains` reads use lazy repos. Verified against a **local Postgres**
+    (25/25): generate-template hierarchy (idempotent re-run), create + parent
+    validation, list + tree, a PG-only "ghost" group surfacing, person/agent
+    member add (agent-only-ADVISOR rule) persisting to the group row, `:id`
+    member enrichment + parent/children, recommendations off PG domains, member
+    remove, update, delete with child re-parenting, and delete-all. tsc clean,
+    full suite green (890). **This fully clears the `governanceGroups` store.**
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

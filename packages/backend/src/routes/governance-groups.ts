@@ -9,6 +9,10 @@ import { people } from './people';
 import { agents } from './agents';
 import logger from '../lib/logger';
 import { getGovernanceGroupsRepository } from '../db/governance-groups.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getAgentsRepository } from '../db/agents.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { hasDatabase } from '../db/prisma';
 
 // Governance Hierarchy Tiers (aligned with data governance best practices)
 const GROUP_TYPES = [
@@ -78,6 +82,14 @@ registerStore('governanceGroups', governanceGroups);
 const governanceGroupsRepo = getGovernanceGroupsRepository(governanceGroups);
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
+// Foreign stores for member/recommendation enrichment — lazy repos (cycle-safe).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _agentsRepo: ReturnType<typeof getAgentsRepository> | null = null;
+const agentsRepo = () => (_agentsRepo ??= getAgentsRepository(agents));
+let _dataDomainsRepo: ReturnType<typeof getDataDomainsRepository> | null = null;
+const dataDomainsRepo = () => (_dataDomainsRepo ??= getDataDomainsRepository(dataDomains));
+
 // Request-body schemas — Zod at the API boundary. Enum checks + type
 // guarantees fall out of the parse so downstream code can drop the
 // `.includes(x as any)` runtime checks and use the typed body directly.
@@ -107,8 +119,9 @@ const addMemberBodySchema = z.object({
   groupRole: z.enum(GROUP_ROLES),
 });
 
-// Deduplicate on startup: keep the first occurrence of each name+orgId+type combo
-{
+// Deduplicate on startup: keep the first occurrence of each name+orgId+type
+// combo. JSON mode only — Postgres rows are managed through the repo.
+if (!hasDatabase()) {
   const seen = new Set<string>();
   const dupeIds: string[] = [];
   for (const g of governanceGroups) {
@@ -127,8 +140,8 @@ const addMemberBodySchema = z.object({
 
 // Backfill: ensure every membership row has the (personId, agentId)
 // discriminator pair so downstream code can branch on type without
-// undefined checks. Legacy rows only stored personId.
-{
+// undefined checks. Legacy rows only stored personId. JSON mode only.
+if (!hasDatabase()) {
   let backfilled = 0;
   for (const g of governanceGroups) {
     for (const m of g.members) {
@@ -169,9 +182,9 @@ const router = Router();
 
 /** DELETE /api/v1/governance-groups/all — delete all governance groups */
 router.delete('/all', async (_req: Request, res: Response) => {
-  const count = governanceGroups.length;
-  governanceGroups.splice(0, governanceGroups.length);
-  saveStore('governanceGroups', governanceGroups);
+  const all = await governanceGroupsRepo.list();
+  const count = all.length;
+  for (const g of all) await governanceGroupsRepo.delete(g.id);
   auditService.log(DEV_ORG_ID, null, 'GovernanceGroup', '*', 'DELETE_ALL', null, { count });
   logger.info({ count }, 'Deleted all governance groups');
   res.json({ success: true, deleted: count });
@@ -180,7 +193,7 @@ router.delete('/all', async (_req: Request, res: Response) => {
 /** GET /api/v1/governance-groups */
 router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
-  let filtered = filterByOrgScope(governanceGroups, orgId as string | undefined);
+  let filtered = filterByOrgScope(await governanceGroupsRepo.list(), orgId as string | undefined);
   // Deduplicate by name+type within the result set
   const seen = new Set<string>();
   filtered = filtered.filter((g) => {
@@ -224,13 +237,12 @@ router.post('/generate-template', async (req: Request, res: Response) => {
   ];
 
   // Skip items that already exist in this org (prevents duplicates on re-run)
-  const existingNames = new Set(
-    governanceGroups.filter((g) => g.orgId === targetOrgId).map((g) => g.name.toLowerCase()),
-  );
+  const orgGroups = (await governanceGroupsRepo.list()).filter((g) => g.orgId === targetOrgId);
+  const existingNames = new Set(orgGroups.map((g) => g.name.toLowerCase()));
 
   const typeToId: Record<string, string> = {};
   // Seed typeToId from existing groups so parent lookups work even when skipping
-  for (const g of governanceGroups.filter((g) => g.orgId === targetOrgId)) {
+  for (const g of orgGroups) {
     if (!typeToId[g.type]) typeToId[g.type] = g.id;
   }
 
@@ -242,32 +254,35 @@ router.post('/generate-template', async (req: Request, res: Response) => {
       name: t.name, type: t.type, description: t.description, charter: t.charter,
       status: 'ACTIVE', members: [], createdAt: now, updatedAt: now,
     };
-    governanceGroups.push(group);
+    await governanceGroupsRepo.create(group);
     created.push(group);
+    orgGroups.push(group);
     if (!typeToId[t.type]) typeToId[t.type] = group.id;
   }
 
-  saveStore('governanceGroups', governanceGroups);
   logger.info({ count: created.length, orgId: targetOrgId }, 'Generated governance template');
-  res.status(201).json({ success: true, data: created, tree: buildTree(governanceGroups.filter((g) => g.orgId === targetOrgId)) });
+  res.status(201).json({ success: true, data: created, tree: buildTree(orgGroups) });
 });
 
 /** GET /api/v1/governance-groups/:id */
 router.get('/:id', async (req: Request, res: Response) => {
-  const group = governanceGroups.find((g) => g.id === req.params.id);
+  const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
+  const [allPeople, allAgents, allGroups] = await Promise.all([
+    peopleRepo().list(), agentsRepo().list(), governanceGroupsRepo.list(),
+  ]);
   const enrichedMembers = group.members.map((m) => {
     if (m.agentId) {
-      const agent = agents.find((a) => a.id === m.agentId);
+      const agent = allAgents.find((a) => a.id === m.agentId);
       return { ...m, personName: null, agentName: agent?.name || 'Unknown' };
     }
-    const person = people.find((p) => p.id === m.personId);
+    const person = allPeople.find((p) => p.id === m.personId);
     return { ...m, personName: person?.name || 'Unknown', agentName: null };
   });
 
-  const parent = group.parentId ? governanceGroups.find((g) => g.id === group.parentId) : null;
-  const children = governanceGroups.filter((g) => g.parentId === group.id);
+  const parent = group.parentId ? allGroups.find((g) => g.id === group.parentId) : null;
+  const children = allGroups.filter((g) => g.parentId === group.id);
 
   res.json({
     success: true,
@@ -283,11 +298,11 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-groups/:id/recommendations */
 router.get('/:id/recommendations', async (req: Request, res: Response) => {
-  const group = governanceGroups.find((g) => g.id === req.params.id);
+  const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Group not found' }); return; }
 
   const validChildTypes = VALID_CHILDREN[group.type] || [];
-  const orgGroups = governanceGroups.filter((g) => g.orgId === group.orgId);
+  const orgGroups = (await governanceGroupsRepo.list()).filter((g) => g.orgId === group.orgId);
   const allOrgGroupNames = new Set(orgGroups.map((g) => g.name.toLowerCase()));
 
   interface Recommendation {
@@ -304,7 +319,7 @@ router.get('/:id/recommendations', async (req: Request, res: Response) => {
 
   if (group.type === 'COMMITTEE' || group.type === 'OFFICE') {
     // Recommend a stewardship team for each data domain
-    const orgDomains = dataDomains.filter((d) => d.orgId === group.orgId);
+    const orgDomains = (await dataDomainsRepo().list()).filter((d) => d.orgId === group.orgId);
     for (const domain of orgDomains) {
       const teamName = `${domain.name} Stewardship Team`;
       recommendations.push({
@@ -371,11 +386,12 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
   const { name, type, description, charter, status, orgId, parentId } = parsed.data;
+  const allGroups = await governanceGroupsRepo.list();
 
   // Check parent-child relationship (soft warning, not a block)
   let warning: string | null = null;
   if (parentId) {
-    const parent = governanceGroups.find((g) => g.id === parentId);
+    const parent = allGroups.find((g) => g.id === parentId);
     if (!parent) { res.status(400).json({ success: false, error: 'Parent group not found' }); return; }
     const recommended = VALID_CHILDREN[parent.type] || [];
     if (!recommended.includes(type)) {
@@ -387,7 +403,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   // Check if no top-level council exists
   if (type !== 'COUNCIL' && !parentId) {
-    const hasCouncil = governanceGroups.some((g) => g.type === 'COUNCIL');
+    const hasCouncil = allGroups.some((g) => g.type === 'COUNCIL');
     if (!hasCouncil && !warning) {
       warning = 'Governance best practices suggest establishing a Data Governance Council as the top-level governing body first.';
     }
@@ -407,7 +423,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/governance-groups/:id */
 router.put('/:id', async (req: Request, res: Response) => {
-  const group = governanceGroups.find((g) => g.id === req.params.id);
+  const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
   const parsed = updateGroupBodySchema.safeParse(req.body);
@@ -432,21 +448,21 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/governance-groups/:id */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = governanceGroups.find((g) => g.id === req.params.id);
+  const removed = await governanceGroupsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
-  // Re-parent children
-  for (const g of governanceGroups) {
-    if (g.parentId === removed.id) g.parentId = removed.parentId;
+  // Re-parent children onto the removed group's parent.
+  const children = (await governanceGroupsRepo.list()).filter((g) => g.parentId === removed.id);
+  for (const child of children) {
+    await governanceGroupsRepo.update(child.id, { parentId: removed.parentId });
   }
   auditService.log(removed.orgId, null, 'GovernanceGroup', removed.id, 'DELETE', removed, null);
   await governanceGroupsRepo.delete(removed.id);
-  saveStore('governanceGroups', governanceGroups);
   res.status(204).send();
 });
 
 /** POST /api/v1/governance-groups/:id/members */
 router.post('/:id/members', async (req: Request, res: Response) => {
-  const group = governanceGroups.find((g) => g.id === req.params.id);
+  const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
 
   const parsed = addMemberBodySchema.safeParse(req.body);
@@ -478,12 +494,12 @@ router.post('/:id/members', async (req: Request, res: Response) => {
       res.status(409).json({ success: false, error: 'This person is already a member' });
       return;
     }
-    const person = people.find((p) => p.id === personId);
+    const person = await peopleRepo().get(personId);
     if (!person) { res.status(400).json({ success: false, error: 'Person not found' }); return; }
     const now = new Date().toISOString();
     group.members.push({ personId, agentId: null, groupRole, since: now });
     group.updatedAt = now;
-    saveStore('governanceGroups', governanceGroups);
+    await governanceGroupsRepo.update(group.id, group);
     auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { personId, groupRole });
     res.status(201).json({ success: true, data: { personId, agentId: null, groupRole, personName: person.name, agentName: null, since: now } });
     return;
@@ -494,12 +510,12 @@ router.post('/:id/members', async (req: Request, res: Response) => {
     res.status(409).json({ success: false, error: 'This agent is already a member' });
     return;
   }
-  const agent = agents.find((a) => a.id === agentId);
+  const agent = await agentsRepo().get(String(agentId));
   if (!agent) { res.status(400).json({ success: false, error: 'Agent not found' }); return; }
   const now = new Date().toISOString();
   group.members.push({ personId: null, agentId: agentId!, groupRole, since: now });
   group.updatedAt = now;
-  saveStore('governanceGroups', governanceGroups);
+  await governanceGroupsRepo.update(group.id, group);
   auditService.log(group.orgId, null, 'GovernanceGroup', group.id, 'ADD_MEMBER', null, { agentId, groupRole });
   res.status(201).json({ success: true, data: { personId: null, agentId, groupRole, personName: null, agentName: agent.name, since: now } });
 });
@@ -509,14 +525,14 @@ router.post('/:id/members', async (req: Request, res: Response) => {
  *  We look it up across both so the frontend can use the same delete
  *  call for either holder kind. */
 router.delete('/:id/members/:memberId', async (req: Request, res: Response) => {
-  const group = governanceGroups.find((g) => g.id === req.params.id);
+  const group = await governanceGroupsRepo.get(String(req.params.id));
   if (!group) { res.status(404).json({ success: false, error: 'Governance group not found' }); return; }
   const { memberId } = req.params;
   const idx = group.members.findIndex((m) => m.personId === memberId || m.agentId === memberId);
   if (idx === -1) { res.status(404).json({ success: false, error: 'Member not found' }); return; }
   group.members.splice(idx, 1);
   group.updatedAt = new Date().toISOString();
-  saveStore('governanceGroups', governanceGroups);
+  await governanceGroupsRepo.update(group.id, group);
   res.status(204).send();
 });
 
