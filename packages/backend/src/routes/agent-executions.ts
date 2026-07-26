@@ -363,7 +363,7 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
   const doc: StoredGovernancePolicy = {
     id: uuid(),
     orgId: exec.orgId,
-    code: generateDocCode(finalDocumentType),
+    code: await generateDocCode(finalDocumentType),
     name: docName,
     description: (typeof description === 'string' && description.trim()) ? `${description.trim()}\n\n${provenanceLine}` : provenanceLine,
     documentType: finalDocumentType,

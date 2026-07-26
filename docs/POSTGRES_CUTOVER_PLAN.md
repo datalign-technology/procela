@@ -744,6 +744,27 @@ data-carrying cutover, or take the fresh-org path.
     `governancePolicies` dedup read — these belong to those stores' own
     conversions (esp. the deferred 16-file `mappings` store).
 
+  - **9b.20 (done) — governance-controls.ts + governance-policies.ts.** First
+    two of the governance cluster (tightly coupled — controls belong to a
+    policy, and each cascades to the other on delete). Writes already used their
+    repos; converted every `governanceControls`/`governancePolicies`
+    `.find/.filter/.length` → repo `get/list`, made both `generateCode` helpers
+    async (they read the store to pick the next `CTL-###` / per-type
+    `CHA-/POL-/STD-/FRW-###` sequence — now off the repo), and parameterised the
+    `resolveOwnerName`/`resolvePolicyName` enrichers onto repo-loaded
+    `people`/`policies` lists (lazy repos). Cross-store paths go through repos
+    too: the policy's `linkedControlsCount` and its delete-time "orphan the
+    linked controls" cascade use the controls repo. `agent-executions.ts`
+    imports `generateCode` (as `generateDocCode`) — its one call site now
+    `await`s. Verified against a **local Postgres** (20/20): create with codes
+    sequenced from PG (CHA-001, POL-001, CTL-001) + owner/policy-name
+    enrichment, list/summary/`:id` read PG, PG-only rows surface,
+    `linkedControlsCount`, update, and policy-delete orphaning its linked
+    control (`policyId` cleared in PG). tsc clean, full suite green (890). The
+    control-delete → `processNodes.controlIds` cascade stays a stale-array
+    write (foreign `processNodes`) — it self-heals via process-catalog's
+    `cleanControlIds` pruning, so it's left as a documented PG no-op.
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the

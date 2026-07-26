@@ -6,6 +6,8 @@ import { governancePolicies } from './governance-policies';
 import { people } from './people';
 import logger from '../lib/logger';
 import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
 
 export interface StoredGovernanceControl {
   id: string;
@@ -30,20 +32,26 @@ registerStore('governanceControls', governanceControls);
 
 const governanceControlsRepo = getGovernanceControlsRepository(governanceControls);
 
-function generateCode(): string {
-  const seq = governanceControls.length + 1;
+// Foreign stores for enrichment — lazy repos (cycle-safe).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _policiesRepo: ReturnType<typeof getGovernancePoliciesRepository> | null = null;
+const policiesRepo = () => (_policiesRepo ??= getGovernancePoliciesRepository(governancePolicies));
+
+async function generateCode(): Promise<string> {
+  const seq = (await governanceControlsRepo.list()).length + 1;
   return `CTL-${String(seq).padStart(3, '0')}`;
 }
 
-function resolveOwnerName(ownerAssignmentId: string | null): string | null {
+function resolveOwnerName(ownerAssignmentId: string | null, allPeople: typeof people): string | null {
   if (!ownerAssignmentId) return null;
-  const person = people.find((p) => p.id === ownerAssignmentId);
+  const person = allPeople.find((p) => p.id === ownerAssignmentId);
   return person?.name || null;
 }
 
-function resolvePolicyName(policyId: string): string | null {
+function resolvePolicyName(policyId: string, allPolicies: typeof governancePolicies): string | null {
   if (!policyId) return null;
-  const policy = governancePolicies.find((p) => p.id === policyId);
+  const policy = allPolicies.find((p) => p.id === policyId);
   return policy?.name || null;
 }
 
@@ -59,10 +67,11 @@ router.get('/', async (req: Request, res: Response) => {
   if (automationMode) filtered = filtered.filter((c) => c.automationMode === automationMode);
   if (status) filtered = filtered.filter((c) => c.status === status);
 
+  const [allPeople, allPolicies] = await Promise.all([peopleRepo().list(), policiesRepo().list()]);
   const enriched = filtered.map((c) => ({
     ...c,
-    ownerName: resolveOwnerName(c.ownerAssignmentId),
-    policyName: resolvePolicyName(c.policyId),
+    ownerName: resolveOwnerName(c.ownerAssignmentId, allPeople),
+    policyName: resolvePolicyName(c.policyId, allPolicies),
   }));
 
   res.json({ success: true, data: enriched });
@@ -89,15 +98,16 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-controls/:id — single control */
 router.get('/:id', async (req: Request, res: Response) => {
-  const control = governanceControls.find((c) => c.id === req.params.id);
+  const control = await governanceControlsRepo.get(String(req.params.id));
   if (!control) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
 
+  const [allPeople, allPolicies] = await Promise.all([peopleRepo().list(), policiesRepo().list()]);
   res.json({
     success: true,
     data: {
       ...control,
-      ownerName: resolveOwnerName(control.ownerAssignmentId),
-      policyName: resolvePolicyName(control.policyId),
+      ownerName: resolveOwnerName(control.ownerAssignmentId, allPeople),
+      policyName: resolvePolicyName(control.policyId, allPolicies),
     },
   });
 });
@@ -115,7 +125,7 @@ router.post('/', async (req: Request, res: Response) => {
     id: uuid(),
     orgId,
     policyId,
-    code: generateCode(),
+    code: await generateCode(),
     name,
     description: description || '',
     controlType: controlType || 'DETECTIVE',
@@ -137,7 +147,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/governance-controls/:id — update control */
 router.put('/:id', async (req: Request, res: Response) => {
-  const control = governanceControls.find((c) => c.id === req.params.id);
+  const control = await governanceControlsRepo.get(String(req.params.id));
   if (!control) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
 
   const before = { ...control };
@@ -164,7 +174,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/governance-controls/:id — delete control */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = governanceControls.find((c) => c.id === req.params.id);
+  const removed = await governanceControlsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance control not found' }); return; }
 
   auditService.log(removed.orgId, null, 'GovernanceControl', removed.id, 'DELETE', removed, null);

@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { people } from './people';
 import logger from '../lib/logger';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
 
 export interface StoredGovernancePolicy {
   id: string;
@@ -54,6 +56,15 @@ registerStore('governancePolicies', governancePolicies);
 
 const governancePoliciesRepo = getGovernancePoliciesRepository(governancePolicies);
 
+// Foreign stores — lazy repos (cycle-safe; governance-controls value-imports
+// this module, so its array is fetched via require at call time).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+let _controlsRepo: ReturnType<typeof getGovernanceControlsRepository> | null = null;
+const controlsRepo = () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  (_controlsRepo ??= getGovernanceControlsRepository(require('./governance-controls').governanceControls));
+
 // Code prefix per documentType so a charter coded "POL-001" stops
 // reading as a misnamed policy. Sequence is per-type: CHA-001,
 // CHA-002, STD-001, etc. — counts existing rows of the same type
@@ -64,15 +75,15 @@ const CODE_PREFIX: Record<StoredGovernancePolicy['documentType'], string> = {
   STANDARD: 'STD',
   POLICY: 'POL',
 };
-export function generateCode(documentType: StoredGovernancePolicy['documentType']): string {
+export async function generateCode(documentType: StoredGovernancePolicy['documentType']): Promise<string> {
   const prefix = CODE_PREFIX[documentType];
-  const seq = governancePolicies.filter((p) => p.documentType === documentType).length + 1;
+  const seq = (await governancePoliciesRepo.list()).filter((p) => p.documentType === documentType).length + 1;
   return `${prefix}-${String(seq).padStart(3, '0')}`;
 }
 
-function resolveOwnerName(ownerAssignmentId: string | null): string | null {
+function resolveOwnerName(ownerAssignmentId: string | null, allPeople: typeof people): string | null {
   if (!ownerAssignmentId) return null;
-  const person = people.find((p) => p.id === ownerAssignmentId);
+  const person = allPeople.find((p) => p.id === ownerAssignmentId);
   return person?.name || null;
 }
 
@@ -87,9 +98,10 @@ router.get('/', async (req: Request, res: Response) => {
   if (category) filtered = filtered.filter((p) => p.category === category);
   if (documentType) filtered = filtered.filter((p) => p.documentType === documentType);
 
+  const allPeople = await peopleRepo().list();
   const enriched = filtered.map((p) => ({
     ...p,
-    ownerName: resolveOwnerName(p.ownerAssignmentId),
+    ownerName: resolveOwnerName(p.ownerAssignmentId, allPeople),
   }));
 
   res.json({ success: true, data: enriched });
@@ -119,21 +131,17 @@ router.get('/summary', async (req: Request, res: Response) => {
 
 /** GET /api/v1/governance-policies/:id — single policy */
 router.get('/:id', async (req: Request, res: Response) => {
-  const policy = governancePolicies.find((p) => p.id === req.params.id);
+  const policy = await governancePoliciesRepo.get(String(req.params.id));
   if (!policy) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
 
-  // Count linked controls — import at runtime to avoid circular dependency
-  let linkedControlsCount = 0;
-  try {
-    const { governanceControls } = require('./governance-controls');
-    linkedControlsCount = governanceControls.filter((c: any) => c.policyId === policy.id).length;
-  } catch { /* controls module not loaded yet */ }
+  const [allPeople, allControls] = await Promise.all([peopleRepo().list(), controlsRepo().list()]);
+  const linkedControlsCount = allControls.filter((c) => c.policyId === policy.id).length;
 
   res.json({
     success: true,
     data: {
       ...policy,
-      ownerName: resolveOwnerName(policy.ownerAssignmentId),
+      ownerName: resolveOwnerName(policy.ownerAssignmentId, allPeople),
       linkedControlsCount,
     },
   });
@@ -151,7 +159,7 @@ router.post('/', async (req: Request, res: Response) => {
   const policy: StoredGovernancePolicy = {
     id: uuid(),
     orgId,
-    code: generateCode(finalDocumentType),
+    code: await generateCode(finalDocumentType),
     name,
     description: description || '',
     documentType: finalDocumentType,
@@ -175,7 +183,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 /** PUT /api/v1/governance-policies/:id — update policy */
 router.put('/:id', async (req: Request, res: Response) => {
-  const policy = governancePolicies.find((p) => p.id === req.params.id);
+  const policy = await governancePoliciesRepo.get(String(req.params.id));
   if (!policy) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
 
   const before = { ...policy };
@@ -209,19 +217,17 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /** DELETE /api/v1/governance-policies/:id — delete policy and orphan its controls */
 router.delete('/:id', async (req: Request, res: Response) => {
-  const removed = governancePolicies.find((p) => p.id === req.params.id);
+  const removed = await governancePoliciesRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Governance policy not found' }); return; }
 
-  // Orphan controls linked to this policy (set policyId to empty string)
+  // Orphan controls linked to this policy (set policyId to empty string).
   try {
-    const { governanceControls } = require('./governance-controls');
-    for (const ctrl of governanceControls) {
-      if (ctrl.policyId === removed.id) {
-        ctrl.policyId = '';
-      }
+    const repo = controlsRepo();
+    const linked = (await repo.list()).filter((c) => c.policyId === removed.id);
+    for (const ctrl of linked) {
+      await repo.update(ctrl.id, { policyId: '' });
     }
-    saveStore('governanceControls', governanceControls);
-  } catch { /* controls module not loaded yet */ }
+  } catch (err) { logger.warn({ err, policyId: removed.id }, 'Failed to orphan linked controls'); }
 
   auditService.log(removed.orgId, null, 'GovernancePolicy', removed.id, 'DELETE', removed, null);
   await governancePoliciesRepo.delete(removed.id);
