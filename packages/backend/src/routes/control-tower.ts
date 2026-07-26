@@ -4,6 +4,13 @@ import logger from '../lib/logger';
 import { dataDomains } from './data-domains';
 import { dataAssets } from './data-assets';
 import { processNodes } from './process-catalog';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getGovernanceTasksRepository } from '../db/governance-tasks.repo';
+import { getGovernanceIssuesRepository } from '../db/governance-issues.repo';
+import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
+import { getGovernanceControlsRepository } from '../db/governance-controls.repo';
 
 // ── Defensive imports for governance modules that may not exist yet ──────
 // These stores are created by separate agents; use `require` inside a
@@ -19,6 +26,16 @@ try { governanceTasks = require('./governance-tasks').governanceTasks; } catch {
 try { governanceIssues = require('./governance-issues').governanceIssues; } catch { /* module not yet created */ }
 try { governancePolicies = require('./governance-policies').governancePolicies; } catch { /* module not yet created */ }
 try { governanceControls = require('./governance-controls').governanceControls; } catch { /* module not yet created */ }
+
+// Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays
+// above. This aggregator is read-only; each request loads a fresh snapshot.
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const governanceTasksRepo = getGovernanceTasksRepository(governanceTasks);
+const governanceIssuesRepo = getGovernanceIssuesRepository(governanceIssues);
+const governancePoliciesRepo = getGovernancePoliciesRepository(governancePolicies);
+const governanceControlsRepo = getGovernanceControlsRepository(governanceControls);
 
 // ── Helper: count occurrences of a field value in a filtered array ──────
 function countBy<T>(items: T[], field: keyof T): Record<string, number> {
@@ -41,25 +58,34 @@ const router = Router();
  *
  * Supports `?orgId=` to scope results to a specific organization.
  */
-router.get('/summary', (req: Request, res: Response) => {
+router.get('/summary', async (req: Request, res: Response) => {
   try {
     const { orgId } = req.query;
     const orgFilter = orgId as string | undefined;
 
-    // ── Filter each store by org scope ──────────────────────────────────
-    const filteredIssues = filterByOrgScope(governanceIssues, orgFilter);
-    const filteredTasks = filterByOrgScope(governanceTasks, orgFilter);
-    const filteredPolicies = filterByOrgScope(governancePolicies, orgFilter);
-    const filteredControls = filterByOrgScope(governanceControls, orgFilter);
-    const filteredDomains = filterByOrgScope(dataDomains, orgFilter);
-    const filteredAssets = filterByOrgScope(dataAssets, orgFilter);
+    // ── Load each store (Postgres or JSON) then filter by org scope ─────
+    const [allIssues, allTasks, allPolicies, allControls, allDomains, allAssets, allNodes] = await Promise.all([
+      governanceIssuesRepo.list(),
+      governanceTasksRepo.list(),
+      governancePoliciesRepo.list(),
+      governanceControlsRepo.list(),
+      dataDomainsRepo.list(),
+      dataAssetsRepo.list(),
+      processNodesRepo.list(),
+    ]);
+    const filteredIssues = filterByOrgScope(allIssues, orgFilter);
+    const filteredTasks = filterByOrgScope(allTasks, orgFilter);
+    const filteredPolicies = filterByOrgScope(allPolicies, orgFilter);
+    const filteredControls = filterByOrgScope(allControls, orgFilter);
+    const filteredDomains = filterByOrgScope(allDomains, orgFilter);
+    const filteredAssets = filterByOrgScope(allAssets, orgFilter);
     const filteredProcesses = orgFilter
-      ? processNodes.filter((n) => {
+      ? allNodes.filter((n) => {
           // processNodes use orgId + orgIds (multi-org), mirror the
           // pattern in process-catalog route's GET /
           return n.orgId === orgFilter || (n.orgIds && n.orgIds.includes(orgFilter));
         })
-      : processNodes;
+      : allNodes;
 
     // ── Issue metrics ───────────────────────────────────────────────────
     const issueTotal = filteredIssues.length;
