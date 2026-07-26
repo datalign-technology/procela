@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { auditService } from '../services/audit.service';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import { people } from './people';
 import { createNotification } from './notifications';
@@ -170,10 +170,11 @@ function enrichTask(
  */
 const ACTIVE_STATUSES = new Set(['OPEN', 'IN_PROGRESS', 'PENDING_APPROVAL']);
 
-export function sweepOverdueTasks(scopeOrgId?: string): { fired: string[] } {
+export async function sweepOverdueTasks(scopeOrgId?: string): Promise<{ fired: string[] }> {
   const now = Date.now();
   const fired: string[] = [];
-  for (const task of governanceTasks) {
+  const allTasks = await governanceTasksRepo.list();
+  for (const task of allTasks) {
     if (scopeOrgId && task.orgId !== scopeOrgId) continue;
     if (!ACTIVE_STATUSES.has(task.status)) continue;
     if (!task.dueDate) continue;
@@ -197,10 +198,13 @@ export function sweepOverdueTasks(scopeOrgId?: string): { fired: string[] } {
     });
     task.overdueNotifiedAt = new Date().toISOString();
     task.updatedAt = task.overdueNotifiedAt;
+    await governanceTasksRepo.update(task.id, {
+      overdueNotifiedAt: task.overdueNotifiedAt,
+      updatedAt: task.updatedAt,
+    });
     fired.push(task.id);
   }
   if (fired.length > 0) {
-    saveStore('governanceTasks', governanceTasks);
     logger.info({ scopeOrgId, count: fired.length }, 'Overdue task sweep fired');
   }
   return { fired };
@@ -214,7 +218,7 @@ const router = Router();
  *  drive the flow synchronously. */
 router.post('/sweep-overdue', async (req: Request, res: Response) => {
   const orgId = ((req.query.orgId as string) || '').trim() || undefined;
-  const result = sweepOverdueTasks(orgId);
+  const result = await sweepOverdueTasks(orgId);
   res.json({ success: true, data: result });
 });
 

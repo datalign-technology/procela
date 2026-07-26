@@ -77,7 +77,7 @@ describe('sweepOverdueTasks', () => {
       makeTask({ title: 'Overdue A', status: 'OPEN', dueDate: daysAgo(2), assigneeId: 'user-a' }),
       makeTask({ title: 'Overdue B', status: 'IN_PROGRESS', dueDate: daysAgo(5), assigneeId: 'user-b' }),
     );
-    const result = sweepOverdueTasks(orgId);
+    const result = await sweepOverdueTasks(orgId);
     assert.strictEqual(result.fired.length, 2);
     const orgNotifs = notifications.filter((n) => n.orgId === orgId);
     assert.strictEqual(orgNotifs.length, 2);
@@ -92,7 +92,7 @@ describe('sweepOverdueTasks', () => {
       makeTask({ title: 'Future', status: 'OPEN', dueDate: daysAhead(3) }),
       makeTask({ title: 'No date', status: 'OPEN', dueDate: null }),
     );
-    const result = sweepOverdueTasks(orgId);
+    const result = await sweepOverdueTasks(orgId);
     assert.strictEqual(result.fired.length, 0);
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 0);
   });
@@ -104,15 +104,15 @@ describe('sweepOverdueTasks', () => {
       makeTask({ title: 'Rejected', status: 'REJECTED', dueDate: daysAgo(1) }),
       makeTask({ title: 'Draft', status: 'DRAFT', dueDate: daysAgo(1) }),
     );
-    const result = sweepOverdueTasks(orgId);
+    const result = await sweepOverdueTasks(orgId);
     assert.strictEqual(result.fired.length, 0);
   });
 
   it('is idempotent — a second sweep with no state change fires nothing', async () => {
     governanceTasks.push(makeTask({ title: 'Once', status: 'OPEN', dueDate: daysAgo(1), assigneeId: 'user-a' }));
-    const first = sweepOverdueTasks(orgId);
+    const first = await sweepOverdueTasks(orgId);
     assert.strictEqual(first.fired.length, 1);
-    const second = sweepOverdueTasks(orgId);
+    const second = await sweepOverdueTasks(orgId);
     assert.strictEqual(second.fired.length, 0);
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 1);
   });
@@ -120,26 +120,26 @@ describe('sweepOverdueTasks', () => {
   it('re-arms when dueDate is pushed forward past the notified marker', async () => {
     const task: any = makeTask({ title: 'Push', status: 'OPEN', dueDate: daysAgo(3), assigneeId: 'user-a' });
     governanceTasks.push(task);
-    sweepOverdueTasks(orgId);
+    await sweepOverdueTasks(orgId);
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 1);
     // Simulate the PUT handler: reviewer pushes due-date forward.
     // The route clears overdueNotifiedAt on any dueDate change, so we
     // mirror that here to test what the sweep does when it comes back.
     task.dueDate = daysAgo(-1); // now 1 day in the future
     task.overdueNotifiedAt = null;
-    sweepOverdueTasks(orgId);
+    await sweepOverdueTasks(orgId);
     // Still not overdue → no fire.
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 1);
     // Now they miss the pushed-forward date too.
     task.dueDate = daysAgo(1);
     task.overdueNotifiedAt = null;
-    sweepOverdueTasks(orgId);
+    await sweepOverdueTasks(orgId);
     assert.strictEqual(notifications.filter((n) => n.orgId === orgId).length, 2);
   });
 
   it('fires org-wide (userId=null) when the task has no assignee', async () => {
     governanceTasks.push(makeTask({ title: 'Unassigned', status: 'OPEN', dueDate: daysAgo(1), assigneeId: null }));
-    sweepOverdueTasks(orgId);
+    await sweepOverdueTasks(orgId);
     const orgNotifs = notifications.filter((n) => n.orgId === orgId);
     assert.strictEqual(orgNotifs.length, 1);
     assert.strictEqual(orgNotifs[0].userId, null);
@@ -151,7 +151,7 @@ describe('sweepOverdueTasks', () => {
       makeTask({ title: 'Ours', status: 'OPEN', dueDate: daysAgo(1) }),
       makeTask({ orgId: otherOrg, title: 'Theirs', status: 'OPEN', dueDate: daysAgo(1) }),
     );
-    const result = sweepOverdueTasks(orgId);
+    const result = await sweepOverdueTasks(orgId);
     assert.strictEqual(result.fired.length, 1);
     // Clean up the cross-org row we planted.
     sweep(governanceTasks, (t: any) => t.orgId === otherOrg);
