@@ -7,8 +7,37 @@ import { dataDomains } from './data-domains';
 import { dataLineageLinks } from './data-lineage';
 import { dataQualityRules } from './data-quality';
 import { getVisibleOrgScope, filterByOrgScope } from '../lib/org-scope';
+import { getProcessNodesRepository } from '../db/process-nodes.repo';
+import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getSystemsRepository } from '../db/systems.repo';
+import { getPeopleRepository } from '../db/people.repo';
+import { getDataDomainsRepository } from '../db/data-domains.repo';
+import { getDataLineageLinksRepository } from '../db/data-lineage-links.repo';
+import { getDataQualityRulesRepository } from '../db/data-quality-rules.repo';
+import { getMappingsRepository } from '../db/mappings.repo';
 
 const router = Router();
+
+// Repositories — read Postgres when DATABASE_URL is set, else the JSON arrays.
+// This aggregator is read-only; each request loads a fresh snapshot.
+const processNodesRepo = getProcessNodesRepository(processNodes);
+const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const systemsRepo = getSystemsRepository(systems);
+const peopleRepo = getPeopleRepository(people);
+const dataDomainsRepo = getDataDomainsRepository(dataDomains);
+const dataLineageLinksRepo = getDataLineageLinksRepository(dataLineageLinks);
+const dataQualityRulesRepo = getDataQualityRulesRepository(dataQualityRules);
+// mappings is required lazily (its module imports back into the catalog graph).
+let _mappingsRepo: ReturnType<typeof getMappingsRepository> | null = null;
+const mappingsRepo = () => {
+  if (!_mappingsRepo) {
+    let arr: any[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    try { arr = require('./mappings').mappings || []; } catch { /* */ }
+    _mappingsRepo = getMappingsRepository(arr);
+  }
+  return _mappingsRepo;
+};
 
 interface GraphNode {
   id: string;
@@ -26,8 +55,19 @@ interface GraphEdge {
   label: string;
 }
 
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   const { orgId } = req.query;
+
+  const [allNodes, allSystems, allAssets, allDomains, allRules, allPeople, allLineage, allMappings] = await Promise.all([
+    processNodesRepo.list(),
+    systemsRepo.list(),
+    dataAssetsRepo.list(),
+    dataDomainsRepo.list(),
+    dataQualityRulesRepo.list(),
+    peopleRepo.list(),
+    dataLineageLinksRepo.list(),
+    mappingsRepo().list(),
+  ]);
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -42,9 +82,9 @@ router.get('/', (req: Request, res: Response) => {
   const filteredProcesses = orgId
     ? (() => {
         const scope = getVisibleOrgScope(orgId as string)!;
-        return processNodes.filter((p) => scope.has(p.orgId) || (p.orgIds || []).some((id) => scope.has(id)));
+        return allNodes.filter((p) => scope.has(p.orgId) || (p.orgIds || []).some((id) => scope.has(id)));
       })()
-    : processNodes;
+    : allNodes;
   for (const p of filteredProcesses) {
     if (!topLevels.has(p.level)) continue;
     addNode({
@@ -66,7 +106,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Systems
   const filteredSystems = orgId
-    ? filterByOrgScope(systems, orgId as string) : systems;
+    ? filterByOrgScope(allSystems, orgId as string) : allSystems;
   for (const s of filteredSystems as any[]) {
     addNode({
       id: s.id, type: 'system',
@@ -77,9 +117,9 @@ router.get('/', (req: Request, res: Response) => {
 
   // Data assets
   const filteredAssets = orgId
-    ? filterByOrgScope(dataAssets, orgId as string) : dataAssets;
+    ? filterByOrgScope(allAssets, orgId as string) : allAssets;
   for (const a of filteredAssets) {
-    const assetRules = dataQualityRules.filter((r) => r.dataAssetId === a.id);
+    const assetRules = allRules.filter((r) => r.dataAssetId === a.id);
     addNode({
       id: a.id, type: 'data-asset',
       label: a.name, status: undefined,
@@ -99,7 +139,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Data domains
   const filteredDomains = orgId
-    ? filterByOrgScope(dataDomains, orgId as string) : dataDomains;
+    ? filterByOrgScope(allDomains, orgId as string) : allDomains;
   for (const d of filteredDomains) {
     addNode({
       id: d.id, type: 'domain',
@@ -126,7 +166,7 @@ router.get('/', (req: Request, res: Response) => {
     for (const sid of d.stewardIds) relevantPeopleIds.add(sid);
   }
   for (const pid of relevantPeopleIds) {
-    const person = people.find((p) => p.id === pid);
+    const person = allPeople.find((p) => p.id === pid);
     if (!person) continue;
     addNode({
       id: person.id, type: 'person',
@@ -154,12 +194,10 @@ router.get('/', (req: Request, res: Response) => {
     }
   }
 
-  // Mappings: Process step → Data Asset (load inline to avoid circular deps)
-  let mappings: any[] = [];
-  try { mappings = require('./mappings').mappings || []; } catch { /* */ }
+  // Mappings: Process step → Data Asset (loaded via the repo above)
   const filteredMappings = orgId
-    ? filterByOrgScope(mappings, orgId as string) : mappings;
-  for (const m of filteredMappings) {
+    ? filterByOrgScope(allMappings, orgId as string) : allMappings;
+  for (const m of filteredMappings as any[]) {
     // Map to the process node (step/activity) and data asset
     if (nodeIds.has(m.processStepId) && nodeIds.has(m.dataAssetId)) {
       edges.push({
@@ -174,7 +212,7 @@ router.get('/', (req: Request, res: Response) => {
 
   // Lineage: System → System
   const filteredLineage = orgId
-    ? filterByOrgScope(dataLineageLinks, orgId as string) : dataLineageLinks;
+    ? filterByOrgScope(allLineage, orgId as string) : allLineage;
   for (const l of filteredLineage as any[]) {
     if (nodeIds.has(l.sourceSystemId) && nodeIds.has(l.targetSystemId)) {
       edges.push({

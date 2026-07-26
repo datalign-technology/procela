@@ -819,6 +819,21 @@ data-carrying cutover, or take the fresh-org path.
     remove, update, delete with child re-parenting, and delete-all. tsc clean,
     full suite green (890). **This fully clears the `governanceGroups` store.**
 
+  - **9b.24 (done) — control-tower.ts + enterprise-view.ts (aggregators).**
+    First two of the read-only aggregator batch. `control-tower`'s `/summary`
+    loads governanceIssues/Tasks/Policies/Controls + dataDomains/dataAssets/
+    processNodes via repos (`Promise.all`) then runs the same in-memory
+    `filterByOrgScope` + `countBy` roll-ups. `enterprise-view`'s graph builder
+    loads processNodes/systems/dataAssets/dataDomains/dataQualityRules/people/
+    dataLineageLinks/mappings via repos (mappings lazy — its module imports back
+    into the catalog graph) and assembles the node/edge graph off those
+    snapshots. Both were sync handlers → made async; no writes (the many
+    `.push` calls build local result arrays, not stores). Verified against a
+    **local Postgres** (14/14): control-tower issue/policy/coverage counts read
+    PG (incl. a direct-PG insert bumping the total) with owners resolved from
+    PG; enterprise-view emits process/system/asset/person nodes and the
+    asset→system edge from PG. tsc clean, full suite green (890).
+
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
 isolation. Added a `live-db business flows` suite that drives the
