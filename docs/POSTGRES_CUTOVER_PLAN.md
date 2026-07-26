@@ -1040,6 +1040,49 @@ data-carrying cutover, or take the fresh-org path.
     (890). This closes the last small foreign-read gap in the data-quality
     route. **Index autosave** needed no work — the JSON autosave timer and
     shutdown flush in `index.ts` are already gated on `!hasDatabase()`.
+  - **9b.35 (done) — audit.service hash-chain → repository.** The tamper-evident
+    audit ledger was the largest remaining reader: `auditService.log()` is called
+    ~210 times across 39 files, always synchronously (fire-and-forget), and it
+    appends to a SHA-256 hash chain where each entry links to the previous
+    entry's `entryHash`. In Postgres mode every write went to the stale boot
+    array and every query (`getAll`/`getByEntity`/`verifyChain`) read it back
+    empty — the audit trail was effectively blank. Converted without touching the
+    210 call-sites:
+      * **`log()` stays synchronous / `void`.** It computes and advances the
+        chain against an in-memory cursor, then fire-and-forgets
+        `auditLogsRepo.create(entry)` (same durability model as
+        `createNotification`). The tail source is mode-split so the chain is
+        always correct and test-isolation-safe: JSON mode derives the tail from
+        the array (the source of truth, reset per-test by the store-isolation
+        helper); Postgres mode uses the cursor, seeded from the DB tail at boot
+        by the new `initAuditChain()` (wired into `index.ts` next to the other
+        cache initialisers). Computing the chain synchronously in-memory means
+        concurrent `log()` calls can't fork it, regardless of when the async
+        writes land.
+      * **`getAll` / `getByEntity` / `verifyChain` / `redactPerson` are now
+        `async`** and go through the repo (`list` orders by timestamp asc so the
+        chain walk sees insertion order). `redactPerson` re-chains the tail and
+        persists each scrubbed row via `repo.update`, then advances the cursor.
+      * Callers followed: `routes/audit.ts` (list / export.csv / verify),
+        `routes/trends.ts`, `routes/exports.ts` (already async), and the GDPR
+        cascade — `gdpr.service.erasePersonReferences` became `async` and its
+        `routes/people.ts` caller now awaits it. The `audit-chain` and
+        `gdpr-cascade` test call-sites were made `async`/`await`.
+      Verified against a **local Postgres** (11/11): three chained `log()` calls
+      persist a linked chain to PG (root `prevHash=""`, each entry linking to the
+      prior `entryHash`); `getAll`/`getByEntity` read off PG; `verifyChain`
+      reports the PG ledger valid; `redactPerson` tombstones the target `userId`
+      to `[deleted]` and re-chains in PG with the chain still verifying; and a
+      post-redact `log()` chains onto the re-hashed tail. tsc clean, full suite
+      green (890). *Durability caveat (documented):* like `createNotification`,
+      the PG insert is fire-and-forget — a failed write is logged, not retried,
+      so an operator monitoring the audit-persist error log is the backstop; a
+      transactional append queue is a possible hardening follow-up.
+
+**All deferred cutover items are now repository-backed except the dbt-import
+subsystem** in `data-lineage` (its own stores `dbtAssetMappings` /
+`dbtTestMappings` plus the manifest-import flow that fans out into assets,
+mappings and DQ rules), which remains a dedicated follow-up increment.
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in

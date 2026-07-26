@@ -142,7 +142,7 @@ export async function buildExecutiveReportMarkdown(ctx: ReportContext): Promise<
 
   // Recent activity from the audit log gives reviewers a "what's been
   // changing" signal without diving into the full log.
-  const recent = auditService.getAll(ctx.orgId || undefined)
+  const recent = (await auditService.getAll(ctx.orgId || undefined))
     .slice()
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     .slice(0, 10);

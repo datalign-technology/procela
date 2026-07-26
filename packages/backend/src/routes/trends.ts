@@ -5,8 +5,8 @@ import { processNodes, NODE_LEVELS } from './process-catalog';
 const router = Router();
 
 /** GET /api/v1/trends/activity — count of CREATE/UPDATE/DELETE actions per day for the last 30 days */
-router.get('/activity', (req: Request, res: Response) => {
-  const entries = auditService.getAll();
+router.get('/activity', async (req: Request, res: Response) => {
+  const entries = await auditService.getAll();
   const now = new Date();
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
