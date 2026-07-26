@@ -1079,10 +1079,41 @@ data-carrying cutover, or take the fresh-org path.
       so an operator monitoring the audit-persist error log is the backstop; a
       transactional append queue is a possible hardening follow-up.
 
-**All deferred cutover items are now repository-backed except the dbt-import
-subsystem** in `data-lineage` (its own stores `dbtAssetMappings` /
-`dbtTestMappings` plus the manifest-import flow that fans out into assets,
-mappings and DQ rules), which remains a dedicated follow-up increment.
+  - **9b.36 (done) — dbt-import reconcile + asset-lineage edges → repository.**
+    The last deferred subsystem. `POST /import-dbt` → `reconcileDbtManifest`
+    fans a dbt manifest out across five stores; the writes to `assetLineageEdges`
+    already went through a repo, but everything else read the module arrays, so
+    in Postgres mode the import created assets/rules against stale state and its
+    reconcile (match / prune) never saw prior rows. Converted the whole reconcile:
+      * Loads `dataAssets`, `dbtAssetMappings`, `dbtTestMappings`,
+        `dataQualityRules` and the org's existing dbt `assetLineageEdges` once as
+        mutable working snapshots, so rows created earlier in the loop are
+        visible to later iterations (exact-name asset match, rule dedup) before a
+        re-read.
+      * Asset upsert → `dataAssetsRepo().create` + push-to-working-copy; mapping
+        upsert/repair → `dbtAssetMappingsRepo.upsert`; edge upsert → the existing
+        `assetLineageEdgesRepo` but the **existing-edge lookup and the prune now
+        read the loaded snapshot** instead of the empty array (the bug that made
+        re-imports duplicate edges and prunes no-op in PG); test→DQ-rule
+        create/refresh → `dataQualityRulesRepo().create`/`.update`; stale-rule
+        prune → `dataQualityRulesRepo().delete` + `dbtTestMappingsRepo.remove`.
+        The four whole-store `saveStore` calls were dropped (every write persists
+        through its repo).
+      * The sibling `GET /asset-edges` list view (edge + asset-name enrichment)
+        was converted in the same pass — it read `assetLineageEdges` + dataAssets
+        off the arrays. `dataQualityRules` is lazy-required (data-lineage ↔
+        data-quality cycle); the dead `saveStore` / `dataQualityRules` imports
+        were removed.
+      Verified against a **local Postgres** (11/11): a first import creates 2
+      assets + 1 edge + 1 DQ rule (with side-table mappings) in PG; an identical
+      re-import is idempotent (0 created, edge touched, counts unchanged); and a
+      shrunk manifest prunes exactly the dropped edge and test-derived rule while
+      keeping the assets. tsc clean, full suite green (890).
+
+**Every deferred reader in the JSON→Postgres cutover is now
+repository-backed.** The remaining follow-ups are operational hardening, not
+array reads: the audit-log fire-and-forget durability (a transactional append
+queue), and any future column-level lineage work.
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
