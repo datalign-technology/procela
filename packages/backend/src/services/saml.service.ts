@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
+import { ROLES } from '../lib/permissions';
 import type { AuthProvider, AuthResult } from './auth-providers';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -238,16 +239,29 @@ export class SamlAuthProvider implements AuthProvider {
   }
 }
 
+// Map a raw IdP role / group claim onto one of Procela's canonical
+// application (access-control) roles. The direct-match list is derived
+// from ROLE_PERMISSIONS (lib/permissions) — the single source of truth
+// that requirePermission() enforces — so the two can't drift. Mapping a
+// claim to a role name that has no entry in ROLE_PERMISSIONS would
+// authenticate a user who then fails every permission check, which is
+// exactly the bug this replaced (it emitted PROCESS_OWNER / DATA_STEWARD,
+// neither of which is a real permission role).
+//
+// Note: DAMA governance roles (Data Owner, Data Steward, … — see
+// DamaRole) are a separate, non-permission concept. Owner- and
+// steward-style IdP groups therefore map to EDITOR, the application role
+// that grants read-write on the catalog, systems, data assets and
+// mappings — not to a governance-role name.
 export function mapClaimToRole(claim: string): string {
   const c = claim.toUpperCase();
-  // Direct match against our role names is the common case.
-  if (['SUPER_ADMIN', 'ORG_ADMIN', 'PROCESS_OWNER', 'DATA_STEWARD', 'CONTRIBUTOR', 'VIEWER'].includes(c)) {
+  // Direct match against a canonical application role is the common case.
+  if ((ROLES as string[]).includes(c)) {
     return c;
   }
-  // Some IdPs emit short codes — map the obvious ones.
+  // Some IdPs emit short codes / group names — map the obvious ones.
   if (c.includes('ADMIN')) return 'ORG_ADMIN';
-  if (c.includes('STEWARD')) return 'DATA_STEWARD';
-  if (c.includes('OWNER')) return 'PROCESS_OWNER';
+  if (c.includes('EDIT') || c.includes('STEWARD') || c.includes('OWNER')) return 'EDITOR';
   if (c.includes('CONTRIB')) return 'CONTRIBUTOR';
   return 'VIEWER';
 }
