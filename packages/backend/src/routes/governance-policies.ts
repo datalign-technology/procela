@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import { auditService } from '../services/audit.service';
 import { loadStore, registerStore } from '../lib/persistence';
+import { hasDatabase } from '../db/prisma';
 import { people } from './people';
 import logger from '../lib/logger';
 import { getGovernancePoliciesRepository } from '../db/governance-policies.repo';
@@ -48,10 +49,17 @@ function inferDocumentType(name: string): StoredGovernancePolicy['documentType']
   return 'POLICY';
 }
 
-export const governancePolicies: StoredGovernancePolicy[] = loadStore<StoredGovernancePolicy>('governancePolicies').map((p) => ({
-  ...p,
-  documentType: p.documentType || inferDocumentType(p.name),
-}));
+// The documentType backfill is a JSON-mode load-time migration for legacy
+// rows. In Postgres mode the array is retired (loadStore returns []), so the
+// `.map` is skipped — mapping the instrumented empty array would trip a
+// stale-read warning, and documentType comes from the DB column there.
+const _loadedPolicies = loadStore<StoredGovernancePolicy>('governancePolicies');
+export const governancePolicies: StoredGovernancePolicy[] = hasDatabase()
+  ? _loadedPolicies
+  : _loadedPolicies.map((p) => ({
+      ...p,
+      documentType: p.documentType || inferDocumentType(p.name),
+    }));
 registerStore('governancePolicies', governancePolicies);
 
 const governancePoliciesRepo = getGovernancePoliciesRepository(governancePolicies);

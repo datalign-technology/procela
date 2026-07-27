@@ -176,7 +176,10 @@ function deriveTailHash(entries: AuditLogEntry[]): string {
   }
   return '';
 }
-let tailHash = deriveTailHash(auditLogs);
+// JSON mode seeds the cursor from the loaded array; Postgres mode leaves
+// it empty here and initAuditChain() re-seeds it from the DB tail at boot
+// (reading the retired `auditLogs` array in PG mode would be a stale read).
+let tailHash = hasDatabase() ? '' : deriveTailHash(auditLogs);
 
 /** Seed the in-memory chain cursor from Postgres at boot. No-op in JSON
  *  mode (the cursor is already seeded from the loaded array). Call this

@@ -146,6 +146,22 @@ export function saveStore(name: string, data: any[]) {
 // input shape differs from the parsed StoredX shape). Output type is
 // still pinned to T, so downstream code sees the concrete row shape.
 export function loadStore<T>(name: string, rowSchema?: ZodType<T, ZodTypeDef, unknown>): T[] {
+  // Postgres mode: the repositories are the source of truth for every
+  // store, so the JSON arrays are retired — return an empty,
+  // stale-read-instrumented array instead of hydrating dead boot-state
+  // from disk. This is the final step of the JSON→Postgres cutover (PR
+  // 9b): with all readers repo-backed, nothing should touch the array in
+  // Postgres mode, and anything that still does is a bug the instrument
+  // proxy surfaces. The on-disk JSON files are left untouched (nothing
+  // writes them in PG mode), so switching a machine back to JSON mode
+  // still finds its data.
+  //
+  // IN_MEMORY_STORES (regenerable per-instance caches like
+  // aiTemplateCache) are exempt: they legitimately use the array as their
+  // backing store even in Postgres mode, so they load/stay real.
+  if (hasDatabase() && !IN_MEMORY_STORES.has(name)) {
+    return instrumentStaleStore(name, []);
+  }
   return maybeInstrumentStore(name, loadStoreRaw(name, rowSchema));
 }
 

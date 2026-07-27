@@ -8,6 +8,7 @@ import { filterByOrgScope } from '../lib/org-scope';
 import { testConnection, discoverAssets } from '../services/connector.service';
 import { analyzeLocalFile, deleteLocalFileDir, getUploadsDir } from '../lib/local-file-connector';
 import logger from '../lib/logger';
+import { hasDatabase } from '../db/prisma';
 import { getConnectionsRepository } from '../db/connections.repo';
 import { getConnectionSystemLinksRepository } from '../db/connection-system-links.repo';
 
@@ -122,26 +123,30 @@ const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionS
 
 // One-time migration: seed link rows from the legacy single systemId
 // per connection. Idempotent — only inserts a row if no link already
-// exists for the (connectionId, systemId) pair.
-let linksMigrated = false;
-for (const c of connections) {
-  if (c.systemId && c.systemId.trim()) {
-    const exists = connectionSystemLinks.some(
-      (l) => l.connectionId === c.id && l.systemId === c.systemId,
-    );
-    if (!exists) {
-      connectionSystemLinks.push({
-        id: uuid(),
-        orgId: c.orgId,
-        connectionId: c.id,
-        systemId: c.systemId,
-        createdAt: c.createdAt || new Date().toISOString(),
-      });
-      linksMigrated = true;
+// exists for the (connectionId, systemId) pair. JSON mode only — in
+// Postgres mode these arrays are retired (the migrate-json script owns
+// the one-time backfill), and reading them here would be a stale read.
+if (!hasDatabase()) {
+  let linksMigrated = false;
+  for (const c of connections) {
+    if (c.systemId && c.systemId.trim()) {
+      const exists = connectionSystemLinks.some(
+        (l) => l.connectionId === c.id && l.systemId === c.systemId,
+      );
+      if (!exists) {
+        connectionSystemLinks.push({
+          id: uuid(),
+          orgId: c.orgId,
+          connectionId: c.id,
+          systemId: c.systemId,
+          createdAt: c.createdAt || new Date().toISOString(),
+        });
+        linksMigrated = true;
+      }
     }
   }
+  if (linksMigrated) saveStore('connectionSystemLinks', connectionSystemLinks);
 }
-if (linksMigrated) saveStore('connectionSystemLinks', connectionSystemLinks);
 
 export function systemIdsForConnection(connectionId: string): string[] {
   return connectionSystemLinks.filter((l) => l.connectionId === connectionId).map((l) => l.systemId);

@@ -22,13 +22,19 @@ customer.
   `scripts/migrate-json-to-postgres.ts` reads `.procela-data/*.json` and
   inserts through each repo in FK-tier order, idempotently; run via
   `npm run db:migrate-json` (supports `--dry-run`).
-- [ ] **4. Cross-file consumers still read arrays (mostly done).**
-  `services/scheduler`, `services/digest.service`,
-  `services/report-engine`, and `lib/org-scope` are **converted** (cutover
-  PRs 4/5/6). The remaining gap is the long-tail routes the PR 9a stale-read
-  diagnostic flags (agent-executions, data-lineage, dashboard-stats) —
-  tracked as **PR 9b**, the last cutover step. Once 9b lands, `loadStore`
-  returns `[]` in Postgres mode and the dead arrays are retired.
+- [x] ~~**4. Cross-file consumers still read arrays.**~~ **Done** (cutover
+  **PR 9b**, increments 9b.1–9b.37). Every reader — the aggregators
+  (control-tower, enterprise-view, exports, analysis, chat), the store-owning
+  routes and their foreign reads (systems, process-catalog, data-quality,
+  data-lineage/dbt-import), the deferred governance sync helpers
+  (`syncDataQualityIssueForRule`, `sweepOverdueTasks`,
+  `openAgentOwnershipIssue`), and the audit hash-chain — now goes through its
+  repository. The arrays are retired: `loadStore` returns `[]` in Postgres
+  mode (the last four boot-time reads — audit cursor seed, process-catalog
+  counter reseed, connections legacy link-migration, governance-policies
+  documentType backfill — are `hasDatabase()`-guarded, so the app boots with
+  **zero** stale-read warnings). Verified by booting the backend against a
+  live Postgres (clean boot, 0 warnings) and the `live-db` suite (21/21).
 - [x] ~~**5. Auth cutover.**~~ **Done** (cutover PRs 3a–3e). `services/scim`,
   `routes/auth*`, account-lockout, refresh tokens, MFA/WebAuthn, and the
   auth-providers config are all repo-backed and async. Cognito / Azure AD
