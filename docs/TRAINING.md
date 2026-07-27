@@ -1063,7 +1063,7 @@ via the **RACI Matrix**.
 | Pivot exploration | Insights → Analysis |
 | Where are the gaps? | Dashboard → Gaps section + Insights → Gap Detection |
 | Live source metadata / freshness | Systems → Connections (if Procela can reach the DB) or Settings → On-prem connectors (if it can't) |
-| Help / shortcuts | Bottom-left nav → Help; press `?` for keyboard shortcuts |
+| Help / shortcuts | Top-bar **Help** button (next to Ask AI); press `?` for keyboard shortcuts |
 
 ### Keyboard shortcuts to know
 
