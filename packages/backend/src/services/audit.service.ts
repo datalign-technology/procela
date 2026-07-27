@@ -191,6 +191,95 @@ export async function initAuditChain(): Promise<void> {
   logger.info({ entries: all.length }, 'Audit chain cursor seeded from Postgres');
 }
 
+// ── Durable append queue (Postgres mode) ─────────────────────────────────
+// log() stays synchronous and void, but the DB insert must not be silently
+// dropped on a transient failure (the old fire-and-forget model). Entries
+// are enqueued and drained by a single worker in FIFO order, each insert
+// retried with capped exponential backoff. A single drainer means inserts
+// land in the same order log() computed the chain, and a DB blip costs a
+// retry rather than a lost audit row. JSON mode does NOT use this path — its
+// repo.create runs synchronously, so tests and the JSON store see the entry
+// immediately.
+const AUDIT_WRITE_MAX_ATTEMPTS = 6;
+const auditWriteQueue: AuditLogEntry[] = [];
+let drainInFlight: Promise<void> | null = null;
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Persist one entry, retrying on failure with capped exponential backoff.
+ *  Returns true once the write succeeds, false if it never does within
+ *  `maxAttempts`. Exported with injectable `create` / `sleep` so the retry
+ *  policy is unit-testable without a real database or real timers. */
+export async function persistAuditEntryWithRetry(
+  create: (e: AuditLogEntry) => Promise<unknown>,
+  entry: AuditLogEntry,
+  opts: {
+    maxAttempts?: number;
+    sleep?: (ms: number) => Promise<void>;
+    backoffMs?: (attempt: number) => number;
+  } = {},
+): Promise<boolean> {
+  const maxAttempts = opts.maxAttempts ?? AUDIT_WRITE_MAX_ATTEMPTS;
+  const sleep = opts.sleep ?? defaultSleep;
+  const backoff = opts.backoffMs ?? ((attempt) => Math.min(250 * 2 ** (attempt - 1), 30_000));
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await create(entry);
+      return true;
+    } catch (err) {
+      if (attempt < maxAttempts) {
+        logger.warn({ err, id: entry.id, attempt, maxAttempts }, 'Audit persist failed; will retry');
+        await sleep(backoff(attempt));
+      } else {
+        logger.error({ err, id: entry.id, attempt }, 'Audit persist failed on final attempt');
+      }
+    }
+  }
+  return false;
+}
+
+async function drainAuditQueue(): Promise<void> {
+  while (auditWriteQueue.length > 0) {
+    const entry = auditWriteQueue[0];
+    const ok = await persistAuditEntryWithRetry((e) => auditLogsRepo.create(e), entry);
+    if (!ok) {
+      // Never persisted after every retry. Emit the full entry at error
+      // level so it lands in log aggregation and can be replayed manually,
+      // then drop it so one poison row can't wedge the whole audit pipeline.
+      // The chain stays verifiable — the cursor already advanced, so this is
+      // a single missing row that verifyChain will flag if ever queried.
+      logger.error(
+        { auditEntry: entry },
+        'Audit entry permanently failed to persist — dropping from queue after exhausting retries',
+      );
+    }
+    auditWriteQueue.shift();
+  }
+}
+
+/** Enqueue an entry for durable persistence and ensure a drainer is running. */
+function enqueueAuditWrite(entry: AuditLogEntry): void {
+  auditWriteQueue.push(entry);
+  if (!drainInFlight) {
+    drainInFlight = drainAuditQueue().finally(() => { drainInFlight = null; });
+  }
+}
+
+/** Await the audit write queue draining to empty. Call during graceful
+ *  shutdown so pending entries persist before the process exits. Resolves
+ *  immediately in JSON mode (the queue is never used there). */
+export async function flushAuditQueue(): Promise<void> {
+  while (drainInFlight) {
+    await drainInFlight;
+  }
+}
+
+/** Depth of the pending audit write queue — exposed for health / metrics. */
+export function auditQueueDepth(): number {
+  return auditWriteQueue.length;
+}
+
 // Standalone variant of computeEntryHash that takes the entry
 // directly. Used by the bootstrap pass since `computeEntryHash` is
 // hoisted below as a function declaration but the standalone variant
@@ -272,12 +361,19 @@ export const auditService = {
     const prevHash = hasDatabase() ? tailHash : deriveTailHash(auditLogs);
     const entryHash = computeEntryHash(prevHash, base);
     const entry: AuditLogEntry = { ...base, prevHash, entryHash };
-    if (hasDatabase()) tailHash = entryHash;
-    // In JSON mode repo.create pushes to the array synchronously (its body
-    // has no await), so a test reading the array right after log() sees it;
-    // in Postgres mode the insert is fire-and-forget with error logging.
-    void auditLogsRepo.create(entry).catch((err) =>
-      logger.error({ err, id: entry.id }, 'Failed to persist audit entry'));
+    if (hasDatabase()) {
+      tailHash = entryHash;
+      // Postgres: hand off to the durable append queue — a serialized,
+      // retrying drainer so a transient DB failure doesn't silently drop
+      // the entry. flushAuditQueue() persists any backlog on shutdown.
+      enqueueAuditWrite(entry);
+    } else {
+      // JSON mode: jsonRepository.create runs synchronously (push +
+      // saveStore, no await), so a test reading the array right after log()
+      // sees the entry. Keep it direct — the queue isn't needed here.
+      void auditLogsRepo.create(entry).catch((err) =>
+        logger.error({ err, id: entry.id }, 'Failed to persist audit entry (JSON)'));
+    }
     logger.info({ entityType, entityId, action }, `[Audit] ${action} ${entityType}`);
   },
 

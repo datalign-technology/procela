@@ -265,7 +265,7 @@ import { mappings } from './routes/mappings';
 import { governanceGroups } from './routes/governance-groups';
 import { damaRoles } from './routes/dama-roles';
 import { dataDomains } from './routes/data-domains';
-import { auditLogs, initAuditChain } from './services/audit.service';
+import { auditLogs, initAuditChain, flushAuditQueue } from './services/audit.service';
 import { tags } from './routes/tags';
 import { comments } from './routes/comments';
 import { notifications } from './routes/notifications';
@@ -555,8 +555,16 @@ function shutdown(signal: string): void {
   // Only flush JSON stores in JSON mode. In Postgres mode the arrays are
   // stale boot-state and flushing them would clobber the JSON files.
   if (!hasDatabase()) flushStores(stores);
-  server.close((err) => {
+  server.close(async (err) => {
     if (err) logger.error({ err }, 'Error closing HTTP server');
+    // Persist any queued audit entries before exit so a shutdown mid-write
+    // doesn't lose the tail of the audit trail (Postgres mode). No-op in
+    // JSON mode. The 5s force-exit timeout below is the backstop if it hangs.
+    try {
+      await flushAuditQueue();
+    } catch (flushErr) {
+      logger.error({ err: flushErr }, 'Audit queue flush failed during shutdown');
+    }
     process.exit(err ? 1 : 0);
   });
   // Hard exit if close() hangs (e.g. a long-poll never finishes).
