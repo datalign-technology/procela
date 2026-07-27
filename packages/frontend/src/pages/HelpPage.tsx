@@ -32,11 +32,12 @@ const HELP_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'help-systems', label: '6. Systems' },
   { id: 'help-organizations', label: '7. Organizations' },
   { id: 'help-governance', label: '8. Governance' },
-  { id: 'help-security', label: '9. Security & Account' },
-  { id: 'help-cross-cutting', label: '10. Cross-cutting Features' },
-  { id: 'help-key-concepts', label: '11. Key Concepts' },
-  { id: 'help-faq', label: '12. Frequently Asked Questions' },
-  { id: 'help-shortcuts', label: '13. Keyboard shortcuts' },
+  { id: 'help-insights', label: '9. Insights' },
+  { id: 'help-security', label: '10. Security & Account' },
+  { id: 'help-cross-cutting', label: '11. Cross-cutting Features' },
+  { id: 'help-key-concepts', label: '12. Key Concepts' },
+  { id: 'help-faq', label: '13. Frequently Asked Questions' },
+  { id: 'help-shortcuts', label: '14. Keyboard shortcuts' },
 ];
 
 const h3Style: React.CSSProperties = {
@@ -180,7 +181,7 @@ export default function HelpPage() {
           <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
           <li><strong>Insights</strong> &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Data Mapping) and <strong>Review</strong> (Reports, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
         </ul>
-        <p style={pStyle}>Settings and Help sit at the bottom of the sidebar.</p>
+        <p style={pStyle}>Settings sits at the bottom of the sidebar; Help is the button in the top bar (next to Ask AI).</p>
 
         <h3 style={h3Style}>Header controls</h3>
         <ul style={listStyle}>
@@ -292,6 +293,10 @@ export default function HelpPage() {
           <li>Quality rules per asset / column with dimensions (completeness, accuracy, timeliness, etc.).</li>
           <li>Weighted scoring rolls up to an asset-level health score.</li>
           <li>dbt tests imported via a manifest become rules automatically (templateId starts with <code>dbt:</code>). Edits to those rules persist across re-imports; removed tests delete their rule.</li>
+        </ul>
+        <h3 style={h3Style}>Orphan Assets</h3>
+        <ul style={listStyle}>
+          <li>A focused list of data assets that no process step references &mdash; candidates to either map to a step that uses them or retire. Sidebar: <strong>Data &rarr; Orphan Assets</strong> (<code>/data-assets/orphans</code>); the same orphans also surface in Gap Detection.</li>
         </ul>
       </div>
 
@@ -418,7 +423,7 @@ export default function HelpPage() {
           <li>Each row carries a <em>documentType</em> badge plus the existing status, review cadence, owner, and category. Codes are auto-generated and per-type — <code>CHA-001</code>, <code>FRW-001</code>, <code>STD-001</code>, <code>POL-001</code> — so the code itself tells you what kind of document you're looking at.</li>
           <li><strong>Controls hang off Policies only.</strong> The expanded controls panel only opens for rows with <em>documentType: Policy</em> — charters and frameworks don't have rule-shaped controls and the panel stays hidden for them.</li>
           <li>Controls have a type (Preventive / Detective / Corrective) and an automation mode (Human / Agent / Hybrid).</li>
-          <li>This used to be called <em>Policies</em> and was scoped to rules only. The old <code>/governance-policies</code> URL still works as a back-compat alias; the canonical path is <code>/governance-documents</code>. Sidebar label is now <strong>Documents</strong> under the Governance section.</li>
+          <li>This used to be called <em>Policies</em> and was scoped to rules only. It now lives at <code>/governance-policies</code> (the route the sidebar links to); the <code>/governance-documents</code> alias also resolves here. Sidebar label is now <strong>Documents</strong> under the Governance section.</li>
           <li>If you previously ran the <em>Generate governance processes</em> wand, it used to seed 15 "governance Data Assets" — Charter, Policies, Standards, Glossary, Domain Catalog, etc. A one-time startup migration moves the four real documents (Charter, Data Policies, Data Standards, Access Control Policies) into Governance Documents with the right type, and deletes the rest because they were either duplicates of existing entities (Glossary, Domains, Lineage, DQ Rules, Issues, Tasks) or generated outputs (reports, communications) that were never really stored data.</li>
         </ul>
         <h3 style={h3Style}>Documentation (Manual + Procedures)</h3>
@@ -441,6 +446,23 @@ export default function HelpPage() {
           <li><strong>Automatic overdue detection.</strong> A background sweep runs every hour and writes a <em>Task overdue: &lt;title&gt;</em> warning into the notifications bell for the assignee of any OPEN / IN_PROGRESS / PENDING_APPROVAL task whose due date has slipped. It's idempotent (the row is stamped after firing) and re-arms when the due date is pushed forward or the task cycles back to OPEN. Unassigned tasks fire org-wide. <code>POST /api/v1/governance-tasks/sweep-overdue</code> drives the same sweep synchronously.</li>
           <li><strong>Weekly digest scheduler.</strong> The same in-app scheduler fires the gap-delta digest (see below) once a week on the first tick after Sunday 23:00 UTC. The last-fired timestamp is persisted, so a restart in the firing window doesn't double-notify. Both loops can be disabled via <code>PROCELA_DISABLE_SCHEDULER=1</code>.</li>
         </ul>
+        <h3 style={h3Style}>Dependency Enforcement</h3>
+        <p style={pStyle}>
+          Governance pages show prerequisite banners when prior steps haven't been completed.
+          For example, the RACI page shows "Create domains and governance groups first" until those exist.
+        </p>
+      </div>
+
+      {/* 9. Insights */}
+      <div style={sectionStyle}>
+        <h2 id="help-insights" style={h2Style}>9. Insights</h2>
+        <p style={pStyle}>
+          Cross-cutting exploration and review surfaces that read across every part of the
+          catalog. Promoted out of Governance into their own <strong>Insights</strong> sidebar
+          section &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Data
+          Mapping, Process &harr; Data Map) and <strong>Review</strong> (Reports, Gap Detection,
+          Audit Log).
+        </p>
         <h3 style={h3Style}>Enterprise View</h3>
         <ul style={listStyle}>
           <li>Single pane of glass across processes, systems, data assets, domains, and people. Filters by view preset (Process &rarr; System &rarr; Data, Governance, Ownership, Lineage, etc.) to focus on one relationship at a time.</li>
@@ -465,16 +487,19 @@ export default function HelpPage() {
           <li><strong>My Reports + Report Builder.</strong> Build a report against Procela's logical data model — pick a starting entity (Processes, Data Assets, Systems, People, Mappings, Domains, Roles, Skills, Organizations), choose columns directly on that entity <em>or</em> joined columns from a related entity (e.g. <em>Responsible Person → Name</em>, <em>Required Skills → Name</em>), add filters with op-aware value inputs (enum dropdowns, number coercion), set sort, and preview live as you type. Save with a name and visibility (Shared with org / Private to me); saved reports show up on the My Reports tab with metadata (primary entity, column count). Edit at <code>/reports/builder/:id</code>; new at <code>/reports/builder</code>.</li>
           <li><strong>Gap Detection.</strong> Cross-cutting view of unmapped activities, ungoverned assets, ownership gaps, low-health assets, unowned domains, orphaned assets, unlinked assets, unassigned people, and duplicate asset names. Drill-down everywhere: the four summary cards at the top (Total Gaps / Critical / Warning / Informational) scroll to the first matching section when clicked; each row inside a section is a hyperlink that opens the affected item on its source page so you can fix the gap in one click — Unmapped Activity rows jump to the Process Catalog with the node highlighted, asset rows jump to Data Assets, person rows open the person's profile, and so on.</li>
         </ul>
-        <h3 style={h3Style}>Dependency Enforcement</h3>
-        <p style={pStyle}>
-          Governance pages show prerequisite banners when prior steps haven't been completed.
-          For example, the RACI page shows "Create domains and governance groups first" until those exist.
-        </p>
+        <h3 style={h3Style}>Process &harr; Data Map</h3>
+        <ul style={listStyle}>
+          <li>A bipartite visualization of which activities depend on which data assets, drawn as two columns with mapping edges between them &mdash; the graph view of the <em>Data Mapping</em> table. Sidebar: <strong>Insights &rarr; Explore &rarr; Process &harr; Data Map</strong> (<code>/processes/data-map</code>). Governance-domain activities are hidden by default; toggle them in with the include-governance control.</li>
+        </ul>
+        <h3 style={h3Style}>Audit Log</h3>
+        <ul style={listStyle}>
+          <li>The full, queryable trail of every change &mdash; who did what to which entity and when. Filter by organization, entity type / id, or user, cap the result size, and export to CSV for a compliance reviewer. Sidebar: <strong>Insights &rarr; Review &rarr; Audit Log</strong> (<code>/audit-log</code>). Every row is hash-chained to the previous one; the <em>Verify integrity</em> action (see Security &amp; Account) walks the chain and flags any tampering.</li>
+        </ul>
       </div>
 
-      {/* 9. Security & Account */}
+      {/* 10. Security & Account */}
       <div style={sectionStyle}>
-        <h2 id="help-security" style={h2Style}>9. Security &amp; Account</h2>
+        <h2 id="help-security" style={h2Style}>10. Security &amp; Account</h2>
         <p style={pStyle}>
           Procela ships with a layered sign-in stack — federated SSO, second-factor authentication, brute-force defences, and admin controls for credential lifecycle. Most of these are configurable per deployment; the defaults are sensible for a prototype but production deployments will want to set the env vars called out below. All settings below live under <strong>Settings</strong> unless noted; the credential-lifecycle admin actions live on the Person detail page.
         </p>
@@ -571,9 +596,9 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 10. Cross-cutting Features */}
+      {/* 11. Cross-cutting Features */}
       <div style={sectionStyle}>
-        <h2 id="help-cross-cutting" style={h2Style}>10. Cross-cutting Features</h2>
+        <h2 id="help-cross-cutting" style={h2Style}>11. Cross-cutting Features</h2>
         <p style={pStyle}>
           A handful of components show up on every detail page so the patterns stay the same as you move around the app.
         </p>
@@ -623,9 +648,9 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 10. Key Concepts */}
+      {/* 12. Key Concepts */}
       <div style={sectionStyle}>
-        <h2 id="help-key-concepts" style={h2Style}>11. Key Concepts</h2>
+        <h2 id="help-key-concepts" style={h2Style}>12. Key Concepts</h2>
         <h3 style={h3Style}>DAMA Framework</h3>
         <p style={pStyle}>
           Procela follows the DAMA (Data Management Association) framework for data governance. The governance
@@ -676,11 +701,11 @@ export default function HelpPage() {
         </p>
       </div>
 
-      {/* 11. FAQ — the keyboard-shortcuts section that used to live
+      {/* 13. FAQ — the keyboard-shortcuts section that used to live
           here was a duplicate of the formatted table further down the
           page. Removed when the L-pass appendix added the better one. */}
       <div style={sectionStyle}>
-        <h2 id="help-faq" style={h2Style}>12. Frequently Asked Questions</h2>
+        <h2 id="help-faq" style={h2Style}>13. Frequently Asked Questions</h2>
 
         <h3 style={h3Style}>What is Procela?</h3>
         <p style={pStyle}>
@@ -824,7 +849,7 @@ export default function HelpPage() {
           the same overlay the user gets from Shift+? globally. Keeps
           discoverability high without forcing users to know the chord. */}
       <div style={sectionStyle}>
-        <h2 id="help-shortcuts" style={h2Style}>13. Keyboard shortcuts</h2>
+        <h2 id="help-shortcuts" style={h2Style}>14. Keyboard shortcuts</h2>
         <p style={pStyle}>
           Procela has a small set of keyboard chords for the things you'll do most often.
           Press <kbd style={kbdStyle}>Shift</kbd> + <kbd style={kbdStyle}>?</kbd> anywhere
