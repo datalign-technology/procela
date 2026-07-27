@@ -386,7 +386,10 @@ function reseedLevelCounters(nodes: ProcessNode[]): void {
     levelCounters[level] = existing.length > 0 ? Math.max(...existing) : 0;
   }
 }
-reseedLevelCounters(processNodes);
+// JSON mode seeds the ID counters from the loaded array at boot; Postgres
+// mode leaves them until initProcessCatalog() reseeds from the repo cache
+// (reading the retired `processNodes` array in PG mode would be a stale read).
+if (!hasDatabase()) reseedLevelCounters(processNodes);
 
 function generateNodeId(level: string): string {
   const prefix = ID_PREFIXES[level];

@@ -1109,11 +1109,32 @@ data-carrying cutover, or take the fresh-org path.
       re-import is idempotent (0 created, edge touched, counts unchanged); and a
       shrunk manifest prunes exactly the dropped edge and test-derived rule while
       keeping the assets. tsc clean, full suite green (890).
+  - **9b.37 (done) — retire the JSON arrays in Postgres mode (`loadStore → []`).**
+    The final step. With every reader repo-backed, `loadStore(name)` now returns
+    an empty, stale-read-instrumented array in Postgres mode instead of
+    hydrating boot-state from `.procela-data/*.json` — so no dead JSON data
+    lingers in memory and any un-migrated reader is forced to surface via the
+    instrument proxy. Confirmed every one of the ~55 stores is repo-backed
+    (only `aiTemplateCache`, a regenerable per-instance cache, stays real via
+    `IN_MEMORY_STORES`). Booting the backend against a live Postgres then
+    surfaced four remaining **boot-time** array reads (not request-path); each
+    was guarded `if (!hasDatabase())` because its Postgres equivalent runs at
+    boot: the audit tail-cursor seed (`initAuditChain` reseeds from the DB
+    tail), the process-catalog ID-counter reseed (`initProcessCatalog` reseeds
+    from the repo cache), the connections legacy `systemId → link` migration
+    (owned by the `migrate-json` script in PG), and the governance-policies
+    `documentType` load-time backfill (the column carries it in PG). The
+    on-disk JSON files are left untouched — nothing writes them in PG mode — so
+    a machine can still switch back to JSON mode and find its data. Verified:
+    tsc clean; full JSON-mode suite green (890, unaffected — the flip is
+    PG-only); the backend **boots against a live Postgres with zero stale-read
+    warnings**; and the `live-db` suite passes 21/21 with the flip active.
 
-**Every deferred reader in the JSON→Postgres cutover is now
-repository-backed.** The remaining follow-ups are operational hardening, not
-array reads: the audit-log fire-and-forget durability (a transactional append
-queue), and any future column-level lineage work.
+**Every reader in the JSON→Postgres cutover is now repository-backed, and the
+JSON arrays are retired in Postgres mode.** The remaining follow-ups are
+operational hardening, not array reads: the audit-log fire-and-forget
+durability (a transactional append queue), and any future column-level lineage
+work.
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
