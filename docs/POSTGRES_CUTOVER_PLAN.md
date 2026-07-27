@@ -1074,10 +1074,9 @@ data-carrying cutover, or take the fresh-org path.
       reports the PG ledger valid; `redactPerson` tombstones the target `userId`
       to `[deleted]` and re-chains in PG with the chain still verifying; and a
       post-redact `log()` chains onto the re-hashed tail. tsc clean, full suite
-      green (890). *Durability caveat (documented):* like `createNotification`,
-      the PG insert is fire-and-forget — a failed write is logged, not retried,
-      so an operator monitoring the audit-persist error log is the backstop; a
-      transactional append queue is a possible hardening follow-up.
+      green (890). *Durability caveat:* the PG insert was fire-and-forget here —
+      a failed write was logged, not retried. **Hardened in 9b.38** with a
+      serialized retry queue + graceful-shutdown flush.
 
   - **9b.36 (done) — dbt-import reconcile + asset-lineage edges → repository.**
     The last deferred subsystem. `POST /import-dbt` → `reconcileDbtManifest`
@@ -1131,10 +1130,33 @@ data-carrying cutover, or take the fresh-org path.
     warnings**; and the `live-db` suite passes 21/21 with the flip active.
 
 **Every reader in the JSON→Postgres cutover is now repository-backed, and the
-JSON arrays are retired in Postgres mode.** The remaining follow-ups are
-operational hardening, not array reads: the audit-log fire-and-forget
-durability (a transactional append queue), and any future column-level lineage
-work.
+JSON arrays are retired in Postgres mode.**
+
+  - **9b.38 (done) — audit-log write durability (serialized retry queue).**
+    Follow-up hardening for 9b.35. The Postgres audit insert was
+    fire-and-forget (`void auditLogsRepo.create(entry).catch(log)`), so a
+    transient DB failure silently dropped the entry while the in-memory chain
+    cursor had already advanced — a gap that only surfaced on a later
+    `verifyChain`. Replaced it with a **serialized, retrying append queue**:
+    `log()` stays synchronous / `void` but now enqueues in Postgres mode; a
+    single drainer persists in FIFO order (so inserts land in the same order
+    the chain was computed), retrying each write with capped exponential
+    backoff (`persistAuditEntryWithRetry`, 6 attempts) before, as a last
+    resort, logging the full entry at error level and dropping it so one poison
+    row can't wedge the pipeline. `flushAuditQueue()` is awaited in the
+    graceful-shutdown path (`index.ts` `server.close`) so a restart mid-write
+    persists the backlog; `auditQueueDepth()` is exposed for health/metrics.
+    JSON mode is unchanged — its `repo.create` runs synchronously, so tests and
+    the JSON store still see the entry immediately. Verified: the retry policy
+    is unit-tested with injected `create` + `sleep` (first-try success, recover
+    after 2 failures, give-up after `maxAttempts`, backoff schedule) — full
+    suite **894/894**; and against a **live Postgres**, 25 synchronously-logged
+    entries drain to PG, `flushAuditQueue` empties the backlog, the chain still
+    verifies (FIFO order preserved), and a second batch re-flushes cleanly.
+
+The remaining follow-ups are ops-only, not app code: any future column-level
+lineage work, and the go-live checklist (Postgres provisioning, secrets,
+HTTPS, backups, monitoring, security review).
 
 **PR 10 (done) — Expand live-db CI.** `live-db.test.ts` had a
 `live-db repository round-trips` suite proving each repo maps to Postgres in
