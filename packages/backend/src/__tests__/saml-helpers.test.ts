@@ -4,14 +4,28 @@ import assert from 'node:assert';
 import { mapClaimToRole, normaliseCert } from '../services/saml.service';
 
 describe('saml.service — mapClaimToRole', () => {
-  it('passes Procela-canonical roles through unchanged', () => {
-    for (const role of ['SUPER_ADMIN', 'ORG_ADMIN', 'PROCESS_OWNER', 'DATA_STEWARD', 'CONTRIBUTOR', 'VIEWER']) {
+  it('passes Procela-canonical application roles through unchanged', () => {
+    // The canonical set is exactly ROLE_PERMISSIONS' keys — the roles
+    // requirePermission() actually enforces.
+    for (const role of ['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER']) {
       assert.strictEqual(mapClaimToRole(role), role);
+    }
+  });
+
+  it('never emits a role that has no permission entry', () => {
+    // Regression guard for the SAML/RBAC drift: PROCESS_OWNER and
+    // DATA_STEWARD used to be emitted but grant no permissions, so a
+    // user mapped to them could do nothing. Every output must be a
+    // real, enforceable role.
+    const canonical = new Set(['SUPER_ADMIN', 'ORG_ADMIN', 'EDITOR', 'CONTRIBUTOR', 'VIEWER']);
+    for (const claim of ['steward', 'Data Steward', 'process-owner', 'owner', 'PROCESS_OWNER', 'DATA_STEWARD', 'engineer', 'anything']) {
+      assert.ok(canonical.has(mapClaimToRole(claim)), `${claim} mapped outside the canonical set`);
     }
   });
 
   it('is case-insensitive on canonical roles', () => {
     assert.strictEqual(mapClaimToRole('org_admin'), 'ORG_ADMIN');
+    assert.strictEqual(mapClaimToRole('editor'), 'EDITOR');
     assert.strictEqual(mapClaimToRole('Viewer'), 'VIEWER');
   });
 
@@ -22,14 +36,19 @@ describe('saml.service — mapClaimToRole', () => {
     assert.strictEqual(mapClaimToRole('system-admin'), 'ORG_ADMIN');
   });
 
-  it('matches steward-style codes to DATA_STEWARD', () => {
-    assert.strictEqual(mapClaimToRole('steward'), 'DATA_STEWARD');
-    assert.strictEqual(mapClaimToRole('Data Steward'), 'DATA_STEWARD');
+  it('maps steward- and owner-style groups to EDITOR', () => {
+    // DAMA governance groups (Data Steward, Data/Process Owner) are not
+    // permission roles — they resolve to EDITOR, the read-write catalog
+    // role, not to a non-existent governance role name.
+    assert.strictEqual(mapClaimToRole('steward'), 'EDITOR');
+    assert.strictEqual(mapClaimToRole('Data Steward'), 'EDITOR');
+    assert.strictEqual(mapClaimToRole('process-owner'), 'EDITOR');
+    assert.strictEqual(mapClaimToRole('owner'), 'EDITOR');
   });
 
-  it('matches owner-style codes to PROCESS_OWNER', () => {
-    assert.strictEqual(mapClaimToRole('process-owner'), 'PROCESS_OWNER');
-    assert.strictEqual(mapClaimToRole('owner'), 'PROCESS_OWNER');
+  it('matches editor-style codes to EDITOR', () => {
+    assert.strictEqual(mapClaimToRole('editor'), 'EDITOR');
+    assert.strictEqual(mapClaimToRole('content-editor'), 'EDITOR');
   });
 
   it('matches contrib* to CONTRIBUTOR', () => {
