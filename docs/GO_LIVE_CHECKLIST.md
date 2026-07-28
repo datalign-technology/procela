@@ -107,8 +107,13 @@ customer.
     only via the SheetJS CDN tarball. Decide: switch install source or
     mitigate/accept.
   SAST and a pen test are still outstanding.
-- [ ] **23. DR runbook.** How to restore from backup, rotate a
-  compromised API key, and roll back a migration.
+- [x] ~~**23. DR runbook.**~~ **Written** — [`docs/DR_RUNBOOK.md`](./DR_RUNBOOK.md)
+  covers restore-from-backup (PITR / snapshot / JSON fallback), migration
+  roll-back, and secret / API-key rotation, grounded in `deploy/terraform/`
+  and the Prisma migration flow. Ops still owes one **rehearsal against a
+  staging restore** to record real RTO/RPO and confirm the prod-hardening
+  prerequisites in the runbook's §7 (PITR retention, deletion protection,
+  final snapshot, `MFA_ENCRYPTION_KEY` in Secrets Manager).
 - [x] ~~**24. Real Postgres integration test in CI.**~~ **Done** (cutover
   PR 10). `live-db.test.ts` now carries a `live-db business flows` suite that
   drives the converted services (report-engine join, org-scope cascade,
