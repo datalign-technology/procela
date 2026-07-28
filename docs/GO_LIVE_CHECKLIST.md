@@ -43,9 +43,11 @@ customer.
 ## Environment / secrets — per environment
 
 - [ ] **6. `ANTHROPIC_API_KEY`** — the working key set locally.
-- [ ] **7. `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY`** — RS256 signing. The
-  backend currently boots with an HS256 warning. Generate an RSA
-  keypair; store the private key in Secrets Manager.
+- [ ] **7. `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY`** — RS256 signing.
+  **Code-complete** (`services/jwt-signer.ts`): the backend signs with
+  RS256 when the keypair is present and only falls back to HS256 (with a
+  boot warning) when it isn't. Config-only: generate an RSA keypair and
+  store the private key in Secrets Manager.
 - [ ] **8. `REDIS_URL`** — real Redis for rate-limiting & sessions. The
   backend falls back to in-memory if unset (fine for dev, not for HA).
 - [ ] **9. `SMTP_*`** — mail delivery for notifications / password
@@ -53,9 +55,12 @@ customer.
 - [ ] **10. Identity provider config.** `AUTH_PROVIDER`, `COGNITO_*`
   (AWS) or `SAML_*` / OIDC issuer URLs. Sub-domain-based tenant
   white-labeling needs proper DNS + a wildcard cert.
-- [ ] **11. `KMS_PROVIDER` / `MFA_ENCRYPTION_KEY`** — the backend
-  currently warns "secrets stored in plaintext." Wire AWS KMS or a
-  passphrase-derived key for TOTP secrets and password hashes at rest.
+- [ ] **11. `KMS_PROVIDER` / `MFA_ENCRYPTION_KEY`** — encryption at
+  rest for TOTP secrets is **code-complete** (`services/crypto.service.ts`
+  + `services/kms-providers.ts`, with tests); it encrypts when a key /
+  KMS provider is configured and falls back to plaintext **only in dev**
+  (with a boot warning) when neither is set. Config-only: wire AWS KMS or
+  a passphrase-derived `MFA_ENCRYPTION_KEY` in each environment.
 
 ## Runtime / operations
 
@@ -88,7 +93,20 @@ customer.
 - [ ] **21. Load test.** The E2E smoke covers correctness, not
   throughput — especially the AI endpoints, which are paid per call.
 - [ ] **22. Security review.** SAST / dependency audit / pen test.
-  `npm audit` currently shows 7 vulnerabilities to review.
+  Dependency audit **triaged**: `npm audit fix` (non-breaking) cleared the
+  safely-fixable advisories (19 → 9, lockfile-only, all suites green). The
+  remaining 9 need deliberate major-version work and are tracked
+  separately — do not auto-`--force`:
+  - **vitest toolchain** (`vitest`, `vite`, `vite-node`, `esbuild`,
+    `@vitest/mocker`) — dev/test only; fix is the vitest 3 → 4 major.
+  - **`nodemailer`** — runtime; fix is the 9.x major (`raw`-option file
+    read; low exposure unless the `raw` send option is used).
+  - **`react-router` / `react-router-dom`** — frontend runtime; fixed only
+    in react-router **7.18+** (v6 → v7 major; open-redirect / XSS).
+  - **`xlsx` (SheetJS)** — no npm fix published; the upstream fix ships
+    only via the SheetJS CDN tarball. Decide: switch install source or
+    mitigate/accept.
+  SAST and a pen test are still outstanding.
 - [ ] **23. DR runbook.** How to restore from backup, rotate a
   compromised API key, and roll back a migration.
 - [x] ~~**24. Real Postgres integration test in CI.**~~ **Done** (cutover
