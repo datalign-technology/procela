@@ -125,9 +125,16 @@ customer.
 - [ ] **25. Phase 3 connectors** — the real on-prem agent that scans
   customer DBs. UI stubs + backend registration exist; the actual agent
   binary / Docker image is future work.
-- [ ] **26. On-prem deployment** (per the CLAUDE.md guarantee).
-  Currently prototyped on AWS. Helm charts / k8s manifests for on-prem
-  don't exist yet.
+- [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
+  chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
+  backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,
+  a `prisma migrate deploy` pre-upgrade hook, Ingress, and split
+  ConfigMap/Secret. Mirrors the compose topology. **Remaining:** the prod
+  backend image omits the prisma CLI (a `devDependency`), so the migrate
+  Job needs an image that includes it (or run migrations out-of-band);
+  and the chart still needs a real `helm lint` + a smoke deploy on a
+  cluster (couldn't run in CI's sandbox). Managed/HA PostgreSQL (vs the
+  bundled single-replica StatefulSet) is a follow-up.
 - [x] ~~**27. The ~7 rule-8 handlers left as follow-up.**~~ Converted
   in PR [#137](https://github.com/datalign-technology/procela/issues/137).
   **Done.**
