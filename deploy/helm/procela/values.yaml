@@ -138,17 +138,15 @@ externalRedis:
 
 # ---------------------------------------------------------------------------
 # Database migrations — runs `prisma migrate deploy` as a pre-install /
-# pre-upgrade Helm hook Job.
-#
-# IMPORTANT: the stock production backend image omits the prisma CLI (it
-# is a devDependency). Either point `image` at an image that includes the
-# prisma CLI, or set `enabled: false` and run `prisma migrate deploy`
-# out-of-band before upgrading. See the chart README.
+# pre-upgrade Helm hook Job. The default backend image bundles the prisma
+# CLI + migration engine, so this works out of the box. Override `image`
+# only to run migrations from a different image, or set `enabled: false`
+# to run them out-of-band.
 # ---------------------------------------------------------------------------
 migrations:
   enabled: true
   image:
-    repository: ""           # empty -> backend image
+    repository: ""           # empty -> backend image (includes the prisma CLI)
     tag: ""
   command: ["npx", "prisma", "migrate", "deploy"]
   backoffLimit: 3
