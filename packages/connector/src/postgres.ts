@@ -10,7 +10,7 @@
 
 import { Client } from 'pg';
 import type { PostgresSource, ReportedAsset } from './types';
-import { pgSchemaFilter, rowToAsset, type RawCatalogRow } from './discovery';
+import { pgSchemaFilter, rowToAsset, attachColumns, type RawCatalogRow, type RawColumnRow } from './discovery';
 
 /** Scan one Postgres source. Opens a fresh connection, runs two
  *  queries (catalog + stats), closes. Errors propagate so the
@@ -49,8 +49,27 @@ export async function scanPostgres(source: PostgresSource): Promise<ReportedAsse
 
     // "schema.table" identity, freshness signal, and description
     // fallback are shared across all adapters — see ./discovery.
-    return res.rows.map((r): ReportedAsset =>
+    const assets = res.rows.map((r): ReportedAsset =>
       rowToAsset(r as RawCatalogRow, 'Postgres', source.systemId));
+
+    // Column-level metadata from the SQL-standard information_schema.
+    // Names + types only — never values. One extra query for the whole
+    // scope; attachColumns groups it back onto the assets.
+    const colsSql = `
+      SELECT
+        table_schema      AS schema,
+        table_name        AS "table",
+        column_name       AS column,
+        data_type         AS data_type,
+        is_nullable       AS is_nullable,
+        ordinal_position  AS ordinal
+      FROM information_schema.columns
+      WHERE table_schema IN (${schemaList})
+      ORDER BY table_schema, table_name, ordinal_position
+    `;
+    const colRes = await client.query(colsSql);
+    attachColumns(assets, colRes.rows as RawColumnRow[]);
+    return assets;
   } finally {
     await client.end();
   }

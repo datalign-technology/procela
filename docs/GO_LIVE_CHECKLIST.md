@@ -131,9 +131,11 @@ customer.
   upserts discovered tables as Bronze `DataAsset`s, audit-only. This
   session added the agent's **first test suite** (discovery mapping,
   config normalisation, the backend HTTP contract) + a CI `Connector
-  tests` job. **Remaining:** column-level discovery (tables only today),
-  Oracle + dbt-manifest source types (planned), and a real end-to-end
-  run against customer databases.
+  tests` job, and **column-level discovery** — the three adapters now
+  also read `information_schema.columns` and `/report` upserts
+  `DataAssetColumn`s (name + type, audit-only; no values cross the wire).
+  **Remaining:** Oracle + dbt-manifest source types (planned), and a real
+  end-to-end run against customer databases.
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,

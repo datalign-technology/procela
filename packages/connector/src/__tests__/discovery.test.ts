@@ -7,8 +7,13 @@ import {
   freshnessSignal,
   rowToAsset,
   pgSchemaFilter,
+  normalizeNullable,
+  columnToReported,
+  attachColumns,
   type RawCatalogRow,
+  type RawColumnRow,
 } from '../discovery';
+import type { ReportedAsset } from '../types';
 
 describe('discovery — assetName', () => {
   it('qualifies the object with its schema', () => {
@@ -79,6 +84,68 @@ describe('discovery — rowToAsset', () => {
 
   it('omits freshness when there is no signal', () => {
     assert.strictEqual(rowToAsset({ ...base, last_activity: null }, 'Postgres').lastWriteAt, undefined);
+  });
+});
+
+describe('discovery — normalizeNullable', () => {
+  it('reads information_schema YES/NO', () => {
+    assert.strictEqual(normalizeNullable('YES'), true);
+    assert.strictEqual(normalizeNullable('no'), false);
+    assert.strictEqual(normalizeNullable(' Yes '), true);
+  });
+  it('reads boolean and numeric forms', () => {
+    assert.strictEqual(normalizeNullable(true), true);
+    assert.strictEqual(normalizeNullable(false), false);
+    assert.strictEqual(normalizeNullable(1), true);
+    assert.strictEqual(normalizeNullable(0), false);
+    assert.strictEqual(normalizeNullable('1'), true);
+  });
+  it('treats null/unknown as not-nullable', () => {
+    assert.strictEqual(normalizeNullable(null), false);
+    assert.strictEqual(normalizeNullable('maybe'), false);
+  });
+});
+
+describe('discovery — columnToReported', () => {
+  const raw: RawColumnRow = {
+    schema: 'sales', table: 'orders', column: 'total',
+    data_type: 'numeric', is_nullable: 'NO', ordinal: 3,
+  };
+  it('maps name, dataType, nullable, ordinal', () => {
+    assert.deepStrictEqual(columnToReported(raw), { name: 'total', dataType: 'numeric', nullable: false, ordinal: 3 });
+  });
+  it('omits dataType and ordinal when absent', () => {
+    const c = columnToReported({ ...raw, data_type: null, ordinal: null });
+    assert.strictEqual(c.dataType, undefined);
+    assert.strictEqual('ordinal' in c, false);
+  });
+});
+
+describe('discovery — attachColumns', () => {
+  const assets: ReportedAsset[] = [
+    { name: 'sales.orders', rowCount: 10 },
+    { name: 'sales.customers', rowCount: 5 },
+  ];
+  const cols: RawColumnRow[] = [
+    { schema: 'sales', table: 'orders', column: 'total', data_type: 'numeric', is_nullable: 'NO', ordinal: 2 },
+    { schema: 'sales', table: 'orders', column: 'id', data_type: 'integer', is_nullable: 'NO', ordinal: 1 },
+    { schema: 'sales', table: 'customers', column: 'email', data_type: 'text', is_nullable: 'YES', ordinal: 1 },
+    // a column for a table that isn't in the asset list — ignored
+    { schema: 'sales', table: 'ghost', column: 'x', data_type: 'text', is_nullable: 'YES', ordinal: 1 },
+  ];
+
+  it('groups columns under their asset and orders by ordinal', () => {
+    const out = attachColumns(assets.map((a) => ({ ...a })), cols);
+    const orders = out.find((a) => a.name === 'sales.orders')!;
+    assert.deepStrictEqual(orders.columns?.map((c) => c.name), ['id', 'total']);
+    const customers = out.find((a) => a.name === 'sales.customers')!;
+    assert.strictEqual(customers.columns?.length, 1);
+    assert.strictEqual(customers.columns?.[0].name, 'email');
+  });
+
+  it('leaves assets with no matching columns untouched', () => {
+    const out = attachColumns([{ name: 'sales.empty' }], cols);
+    assert.strictEqual(out[0].columns, undefined);
   });
 });
 

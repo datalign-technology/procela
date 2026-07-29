@@ -10,7 +10,7 @@
 
 import mssql from 'mssql';
 import type { SqlServerSource, ReportedAsset } from './types';
-import { rowToAsset, type RawCatalogRow } from './discovery';
+import { rowToAsset, attachColumns, type RawCatalogRow, type RawColumnRow } from './discovery';
 
 // System schemas we never want to surface. INFORMATION_SCHEMA is
 // SQL Server's SQL-standard views layer; the sys.* metadata lives
@@ -110,8 +110,43 @@ export async function scanSqlServer(source: SqlServerSource): Promise<ReportedAs
     // fallback — see ./discovery. last_user_update is NULL until the
     // DMV records a write since the last restart; freshnessSignal
     // maps that (and epoch) to "no signal".
-    return res.recordset.map((r: RawCatalogRow): ReportedAsset =>
+    const assets = res.recordset.map((r: RawCatalogRow): ReportedAsset =>
       rowToAsset(r, 'SQL Server', source.systemId));
+
+    // Column-level metadata from the SQL-standard INFORMATION_SCHEMA.
+    // Names + types only — never values. A fresh request for its own
+    // bound schema params; the clause is the same filter re-aliased to
+    // the columns view's TABLE_SCHEMA.
+    const colRequest = pool.request();
+    let colClause: string;
+    if (source.schemas && source.schemas.length > 0) {
+      const names = source.schemas.map((s, i) => {
+        colRequest.input(`schema_${i}`, mssql.NVarChar, s);
+        return `@schema_${i}`;
+      });
+      colClause = `c.TABLE_SCHEMA IN (${names.join(', ')})`;
+    } else {
+      const names = Array.from(SYSTEM_SCHEMAS).map((s, i) => {
+        colRequest.input(`sysSchema_${i}`, mssql.NVarChar, s);
+        return `@sysSchema_${i}`;
+      });
+      colClause = `c.TABLE_SCHEMA NOT IN (${names.join(', ')})`;
+    }
+    const colsSql = `
+      SELECT
+        c.TABLE_SCHEMA     AS [schema],
+        c.TABLE_NAME       AS [table],
+        c.COLUMN_NAME      AS [column],
+        c.DATA_TYPE        AS data_type,
+        c.IS_NULLABLE      AS is_nullable,
+        c.ORDINAL_POSITION AS ordinal
+      FROM INFORMATION_SCHEMA.COLUMNS c
+      WHERE ${colClause}
+      ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION
+    `;
+    const colRes = await colRequest.query(colsSql);
+    attachColumns(assets, colRes.recordset as RawColumnRow[]);
+    return assets;
   } finally {
     await pool.close();
   }

@@ -4,8 +4,10 @@ import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
 import { loadStore, registerStore } from '../lib/persistence';
 import { auditService } from '../services/audit.service';
-import { dataAssets } from './data-assets';
+import { dataAssets, dataAssetColumns } from './data-assets';
+import type { StoredDataAssetColumn } from './data-assets';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
+import { getDataAssetColumnsRepository } from '../db/data-asset-columns.repo';
 import { createNotification } from './notifications';
 import { authenticateToken, type AuthenticatedRequest } from '../middleware/auth';
 import { rateLimit } from '../middleware/rate-limit';
@@ -95,6 +97,7 @@ registerStore('connectorEvents', connectorEvents);
 const connectorsRepo = getConnectorsRepository(connectors);
 // Foreign data-asset writes go through the repository (Postgres or JSON) — PR 7b.
 const dataAssetsRepo = getDataAssetsRepository(dataAssets);
+const dataAssetColumnsRepo = getDataAssetColumnsRepository(dataAssetColumns);
 const connectorEventsRepo = getConnectorEventsRepository(connectorEvents);
 
 const router = Router();
@@ -351,25 +354,37 @@ router.post('/heartbeat', requireConnectorToken, async (req: Request, res: Respo
   res.json({ success: true });
 });
 
-/** POST /connectors/report — agent ships a metadata snapshot. v1
- *  accepts a flat list of "assets" each with `name`, optional
- *  `systemId`, `schema`, `description`, `rowCount`, `lastWriteAt`.
+/** POST /connectors/report — agent ships a metadata snapshot. Accepts
+ *  a flat list of "assets" each with `name`, optional `systemId`,
+ *  `description`, `rowCount`, `lastWriteAt`, and (v2) an optional
+ *  `columns[]` of { name, dataType, nullable, ordinal }.
  *  Behaviour:
- *    - Upsert by (orgId, systemId, name): existing assets get
- *      healthScore + lastWriteAt refreshed; missing ones get
- *      created as Bronze with the reported description.
- *    - Audit-only — no destructive sync of "anything not reported".
- *      Removing an asset is still an explicit admin action.
- *  Returns the number of created vs updated rows so the connector
- *  can log it. */
+ *    - Upsert assets by (orgId, name): existing get healthScore +
+ *      lastWriteAt refreshed; missing ones are created as Bronze.
+ *    - Upsert their columns by (dataAssetId, columnName): new columns
+ *      are created (with dataType + discovery provenance), a changed
+ *      dataType is refreshed. Column-less reports skip this entirely,
+ *      so an older agent never wipes a curated schema.
+ *    - Audit-only throughout — nothing not reported is deleted.
+ *  Returns created/updated counts for both assets and columns. */
 router.post('/report', requireConnectorToken, async (req: Request, res: Response) => {
   const row = (req as any).connector as StoredConnector;
   const incoming = Array.isArray(req.body?.assets) ? req.body.assets : [];
   let created = 0;
   let updated = 0;
+  let columnsCreated = 0;
+  let columnsUpdated = 0;
   // Snapshot the assets once; new rows are pushed back in so a later same-name
   // asset in this same batch still dedups against them (PR 7b).
   const allAssets = await dataAssetsRepo.list();
+  // Snapshot columns too, indexed by (dataAssetId, columnName) so column
+  // upserts dedup without an N+1 read. Same audit-only stance as assets:
+  // reported columns are created / type-refreshed, never deleted.
+  const allColumns = await dataAssetColumnsRepo.list();
+  const colKey = (dataAssetId: string, columnName: string) => `${dataAssetId} ${columnName}`;
+  const colIndex = new Map<string, StoredDataAssetColumn>();
+  for (const c of allColumns) colIndex.set(colKey(c.dataAssetId, c.columnName), c);
+
   for (const a of incoming) {
     const name = String(a?.name || '').trim();
     if (!name) continue;
@@ -377,6 +392,7 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
     const rowCount = typeof a?.rowCount === 'number' ? a.rowCount : null;
     const lastWriteAt = typeof a?.lastWriteAt === 'string' ? a.lastWriteAt : null;
     const existing = allAssets.find((d) => d.orgId === row.orgId && d.name === name);
+    let assetId: string;
     if (existing) {
       if (lastWriteAt) (existing as any).healthScoreAt = lastWriteAt;
       // Refresh a coarse health signal: 90 if recently written, 60
@@ -391,6 +407,7 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
       (existing as any).lastSyncedByConnectorId = row.id;
       (existing as any).lastSyncedAt = nowIso();
       await dataAssetsRepo.update(existing.id, existing);
+      assetId = existing.id;
       updated++;
     } else {
       const now = nowIso();
@@ -408,16 +425,53 @@ router.post('/report', requireConnectorToken, async (req: Request, res: Response
       } as any;
       await dataAssetsRepo.create(newAsset);
       allAssets.push(newAsset);
+      assetId = newAsset.id;
       created++;
+    }
+
+    // Column-level metadata (v2): create new columns, refresh a changed
+    // dataType. Audit-only — columns no longer reported are left in
+    // place. Skipped entirely when the agent sends no columns (older
+    // agents), so it never wipes a manually-curated schema.
+    if (Array.isArray(a?.columns)) {
+      for (const col of a.columns) {
+        const columnName = String(col?.name || '').trim();
+        if (!columnName) continue;
+        const dataType = typeof col?.dataType === 'string' && col.dataType ? col.dataType : undefined;
+        const key = colKey(assetId, columnName);
+        const existingCol = colIndex.get(key);
+        if (existingCol) {
+          if (dataType && existingCol.dataType !== dataType) {
+            existingCol.dataType = dataType;
+            existingCol.updatedAt = nowIso();
+            await dataAssetColumnsRepo.update(existingCol.id, existingCol);
+            columnsUpdated++;
+          }
+        } else {
+          const nowc = nowIso();
+          const newCol: StoredDataAssetColumn = {
+            id: uuid(), dataAssetId: assetId, columnName,
+            ...(dataType ? { dataType } : {}),
+            // Record the discovery provenance so a steward can see the
+            // column came from this scanned source, not a manual add.
+            sourceAsset: name, sourceColumn: columnName,
+            createdAt: nowc, updatedAt: nowc,
+          };
+          await dataAssetColumnsRepo.create(newCol);
+          allColumns.push(newCol);
+          colIndex.set(key, newCol);
+          columnsCreated++;
+        }
+      }
     }
   }
   await connectorsRepo.update(row.id, { lastHeartbeatAt: nowIso(), updatedAt: nowIso() });
   await connectorEventsRepo.create({
     id: uuid(), connectorId: row.id, orgId: row.orgId,
     type: 'ASSETS_REPORTED', ts: nowIso(),
-    data: { incoming: incoming.length, created, updated, rowCount: incoming.length },
+    data: { incoming: incoming.length, created, updated, columnsCreated, columnsUpdated, rowCount: incoming.length },
   });
-  res.json({ success: true, data: { created, updated, total: incoming.length } });
+  res.json({ success: true, data: { created, updated, columnsCreated, columnsUpdated, total: incoming.length } });
 });
 
 /** Internal helper used by the scheduled-offline scan (next file).
