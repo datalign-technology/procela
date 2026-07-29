@@ -1,0 +1,184 @@
+# Default values for the Procela on-premise Helm chart.
+# Override with `-f my-values.yaml` or `--set key=value`.
+# Anything under `secrets:` must be supplied at install time — never
+# commit real secret values.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Optional private registry prefix (e.g. "registry.internal/"). When set
+# it is prepended to every image repository below.
+imageRegistry: ""
+imagePullSecrets: []
+imagePullPolicy: IfNotPresent
+
+# ---------------------------------------------------------------------------
+# Backend API (Node/Express, container port 3001)
+# ---------------------------------------------------------------------------
+backend:
+  image:
+    repository: procela/backend
+    tag: ""            # empty -> Chart.AppVersion
+  replicaCount: 2
+  containerPort: 3001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  # Extra plain (non-secret) environment variables, as a map.
+  extraEnv: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Frontend (Nginx serving the static SPA + proxying /api to the backend)
+# ---------------------------------------------------------------------------
+frontend:
+  image:
+    repository: procela/frontend
+    tag: ""            # empty -> Chart.AppVersion
+  replicaCount: 2
+  containerPort: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------
+# Non-secret application config (rendered into a ConfigMap for the backend)
+# ---------------------------------------------------------------------------
+config:
+  nodeEnv: production
+  logLevel: info
+  # cognito | azuread | okta | saml | oidc — on-prem typically uses saml/oidc.
+  authProvider: saml
+  appUrl: ""                 # public URL, e.g. https://procela.example.com
+  anthropicModel: ""         # empty -> backend default
+  storageProvider: local
+  mailFrom: ""
+  saml:
+    entryPoint: ""
+    issuer: ""
+    callbackUrl: ""
+    logoutUrl: ""
+  smtp:
+    host: ""
+    port: ""
+    secure: "false"
+    user: ""
+
+# ---------------------------------------------------------------------------
+# Secret application config (rendered into a Secret unless existingSecret set)
+# Supply via --set or a private values file. NEVER commit real values.
+# ---------------------------------------------------------------------------
+secrets:
+  # Use a pre-existing Secret instead of the chart-managed one. It must
+  # provide the same keys (ANTHROPIC_API_KEY, JWT_*, MFA_ENCRYPTION_KEY,
+  # DATABASE_URL, SAML_IDP_CERT, SMTP_PASS). When set, all values below
+  # are ignored.
+  existingSecret: ""
+  anthropicApiKey: ""
+  jwtSecret: ""              # HS256 fallback secret
+  jwtPrivateKey: ""          # RS256 PEM (preferred)
+  jwtPublicKey: ""           # RS256 PEM (preferred)
+  mfaEncryptionKey: ""       # encrypts stored TOTP secrets at rest
+  samlIdpCert: ""            # IdP signing cert (PEM)
+  smtpPass: ""
+
+# ---------------------------------------------------------------------------
+# Bundled PostgreSQL. Set enabled=false to use externalDatabase.url.
+# ---------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  image: postgres:16-alpine
+  auth:
+    username: procela
+    password: procela        # OVERRIDE in production
+    database: procela
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""         # "" -> cluster default
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+externalDatabase:
+  # Used only when postgresql.enabled=false.
+  # postgresql://user:pass@host:5432/procela?schema=public
+  url: ""
+
+# ---------------------------------------------------------------------------
+# Bundled Redis. Set enabled=false to use externalRedis.url.
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true
+  image: redis:7-alpine
+  service:
+    port: 6379
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+externalRedis:
+  # Used only when redis.enabled=false. redis://host:6379
+  url: ""
+
+# ---------------------------------------------------------------------------
+# Database migrations — runs `prisma migrate deploy` as a pre-install /
+# pre-upgrade Helm hook Job.
+#
+# IMPORTANT: the stock production backend image omits the prisma CLI (it
+# is a devDependency). Either point `image` at an image that includes the
+# prisma CLI, or set `enabled: false` and run `prisma migrate deploy`
+# out-of-band before upgrading. See the chart README.
+# ---------------------------------------------------------------------------
+migrations:
+  enabled: true
+  image:
+    repository: ""           # empty -> backend image
+    tag: ""
+  command: ["npx", "prisma", "migrate", "deploy"]
+  backoffLimit: 3
+  resources: {}
+
+# ---------------------------------------------------------------------------
+# Ingress (path-based: / -> frontend, which itself proxies /api -> backend)
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  host: procela.example.local
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Applied to the backend pod/containers. Frontend Nginx needs to bind :80,
+# so its container security context is set separately in its template.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL

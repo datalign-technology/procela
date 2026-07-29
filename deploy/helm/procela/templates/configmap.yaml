@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "procela.fullname" . }}-config
+  labels:
+    {{- include "procela.labels" . | nindent 4 }}
+data:
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  PORT: {{ .Values.backend.containerPort | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  AUTH_PROVIDER: {{ .Values.config.authProvider | quote }}
+  STORAGE_PROVIDER: {{ .Values.config.storageProvider | quote }}
+  REDIS_URL: {{ include "procela.redisUrl" . | quote }}
+  {{- with .Values.config.appUrl }}
+  APP_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.anthropicModel }}
+  ANTHROPIC_MODEL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.mailFrom }}
+  MAIL_FROM: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.saml.entryPoint }}
+  SAML_ENTRY_POINT: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.saml.issuer }}
+  SAML_ISSUER: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.saml.callbackUrl }}
+  SAML_CALLBACK_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.saml.logoutUrl }}
+  SAML_LOGOUT_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.smtp.host }}
+  SMTP_HOST: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.smtp.port }}
+  SMTP_PORT: {{ . | quote }}
+  {{- end }}
+  SMTP_SECURE: {{ .Values.config.smtp.secure | quote }}
+  {{- with .Values.config.smtp.user }}
+  SMTP_USER: {{ . | quote }}
+  {{- end }}

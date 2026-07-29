@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "procela.fullname" . }}-backend
+  labels:
+    {{- include "procela.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "procela.selectorLabels" (dict "root" . "component" "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "procela.selectorLabels" (dict "root" . "component" "backend") | nindent 8 }}
+      annotations:
+        # Roll pods when the config/secret changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "procela.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backend
+          image: {{ include "procela.backendImage" . }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.containerPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "procela.fullname" . }}-config
+            - secretRef:
+                name: {{ include "procela.secretName" . }}
+          {{- with .Values.backend.extraEnv }}
+          env:
+            {{- range $k, $v := . }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,22 @@
+apiVersion: v2
+name: procela
+description: >-
+  Procela — business-process-to-data governance platform. On-premise /
+  Kubernetes deployment: backend API, Nginx-served frontend, and
+  optionally-bundled PostgreSQL and Redis. Mirrors the docker-compose
+  topology so the same container images run on a customer's own cluster.
+type: application
+# Chart version — bump on chart changes.
+version: 0.1.0
+# App version — the Procela release these defaults target. Used as the
+# default image tag when backend/frontend image tags are left empty.
+appVersion: "0.1.0"
+keywords:
+  - procela
+  - data-governance
+  - on-premise
+home: https://github.com/datalign-technology/procela
+sources:
+  - https://github.com/datalign-technology/procela
+maintainers:
+  - name: Procela
