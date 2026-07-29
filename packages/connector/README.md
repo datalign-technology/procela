@@ -18,8 +18,11 @@ For each table or view in every configured schema:
 - approximate row count (`pg_stat_user_tables.n_live_tup`)
 - last-vacuum / last-analyze timestamp (freshness proxy)
 - optional `obj_description` comment
+- its **columns** — name, data type, nullability, ordinal position
+  (from the SQL-standard `information_schema.columns`)
 
-No row values. No connection strings. No credentials.
+No row values. No connection strings. No credentials. Column
+**names and types** cross the wire; column **data** never does.
 
 ## Pairing flow
 

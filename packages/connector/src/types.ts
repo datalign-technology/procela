@@ -87,12 +87,26 @@ export interface SqlServerSource {
   systemId?: string;
 }
 
+export interface ReportedColumn {
+  /** Column name (unqualified — the parent asset carries schema.table). */
+  name: string;
+  /** Engine-reported data type, e.g. "integer", "varchar", "timestamp". */
+  dataType?: string;
+  /** Whether the column accepts NULL. */
+  nullable?: boolean;
+  /** 1-based position in the table. */
+  ordinal?: number;
+}
+
 export interface ReportedAsset {
   name: string;
   systemId?: string;
   description?: string;
   rowCount?: number;
   lastWriteAt?: string;
+  /** Column-level metadata (names + types only — never values). Omitted
+   *  by older agents; the backend upserts them audit-only when present. */
+  columns?: ReportedColumn[];
 }
 
 export interface PairClaimResponse {
@@ -103,6 +117,12 @@ export interface PairClaimResponse {
 
 export interface ReportResponse {
   success: boolean;
-  data?: { created: number; updated: number; total: number };
+  data?: {
+    created: number;
+    updated: number;
+    total: number;
+    columnsCreated?: number;
+    columnsUpdated?: number;
+  };
   error?: string;
 }

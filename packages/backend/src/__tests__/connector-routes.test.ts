@@ -18,7 +18,7 @@ const connectorsRouter = require('../routes/connectors').default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { connectors, connectorEvents, scanForOfflineConnectors } = require('../routes/connectors');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { dataAssets } = require('../routes/data-assets');
+const { dataAssets, dataAssetColumns } = require('../routes/data-assets');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { notifications } = require('../routes/notifications');
 
@@ -79,7 +79,7 @@ describe('connector routes', () => {
         }
       }
     };
-    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(notifications);
+    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(dataAssetColumns); sweep(notifications);
   });
 
   after(async () => {
@@ -90,7 +90,7 @@ describe('connector routes', () => {
         }
       }
     };
-    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(notifications);
+    sweep(connectors); sweep(connectorEvents); sweep(dataAssets); sweep(dataAssetColumns); sweep(notifications);
     await new Promise<void>((r) => server.close(() => r()));
   });
 
@@ -243,6 +243,60 @@ describe('connector routes', () => {
       });
       assert.strictEqual(second.body.data.updated, 1);
       assert.strictEqual(second.body.data.created, 0);
+    });
+
+    it('POST /report upserts column-level metadata, audit-only', async () => {
+      // First report: asset + two columns are created.
+      const first = await request(port, 'POST', '/connectors/report', {
+        body: { assets: [
+          { name: PREFIX + 'cols', description: 'with cols', rowCount: 3, columns: [
+            { name: 'id', dataType: 'integer', nullable: false, ordinal: 1 },
+            { name: 'email', dataType: 'text', nullable: true, ordinal: 2 },
+          ] },
+        ] },
+        bearer: token,
+      });
+      assert.strictEqual(first.status, 200);
+      assert.strictEqual(first.body.data.columnsCreated, 2);
+      assert.strictEqual(first.body.data.columnsUpdated, 0);
+
+      const asset = dataAssets.find((d: any) => d.name === PREFIX + 'cols');
+      assert.ok(asset);
+      let cols = dataAssetColumns.filter((c: any) => c.dataAssetId === asset.id);
+      assert.strictEqual(cols.length, 2);
+      const idCol = cols.find((c: any) => c.columnName === 'id');
+      assert.strictEqual(idCol.dataType, 'integer');
+      // Discovery provenance is recorded so a steward sees it was scanned.
+      assert.strictEqual(idCol.sourceColumn, 'id');
+      assert.strictEqual(idCol.sourceAsset, PREFIX + 'cols');
+
+      // Second report: unchanged col is a no-op, a type change updates,
+      // a new column is created.
+      const second = await request(port, 'POST', '/connectors/report', {
+        body: { assets: [
+          { name: PREFIX + 'cols', columns: [
+            { name: 'id', dataType: 'integer' },           // unchanged
+            { name: 'email', dataType: 'varchar' },        // changed -> update
+            { name: 'created_at', dataType: 'timestamp' }, // new -> create
+          ] },
+        ] },
+        bearer: token,
+      });
+      assert.strictEqual(second.body.data.columnsCreated, 1);
+      assert.strictEqual(second.body.data.columnsUpdated, 1);
+      cols = dataAssetColumns.filter((c: any) => c.dataAssetId === asset.id);
+      assert.strictEqual(cols.length, 3);
+      assert.strictEqual(cols.find((c: any) => c.columnName === 'email').dataType, 'varchar');
+
+      // Third report omits columns entirely — must not touch the schema
+      // (older agents, and a table-only rescan, don't wipe columns).
+      const third = await request(port, 'POST', '/connectors/report', {
+        body: { assets: [{ name: PREFIX + 'cols', rowCount: 9 }] },
+        bearer: token,
+      });
+      assert.strictEqual(third.body.data.columnsCreated, 0);
+      assert.strictEqual(third.body.data.columnsUpdated, 0);
+      assert.strictEqual(dataAssetColumns.filter((c: any) => c.dataAssetId === asset.id).length, 3);
     });
 
     it('GET /:id/events returns the connector\'s recent events newest-first', async () => {

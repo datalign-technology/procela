@@ -8,7 +8,7 @@
 
 import mysql from 'mysql2/promise';
 import type { MysqlSource, ReportedAsset } from './types';
-import { rowToAsset, type RawCatalogRow } from './discovery';
+import { rowToAsset, attachColumns, type RawCatalogRow, type RawColumnRow } from './discovery';
 
 // MySQL's own system schemas — never surface these as user assets.
 // `mysql` holds users/privileges/timezones; `sys` is the schema
@@ -85,8 +85,29 @@ export async function scanMysql(source: MysqlSource): Promise<ReportedAsset[]> {
 
     // Shared "schema.table" identity + freshness + description
     // fallback — see ./discovery.
-    return records.map((r): ReportedAsset =>
+    const assets = records.map((r): ReportedAsset =>
       rowToAsset(r as RawCatalogRow, 'MySQL', source.systemId));
+
+    // Column-level metadata from information_schema.columns — names +
+    // types only, never values. Same schema scope, re-parameterised
+    // (a fresh param list; the two queries run independently).
+    const colParams = [...params];
+    const colClause = schemaClause.replace(/t\.TABLE_SCHEMA/g, 'c.TABLE_SCHEMA');
+    const colsSql = `
+      SELECT
+        c.TABLE_SCHEMA     AS \`schema\`,
+        c.TABLE_NAME       AS \`table\`,
+        c.COLUMN_NAME      AS \`column\`,
+        c.DATA_TYPE        AS data_type,
+        c.IS_NULLABLE      AS is_nullable,
+        c.ORDINAL_POSITION AS ordinal
+      FROM information_schema.columns c
+      WHERE ${colClause}
+      ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION
+    `;
+    const [colRows] = await conn.execute(colsSql, colParams);
+    attachColumns(assets, colRows as RawColumnRow[]);
+    return assets;
   } finally {
     await conn.end();
   }
