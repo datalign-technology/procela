@@ -21,16 +21,14 @@ target in the root `CLAUDE.md`. The AWS reference deployment lives in
 - An Ingress controller (defaults assume `ingressClassName: nginx`), or
   disable the Ingress and expose the frontend Service yourself.
 
-### Migrations & the prisma CLI (read this)
+### Migrations
 
 The migration Job runs `prisma migrate deploy` as a pre-install/pre-upgrade
-hook. **The stock production backend image omits the prisma CLI** (it is a
-`devDependency`), so out of the box the Job image needs adjusting. Choose one:
-
-1. Build the backend image with the prisma CLI present, **or**
-2. Set `migrations.image.repository` to an image that includes it, **or**
-3. `--set migrations.enabled=false` and run `prisma migrate deploy`
-   out-of-band before each upgrade.
+hook. The backend image bundles the prisma CLI and migration engine
+(`prisma` is a runtime dependency), so this works out of the box. Override
+`migrations.image.repository` only if you run migrations from a different
+image, or `--set migrations.enabled=false` to run `prisma migrate deploy`
+out-of-band yourself.
 
 ## Quick start
 

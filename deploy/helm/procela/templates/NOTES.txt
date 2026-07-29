@@ -7,17 +7,6 @@ Components:
   - Redis:      {{ if .Values.redis.enabled }}bundled{{ else }}external ({{ .Values.externalRedis.url | default "not set" }}){{ end }}
   - Migrations: {{ if .Values.migrations.enabled }}run as a pre-install/pre-upgrade Job{{ else }}DISABLED — run `prisma migrate deploy` yourself{{ end }}
 
-{{- if .Values.migrations.enabled }}
-{{- if not .Values.migrations.image.repository }}
-
-⚠  Migrations use the backend image ({{ include "procela.backendImage" . }}). The stock
-   production backend image omits the prisma CLI (it is a devDependency), so the
-   migrate Job will fail against it. Either build the backend image with the
-   prisma CLI included, set `migrations.image.repository` to an image that has it,
-   or `--set migrations.enabled=false` and run migrations out-of-band.
-{{- end }}
-{{- end }}
-
 Access:
 {{- if .Values.ingress.enabled }}
   http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/

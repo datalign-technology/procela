@@ -22,6 +22,9 @@ ENV NODE_ENV=production
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
+# prisma is a runtime dependency (not just dev) so the CLI + its
+# migration engine ship in the production image — the container can run
+# `prisma migrate deploy` at deploy time (e.g. the Helm migrate hook Job).
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 
