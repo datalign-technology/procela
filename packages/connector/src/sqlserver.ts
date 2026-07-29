@@ -10,6 +10,7 @@
 
 import mssql from 'mssql';
 import type { SqlServerSource, ReportedAsset } from './types';
+import { rowToAsset, type RawCatalogRow } from './discovery';
 
 // System schemas we never want to surface. INFORMATION_SCHEMA is
 // SQL Server's SQL-standard views layer; the sys.* metadata lives
@@ -105,35 +106,12 @@ export async function scanSqlServer(source: SqlServerSource): Promise<ReportedAs
 
     const res = await request.query(sql);
 
-    return res.recordset.map((r: {
-      schema: string;
-      name: string;
-      kind: string;
-      row_count: number | string;
-      last_activity: Date | string | null;
-      description: string | null;
-    }): ReportedAsset => {
-      // We use "schema.table" as the canonical asset name so two
-      // objects with the same name in different schemas don't
-      // collide on upsert. Matches the Postgres adapter's shape so
-      // both sources produce interchangeable-looking assets.
-      const name = `${r.schema}.${r.name}`;
-      const lastActivity: Date | null = r.last_activity == null
-        ? null
-        : (r.last_activity instanceof Date ? r.last_activity : new Date(r.last_activity));
-      // last_user_update is NULL until the DMV has recorded a write
-      // since the last server restart; treat that as "no signal"
-      // rather than a false zero.
-      const hasSignal = lastActivity !== null && !isNaN(lastActivity.getTime())
-        && lastActivity.getFullYear() > 1971;
-      return {
-        name,
-        systemId: source.systemId,
-        description: r.description || `SQL Server ${r.kind === 'v' ? 'view' : 'table'} ${name}`,
-        rowCount: Number(r.row_count) || 0,
-        lastWriteAt: hasSignal ? lastActivity!.toISOString() : undefined,
-      };
-    });
+    // Shared "schema.table" identity + freshness + description
+    // fallback — see ./discovery. last_user_update is NULL until the
+    // DMV records a write since the last restart; freshnessSignal
+    // maps that (and epoch) to "no signal".
+    return res.recordset.map((r: RawCatalogRow): ReportedAsset =>
+      rowToAsset(r, 'SQL Server', source.systemId));
   } finally {
     await pool.close();
   }

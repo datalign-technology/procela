@@ -10,8 +10,7 @@
 
 import { Client } from 'pg';
 import type { PostgresSource, ReportedAsset } from './types';
-
-const DEFAULT_SCHEMA_FILTER = `'public'`;
+import { pgSchemaFilter, rowToAsset, type RawCatalogRow } from './discovery';
 
 /** Scan one Postgres source. Opens a fresh connection, runs two
  *  queries (catalog + stats), closes. Errors propagate so the
@@ -20,9 +19,7 @@ export async function scanPostgres(source: PostgresSource): Promise<ReportedAsse
   const client = new Client({ connectionString: source.connectionString });
   await client.connect();
   try {
-    const schemaList = (source.schemas && source.schemas.length > 0)
-      ? source.schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(',')
-      : DEFAULT_SCHEMA_FILTER;
+    const schemaList = pgSchemaFilter(source.schemas);
 
     // Tables + views with their description and column count. Joins
     // pg_class to pg_namespace to filter by schema name and to the
@@ -50,25 +47,10 @@ export async function scanPostgres(source: PostgresSource): Promise<ReportedAsse
     `;
     const res = await client.query(sql);
 
-    return res.rows.map((r): ReportedAsset => {
-      // We use "schema.table" as the canonical asset name so two
-      // tables with the same name in different schemas don't
-      // collide on upsert.
-      const name = `${r.schema}.${r.name}`;
-      // last_activity is epoch when nothing has ever vacuumed —
-      // treat that as "no signal" rather than a 1970 timestamp.
-      const lastActivity: Date | null = r.last_activity instanceof Date
-        ? r.last_activity
-        : new Date(r.last_activity);
-      const hasSignal = lastActivity && lastActivity.getFullYear() > 1971;
-      return {
-        name,
-        systemId: source.systemId,
-        description: r.description || `Postgres ${r.kind === 'v' ? 'view' : r.kind === 'm' ? 'materialized view' : 'table'} ${name}`,
-        rowCount: Number(r.row_count) || 0,
-        lastWriteAt: hasSignal ? lastActivity!.toISOString() : undefined,
-      };
-    });
+    // "schema.table" identity, freshness signal, and description
+    // fallback are shared across all adapters — see ./discovery.
+    return res.rows.map((r): ReportedAsset =>
+      rowToAsset(r as RawCatalogRow, 'Postgres', source.systemId));
   } finally {
     await client.end();
   }
