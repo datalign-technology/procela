@@ -31,7 +31,20 @@ export interface ConnectorConfig {
 
 /** Discriminated union of every source shape the connector knows
  *  how to scan. Callers switch on `type`. */
-export type Source = PostgresSource | SqlServerSource | MysqlSource;
+export type Source = PostgresSource | SqlServerSource | MysqlSource | DbtSource;
+
+export interface DbtSource {
+  type: 'dbt';
+  /** Friendly name shown in logs. */
+  name: string;
+  /** Path to a dbt `manifest.json` on disk (produced by `dbt compile`
+   *  / `dbt run`). Read locally — no database connection, no network to
+   *  dbt. e.g. /project/target/manifest.json */
+  manifestPath: string;
+  /** Optional explicit Procela systemId this source's assets attach to.
+   *  If omitted the connector's first declared system id is used. */
+  systemId?: string;
+}
 
 export interface PostgresSource {
   type: 'postgres';
