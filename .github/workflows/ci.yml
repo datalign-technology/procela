@@ -59,6 +59,23 @@ jobs:
       # runs in its own job below with a real Postgres.
       - run: npm test -w packages/backend
 
+  test-connector:
+    name: Connector tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Pure unit tests (discovery mapping, config normalisation, the
+      # backend HTTP contract) under node:test via tsx — no live
+      # database or network. The DB adapters themselves are exercised
+      # by their extracted pure helpers in src/discovery.
+      - run: npm test -w packages/connector
+
   # Live-DB integration — real Postgres, real Prisma. Catches schema
   # drift and repo mapping bugs that the stubbed-Prisma unit tests
   # can't see. Runs the same test suite as backend tests, but with

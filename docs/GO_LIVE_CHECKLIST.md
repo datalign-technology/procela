@@ -122,9 +122,18 @@ customer.
 
 ## Roadmap items still ahead of go-live
 
-- [ ] **25. Phase 3 connectors** — the real on-prem agent that scans
-  customer DBs. UI stubs + backend registration exist; the actual agent
-  binary / Docker image is future work.
+- [~] **25. Phase 3 connectors** — the on-prem agent
+  ([`packages/connector/`](../packages/connector/)) is **built and
+  shipped**: a Node 20 agent with Postgres / MySQL / SQL Server adapters,
+  a pairing → token → heartbeat → scan loop, a Docker image, and a GHCR
+  release workflow (`.github/workflows/release-connector.yml`). The
+  backend side (`pair/start` · `pair/claim` · `heartbeat` · `report`)
+  upserts discovered tables as Bronze `DataAsset`s, audit-only. This
+  session added the agent's **first test suite** (discovery mapping,
+  config normalisation, the backend HTTP contract) + a CI `Connector
+  tests` job. **Remaining:** column-level discovery (tables only today),
+  Oracle + dbt-manifest source types (planned), and a real end-to-end
+  run against customer databases.
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,

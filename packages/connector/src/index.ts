@@ -20,12 +20,11 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { ConnectorConfig, ReportedAsset } from './types';
+import { normalizeConfig } from './config';
 import { pairClaim, heartbeat, report } from './api';
 import { scanPostgres } from './postgres';
 import { scanSqlServer } from './sqlserver';
 import { scanMysql } from './mysql';
-
-const AGENT_VERSION = '0.3.0';
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger
@@ -49,14 +48,9 @@ function loadConfig(): { path: string; cfg: ConnectorConfig } {
     );
   }
   const raw = readFileSync(path, 'utf-8');
-  const cfg = parseYaml(raw) as ConnectorConfig;
-  // Env-var override for the pairing code so an operator can pair
-  // without rewriting the file on first boot.
-  if (process.env.PROCELA_PAIRING_CODE) cfg.pairingCode = process.env.PROCELA_PAIRING_CODE.trim();
-  cfg.agentVersion = `procela-connector/${AGENT_VERSION}`;
-  cfg.heartbeatSeconds = cfg.heartbeatSeconds || 60;
-  cfg.scanSeconds = cfg.scanSeconds || 30 * 60;
-  cfg.sources = Array.isArray(cfg.sources) ? cfg.sources : [];
+  // Defaulting + env overrides live in ./config (normalizeConfig) so
+  // they're unit-testable without file IO.
+  const cfg = normalizeConfig(parseYaml(raw), process.env);
   return { path, cfg };
 }
 

@@ -8,6 +8,7 @@
 
 import mysql from 'mysql2/promise';
 import type { MysqlSource, ReportedAsset } from './types';
+import { rowToAsset, type RawCatalogRow } from './discovery';
 
 // MySQL's own system schemas — never surface these as user assets.
 // `mysql` holds users/privileges/timezones; `sys` is the schema
@@ -82,25 +83,10 @@ export async function scanMysql(source: MysqlSource): Promise<ReportedAsset[]> {
       description: string | null;
     }>;
 
-    return records.map((r): ReportedAsset => {
-      // "schema.table" — same identity shape as the Postgres and
-      // SQL Server adapters so both catalog upserts and the "Data
-      // Assets" list look uniform regardless of which source
-      // produced them.
-      const name = `${r.schema}.${r.name}`;
-      const lastActivity: Date | null = r.last_activity == null
-        ? null
-        : (r.last_activity instanceof Date ? r.last_activity : new Date(r.last_activity));
-      const hasSignal = lastActivity !== null && !isNaN(lastActivity.getTime())
-        && lastActivity.getFullYear() > 1971;
-      return {
-        name,
-        systemId: source.systemId,
-        description: r.description || `MySQL ${r.kind === 'v' ? 'view' : 'table'} ${name}`,
-        rowCount: Number(r.row_count) || 0,
-        lastWriteAt: hasSignal ? lastActivity!.toISOString() : undefined,
-      };
-    });
+    // Shared "schema.table" identity + freshness + description
+    // fallback — see ./discovery.
+    return records.map((r): ReportedAsset =>
+      rowToAsset(r as RawCatalogRow, 'MySQL', source.systemId));
   } finally {
     await conn.end();
   }
