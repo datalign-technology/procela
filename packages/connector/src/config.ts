@@ -9,6 +9,9 @@ import type { ConnectorConfig } from './types';
  *  flag stale agents. */
 export const AGENT_VERSION = '0.3.0';
 
+/** Default path for the liveness file the loop touches each heartbeat. */
+export const LIVENESS_FILE_DEFAULT = '/tmp/procela-connector.alive';
+
 /** Apply defaults + environment overrides to a parsed connector
  *  config. Kept pure so tests can pass a plain object + a fake env.
  *
@@ -32,5 +35,8 @@ export function normalizeConfig(
   cfg.heartbeatSeconds = cfg.heartbeatSeconds || 60;
   cfg.scanSeconds = cfg.scanSeconds || 30 * 60;
   cfg.sources = Array.isArray(cfg.sources) ? cfg.sources : [];
+  cfg.livenessFile = cfg.livenessFile || LIVENESS_FILE_DEFAULT;
+  // Tolerate a couple of missed heartbeats before reporting unhealthy.
+  cfg.livenessMaxStaleSeconds = cfg.livenessMaxStaleSeconds || Math.max(cfg.heartbeatSeconds * 3, 180);
   return cfg;
 }

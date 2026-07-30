@@ -27,6 +27,12 @@ export interface ConnectorConfig {
   sources: Source[];
   /** Agent self-reported version string. */
   agentVersion?: string;
+  /** File the loop touches every heartbeat so a container liveness
+   *  probe (`--healthcheck`) can tell the agent is progressing. */
+  livenessFile?: string;
+  /** How stale (seconds) the liveness file may get before the probe
+   *  reports unhealthy. Defaults to max(3 × heartbeat, 180s). */
+  livenessMaxStaleSeconds?: number;
 }
 
 /** Discriminated union of every source shape the connector knows

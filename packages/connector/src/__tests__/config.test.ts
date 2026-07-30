@@ -12,6 +12,14 @@ describe('config — normalizeConfig', () => {
     assert.strictEqual(cfg.scanSeconds, 30 * 60);
     assert.deepStrictEqual(cfg.sources, []);
     assert.strictEqual(cfg.agentVersion, `procela-connector/${AGENT_VERSION}`);
+    // Liveness defaults: default path + max(3×heartbeat, 180s).
+    assert.strictEqual(cfg.livenessFile, '/tmp/procela-connector.alive');
+    assert.strictEqual(cfg.livenessMaxStaleSeconds, 180);
+  });
+
+  it('derives livenessMaxStaleSeconds from a longer heartbeat', () => {
+    const cfg = normalizeConfig({ procelaUrl: 'x', token: 't', heartbeatSeconds: 120 }, EMPTY_ENV);
+    assert.strictEqual(cfg.livenessMaxStaleSeconds, 360, '3 × 120s');
   });
 
   it('preserves operator-provided cadences and sources', () => {

@@ -97,6 +97,30 @@ npm run lint -w packages/connector
 - Logs are structured JSON on stdout — pipe to your container
   logger. Lines are prefixed `[procela-connector]`.
 - SIGINT / SIGTERM trigger a clean exit at the next loop slice.
+- **Liveness.** The agent runs no HTTP server, so there's no port to
+  probe. Instead each loop iteration touches a liveness file
+  (`/tmp/procela-connector.alive` by default; override with
+  `livenessFile:` in the config or `PROCELA_CONNECTOR_LIVENESS_FILE`)
+  with the current time. The same binary run as
+  `node dist/index.js --healthcheck` exits `0` if that file is fresh
+  and `1` once it goes stale (default staleness window
+  `max(3 × heartbeat, 180s)`), so a wedged loop is detected and the
+  container is restarted. The Docker image ships a `HEALTHCHECK` that
+  does exactly this. On Kubernetes, wire an `exec` liveness probe:
+
+  ```yaml
+  livenessProbe:
+    exec:
+      command: ["node", "/app/dist/index.js", "--healthcheck"]
+    initialDelaySeconds: 90
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 3
+  ```
+
+  Liveness tracks the *loop*, not backend reachability — the file is
+  refreshed whether or not the heartbeat POST reached Procela, so a
+  network outage never trips the probe.
 - A failed report is retried with capped exponential backoff
   (5 attempts: 0.5s, 1s, 2s, 4s) before the cycle is abandoned, so a
   brief backend blip doesn't cost a whole scan interval. A heartbeat
