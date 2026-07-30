@@ -156,9 +156,15 @@ customer.
   liveness file each iteration and a `--healthcheck` invocation of the
   same binary exits non-zero once it goes stale, wired as a Docker
   `HEALTHCHECK` (and documented as a k8s `exec` liveness probe) so a
-  wedged agent is restarted. **Remaining:** a real end-to-end run
-  against customer databases (the adapters' SQL is exercised only by
-  their extracted pure helpers today).
+  wedged agent is restarted. The Postgres and MySQL adapters' **real
+  catalog + information_schema SQL is now exercised in CI** against
+  ephemeral Postgres + MySQL service containers (`Connector integration
+  (live DBs)` job → `adapters.int.test.ts`), proving column types,
+  nullability, ordinals, view detection and schema scoping against live
+  engines — not just the pure helpers. **Remaining:** a run against real
+  *customer* databases (the pilot), and equivalent live-DB coverage for
+  the SQL Server / Oracle adapters (no free service-container image in
+  CI; validated by their pure helpers today).
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,
