@@ -4,7 +4,7 @@ import { organizations, StoredOrg } from '../routes/organizations';
 import { people, getVisibleOrgIds, canAccessOrg, StoredPerson } from '../routes/people';
 
 // ── Fixtures ──
-// Mirrors the Momentum Shipbuilding structure used in test-data/organizations.csv
+// Mirrors the Momentum Industries structure used in test-data/organizations.csv
 // so we can verify that a user scoped to "Momentum Tidewater Shipyard" sees
 // only Tidewater and its descendants.
 
@@ -19,7 +19,7 @@ const TEST_IDS = {
 };
 
 const FIXTURE_ORGS: StoredOrg[] = [
-  { id: TEST_IDS.MOMENTUM, parentId: null, name: 'Momentum Shipbuilding', type: 'company', industry: 'Defense', description: '', headCount: 0, createdAt: '', updatedAt: '' },
+  { id: TEST_IDS.MOMENTUM, parentId: null, name: 'Momentum Industries', type: 'company', industry: 'Defense', description: '', headCount: 0, createdAt: '', updatedAt: '' },
   { id: TEST_IDS.TIDEWATER, parentId: TEST_IDS.MOMENTUM, name: 'Momentum Tidewater Shipyard', type: 'division', industry: '', description: '', headCount: 0, createdAt: '', updatedAt: '' },
   { id: TEST_IDS.TIDEWATER_CARRIER, parentId: TEST_IDS.TIDEWATER, name: 'Carrier Construction', type: 'department', industry: '', description: '', headCount: 0, createdAt: '', updatedAt: '' },
   { id: TEST_IDS.TIDEWATER_SUB, parentId: TEST_IDS.TIDEWATER, name: 'Submarine Construction', type: 'department', industry: '', description: '', headCount: 0, createdAt: '', updatedAt: '' },

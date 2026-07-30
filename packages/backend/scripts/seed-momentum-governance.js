@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Seed script — creates the Momentum Shipbuilding org hierarchy
+ * Seed script — creates the Momentum Industries org hierarchy
  * with sample people for every DAMA governance role at corporate
  * and division levels.
  *
@@ -34,7 +34,7 @@ async function login() {
   const r = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@momentumshipbuilding.com' }),
+    body: JSON.stringify({ email: 'admin@momentumindustries.com' }),
   });
   const json = await r.json();
   TOKEN = json.data.accessToken;
@@ -58,58 +58,58 @@ const DAMA_ROLES = [
 // ── People per org level ──
 // Corporate-level people
 const CORPORATE_PEOPLE = [
-  { name: 'Tim Sanders',       roleType: 'CDO',                    email: 'tim.sanders@momentumshipbuilding.com',       platformRole: 'SUPER_ADMIN' },
-  { name: 'Rebecca Torres',    roleType: 'DATA_GOVERNANCE_LEAD',   email: 'rebecca.torres@momentumshipbuilding.com',    platformRole: 'ORG_ADMIN' },
-  { name: 'William Hayes',     roleType: 'DATA_OWNER',             email: 'william.hayes@momentumshipbuilding.com',     platformRole: 'EDITOR' },
-  { name: 'Sandra Mitchell',   roleType: 'BUSINESS_DATA_STEWARD',  email: 'sandra.mitchell@momentumshipbuilding.com',   platformRole: 'EDITOR' },
-  { name: 'Catherine Reeves',  roleType: 'DATA_QUALITY_ANALYST',   email: 'catherine.reeves@momentumshipbuilding.com',  platformRole: 'CONTRIBUTOR' },
-  { name: 'Paul Henderson',    roleType: 'TECHNICAL_DATA_STEWARD', email: 'paul.henderson@momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Donald Perry',      roleType: 'DATA_CUSTODIAN',         email: 'donald.perry@momentumshipbuilding.com',      platformRole: 'CONTRIBUTOR' },
-  { name: 'Kenneth Brooks',    roleType: 'DATA_ARCHITECT',         email: 'kenneth.brooks@momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Brian Patterson',   roleType: 'DATA_ENGINEER',          email: 'brian.patterson@momentumshipbuilding.com',   platformRole: 'CONTRIBUTOR' },
-  { name: 'Michelle Collins',  roleType: 'DATABASE_ADMINISTRATOR', email: 'michelle.collins@momentumshipbuilding.com',  platformRole: 'CONTRIBUTOR' },
+  { name: 'Tim Sanders',       roleType: 'CDO',                    email: 'tim.sanders@momentumindustries.com',       platformRole: 'SUPER_ADMIN' },
+  { name: 'Rebecca Torres',    roleType: 'DATA_GOVERNANCE_LEAD',   email: 'rebecca.torres@momentumindustries.com',    platformRole: 'ORG_ADMIN' },
+  { name: 'William Hayes',     roleType: 'DATA_OWNER',             email: 'william.hayes@momentumindustries.com',     platformRole: 'EDITOR' },
+  { name: 'Sandra Mitchell',   roleType: 'BUSINESS_DATA_STEWARD',  email: 'sandra.mitchell@momentumindustries.com',   platformRole: 'EDITOR' },
+  { name: 'Catherine Reeves',  roleType: 'DATA_QUALITY_ANALYST',   email: 'catherine.reeves@momentumindustries.com',  platformRole: 'CONTRIBUTOR' },
+  { name: 'Paul Henderson',    roleType: 'TECHNICAL_DATA_STEWARD', email: 'paul.henderson@momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Donald Perry',      roleType: 'DATA_CUSTODIAN',         email: 'donald.perry@momentumindustries.com',      platformRole: 'CONTRIBUTOR' },
+  { name: 'Kenneth Brooks',    roleType: 'DATA_ARCHITECT',         email: 'kenneth.brooks@momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Brian Patterson',   roleType: 'DATA_ENGINEER',          email: 'brian.patterson@momentumindustries.com',   platformRole: 'CONTRIBUTOR' },
+  { name: 'Michelle Collins',  roleType: 'DATABASE_ADMINISTRATOR', email: 'michelle.collins@momentumindustries.com',  platformRole: 'CONTRIBUTOR' },
 ];
 
 // Momentum Tidewater Shipyard division people
 const TIDEWATER_PEOPLE = [
-  { name: 'Jonathan Carter',   roleType: 'CDO',                    email: 'jonathan.carter@tidewater.momentumshipbuilding.com',   platformRole: 'ORG_ADMIN' },
-  { name: 'Laura Simmons',     roleType: 'DATA_GOVERNANCE_LEAD',   email: 'laura.simmons@tidewater.momentumshipbuilding.com',     platformRole: 'EDITOR' },
-  { name: 'Gregory Foster',    roleType: 'DATA_OWNER',             email: 'gregory.foster@tidewater.momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Deborah Russell',   roleType: 'BUSINESS_DATA_STEWARD',  email: 'deborah.russell@tidewater.momentumshipbuilding.com',   platformRole: 'EDITOR' },
-  { name: 'Andrea Griffin',    roleType: 'DATA_QUALITY_ANALYST',   email: 'andrea.griffin@tidewater.momentumshipbuilding.com',    platformRole: 'CONTRIBUTOR' },
-  { name: 'Christopher Ward',  roleType: 'TECHNICAL_DATA_STEWARD', email: 'christopher.ward@tidewater.momentumshipbuilding.com',  platformRole: 'EDITOR' },
-  { name: 'Joshua Bell',       roleType: 'DATA_CUSTODIAN',         email: 'joshua.bell@tidewater.momentumshipbuilding.com',       platformRole: 'CONTRIBUTOR' },
-  { name: 'Nicole Rivera',     roleType: 'DATA_ARCHITECT',         email: 'nicole.rivera@tidewater.momentumshipbuilding.com',     platformRole: 'EDITOR' },
-  { name: 'Eric Coleman',      roleType: 'DATA_ENGINEER',          email: 'eric.coleman@tidewater.momentumshipbuilding.com',      platformRole: 'CONTRIBUTOR' },
-  { name: 'Heather Powell',    roleType: 'DATABASE_ADMINISTRATOR', email: 'heather.powell@tidewater.momentumshipbuilding.com',    platformRole: 'CONTRIBUTOR' },
+  { name: 'Jonathan Carter',   roleType: 'CDO',                    email: 'jonathan.carter@tidewater.momentumindustries.com',   platformRole: 'ORG_ADMIN' },
+  { name: 'Laura Simmons',     roleType: 'DATA_GOVERNANCE_LEAD',   email: 'laura.simmons@tidewater.momentumindustries.com',     platformRole: 'EDITOR' },
+  { name: 'Gregory Foster',    roleType: 'DATA_OWNER',             email: 'gregory.foster@tidewater.momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Deborah Russell',   roleType: 'BUSINESS_DATA_STEWARD',  email: 'deborah.russell@tidewater.momentumindustries.com',   platformRole: 'EDITOR' },
+  { name: 'Andrea Griffin',    roleType: 'DATA_QUALITY_ANALYST',   email: 'andrea.griffin@tidewater.momentumindustries.com',    platformRole: 'CONTRIBUTOR' },
+  { name: 'Christopher Ward',  roleType: 'TECHNICAL_DATA_STEWARD', email: 'christopher.ward@tidewater.momentumindustries.com',  platformRole: 'EDITOR' },
+  { name: 'Joshua Bell',       roleType: 'DATA_CUSTODIAN',         email: 'joshua.bell@tidewater.momentumindustries.com',       platformRole: 'CONTRIBUTOR' },
+  { name: 'Nicole Rivera',     roleType: 'DATA_ARCHITECT',         email: 'nicole.rivera@tidewater.momentumindustries.com',     platformRole: 'EDITOR' },
+  { name: 'Eric Coleman',      roleType: 'DATA_ENGINEER',          email: 'eric.coleman@tidewater.momentumindustries.com',      platformRole: 'CONTRIBUTOR' },
+  { name: 'Heather Powell',    roleType: 'DATABASE_ADMINISTRATOR', email: 'heather.powell@tidewater.momentumindustries.com',    platformRole: 'CONTRIBUTOR' },
 ];
 
 // Momentum Gulf Shipyard division people
 const GULF_PEOPLE = [
-  { name: 'Daniel Morgan',     roleType: 'CDO',                    email: 'daniel.morgan@gulf.momentumshipbuilding.com',     platformRole: 'ORG_ADMIN' },
-  { name: 'Karen Sullivan',    roleType: 'DATA_GOVERNANCE_LEAD',   email: 'karen.sullivan@gulf.momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Steven Barnes',     roleType: 'DATA_OWNER',             email: 'steven.barnes@gulf.momentumshipbuilding.com',     platformRole: 'EDITOR' },
-  { name: 'Pamela Howard',     roleType: 'BUSINESS_DATA_STEWARD',  email: 'pamela.howard@gulf.momentumshipbuilding.com',     platformRole: 'EDITOR' },
-  { name: 'Christine Long',    roleType: 'DATA_QUALITY_ANALYST',   email: 'christine.long@gulf.momentumshipbuilding.com',    platformRole: 'CONTRIBUTOR' },
-  { name: 'Matthew Reed',      roleType: 'TECHNICAL_DATA_STEWARD', email: 'matthew.reed@gulf.momentumshipbuilding.com',      platformRole: 'EDITOR' },
-  { name: 'Tyler Cox',         roleType: 'DATA_CUSTODIAN',         email: 'tyler.cox@gulf.momentumshipbuilding.com',         platformRole: 'CONTRIBUTOR' },
-  { name: 'Jessica Diaz',      roleType: 'DATA_ARCHITECT',         email: 'jessica.diaz@gulf.momentumshipbuilding.com',      platformRole: 'EDITOR' },
-  { name: 'Brandon Campbell',  roleType: 'DATA_ENGINEER',          email: 'brandon.campbell@gulf.momentumshipbuilding.com',  platformRole: 'CONTRIBUTOR' },
-  { name: 'Melissa Turner',    roleType: 'DATABASE_ADMINISTRATOR', email: 'melissa.turner@gulf.momentumshipbuilding.com',    platformRole: 'CONTRIBUTOR' },
+  { name: 'Daniel Morgan',     roleType: 'CDO',                    email: 'daniel.morgan@gulf.momentumindustries.com',     platformRole: 'ORG_ADMIN' },
+  { name: 'Karen Sullivan',    roleType: 'DATA_GOVERNANCE_LEAD',   email: 'karen.sullivan@gulf.momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Steven Barnes',     roleType: 'DATA_OWNER',             email: 'steven.barnes@gulf.momentumindustries.com',     platformRole: 'EDITOR' },
+  { name: 'Pamela Howard',     roleType: 'BUSINESS_DATA_STEWARD',  email: 'pamela.howard@gulf.momentumindustries.com',     platformRole: 'EDITOR' },
+  { name: 'Christine Long',    roleType: 'DATA_QUALITY_ANALYST',   email: 'christine.long@gulf.momentumindustries.com',    platformRole: 'CONTRIBUTOR' },
+  { name: 'Matthew Reed',      roleType: 'TECHNICAL_DATA_STEWARD', email: 'matthew.reed@gulf.momentumindustries.com',      platformRole: 'EDITOR' },
+  { name: 'Tyler Cox',         roleType: 'DATA_CUSTODIAN',         email: 'tyler.cox@gulf.momentumindustries.com',         platformRole: 'CONTRIBUTOR' },
+  { name: 'Jessica Diaz',      roleType: 'DATA_ARCHITECT',         email: 'jessica.diaz@gulf.momentumindustries.com',      platformRole: 'EDITOR' },
+  { name: 'Brandon Campbell',  roleType: 'DATA_ENGINEER',          email: 'brandon.campbell@gulf.momentumindustries.com',  platformRole: 'CONTRIBUTOR' },
+  { name: 'Melissa Turner',    roleType: 'DATABASE_ADMINISTRATOR', email: 'melissa.turner@gulf.momentumindustries.com',    platformRole: 'CONTRIBUTOR' },
 ];
 
 // Mission Technologies division people
 const MT_PEOPLE = [
-  { name: 'Raymond Price',     roleType: 'CDO',                    email: 'raymond.price@mt.momentumshipbuilding.com',     platformRole: 'ORG_ADMIN' },
-  { name: 'Stephanie Butler',  roleType: 'DATA_GOVERNANCE_LEAD',   email: 'stephanie.butler@mt.momentumshipbuilding.com',  platformRole: 'EDITOR' },
-  { name: 'Patrick Murphy',    roleType: 'DATA_OWNER',             email: 'patrick.murphy@mt.momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Amanda Jenkins',    roleType: 'BUSINESS_DATA_STEWARD',  email: 'amanda.jenkins@mt.momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Kelly Sanders',     roleType: 'DATA_QUALITY_ANALYST',   email: 'kelly.sanders@mt.momentumshipbuilding.com',     platformRole: 'CONTRIBUTOR' },
-  { name: 'Scott Gonzalez',    roleType: 'TECHNICAL_DATA_STEWARD', email: 'scott.gonzalez@mt.momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Aaron Hughes',      roleType: 'DATA_CUSTODIAN',         email: 'aaron.hughes@mt.momentumshipbuilding.com',      platformRole: 'CONTRIBUTOR' },
-  { name: 'Natalie Watson',    roleType: 'DATA_ARCHITECT',         email: 'natalie.watson@mt.momentumshipbuilding.com',    platformRole: 'EDITOR' },
-  { name: 'Derek Flores',      roleType: 'DATA_ENGINEER',          email: 'derek.flores@mt.momentumshipbuilding.com',      platformRole: 'CONTRIBUTOR' },
-  { name: 'Tiffany Ross',      roleType: 'DATABASE_ADMINISTRATOR', email: 'tiffany.ross@mt.momentumshipbuilding.com',      platformRole: 'CONTRIBUTOR' },
+  { name: 'Raymond Price',     roleType: 'CDO',                    email: 'raymond.price@mt.momentumindustries.com',     platformRole: 'ORG_ADMIN' },
+  { name: 'Stephanie Butler',  roleType: 'DATA_GOVERNANCE_LEAD',   email: 'stephanie.butler@mt.momentumindustries.com',  platformRole: 'EDITOR' },
+  { name: 'Patrick Murphy',    roleType: 'DATA_OWNER',             email: 'patrick.murphy@mt.momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Amanda Jenkins',    roleType: 'BUSINESS_DATA_STEWARD',  email: 'amanda.jenkins@mt.momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Kelly Sanders',     roleType: 'DATA_QUALITY_ANALYST',   email: 'kelly.sanders@mt.momentumindustries.com',     platformRole: 'CONTRIBUTOR' },
+  { name: 'Scott Gonzalez',    roleType: 'TECHNICAL_DATA_STEWARD', email: 'scott.gonzalez@mt.momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Aaron Hughes',      roleType: 'DATA_CUSTODIAN',         email: 'aaron.hughes@mt.momentumindustries.com',      platformRole: 'CONTRIBUTOR' },
+  { name: 'Natalie Watson',    roleType: 'DATA_ARCHITECT',         email: 'natalie.watson@mt.momentumindustries.com',    platformRole: 'EDITOR' },
+  { name: 'Derek Flores',      roleType: 'DATA_ENGINEER',          email: 'derek.flores@mt.momentumindustries.com',      platformRole: 'CONTRIBUTOR' },
+  { name: 'Tiffany Ross',      roleType: 'DATABASE_ADMINISTRATOR', email: 'tiffany.ross@mt.momentumindustries.com',      platformRole: 'CONTRIBUTOR' },
 ];
 
 async function main() {
@@ -121,17 +121,17 @@ async function main() {
   const allOrgs = orgsRes.data || [];
 
   // Corporate
-  let company = allOrgs.find(o => o.name === 'Momentum Shipbuilding' && o.type === 'company');
+  let company = allOrgs.find(o => o.name === 'Momentum Industries' && o.type === 'company');
   if (!company) {
     company = await post('/organizations', {
-      name: 'Momentum Shipbuilding',
+      name: 'Momentum Industries',
       type: 'company',
       industry: 'Defense & Shipbuilding',
       description: 'A leading military shipbuilding company and a provider of professional services to partners in government and industry.',
     });
-    console.log('Created: Momentum Shipbuilding (corporate)');
+    console.log('Created: Momentum Industries (corporate)');
   } else {
-    console.log('Exists: Momentum Shipbuilding');
+    console.log('Exists: Momentum Industries');
   }
   const companyId = company.id;
 
@@ -206,7 +206,7 @@ async function main() {
     }
   }
 
-  await createPeopleAndRoles(CORPORATE_PEOPLE, companyId, 'Momentum Shipbuilding');
+  await createPeopleAndRoles(CORPORATE_PEOPLE, companyId, 'Momentum Industries');
   await createPeopleAndRoles(TIDEWATER_PEOPLE, divisions['Momentum Tidewater Shipyard'].id, 'Momentum Tidewater Shipyard');
   await createPeopleAndRoles(GULF_PEOPLE, divisions['Momentum Gulf Shipyard'].id, 'Momentum Gulf Shipyard');
   await createPeopleAndRoles(MT_PEOPLE, divisions['Mission Technologies'].id, 'Mission Technologies');
