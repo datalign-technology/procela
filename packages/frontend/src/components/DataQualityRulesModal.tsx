@@ -418,7 +418,7 @@ export default function DataQualityRulesModal({ asset, onClose, onAfterChange }:
                 <textarea
                   style={{ ...inputStyle, fontSize: 12, fontFamily: 'var(--font-mono)', minHeight: 70, whiteSpace: 'pre' }}
                   placeholder={(configParams.language || 'js') === 'js'
-                    ? "value !== null && /^HII-\\d+$/.test(value)"
+                    ? "value !== null && /^MSB-\\d+$/.test(value)"
                     : 'SELECT COUNT(*) FILTER (WHERE my_column IS NULL) AS fail_count, COUNT(*) AS total FROM my_table;'}
                   value={configParams.body || ''}
                   onChange={(e) => setConfigParams({ ...configParams, body: e.target.value })}

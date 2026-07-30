@@ -245,7 +245,7 @@ describe('CUSTOM rule evaluation', () => {
   const path = require('path') as typeof import('path');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'procela-custom-'));
   const csv = path.join(tmp, 'parts.csv');
-  fs.writeFileSync(csv, 'id,code\n1,HII-001\n2,hii-002\n3,OTHER\n4,HII-9\n');
+  fs.writeFileSync(csv, 'id,code\n1,MSB-001\n2,msb-002\n3,OTHER\n4,MSB-9\n');
 
   function subj(ruleId: string) {
     return {
@@ -256,9 +256,9 @@ describe('CUSTOM rule evaluation', () => {
   }
 
   it('executes a bare JS expression per value', () => {
-    const r = evaluateRule('CUSTOM', { language: 'js', body: "value?.startsWith('HII-')" }, subj('r1'));
+    const r = evaluateRule('CUSTOM', { language: 'js', body: "value?.startsWith('MSB-')" }, subj('r1'));
     assert.strictEqual(r.simulated, false);
-    // HII-001 and HII-9 pass; hii-002 and OTHER fail
+    // MSB-001 and MSB-9 pass; msb-002 and OTHER fail
     assert.strictEqual(r.passCount, 2);
     assert.strictEqual(r.failCount, 2);
   });
@@ -266,7 +266,7 @@ describe('CUSTOM rule evaluation', () => {
   it('accepts a statement form with an explicit return', () => {
     const r = evaluateRule('CUSTOM', { language: 'js', body: "return value && value.length > 5;" }, subj('r2'));
     assert.strictEqual(r.simulated, false);
-    // HII-001 (7), hii-002 (7), OTHER (5) -> fails, HII-9 (5) -> fails
+    // MSB-001 (7), msb-002 (7), OTHER (5) -> fails, MSB-9 (5) -> fails
     assert.strictEqual(r.passCount, 2);
     assert.strictEqual(r.failCount, 2);
   });
