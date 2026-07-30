@@ -140,10 +140,11 @@ customer.
   (oracledb thin mode — no Instant Client — reading `all_tables` /
   `all_views` / `all_tab_columns`). Sources supported: Postgres · SQL
   Server · MySQL · Oracle · dbt manifest, all with column-level
-  discovery. **Remaining:** a real end-to-end run against customer
-  databases (the adapters' SQL is exercised only by their extracted pure
-  helpers today), plus the cheap robustness wins (report retry/backoff,
-  a container liveness signal).
+  discovery, and **report retry/backoff** (a transient network failure
+  now retries with capped exponential backoff instead of dropping the
+  scan). **Remaining:** a real end-to-end run against customer databases
+  (the adapters' SQL is exercised only by their extracted pure helpers
+  today), and a container liveness signal.
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,
