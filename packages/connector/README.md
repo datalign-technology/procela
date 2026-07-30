@@ -109,8 +109,15 @@ npm run lint -w packages/connector
 | Postgres     | `postgres`     | v1 (0.1.x) |
 | SQL Server   | `sqlserver`    | v1 (0.2.x) |
 | MySQL / MariaDB | `mysql`     | v1 (0.3.x) |
-| Oracle       | `oracle`       | planned |
+| Oracle       | `oracle`       | v1 (0.5.x) |
 | dbt manifest | `dbt`          | v1 (0.4.x) |
+
+The **Oracle** source uses `oracledb` in **thin mode** — pure
+JavaScript, so no Oracle Instant Client is needed in the image. It reads
+`all_tables` / `all_views` / `all_tab_columns`; row counts come from the
+optimizer stats (`num_rows`) and freshness from `last_analyzed`. With no
+`schemas:` list it scans the connecting user's own schema (`owner =
+USER`).
 
 The **dbt** source reads a local `manifest.json` (from `dbt compile` /
 `dbt run`) and ships each model / source / seed / snapshot as an asset

@@ -31,7 +31,26 @@ export interface ConnectorConfig {
 
 /** Discriminated union of every source shape the connector knows
  *  how to scan. Callers switch on `type`. */
-export type Source = PostgresSource | SqlServerSource | MysqlSource | DbtSource;
+export type Source = PostgresSource | SqlServerSource | MysqlSource | DbtSource | OracleSource;
+
+export interface OracleSource {
+  type: 'oracle';
+  /** Friendly name shown in logs. */
+  name: string;
+  /** Connection string in the URL form:
+   *    oracle://procela_ro:pw@db.internal:1521/ORCLPDB1
+   *  The path segment is the service name (or SID). Runs in oracledb's
+   *  thin mode — no Oracle Instant Client required. Stays on-prem in the
+   *  config file; never sent to Procela. */
+  connectionString: string;
+  /** Optional schema (owner) allowlist — case-insensitive, matched
+   *  against Oracle's uppercase owners. Empty = scan the connecting
+   *  user's own schema (`owner = USER`). */
+  schemas?: string[];
+  /** Optional explicit Procela systemId this source's assets attach to.
+   *  If omitted the connector's first declared system id is used. */
+  systemId?: string;
+}
 
 export interface DbtSource {
   type: 'dbt';

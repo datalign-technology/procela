@@ -63,6 +63,19 @@ sources:
       - reporting
     systemId: sys_billing_prod
 
+  - type: oracle
+    name: erp-prod
+    # oracle://user:pass@host:port/service_name. Runs in oracledb's
+    # thin mode — no Oracle Instant Client needed. The path is the
+    # service name (or SID).
+    connectionString: oracle://procela_ro:CHANGE_ME@oracle.internal:1521/ORCLPDB1
+    # Optional owner allowlist (case-insensitive). Empty = scan the
+    # connecting user's own schema (owner = USER).
+    schemas:
+      - FINANCE
+      - HR
+    systemId: sys_erp_prod
+
   - type: dbt
     name: analytics-dbt
     # Path to a dbt manifest.json on disk (from `dbt compile` / `dbt
