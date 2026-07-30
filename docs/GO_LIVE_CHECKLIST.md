@@ -134,11 +134,16 @@ customer.
   tests` job, and **column-level discovery** — the three adapters now
   also read `information_schema.columns` and `/report` upserts
   `DataAssetColumn`s (name + type, audit-only; no values cross the wire),
-  and a **dbt-manifest source type** (reads a local `manifest.json`,
-  ships models / sources / seeds / snapshots + columns via `/report`,
-  same asset identity as the in-app dbt import). **Remaining:** the
-  Oracle source type (planned), and a real end-to-end run against
-  customer databases.
+  a **dbt-manifest source type** (reads a local `manifest.json`, ships
+  models / sources / seeds / snapshots + columns via `/report`, same
+  asset identity as the in-app dbt import), and an **Oracle source type**
+  (oracledb thin mode — no Instant Client — reading `all_tables` /
+  `all_views` / `all_tab_columns`). Sources supported: Postgres · SQL
+  Server · MySQL · Oracle · dbt manifest, all with column-level
+  discovery. **Remaining:** a real end-to-end run against customer
+  databases (the adapters' SQL is exercised only by their extracted pure
+  helpers today), plus the cheap robustness wins (report retry/backoff,
+  a container liveness signal).
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,

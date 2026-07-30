@@ -79,11 +79,15 @@ export interface RawColumnRow {
 }
 
 /** Normalise the assorted is_nullable representations to a boolean.
- *  'YES' / true / 1 => nullable; 'NO' / false / 0 / null => not. */
+ *  'YES' / 'Y' (Oracle) / true / 1 => nullable; 'NO' / 'N' / false / 0 /
+ *  null => not. */
 export function normalizeNullable(v: string | boolean | number | null | undefined): boolean {
   if (typeof v === 'boolean') return v;
   if (typeof v === 'number') return v !== 0;
-  if (typeof v === 'string') return v.trim().toUpperCase() === 'YES' || v.trim() === '1';
+  if (typeof v === 'string') {
+    const s = v.trim().toUpperCase();
+    return s === 'YES' || s === 'Y' || s === '1';
+  }
   return false;
 }
 

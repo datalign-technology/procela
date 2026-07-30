@@ -26,6 +26,7 @@ import { scanPostgres } from './postgres';
 import { scanSqlServer } from './sqlserver';
 import { scanMysql } from './mysql';
 import { scanDbt } from './dbt';
+import { scanOracle } from './oracle';
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger
@@ -102,6 +103,9 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
           break;
         case 'dbt':
           assets = await scanDbt(source);
+          break;
+        case 'oracle':
+          assets = await scanOracle(source);
           break;
         default:
           // TypeScript's exhaustiveness check would flag a missing
