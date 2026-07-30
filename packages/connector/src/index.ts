@@ -20,7 +20,8 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { ConnectorConfig, ReportedAsset } from './types';
-import { normalizeConfig } from './config';
+import { normalizeConfig, LIVENESS_FILE_DEFAULT } from './config';
+import { writeLiveness, checkLiveness } from './liveness';
 import { pairClaim, heartbeat, report } from './api';
 import { scanPostgres } from './postgres';
 import { scanSqlServer } from './sqlserver';
@@ -183,6 +184,11 @@ async function main(): Promise<void> {
   while (!stopping) {
     const ok = await heartbeat(cfg);
     if (!ok) log('heartbeat failed — backend rejected or unreachable');
+    // Touch the liveness file every loop — reflects the loop is
+    // progressing, independent of whether the heartbeat POST reached
+    // the backend. A wedged loop lets it go stale and the container's
+    // --healthcheck probe restarts the agent.
+    writeLiveness(cfg.livenessFile!, Date.now());
 
     const now = Date.now();
     if (now - lastScanAt > cfg.scanSeconds * 1000) {
@@ -198,7 +204,30 @@ async function main(): Promise<void> {
   log('clean exit');
 }
 
-main().catch((err) => {
-  log('fatal', { err: err?.message || String(err) });
-  process.exit(1);
-});
+/** `--healthcheck` mode (also PROCELA_CONNECTOR_HEALTHCHECK): a
+ *  short-lived probe the container liveness check execs. Reports healthy
+ *  iff the liveness file the main loop touches is fresh. Never starts the
+ *  loop. */
+function runHealthcheckAndExit(): never {
+  let path = process.env.PROCELA_CONNECTOR_LIVENESS_FILE || LIVENESS_FILE_DEFAULT;
+  let maxStaleMs = 180_000;
+  try {
+    const { cfg } = loadConfig();
+    path = process.env.PROCELA_CONNECTOR_LIVENESS_FILE || cfg.livenessFile || path;
+    if (cfg.livenessMaxStaleSeconds) maxStaleMs = cfg.livenessMaxStaleSeconds * 1000;
+  } catch {
+    // Config unreadable — fall back to defaults and still check the file.
+  }
+  const healthy = checkLiveness(path, Date.now(), maxStaleMs);
+  log(`healthcheck ${healthy ? 'ok' : 'stale'}`, { path });
+  process.exit(healthy ? 0 : 1);
+}
+
+if (process.argv.includes('--healthcheck') || process.env.PROCELA_CONNECTOR_HEALTHCHECK) {
+  runHealthcheckAndExit();
+} else {
+  main().catch((err) => {
+    log('fatal', { err: err?.message || String(err) });
+    process.exit(1);
+  });
+}

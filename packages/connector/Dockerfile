@@ -37,4 +37,11 @@ RUN mkdir -p /etc/procela && chown -R procela:procela /etc/procela /app
 
 USER procela
 
+# Liveness: the running agent touches a file every heartbeat; this probe
+# execs a short-lived --healthcheck process that exits non-zero once that
+# file goes stale (a wedged loop), so Docker / an orchestrator restarts it.
+# start-period covers the initial pairing + first heartbeat.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=90s --retries=3 \
+  CMD ["node", "dist/index.js", "--healthcheck"]
+
 ENTRYPOINT ["node", "dist/index.js"]

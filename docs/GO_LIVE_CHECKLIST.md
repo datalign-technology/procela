@@ -142,9 +142,13 @@ customer.
   Server · MySQL · Oracle · dbt manifest, all with column-level
   discovery, and **report retry/backoff** (a transient network failure
   now retries with capped exponential backoff instead of dropping the
-  scan). **Remaining:** a real end-to-end run against customer databases
-  (the adapters' SQL is exercised only by their extracted pure helpers
-  today), and a container liveness signal.
+  scan), and a **container liveness signal** — the loop touches a
+  liveness file each iteration and a `--healthcheck` invocation of the
+  same binary exits non-zero once it goes stale, wired as a Docker
+  `HEALTHCHECK` (and documented as a k8s `exec` liveness probe) so a
+  wedged agent is restarted. **Remaining:** a real end-to-end run
+  against customer databases (the adapters' SQL is exercised only by
+  their extracted pure helpers today).
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,
