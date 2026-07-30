@@ -97,6 +97,11 @@ npm run lint -w packages/connector
 - Logs are structured JSON on stdout — pipe to your container
   logger. Lines are prefixed `[procela-connector]`.
 - SIGINT / SIGTERM trigger a clean exit at the next loop slice.
+- A failed report is retried with capped exponential backoff
+  (5 attempts: 0.5s, 1s, 2s, 4s) before the cycle is abandoned, so a
+  brief backend blip doesn't cost a whole scan interval. A heartbeat
+  miss self-heals on the next beat. A *rejected* report (bad token,
+  validation) is not retried.
 - Multiple connectors per org are supported. Procela tags each
   reported asset with the connector that observed it.
 - Freshness states in the Procela UI: **ONLINE** (heartbeat in

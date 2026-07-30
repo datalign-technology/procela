@@ -27,6 +27,7 @@ import { scanSqlServer } from './sqlserver';
 import { scanMysql } from './mysql';
 import { scanDbt } from './dbt';
 import { scanOracle } from './oracle';
+import { withRetry } from './retry';
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger
@@ -126,7 +127,21 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
     log('no assets discovered — nothing to report');
     return;
   }
-  const res = await report(cfg, all);
+  // Retry the report on a transient network failure (thrown by fetch)
+  // with capped exponential backoff, so a brief blip doesn't drop the
+  // whole scan until the next interval. A returned { success: false }
+  // is a logical rejection (bad token, validation) — not retried.
+  let res;
+  try {
+    res = await withRetry(() => report(cfg, all), {
+      maxAttempts: 5,
+      onRetry: (attempt, err) =>
+        log('report failed, retrying', { attempt, error: (err as { message?: string })?.message || String(err) }),
+    });
+  } catch (err: any) {
+    log('report failed after retries — will retry next scan', { error: err?.message || String(err) });
+    return;
+  }
   if (!res.success) {
     log('report rejected', { error: res.error || 'unknown' });
     return;
