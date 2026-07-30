@@ -62,3 +62,13 @@ sources:
       - billing
       - reporting
     systemId: sys_billing_prod
+
+  - type: dbt
+    name: analytics-dbt
+    # Path to a dbt manifest.json on disk (from `dbt compile` / `dbt
+    # run`). Read locally — no database connection, no network to dbt.
+    # Ships each model / source / seed / snapshot as an asset with its
+    # columns. For full lineage + dbt tests, feed the same manifest
+    # through the in-app dbt import.
+    manifestPath: /project/target/manifest.json
+    systemId: sys_warehouse

@@ -110,7 +110,15 @@ npm run lint -w packages/connector
 | SQL Server   | `sqlserver`    | v1 (0.2.x) |
 | MySQL / MariaDB | `mysql`     | v1 (0.3.x) |
 | Oracle       | `oracle`       | planned |
-| dbt manifest | `dbt`          | planned |
+| dbt manifest | `dbt`          | v1 (0.4.x) |
+
+The **dbt** source reads a local `manifest.json` (from `dbt compile` /
+`dbt run`) and ships each model / source / seed / snapshot as an asset
+with its columns — no database connection required. Asset identity
+(`schema.relation`) matches Procela's in-app dbt import and live DB
+scans, so the three ingest paths reconcile onto the same assets. Lineage
+and dbt tests are captured by the richer in-app dbt import; the edge
+source captures models + columns.
 
 Cloud warehouses (Snowflake / BigQuery / Redshift / Databricks) are
 intentionally out of scope for the edge agent — they always have
