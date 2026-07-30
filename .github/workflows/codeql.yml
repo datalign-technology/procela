@@ -1,0 +1,68 @@
+name: CodeQL
+
+# Static application security testing (SAST) for Procela — checklist #22.
+# CodeQL compiles the repo into a queryable database and runs GitHub's
+# security query suite over the backend, frontend, and connector
+# (all JavaScript/TypeScript). Findings land as code-scanning alerts in
+# the repo's Security → Code scanning tab, with the source→sink data-flow
+# path for each. This complements the dependency audit (which covers
+# vulnerable *libraries*) by checking the code we wrote — injection,
+# unsafe deserialization, tainted-input-to-dangerous-sink, open redirects.
+#
+# ── Prerequisite ──────────────────────────────────────────────────────
+# Code scanning must be enabled for the repository:
+#   • public repos — free, nothing to do;
+#   • private repos — requires GitHub Advanced Security
+#     (Settings → Code security → Code scanning).
+# If it is NOT enabled, the analyze step's SARIF upload fails. To keep
+# that failure OFF pull requests, this workflow runs on push, a weekly
+# schedule, and manual dispatch — never as a PR status check. Once code
+# scanning is confirmed enabled, uncomment the `pull_request:` trigger
+# below to get inline annotations on PRs.
+
+on:
+  push:
+    branches: [create-procela-main]
+  # Uncomment once code scanning is enabled to annotate PRs inline:
+  # pull_request:
+  #   branches: [create-procela-main]
+  schedule:
+    # Weekly — Mondays 07:00 UTC. Catches newly-published CodeQL queries
+    # against code that hasn't changed, without adding per-push cost.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # analyze uploads SARIF results as code-scanning alerts.
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          # One language covers all three packages — they're all JS/TS.
+          languages: javascript-typescript
+          # security-extended goes deeper than the default security suite
+          # without pulling in the noisier maintainability/quality queries.
+          queries: security-extended
+
+      # JavaScript/TypeScript needs no build — CodeQL analyzes the source
+      # directly, so there is no autobuild step. (A compiled language
+      # would need `github/codeql-action/autobuild` here.)
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
