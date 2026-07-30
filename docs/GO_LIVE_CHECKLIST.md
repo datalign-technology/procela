@@ -90,8 +90,18 @@ customer.
 
 ## Testing / hardening beyond CI
 
-- [ ] **21. Load test.** The E2E smoke covers correctness, not
-  throughput — especially the AI endpoints, which are paid per call.
+- [~] **21. Load test.** **Harness built** —
+  [`loadtest/`](../loadtest/) (`npm run loadtest`): an autocannon-driven
+  backstop that authenticates once, then drives the most-clicked list
+  reads and the heavy aggregations (dashboard / control-tower /
+  gap-detection / enterprise-view) against a running backend, gating each
+  on p99 latency, throughput, and zero non-2xx (non-zero exit on breach).
+  Runnable locally or via the manual `Load test` workflow
+  (`.github/workflows/loadtest.yml`, `workflow_dispatch`), which uploads a
+  results JSON artifact. AI / chat endpoints are excluded by design (paid
+  per call; the latency is the model's). **Remaining:** capture a baseline
+  against a representative (Postgres-backed) deploy and tighten the
+  per-scenario budgets from the generous JSON-path defaults.
 - [ ] **22. Security review.** SAST / dependency audit / pen test.
   Dependency audit **triaged**: `npm audit fix` (non-breaking) cleared the
   safely-fixable advisories (19 → 9, lockfile-only, all suites green). The
