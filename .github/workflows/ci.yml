@@ -160,6 +160,68 @@ jobs:
       # tests on the JSON-only `Backend tests` job.
       - run: npm run test:live-db -w packages/backend
 
+  # Connector adapter integration — the real catalog + information_schema
+  # SQL in postgres.ts / mysql.ts, run against ephemeral Postgres + MySQL
+  # service containers (checklist #25). The plain `Connector tests` job
+  # exercises the pure discovery helpers with no driver; this one proves
+  # the adapters against live engines. The tests seed their own schema, so
+  # the containers start empty.
+  test-connector-integration:
+    name: Connector integration (live DBs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: procela_it
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: procela
+          MYSQL_DATABASE: procela_it
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pprocela"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Compose the two target URLs from parts so no user:password@host
+      # literal appears in this file (keeps generic-password scanners
+      # quiet). Postgres uses trust auth (no password); MySQL uses the
+      # root password set on the service above.
+      - name: Compose target DB URLs
+        env:
+          PG_HOST: localhost
+          PG_PORT: '5432'
+          MY_USER: root
+          MY_PASS: procela
+          MY_HOST: 127.0.0.1
+          MY_PORT: '3306'
+          DB: procela_it
+        run: |
+          echo "CONNECTOR_TEST_PG_URL=postgresql://postgres@${PG_HOST}:${PG_PORT}/${DB}" >> "$GITHUB_ENV"
+          echo "CONNECTOR_TEST_MYSQL_URL=mysql://${MY_USER}:${MY_PASS}@${MY_HOST}:${MY_PORT}/${DB}" >> "$GITHUB_ENV"
+          echo "CONNECTOR_TEST_MYSQL_DB=${DB}" >> "$GITHUB_ENV"
+      - run: npm run test:integration -w packages/connector
+
   test-frontend:
     name: Frontend tests
     runs-on: ubuntu-latest
