@@ -116,7 +116,12 @@ customer.
   - **`xlsx` (SheetJS)** — no npm fix published; the upstream fix ships
     only via the SheetJS CDN tarball. Decide: switch install source or
     mitigate/accept.
-  SAST and a pen test are still outstanding.
+  **SAST is now wired** — a CodeQL workflow
+  (`.github/workflows/codeql.yml`) runs GitHub's `security-extended`
+  suite over all three packages on push + weekly, surfacing findings as
+  code-scanning alerts (requires code scanning / GitHub Advanced Security
+  enabled on the repo; PR-inline annotations are a one-line trigger
+  change once it is). A **pen test** is still outstanding.
 - [x] ~~**23. DR runbook.**~~ **Written** — [`docs/DR_RUNBOOK.md`](./DR_RUNBOOK.md)
   covers restore-from-backup (PITR / snapshot / JSON fallback), migration
   roll-back, and secret / API-key rotation, grounded in `deploy/terraform/`
