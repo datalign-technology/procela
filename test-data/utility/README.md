@@ -118,7 +118,7 @@ stays small; nothing prevents you from adding more.
 
 ## Why this data exists
 
-It exercises a different industry than the default Huntington Ingalls
+It exercises a different industry than the default Momentum Industries
 sample data so you can demo Procela's industry-template flow, compare
 behaviour across industries, or spin up a fresh environment without
 loading the defence/shipbuilding set. All names, email addresses and

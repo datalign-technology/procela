@@ -283,9 +283,9 @@ export function computeAccessibleOrgs(person: StoredPerson): Array<{ id: string;
  *
  * The visible set is derived from `computeAccessibleOrgs` and then expanded
  * to include every descendant (of any org type) under each accessible
- * working-level org. This ensures a user scoped to, e.g., "Newport News
- * Shipbuilding" cannot see sibling divisions or other unrelated companies,
- * but can still see the departments/teams/units beneath NNS.
+ * working-level org. This ensures a user scoped to, e.g., "Momentum
+ * Tidewater Shipyard" cannot see sibling divisions or other unrelated
+ * companies, but can still see the departments/teams/units beneath it.
  */
 export function getVisibleOrgIds(
   user: { email?: string; role?: string } | undefined | null,

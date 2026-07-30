@@ -214,7 +214,7 @@ function evaluateValues(
 
     case 'CUSTOM': {
       // Execute the user's JS expression once per value. The expression is
-      // either a bare expression ("value.startsWith('HII-')") or a full
+      // either a bare expression ("value.startsWith('MSB-')") or a full
       // statement block ("return value > 0;"). Syntax errors fail upfront;
       // per-value runtime errors count as failures.
       //
@@ -547,7 +547,7 @@ export function describeRule(
       }
       case 'CUSTOM': {
         const lang = params.language === 'sql' ? 'sql' : 'js';
-        const body = params.body || '// e.g. value.startsWith("HII-")';
+        const body = params.body || '// e.g. value.startsWith("MSB-")';
         // SQL against a LOCAL file isn't executable here.
         return { language: lang, body, executable: lang === 'js' };
       }
