@@ -59,3 +59,7 @@ storage/
 # Real variable values — deploy/terraform/terraform.tfvars.example is committed.
 deploy/terraform/terraform.tfvars
 deploy/terraform/*.auto.tfvars
+
+# Load-test result artifacts (loadtest/README.md → LOADTEST_JSON)
+loadtest-results.json
+loadtest/results.json

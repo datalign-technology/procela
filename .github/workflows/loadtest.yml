@@ -1,0 +1,80 @@
+name: Load test
+
+# Manual, on-demand API load test (checklist #21). Deliberately NOT on
+# the per-PR path: throughput numbers vary with runner load, so gating
+# every PR on them would be flaky. Trigger from the Actions tab before a
+# release, or when a change is expected to touch a hot read/aggregation
+# path, and read the uploaded results.json artifact.
+#
+# Boots the backend on the JSON persistence path (no DATABASE_URL), waits
+# for /health, then runs `npm run loadtest` against it. The harness
+# authenticates once via the Dev provider and gates each scenario on
+# p99 latency, throughput, and zero non-2xx — a breach fails the job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Measured seconds per scenario'
+        required: false
+        default: '10'
+      connections:
+        description: 'Concurrent connections'
+        required: false
+        default: '10'
+
+jobs:
+  loadtest:
+    name: API load test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Start the backend in the background on the JSON path. No
+      # DATABASE_URL, so it uses local JSON persistence — same as the
+      # `Backend tests` job. Logs go to a file the step can dump on
+      # failure.
+      - name: Start backend
+        run: |
+          npm run dev -w packages/backend > backend.log 2>&1 &
+          echo "BACKEND_PID=$!" >> "$GITHUB_ENV"
+
+      # Poll /health until the server answers (or give up after ~60s).
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3001/api/v1/health >/dev/null; then
+              echo "backend healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "backend did not become healthy in time"; cat backend.log; exit 1
+
+      - name: Run load test
+        env:
+          LOADTEST_DURATION: ${{ github.event.inputs.duration }}
+          LOADTEST_CONNECTIONS: ${{ github.event.inputs.connections }}
+          LOADTEST_JSON: loadtest-results.json
+          CI: 'true'
+        run: npm run loadtest
+
+      # Always publish the machine-readable results (pass or fail) so a
+      # release captain can eyeball the numbers / track them over time.
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-results
+          path: loadtest-results.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Dump backend log on failure
+        if: failure()
+        run: cat backend.log || true
