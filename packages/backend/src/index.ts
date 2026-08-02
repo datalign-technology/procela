@@ -47,6 +47,7 @@ import mappingsRouter from './routes/mappings';
 import dashboardRouter from './routes/dashboard';
 import chatRouter from './routes/chat';
 import auditRouter from './routes/audit';
+import supportRouter from './routes/support';
 import searchRouter from './routes/search';
 import governanceGroupsRouter from './routes/governance-groups';
 import damaRolesRouter from './routes/dama-roles';
@@ -202,6 +203,8 @@ app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
 app.use('/api/v1/ai', authenticateToken, enforceAiBudget, aiRouter);
 app.use('/api/v1/chat', authenticateToken, enforceAiBudget, chatRouter);
 app.use('/api/v1/audit', authenticateToken, auditRouter);
+// Support router self-applies authenticateToken + a rate limiter.
+app.use('/api/v1/support', supportRouter);
 // Connectors router handles its own auth — admin endpoints take a
 // user JWT, agent endpoints take a connector token (pct_…) — so it
 // mounts without the global authenticateToken middleware.

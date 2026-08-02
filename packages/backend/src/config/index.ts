@@ -74,6 +74,11 @@ export const config = {
   mailFrom: process.env.MAIL_FROM || '',
   appUrl: process.env.APP_URL || '',
 
+  // Support inbox — where in-app "Report a problem" submissions are
+  // emailed. Unset ⇒ reports are still recorded to the audit trail,
+  // just not emailed (same audit-only fallback as password reset).
+  supportEmail: process.env.SUPPORT_EMAIL || '',
+
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
 } as const;

@@ -83,8 +83,15 @@ customer.
   has stub connectors only).
 - [ ] **18. Legal:** ToS, privacy policy, DPA. Content hooks exist
   (`docs/`) but the actual text is placeholder.
-- [ ] **19. Support flow:** how a customer reports a bug (email, in-app
-  widget, or GitHub). Not wired.
+- [x] ~~**19. Support flow:**~~ **Wired** — an in-app "Report a problem"
+  button in the app shell opens a form (category + message; auto-captures
+  the current route, app version, and browser). It POSTs to
+  `/api/v1/support`, which records every submission to the tamper-evident
+  audit trail (`SUPPORT_REPORT`) and emails the support inbox when
+  configured — audit-only fallback otherwise, the same graceful degrade as
+  password reset. Config-only remaining: set `SUPPORT_EMAIL` (+ SMTP) to
+  turn on email delivery; without it, reports are queryable in the audit
+  log.
 - [ ] **20. Billing** — no billing subsystem exists. If SaaS, integrate
   Stripe / whatever fits.
 

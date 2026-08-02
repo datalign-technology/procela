@@ -171,6 +171,69 @@ export async function sendPasswordResetEmail(args: {
   }
 }
 
+/** Send an in-app "Report a problem" submission to the support inbox.
+ *  Returns true on successful send, false otherwise (not configured, no
+ *  recipient, or a delivery error). The /support route records the audit
+ *  entry regardless — this only handles delivery. */
+export async function sendSupportEmail(args: {
+  to: string;
+  reporterName: string;
+  reporterEmail: string;
+  orgId: string;
+  category: string;
+  message: string;
+  context: Record<string, string>;
+}): Promise<boolean> {
+  if (!isConfigured() || !transporter || !config || !args.to) return false;
+
+  const subject = `[Procela support] ${args.category}: ${args.message.slice(0, 60).replace(/\s+/g, ' ')}`;
+  const ctxLines = Object.entries(args.context).map(([k, v]) => `${k}: ${v}`);
+  const text = [
+    `A Procela user submitted a support request.`,
+    '',
+    `From:     ${args.reporterName} <${args.reporterEmail}>`,
+    `Org:      ${args.orgId}`,
+    `Category: ${args.category}`,
+    '',
+    'Message:',
+    args.message,
+    '',
+    '— context —',
+    ...ctxLines,
+    '',
+    '— Procela',
+  ].join('\n');
+
+  const html = `
+    <div style="font-family: -apple-system, system-ui, sans-serif; color: #1e293b; max-width: 560px;">
+      <p>A Procela user submitted a support request.</p>
+      <table style="font-size: 13px; color: #334155; border-collapse: collapse;">
+        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">From</td><td>${escapeHtml(args.reporterName)} &lt;${escapeHtml(args.reporterEmail)}&gt;</td></tr>
+        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Org</td><td>${escapeHtml(args.orgId)}</td></tr>
+        <tr><td style="padding: 2px 12px 2px 0; color: #64748b;">Category</td><td>${escapeHtml(args.category)}</td></tr>
+      </table>
+      <p style="white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">${escapeHtml(args.message)}</p>
+      <p style="font-size: 12px; color: #94a3b8;">${ctxLines.map(escapeHtml).join('<br/>')}</p>
+      <p style="font-size: 12px; color: #94a3b8; margin-top: 20px;">— Procela</p>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: config.from,
+      to: args.to,
+      replyTo: args.reporterEmail || undefined,
+      subject,
+      text,
+      html,
+    });
+    return true;
+  } catch (err) {
+    logger.warn({ err, to: args.to }, 'Failed to deliver support email');
+    return false;
+  }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
