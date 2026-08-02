@@ -14,6 +14,7 @@ import CommandPalette from './CommandPalette';
 import MobileNavDrawer from './MobileNavDrawer';
 import NotificationsMenu from './NotificationsMenu';
 import UserMenu from './UserMenu';
+import SupportModal from './SupportModal';
 import Sidebar from './Sidebar';
 import {
   navSections,
@@ -90,6 +91,7 @@ export default function Layout() {
 
   // Shortcuts modal state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // Window-event opener for the keyboard shortcuts modal, so any page
   // (Help, in particular) can pop it without holding a setter handle.
@@ -535,6 +537,25 @@ export default function Layout() {
               <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{'⍰'}</span>
               <span>Help</span>
             </button>
+            {/* Report a problem — opens the in-app support form. Sits next
+                to Help so "I'm stuck" and "something's broken" live in the
+                same corner. */}
+            <button
+              onClick={() => setSupportOpen(true)}
+              aria-label="Report a problem"
+              title="Report a problem"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', fontSize: 12, fontWeight: 500,
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>{'⚑'}</span>
+              <span>Report a problem</span>
+            </button>
             {/* Notifications bell + dropdown */}
             <NotificationsMenu />
             <UserMenu onSignOut={handleSignOut} />
@@ -581,6 +602,7 @@ export default function Layout() {
         <IdleTimeout />
         <ToastContainer />
         <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <RoleDetailDrawer />
         <ShortcutsHint onOpenShortcuts={() => setShortcutsOpen(true)} />
