@@ -42,6 +42,10 @@ customer.
 
 ## Environment / secrets — per environment
 
+> Provisioning guide for the items below: [`DEPLOY_RUNBOOK.md`](./DEPLOY_RUNBOOK.md)
+> — how to generate each secret and where it lives (AWS Secrets Manager /
+> Helm). Rotation of a live secret is in [`DR_RUNBOOK.md`](./DR_RUNBOOK.md) §3.
+
 - [ ] **6. `ANTHROPIC_API_KEY`** — the working key set locally.
 - [ ] **7. `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY`** — RS256 signing.
   **Code-complete** (`services/jwt-signer.ts`): the backend signs with
