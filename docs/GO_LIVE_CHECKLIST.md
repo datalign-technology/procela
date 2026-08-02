@@ -103,19 +103,29 @@ customer.
   against a representative (Postgres-backed) deploy and tighten the
   per-scenario budgets from the generous JSON-path defaults.
 - [ ] **22. Security review.** SAST / dependency audit / pen test.
-  Dependency audit **triaged**: `npm audit fix` (non-breaking) cleared the
-  safely-fixable advisories (19 → 9, lockfile-only, all suites green). The
-  remaining 9 need deliberate major-version work and are tracked
-  separately — do not auto-`--force`:
-  - **vitest toolchain** (`vitest`, `vite`, `vite-node`, `esbuild`,
-    `@vitest/mocker`) — dev/test only; fix is the vitest 3 → 4 major.
-  - **`nodemailer`** — runtime; fix is the 9.x major (`raw`-option file
-    read; low exposure unless the `raw` send option is used).
-  - **`react-router` / `react-router-dom`** — frontend runtime; fixed only
-    in react-router **7.18+** (v6 → v7 major; open-redirect / XSS).
-  - **`xlsx` (SheetJS)** — no npm fix published; the upstream fix ships
-    only via the SheetJS CDN tarball. Decide: switch install source or
-    mitigate/accept.
+  Dependency audit **done**: the non-breaking pass cleared the easy
+  advisories, and the major-version work is now landed too — **nodemailer
+  8 → 9** (fixes the `raw`-option file-read/SSRF), **vitest 2 → 4** (clears
+  the whole vitest/vite/vite-node/@vitest/mocker chain incl. the critical
+  UI-server RCE and the vite path-traversal), and **react-router 6 → 7.18**
+  (fixes the open-redirect / XSS and SSR-hydration injection that applied
+  to our client-side routing). Every upgrade verified: tsc clean, backend
+  896/896, frontend 184/184, production build OK. The residual advisories
+  are **accepted with rationale** — none reachable in Procela's usage, and
+  each has no sane forward fix today:
+  - **`react-router` (RSC-mode CSRF, GHSA-qwww-vcr4-c8h2)** — affects
+    react-router's experimental React Server Components framework mode;
+    Procela is a plain client-side SPA (no data router, no server
+    actions), so the path isn't used. Fix is a future 8.3.0; downgrading
+    re-introduces the real open-redirect bug.
+  - **`xlsx` (SheetJS)** — prototype-pollution + ReDoS are in the *parse*
+    path; the only use is the frontend export, which exclusively **writes**
+    (`aoa_to_sheet`/`book_new`). No npm fix (SheetJS left the registry).
+  - **`autocannon` → `hyperid` → `uuid`** — dev-only load-test tooling;
+    npm's only "fix" is an autocannon 2.0.1 downgrade that would break the
+    harness. Not shipped to any runtime.
+  - **`esbuild`** (low) — build-time dev-server, **Windows-only**; our
+    dev/CI is Linux, and no in-range fix exists without disturbing vite.
   **SAST is now wired** — a CodeQL workflow
   (`.github/workflows/codeql.yml`) runs GitHub's `security-extended`
   suite over all three packages on push + weekly, surfacing findings as
