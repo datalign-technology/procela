@@ -9,23 +9,23 @@ name: CodeQL
 # vulnerable *libraries*) by checking the code we wrote — injection,
 # unsafe deserialization, tainted-input-to-dangerous-sink, open redirects.
 #
-# ── Prerequisite ──────────────────────────────────────────────────────
-# Code scanning must be enabled for the repository:
-#   • public repos — free, nothing to do;
+# ── Code scanning ─────────────────────────────────────────────────────
+# Code scanning must be enabled for SARIF upload to succeed:
+#   • public repos — free, always available (this repo is public);
 #   • private repos — requires GitHub Advanced Security
 #     (Settings → Code security → Code scanning).
-# If it is NOT enabled, the analyze step's SARIF upload fails. To keep
-# that failure OFF pull requests, this workflow runs on push, a weekly
-# schedule, and manual dispatch — never as a PR status check. Once code
-# scanning is confirmed enabled, uncomment the `pull_request:` trigger
-# below to get inline annotations on PRs.
+# Because the repo is public, the `pull_request:` trigger below is on:
+# each PR gets a CodeQL run whose findings appear as inline annotations
+# on the changed lines (and as code-scanning alerts). Push + weekly
+# schedule still run the full analysis on the default branch. If this
+# repo is ever made private WITHOUT Advanced Security, drop the
+# `pull_request:` trigger again so the upload failure doesn't red-X PRs.
 
 on:
   push:
     branches: [create-procela-main]
-  # Uncomment once code scanning is enabled to annotate PRs inline:
-  # pull_request:
-  #   branches: [create-procela-main]
+  pull_request:
+    branches: [create-procela-main]
   schedule:
     # Weekly — Mondays 07:00 UTC. Catches newly-published CodeQL queries
     # against code that hasn't changed, without adding per-push cost.
