@@ -45,6 +45,17 @@ customer.
 > Provisioning guide for the items below: [`DEPLOY_RUNBOOK.md`](./DEPLOY_RUNBOOK.md)
 > — how to generate each secret and where it lives (AWS Secrets Manager /
 > Helm). Rotation of a live secret is in [`DR_RUNBOOK.md`](./DR_RUNBOOK.md) §3.
+>
+> **The plumbing is wired on both targets** (AWS: PR #218; on-prem: the Helm
+> chart). `deploy/terraform/` provisions a Secrets Manager entry for every
+> secret below and injects it into the ECS task — `MFA_ENCRYPTION_KEY` and
+> `SCIM_BEARER_TOKEN` are Terraform-generated (secure by default; the MFA
+> key is injected unconditionally), while `REDIS_URL` / `SMTP_PASS` /
+> `OIDC_CLIENT_SECRET` / `SAML_IDP_CERT` are populated out-of-band and
+> injected via `enable_*` toggles. So the items below are now
+> **populate-the-value**, not wire-the-plumbing. (PR #218 also fixed the ECS
+> container health-check path, `/health` → `/api/v1/health`, so tasks
+> actually reach a healthy state.)
 
 - [ ] **6. `ANTHROPIC_API_KEY`** — the working key set locally.
 - [ ] **7. `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY`** — RS256 signing.
@@ -63,8 +74,10 @@ customer.
   rest for TOTP secrets is **code-complete** (`services/crypto.service.ts`
   + `services/kms-providers.ts`, with tests); it encrypts when a key /
   KMS provider is configured and falls back to plaintext **only in dev**
-  (with a boot warning) when neither is set. Config-only: wire AWS KMS or
-  a passphrase-derived `MFA_ENCRYPTION_KEY` in each environment.
+  (with a boot warning) when neither is set. **On AWS, Terraform now
+  generates + injects `MFA_ENCRYPTION_KEY` automatically (PR #218)** — no
+  action needed there. On-prem: set `secrets.mfaEncryptionKey` in the Helm
+  values, or point at a `KMS_PROVIDER`.
 
 ## Runtime / operations
 
