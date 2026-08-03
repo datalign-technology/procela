@@ -202,10 +202,16 @@ customer.
   ephemeral Postgres + MySQL service containers (`Connector integration
   (live DBs)` job → `adapters.int.test.ts`), proving column types,
   nullability, ordinals, view detection and schema scoping against live
-  engines — not just the pure helpers. **Remaining:** a run against real
-  *customer* databases (the pilot), and equivalent live-DB coverage for
-  the SQL Server / Oracle adapters (no free service-container image in
-  CI; validated by their pure helpers today).
+  engines — not just the pure helpers. The **SQL Server and Oracle
+  adapters now have the same live-DB coverage**: two dedicated CI jobs
+  (`Connector integration (SQL Server)` against
+  `mcr.microsoft.com/mssql/server`, and `Connector integration (Oracle)`
+  against `gvenzl/oracle-free`) run the same `adapters.int.test.ts` blocks
+  — column types, nullability, ordinals, view detection and schema/owner
+  scoping — against live engines. (That live SQL Server run also surfaced
+  and fixed a real bug: the documented `mssql://…` URL connection form was
+  never parsed by node-mssql; `buildMssqlConfig` now converts it.)
+  **Remaining:** a run against real *customer* databases (the pilot).
 - [~] **26. On-prem deployment** (per the CLAUDE.md guarantee). **Helm
   chart added** — [`deploy/helm/procela/`](../deploy/helm/procela/):
   backend, Nginx-served frontend, optionally-bundled PostgreSQL + Redis,

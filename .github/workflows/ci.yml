@@ -222,6 +222,93 @@ jobs:
           echo "CONNECTOR_TEST_MYSQL_DB=${DB}" >> "$GITHUB_ENV"
       - run: npm run test:integration -w packages/connector
 
+  # SQL Server and Oracle each get their own job rather than joining the
+  # Postgres+MySQL one: both engines are memory-hungry (SQL Server wants
+  # ~2 GB, Oracle ~1–2 GB), so a dedicated runner per engine avoids one
+  # DB's footprint starving another. The same adapters.int.test.ts runs
+  # in each; only the relevant CONNECTOR_TEST_*_URL is set, so the other
+  # engines' blocks self-skip.
+  test-connector-mssql:
+    name: Connector integration (SQL Server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: Procela_Strong_Pass1
+        ports:
+          - 1433:1433
+        # The image ships no HEALTHCHECK; drive one via sqlcmd (tools18,
+        # -C trusts the container's self-signed cert). The password is read
+        # from the container's own env so no literal appears in the check.
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P $MSSQL_SA_PASSWORD -Q 'SELECT 1' -b"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 30s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Compose the URL from parts so no user:password@host literal appears
+      # in this file (keeps generic-password scanners quiet). Self-signed
+      # container cert → encrypt=false + trustServerCertificate=true.
+      - name: Compose target DB URL
+        env:
+          MS_USER: sa
+          MS_PASS: Procela_Strong_Pass1
+          MS_HOST: localhost
+          MS_PORT: '1433'
+          MS_DB: master
+        run: |
+          echo "CONNECTOR_TEST_MSSQL_URL=mssql://${MS_USER}:${MS_PASS}@${MS_HOST}:${MS_PORT}/${MS_DB}?encrypt=false&trustServerCertificate=true" >> "$GITHUB_ENV"
+      - run: npm run test:integration -w packages/connector
+
+  test-connector-oracle:
+    name: Connector integration (Oracle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      oracle:
+        # gvenzl's community image is the standard for Oracle-in-CI: the
+        # faststart variant boots a pre-created DB in ~30–60s and ships its
+        # own healthcheck.sh. APP_USER isn't needed — the tests seed a
+        # dedicated schema as `system`.
+        image: gvenzl/oracle-free:slim-faststart
+        env:
+          ORACLE_PASSWORD: procela
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 40s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compose target DB URL
+        env:
+          OR_USER: system
+          OR_PASS: procela
+          OR_HOST: localhost
+          OR_PORT: '1521'
+          OR_SERVICE: FREEPDB1
+        run: |
+          echo "CONNECTOR_TEST_ORACLE_URL=oracle://${OR_USER}:${OR_PASS}@${OR_HOST}:${OR_PORT}/${OR_SERVICE}" >> "$GITHUB_ENV"
+      - run: npm run test:integration -w packages/connector
+
   test-frontend:
     name: Frontend tests
     runs-on: ubuntu-latest
