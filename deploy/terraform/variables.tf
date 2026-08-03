@@ -114,3 +114,90 @@ variable "log_retention_days" {
   description = "CloudWatch log group retention for the backend container logs."
   default     = 30
 }
+
+# ── Optional-feature toggles ────────────────────────────────────────────────
+# Each injects the matching secret (and, for SMTP, its non-secret config)
+# into the ECS task. Populate the corresponding Secrets Manager entry with
+# `put-secret-value` BEFORE flipping the toggle, or the app receives the
+# REPLACE_ME placeholder and the feature degrades (mail → audit-log, etc).
+
+variable "enable_redis" {
+  type        = bool
+  description = "Inject REDIS_URL for the shared rate limiter. Populate the redis_url secret first."
+  default     = false
+}
+
+variable "enable_smtp" {
+  type        = bool
+  description = "Inject SMTP_PASS + the SMTP host/port/user/secure/from config for transactional email."
+  default     = false
+}
+
+variable "enable_oidc" {
+  type        = bool
+  description = "Inject OIDC_CLIENT_SECRET (used when AUTH_PROVIDER=oidc)."
+  default     = false
+}
+
+variable "enable_saml" {
+  type        = bool
+  description = "Inject SAML_IDP_CERT (used when AUTH_PROVIDER=saml)."
+  default     = false
+}
+
+variable "enable_scim" {
+  type        = bool
+  description = "Inject SCIM_BEARER_TOKEN to activate the /scim/v2 provisioning endpoints."
+  default     = false
+}
+
+# ── Non-secret application config (plain env) ───────────────────────────────
+# Empty defaults are safe — the app treats an empty value as unset.
+
+variable "app_url" {
+  type        = string
+  description = "Public app URL, used in password-reset / support email links (APP_URL)."
+  default     = ""
+}
+
+variable "cors_allowed_origins" {
+  type        = string
+  description = "Comma-separated extra browser origins permitted to call the API (CORS_ALLOWED_ORIGINS)."
+  default     = ""
+}
+
+variable "support_email" {
+  type        = string
+  description = "Inbox for in-app 'Report a problem' submissions (SUPPORT_EMAIL). Unset ⇒ audit-log only."
+  default     = ""
+}
+
+variable "smtp_host" {
+  type        = string
+  description = "SMTP server host (SMTP_HOST). Required when enable_smtp = true."
+  default     = ""
+}
+
+variable "smtp_port" {
+  type        = number
+  description = "SMTP server port (SMTP_PORT)."
+  default     = 587
+}
+
+variable "smtp_user" {
+  type        = string
+  description = "SMTP username (SMTP_USER)."
+  default     = ""
+}
+
+variable "smtp_secure" {
+  type        = bool
+  description = "Use implicit TLS for SMTP (SMTP_SECURE) — true for port 465."
+  default     = false
+}
+
+variable "mail_from" {
+  type        = string
+  description = "From header for outbound mail (MAIL_FROM)."
+  default     = "Procela <noreply@procela.io>"
+}

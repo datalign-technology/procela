@@ -38,6 +38,15 @@ data "aws_iam_policy_document" "task_execution_secrets" {
       aws_secretsmanager_secret.jwt_secret.arn,
       aws_secretsmanager_secret.anthropic_api_key.arn,
       aws_secretsmanager_secret.db_password.arn,
+      # Read access is granted for all app secrets even when a feature
+      # toggle currently leaves one out of the task — harmless, and lets an
+      # operator flip a toggle without a matching IAM change.
+      aws_secretsmanager_secret.mfa_encryption_key.arn,
+      aws_secretsmanager_secret.scim_bearer_token.arn,
+      aws_secretsmanager_secret.redis_url.arn,
+      aws_secretsmanager_secret.smtp_pass.arn,
+      aws_secretsmanager_secret.oidc_client_secret.arn,
+      aws_secretsmanager_secret.saml_idp_cert.arn,
     ]
   }
 }
