@@ -1,4 +1,6 @@
 # Patterns to ignore when building Helm packages.
+# CI-only lint overlays — not part of the shipped chart.
+ci/
 .DS_Store
 .git/
 .gitignore

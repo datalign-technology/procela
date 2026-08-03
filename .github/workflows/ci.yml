@@ -323,6 +323,41 @@ jobs:
       # Frontend tests run under vitest.
       - run: npm test -w packages/frontend
 
+  # Lints + renders the on-prem Helm chart so a broken template or values
+  # regression is caught in CI (the chart previously had no automated
+  # check — see GO_LIVE_CHECKLIST #26). No cluster needed: `helm lint`
+  # validates Chart/values, `helm template` proves every manifest renders.
+  helm-lint:
+    name: Helm lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      # Default values: bundled in-cluster Postgres + Redis, ingress
+      # without TLS, migrate hook on. --strict promotes lint warnings to
+      # failures.
+      - name: Lint (default values — bundled Postgres + Redis)
+        run: helm lint deploy/helm/procela --strict
+      # Bring-your-own-infra path: external Postgres + Redis + TLS ingress.
+      # Exercises the two `required` guards and the external-URL branches
+      # the default values never reach.
+      - name: Lint (external services + TLS)
+        run: helm lint deploy/helm/procela --strict --values deploy/helm/procela/ci/external-values.yaml
+      # lint validates values + basic template sanity; `helm template`
+      # additionally proves every manifest actually renders. Render both
+      # install paths plus the existing-Secret variant (which skips the
+      # chart-managed Secret), discarding output — success is the signal.
+      - name: Render manifests (default)
+        run: helm template procela deploy/helm/procela > /dev/null
+      - name: Render manifests (external services + TLS)
+        run: helm template procela deploy/helm/procela --values deploy/helm/procela/ci/external-values.yaml > /dev/null
+      - name: Render manifests (existing Secret)
+        run: helm template procela deploy/helm/procela --set secrets.existingSecret=procela-secrets > /dev/null
+
   e2e:
     name: E2E smoke
     runs-on: ubuntu-latest

@@ -219,10 +219,16 @@ customer.
   a `prisma migrate deploy` pre-upgrade hook, Ingress, and split
   ConfigMap/Secret. Mirrors the compose topology. The backend image now
   bundles the prisma CLI (`prisma` moved to a runtime dependency), so the
-  migrate Job works with the default image. **Remaining:** a real
-  `helm lint` + a smoke deploy on a cluster (couldn't run in CI's
-  sandbox), and managed/HA PostgreSQL (vs the bundled single-replica
-  StatefulSet) as a follow-up.
+  migrate Job works with the default image. **`helm lint` is now wired**
+  — a `Helm lint` CI job (`azure/setup-helm`) lints `--strict` and
+  `helm template`-renders the chart on every push/PR, across both install
+  paths: the default (bundled Postgres + Redis) and a "bring-your-own-infra"
+  overlay (`ci/external-values.yaml`: external Postgres + Redis + TLS
+  ingress), plus the existing-Secret variant — so every conditional
+  template branch is rendered at least once. **Remaining:** a smoke deploy
+  on a real cluster (renders clean, but nothing's been `helm install`ed
+  against a live API server), and managed/HA PostgreSQL (vs the bundled
+  single-replica StatefulSet) as a follow-up.
 - [x] ~~**27. The ~7 rule-8 handlers left as follow-up.**~~ Converted
   in PR [#137](https://github.com/datalign-technology/procela/issues/137).
   **Done.**
