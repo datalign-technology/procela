@@ -1,0 +1,29 @@
+# CI-only overlay for the Helm lint job — NOT shipped in the packaged
+# chart (see .helmignore). Default values.yaml exercises the bundled
+# install path (in-cluster Postgres + Redis, ingress without TLS). This
+# overlay drives the OTHER path — "bring your own infrastructure":
+#   - external Postgres  (hits the `required externalDatabase.url` guard
+#     and the computed-DATABASE_URL external branch),
+#   - external Redis     (external REDIS_URL branch),
+#   - TLS ingress        (hits the `required ingress.tls.secretName` guard).
+# Between the default render and this one, every conditional template
+# branch is rendered at least once, so `helm template` catches a broken
+# template on either path.
+
+postgresql:
+  enabled: false
+externalDatabase:
+  # Never parsed — a non-empty DSN just satisfies the required-guard and
+  # the chart-managed Secret's DATABASE_URL. No password on purpose.
+  url: "postgresql://procela@db.internal:5432/procela?schema=public"
+
+redis:
+  enabled: false
+externalRedis:
+  url: "redis://redis.internal:6379"
+
+ingress:
+  enabled: true
+  tls:
+    enabled: true
+    secretName: "procela-tls"
