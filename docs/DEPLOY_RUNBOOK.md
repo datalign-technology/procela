@@ -54,8 +54,8 @@ Required column: **P** = PROD-REQUIRED, **C** = conditionally required
 | `CORS_ALLOWED_ORIGINS` | P | dev fallback echoes the request origin (unsafe) | plain env | ConfigMap |
 | `SMTP_HOST/PORT/USER/PASS/SECURE`, `MAIL_FROM` | P | password reset + support fall back to audit-log only | `SMTP_PASS` → `〈prefix〉/app/smtp_pass`; rest = `enable_smtp` tfvars | `secrets.smtpPass` + ConfigMap |
 | `SUPPORT_EMAIL` | · | "Report a problem" reports are audit-logged, not emailed | plain env | ConfigMap |
-| `AUTH_PROVIDER` + provider block | C | `dev` provider (any email logs in — **never** for prod) | plain env (`cognito` in `ecs.tf`) | ConfigMap |
-| `COGNITO_*` / `OIDC_*` | C | required when `AUTH_PROVIDER=oidc`/cognito | plain env; `OIDC_CLIENT_SECRET` → secret | ConfigMap / `secrets.*` |
+| `AUTH_PROVIDER` + provider block | C | unrecognized/`dev` ⇒ dev provider (any email logs in) — **prod refuses to boot** | `auth_provider` tfvar (validated `oidc`\|`saml`\|`local`, default `oidc`) | ConfigMap |
+| `OIDC_*` (Cognito federates via OIDC) | C | required when `AUTH_PROVIDER=oidc` | `oidc_issuer`/`oidc_client_id` tfvars (`enable_oidc`); `OIDC_CLIENT_SECRET` → secret | ConfigMap / `secrets.*` |
 | `SAML_ENTRY_POINT/ISSUER/IDP_CERT/CALLBACK_URL` | C | required when `AUTH_PROVIDER=saml` | `SAML_IDP_CERT` → secret; rest plain | `secrets.samlIdpCert` + ConfigMap |
 | `SCIM_BEARER_TOKEN` | C | SCIM endpoints return 401 (no IdP user provisioning) | secret | `secrets.*` (add) |
 | `HCAPTCHA_SITE_KEY` / `HCAPTCHA_SECRET` | · | login CAPTCHA accepts any token (no bot protection) | `HCAPTCHA_SECRET` → secret | ConfigMap / `secrets.*` |
@@ -69,10 +69,14 @@ Required column: **P** = PROD-REQUIRED, **C** = conditionally required
 > injected only when their toggle is on — `enable_redis` / `enable_smtp` /
 > `enable_oidc` / `enable_saml` / `enable_scim` — so an un-populated
 > placeholder is never handed to the app. Non-secret SMTP + `APP_URL` /
-> `CORS_ALLOWED_ORIGINS` / `SUPPORT_EMAIL` are tfvars. **Still operator-set:**
-> the non-secret IdP config (`COGNITO_*` / `OIDC_ISSUER` / `SAML_ENTRY_POINT`
-> …) and provisioning the IdP itself — the stack assumes `AUTH_PROVIDER=cognito`
-> but does not create the Cognito pool.
+> `CORS_ALLOWED_ORIGINS` / `SUPPORT_EMAIL` are tfvars. `AUTH_PROVIDER` is the
+> validated `auth_provider` tfvar (`oidc` | `saml` | `local`, default `oidc`);
+> the non-secret IdP config is now tfvars too — `oidc_issuer` / `oidc_client_id`
+> (`enable_oidc`) and `saml_entry_point` / `saml_issuer` / `saml_callback_url`
+> (`enable_saml`). **Still operator-set:** provisioning the IdP itself — e.g.
+> Cognito federates via OIDC (`auth_provider = "oidc"`, issuer
+> `https://cognito-idp.<region>.amazonaws.com/<pool-id>`), but the stack does
+> not create the Cognito user pool.
 
 ---
 

@@ -67,9 +67,11 @@ customer.
   backend falls back to in-memory if unset (fine for dev, not for HA).
 - [ ] **9. `SMTP_*`** — mail delivery for notifications / password
   reset. Currently logs to the audit trail as a fallback.
-- [ ] **10. Identity provider config.** `AUTH_PROVIDER`, `COGNITO_*`
-  (AWS) or `SAML_*` / OIDC issuer URLs. Sub-domain-based tenant
-  white-labeling needs proper DNS + a wildcard cert.
+- [ ] **10. Identity provider config.** `AUTH_PROVIDER` (`oidc` | `saml` |
+  `local` — Cognito federates via OIDC; `dev`/unrecognized values make prod
+  refuse to boot) plus the OIDC issuer / client id or `SAML_*` config. On AWS
+  these are the `auth_provider` / `oidc_*` / `saml_*` tfvars. Sub-domain-based
+  tenant white-labeling needs proper DNS + a wildcard cert.
 - [ ] **11. `KMS_PROVIDER` / `MFA_ENCRYPTION_KEY`** — encryption at
   rest for TOTP secrets is **code-complete** (`services/crypto.service.ts`
   + `services/kms-providers.ts`, with tests); it encrypts when a key /

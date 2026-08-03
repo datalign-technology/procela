@@ -23,6 +23,21 @@ locals {
     { name = "SMTP_SECURE", value = tostring(var.smtp_secure) },
     { name = "MAIL_FROM", value = var.mail_from },
   ] : []
+
+  # Non-secret auth config that pairs with the secret half (OIDC_CLIENT_SECRET /
+  # SAML_IDP_CERT injected via locals.optional_secrets). Added only when the
+  # matching provider is enabled, so an unconfigured provider never ships empty
+  # values that read like real config.
+  oidc_environment = var.enable_oidc ? [
+    { name = "OIDC_ISSUER", value = var.oidc_issuer },
+    { name = "OIDC_CLIENT_ID", value = var.oidc_client_id },
+  ] : []
+
+  saml_environment = var.enable_saml ? [
+    { name = "SAML_ENTRY_POINT", value = var.saml_entry_point },
+    { name = "SAML_ISSUER", value = var.saml_issuer },
+    { name = "SAML_CALLBACK_URL", value = var.saml_callback_url },
+  ] : []
 }
 
 resource "aws_ecs_cluster" "app" {
@@ -70,16 +85,19 @@ resource "aws_ecs_task_definition" "app" {
 
       # Non-secret config. Empty defaults are safe — the app treats an
       # empty value as unset. SMTP host/port/user/from are only added when
-      # enable_smtp is set (see locals.smtp_environment).
+      # enable_smtp is set; OIDC/SAML config only when the matching provider is
+      # enabled (see locals.*_environment). AUTH_PROVIDER comes from a validated
+      # variable (oidc | saml | local) — never a value the app would fall back
+      # to the insecure dev provider on. Cognito federates via OIDC.
       environment = concat([
         { name = "NODE_ENV", value = var.environment == "prod" ? "production" : var.environment },
         { name = "PORT", value = tostring(var.app_port) },
         { name = "LOG_LEVEL", value = "info" },
-        { name = "AUTH_PROVIDER", value = "cognito" },
+        { name = "AUTH_PROVIDER", value = var.auth_provider },
         { name = "APP_URL", value = var.app_url },
         { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
         { name = "SUPPORT_EMAIL", value = var.support_email },
-      ], local.smtp_environment)
+      ], local.smtp_environment, local.oidc_environment, local.saml_environment)
 
       # Every sensitive value is injected as a secret reference — the value
       # itself never lives in the task definition or in Terraform state.
