@@ -29,6 +29,26 @@ app_url              = "https://procela.example.com"
 cors_allowed_origins = "" # extra browser origins, comma-separated
 support_email        = "" # in-app "Report a problem" inbox
 
+# ── Authentication ──
+# AUTH_PROVIDER: oidc | saml | local. Cognito is NOT a value — it federates
+# via OIDC, so use auth_provider = "oidc" with the oidc_* fields + enable_oidc.
+# "dev"/unrecognized values are rejected: the app treats an unrecognized
+# provider as the insecure dev login (any email, no password) and refuses to
+# boot in production, so Terraform validates this up front.
+auth_provider = "oidc"
+
+# OIDC non-secret config (used when enable_oidc = true; the client secret is
+# the oidc_client_secret Secrets Manager entry). For Cognito, the issuer is
+# https://cognito-idp.<region>.amazonaws.com/<user-pool-id>.
+oidc_issuer    = ""
+oidc_client_id = ""
+
+# SAML non-secret config (used when enable_saml = true; the IdP signing cert is
+# the saml_idp_cert secret).
+saml_entry_point  = "" # IdP SSO URL
+saml_issuer       = "" # SP entity id
+saml_callback_url = "" # e.g. https://procela.example.com/api/v1/auth/saml/callback
+
 # ── Optional features ──
 # Flip a toggle to inject its secret into the ECS task. FIRST populate the
 # secret out-of-band, e.g.:

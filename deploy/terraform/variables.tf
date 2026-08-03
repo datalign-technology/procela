@@ -154,6 +154,59 @@ variable "enable_scim" {
 # ── Non-secret application config (plain env) ───────────────────────────────
 # Empty defaults are safe — the app treats an empty value as unset.
 
+variable "auth_provider" {
+  type        = string
+  description = <<-EOT
+    Active authentication provider (AUTH_PROVIDER). Must be one of oidc | saml |
+    local. Amazon Cognito is NOT a provider value — Cognito federates via OIDC,
+    so use auth_provider = "oidc" with the oidc_* config and enable_oidc = true.
+    "dev" and any unrecognized value are intentionally rejected: the backend
+    treats an unrecognized AUTH_PROVIDER as the insecure dev provider (any email,
+    no password) and refuses to boot in production, so Terraform blocks it here.
+  EOT
+  default     = "oidc"
+
+  validation {
+    condition     = contains(["oidc", "saml", "local"], var.auth_provider)
+    error_message = "auth_provider must be oidc, saml, or local (Cognito uses oidc; dev is not allowed in production)."
+  }
+}
+
+# OIDC non-secret config — injected only when enable_oidc = true. The secret
+# half (OIDC_CLIENT_SECRET) rides in via the oidc_client_secret Secrets Manager
+# entry; these are the plain values that pair with it.
+variable "oidc_issuer" {
+  type        = string
+  description = "OIDC issuer URL (OIDC_ISSUER). For Cognito: https://cognito-idp.<region>.amazonaws.com/<user-pool-id>."
+  default     = ""
+}
+
+variable "oidc_client_id" {
+  type        = string
+  description = "OIDC client / application id (OIDC_CLIENT_ID)."
+  default     = ""
+}
+
+# SAML non-secret config — injected only when enable_saml = true. The IdP
+# signing certificate (SAML_IDP_CERT) rides in as a secret.
+variable "saml_entry_point" {
+  type        = string
+  description = "IdP SSO URL where AuthnRequests are sent (SAML_ENTRY_POINT)."
+  default     = ""
+}
+
+variable "saml_issuer" {
+  type        = string
+  description = "SP entity id — Procela's identifier to the IdP (SAML_ISSUER)."
+  default     = ""
+}
+
+variable "saml_callback_url" {
+  type        = string
+  description = "ACS URL the IdP POSTs assertions to (SAML_CALLBACK_URL), e.g. https://<app>/api/v1/auth/saml/callback."
+  default     = ""
+}
+
 variable "app_url" {
   type        = string
   description = "Public app URL, used in password-reset / support email links (APP_URL)."
