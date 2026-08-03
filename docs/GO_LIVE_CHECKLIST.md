@@ -154,10 +154,11 @@ customer.
     dev/CI is Linux, and no in-range fix exists without disturbing vite.
   **SAST is now wired** — a CodeQL workflow
   (`.github/workflows/codeql.yml`) runs GitHub's `security-extended`
-  suite over all three packages on push + weekly, surfacing findings as
-  code-scanning alerts (requires code scanning / GitHub Advanced Security
-  enabled on the repo; PR-inline annotations are a one-line trigger
-  change once it is). A **pen test** is still outstanding.
+  suite over all three packages on push + weekly + **on every PR**,
+  surfacing findings as code-scanning alerts and, on PRs, as **inline
+  annotations on the changed lines** (the repo is public, so code
+  scanning is free — no GitHub Advanced Security needed). A **pen test**
+  is still outstanding.
 - [x] ~~**23. DR runbook.**~~ **Written** — [`docs/DR_RUNBOOK.md`](./DR_RUNBOOK.md)
   covers restore-from-backup (PITR / snapshot / JSON fallback), migration
   roll-back, and secret / API-key rotation, grounded in `deploy/terraform/`
