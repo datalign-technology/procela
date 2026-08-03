@@ -32,7 +32,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
-import { initAuthProviders } from './services/auth-providers';
+import { initAuthProviders, assertAuthSafeForProduction } from './services/auth-providers';
 import { initOrgScope } from './lib/org-scope';
 import scimRouter from './routes/scim';
 import aiRouter from './routes/ai';
@@ -397,7 +397,18 @@ const server = app.listen(PORT, () => {
   // Hydrate persisted auth config + OIDC providers into the in-memory
   // auth state so the sync read API serves them (PR 3c). Env-bootstrapped
   // providers already loaded at module import; this augments/overrides.
-  initAuthProviders().catch((err) => logger.error({ err }, 'initAuthProviders failed'));
+  // Load persisted auth config, then fail-closed: refuse to serve production
+  // traffic with the insecure `dev` provider (any email, no password) — whether
+  // set explicitly or reached because AUTH_PROVIDER was an unrecognized value
+  // (e.g. "cognito") that silently fell back to dev. Checked after init so a
+  // legitimately persisted oidc/saml provider isn't mistaken for dev.
+  initAuthProviders()
+    .catch((err) => logger.error({ err }, 'initAuthProviders failed'))
+    .then(() => assertAuthSafeForProduction())
+    .catch((err: Error) => {
+      logger.error({ err: err.message }, 'FATAL: unsafe auth configuration — refusing to serve traffic');
+      process.exit(1);
+    });
   // Hydrate the org-scope cache from the repo so visibility filtering is
   // correct in Postgres mode (PR 4). No-op in JSON mode.
   initOrgScope().catch((err) => logger.error({ err }, 'initOrgScope failed'));

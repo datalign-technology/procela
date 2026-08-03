@@ -535,6 +535,40 @@ const authConfig: AuthConfig = {
     : 'dev',
 };
 
+// ── Fail-closed auth-safety guard ──────────────────────────────────────────
+// The `dev` provider authenticates ANY email with no password (see
+// DevAuthProvider). It's the intended default for local dev + CI, but it must
+// never be the active provider in production. Two ways it can sneak in:
+//   1. AUTH_PROVIDER=dev set explicitly.
+//   2. AUTH_PROVIDER set to an *unrecognized* value (e.g. "cognito") — the
+//      registry above silently falls back to `dev`. This is the dangerous
+//      one: it reads like an intentional production setting.
+// The backend refuses to start in production in either case.
+
+/** Pure check: returns a fatal message if the resolved auth provider is unsafe
+ *  for `nodeEnv`, else null. `activeProvider` is the effective provider;
+ *  `requestedProvider` is the raw AUTH_PROVIDER value (for a better message). */
+export function authSafetyError(
+  nodeEnv: string,
+  activeProvider: string,
+  requestedProvider: string,
+): string | null {
+  if (nodeEnv !== 'production') return null;
+  if (activeProvider !== 'dev') return null;
+  const unrecognized = !VALID_PROVIDERS.includes(requestedProvider as ProviderName);
+  return unrecognized
+    ? `AUTH_PROVIDER="${requestedProvider}" is not a recognized provider (dev | local | oidc | saml) and silently fell back to the "dev" provider, which authenticates ANY email with no password. Refusing to start in production. Amazon Cognito federates via OIDC — set AUTH_PROVIDER=oidc with OIDC_ISSUER / OIDC_CLIENT_ID / OIDC_CLIENT_SECRET (or AUTH_PROVIDER=saml).`
+    : `AUTH_PROVIDER=dev authenticates ANY email with no password and must not run in production. Refusing to start. Set AUTH_PROVIDER=oidc or saml.`;
+}
+
+/** Throws if the effective auth configuration is unsafe for production. Call
+ *  at boot after any persisted auth config has loaded; a throw should be a
+ *  hard, non-zero exit. */
+export function assertAuthSafeForProduction(): void {
+  const err = authSafetyError(config.nodeEnv, authConfig.activeProvider, config.authProvider);
+  if (err) throw new Error(err);
+}
+
 const devProvider = new DevAuthProvider();
 const localProvider = new LocalAuthProvider();
 
@@ -662,6 +696,11 @@ export async function updateAuthConfig(update: {
   oidcClientId?: string;
 }): Promise<void> {
   if (update.provider && VALID_PROVIDERS.includes(update.provider)) {
+    // Fail-closed: never let a running production instance be switched to the
+    // insecure dev provider (any email, no password) via the admin API.
+    if (config.nodeEnv === 'production' && update.provider === 'dev') {
+      throw new Error('Refusing to switch to the "dev" auth provider in production — it authenticates any email with no password.');
+    }
     authConfig.activeProvider = update.provider;
     await settingsRepo.set('authConfig', { activeProvider: authConfig.activeProvider });
   }
