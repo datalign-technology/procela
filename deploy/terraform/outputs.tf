@@ -48,5 +48,11 @@ output "secret_arns" {
     jwt_secret        = aws_secretsmanager_secret.jwt_secret.arn
     anthropic_api_key = aws_secretsmanager_secret.anthropic_api_key.arn
     db_password       = aws_secretsmanager_secret.db_password.arn
+    mfa_encryption_key = aws_secretsmanager_secret.mfa_encryption_key.arn
+    scim_bearer_token  = aws_secretsmanager_secret.scim_bearer_token.arn
+    redis_url          = aws_secretsmanager_secret.redis_url.arn
+    smtp_pass          = aws_secretsmanager_secret.smtp_pass.arn
+    oidc_client_secret = aws_secretsmanager_secret.oidc_client_secret.arn
+    saml_idp_cert      = aws_secretsmanager_secret.saml_idp_cert.arn
   }
 }
