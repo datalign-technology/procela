@@ -12,6 +12,44 @@ import mssql from 'mssql';
 import type { SqlServerSource, ReportedAsset } from './types';
 import { rowToAsset, attachColumns, type RawCatalogRow, type RawColumnRow } from './discovery';
 
+/** node-mssql's connection-string parser only understands the classic ADO
+ *  form (`Server=host,port;Database=db;User Id=…;Password=…`). The
+ *  `mssql://user:pass@host:port/database?encrypt=…` URL form this source
+ *  type also documents is NOT parsed by the driver — it fails with
+ *  "config.server property is required". Detect the URL form and convert it
+ *  to the config object the driver wants; pass any other string (the ADO
+ *  form) straight through. Pure — unit-testable without a live database. */
+export function buildMssqlConfig(connectionString: string): mssql.config | string {
+  if (!/^(mssql|sqlserver):\/\//i.test(connectionString)) return connectionString;
+  let u: URL;
+  try {
+    u = new URL(connectionString);
+  } catch {
+    throw new Error(`invalid SQL Server connectionString URL (expected mssql://user:pass@host:port/database): ${connectionString}`);
+  }
+  // `new URL('mssql://')` parses with an empty hostname rather than
+  // throwing — reject it here so a hostless URL fails with a clear message
+  // instead of the driver's cryptic "config.server is required".
+  if (!u.hostname) {
+    throw new Error(`invalid SQL Server connectionString URL (missing host): ${connectionString}`);
+  }
+  const encrypt = u.searchParams.get('encrypt');
+  const trust = u.searchParams.get('trustServerCertificate');
+  const database = u.pathname.replace(/^\//, '');
+  return {
+    server: decodeURIComponent(u.hostname),
+    port: u.port ? Number(u.port) : 1433,
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    ...(database ? { database } : {}),
+    options: {
+      // Secure by default: encrypt unless the URL explicitly disables it.
+      encrypt: encrypt == null ? true : encrypt !== 'false',
+      trustServerCertificate: trust === 'true',
+    },
+  };
+}
+
 // System schemas we never want to surface. INFORMATION_SCHEMA is
 // SQL Server's SQL-standard views layer; the sys.* metadata lives
 // in the `sys` schema; guest / db_* are permission-scaffolding.
@@ -27,7 +65,7 @@ const SYSTEM_SCHEMAS = new Set([
  *  closes. Errors propagate so the caller can write the SCAN_FAILED
  *  event. */
 export async function scanSqlServer(source: SqlServerSource): Promise<ReportedAsset[]> {
-  const pool = await mssql.connect(source.connectionString);
+  const pool = await mssql.connect(buildMssqlConfig(source.connectionString));
   try {
     // Build the schema filter. If the operator provided a list, use
     // it; otherwise skip only the system schemas. Doing the filter
