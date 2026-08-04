@@ -1,0 +1,27 @@
+# CodeQL configuration for Procela.
+#
+# Runs the same security-extended suite as before, with one query
+# filtered out: js/missing-rate-limiting.
+#
+# Why the exclusion: Procela DOES rate-limit its API. A custom,
+# Redis-backed limiter lives in
+# packages/backend/src/middleware/rate-limit.ts and is applied both
+# per-route (login, password reset, support) and as a coarse per-IP
+# /api/v1 backstop wired in index.ts. CodeQL's js/missing-rate-limiting
+# query, however, only recognises a fixed set of limiter *libraries*
+# (express-rate-limit and friends) and cannot see a first-party
+# middleware — so it flags every authenticated route that reaches the
+# DB, producing ~34 false positives with no true positives. Excluding
+# this one query keeps the rest of security-extended (injection, unsafe
+# deserialization, tainted-flow, open redirects, …) fully active.
+#
+# If the limiter is ever replaced with a CodeQL-modelled library, drop
+# this filter so the query's coverage comes back.
+name: "Procela CodeQL config"
+
+queries:
+  - uses: security-extended
+
+query-filters:
+  - exclude:
+      id: js/missing-rate-limiting
