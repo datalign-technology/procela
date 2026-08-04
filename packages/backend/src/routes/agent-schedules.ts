@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
-import { loadStore, saveStore, registerStore } from '../lib/persistence';
+import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { agents } from './agents';
 import { processNodes, isGovernanceNode } from './process-catalog';
@@ -204,7 +204,11 @@ async function runScheduleNow(sched: StoredAgentSchedule): Promise<void> {
     sched.nextRunAt = advanceNextRunAt(sched.frequency, new Date()).toISOString();
   }
   sched.updatedAt = new Date().toISOString();
-  saveStore('agentSchedules', agentSchedules);
+  // Persist through the repository so the advance (lastRunAt / runCount /
+  // nextRunAt / status) reaches Postgres in DB mode — saveStore only writes
+  // the JSON store, so a bare saveStore lost these updates under Postgres and
+  // a schedule could re-fire after a restart.
+  await agentSchedulesRepo.update(sched.id, sched);
   auditService.log(sched.orgId, sched.createdBy, 'AgentSchedule', sched.id, 'AGENT_SCHEDULE_FIRED', null, {
     runCount: sched.runCount, status: sched.status, nextRunAt: sched.nextRunAt,
   });

@@ -267,11 +267,11 @@ async function buildFacts(orgId: string | undefined): Promise<Fact[]> {
         refs: { systems: s.id, people: s.ownerPersonId },
       });
     }
-    if ((s as any).deputyOwnerPersonId) {
+    if (s.deputyOwnerId) {
       emit(facts, {
         factId: `sys-deputy:${s.id}`,
         factType: 'sys-owner',
-        refs: { systems: s.id, people: (s as any).deputyOwnerPersonId },
+        refs: { systems: s.id, people: s.deputyOwnerId },
       });
     }
   }
