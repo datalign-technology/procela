@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { hasPermission, getPermissionsForRole, ROLES } from '../lib/permissions';
+import {
+  hasPermission,
+  getPermissionsForRole,
+  ROLES,
+  requireResource,
+  actionForMethod,
+} from '../lib/permissions';
 
 describe('hasPermission', () => {
   it('SUPER_ADMIN has all permissions', () => {
@@ -72,5 +78,105 @@ describe('ROLES', () => {
     assert.ok(ROLES.includes('SUPER_ADMIN'));
     assert.ok(ROLES.includes('VIEWER'));
     assert.ok(ROLES.length >= 5);
+  });
+});
+
+describe('read/write catalog invariants', () => {
+  it('every role is a superset of VIEWER reads (catalog stays readable)', () => {
+    const viewerReads = getPermissionsForRole('VIEWER');
+    for (const role of ['CONTRIBUTOR', 'EDITOR']) {
+      for (const p of viewerReads) {
+        assert.ok(hasPermission(role, p), `${role} should inherit VIEWER perm ${p}`);
+      }
+    }
+  });
+
+  it('EDITOR writes the data/system registry but not governance/people/org', () => {
+    assert.strictEqual(hasPermission('EDITOR', 'data-asset:write'), true);
+    assert.strictEqual(hasPermission('EDITOR', 'system:write'), true);
+    assert.strictEqual(hasPermission('EDITOR', 'mapping:write'), true);
+    assert.strictEqual(hasPermission('EDITOR', 'connection:write'), true);
+    assert.strictEqual(hasPermission('EDITOR', 'governance:write'), false);
+    assert.strictEqual(hasPermission('EDITOR', 'people:write'), false);
+    assert.strictEqual(hasPermission('EDITOR', 'org:write'), false);
+  });
+
+  it('CONTRIBUTOR authors processes + collaboration only', () => {
+    assert.strictEqual(hasPermission('CONTRIBUTOR', 'process:write'), true);
+    assert.strictEqual(hasPermission('CONTRIBUTOR', 'collaboration:write'), true);
+    assert.strictEqual(hasPermission('CONTRIBUTOR', 'data-asset:write'), false);
+    assert.strictEqual(hasPermission('CONTRIBUTOR', 'connection:write'), false);
+    assert.strictEqual(hasPermission('CONTRIBUTOR', 'governance:write'), false);
+  });
+
+  it('VIEWER cannot write anything, including collaboration', () => {
+    for (const perm of ['process:write', 'data-asset:write', 'collaboration:write', 'connection:write']) {
+      assert.strictEqual(hasPermission('VIEWER', perm), false);
+    }
+  });
+
+  it('sensitive buckets (agent/audit/admin/backup) are ORG_ADMIN+ only', () => {
+    for (const perm of ['agent:read', 'agent:write', 'audit:read', 'admin:write']) {
+      assert.strictEqual(hasPermission('VIEWER', perm), false);
+      assert.strictEqual(hasPermission('EDITOR', perm), false);
+      assert.strictEqual(hasPermission('CONTRIBUTOR', perm), false);
+      assert.strictEqual(hasPermission('ORG_ADMIN', perm), true);
+      assert.strictEqual(hasPermission('SUPER_ADMIN', perm), true);
+    }
+    // backup is SUPER-only (no ORG_ADMIN grant)
+    assert.strictEqual(hasPermission('ORG_ADMIN', 'backup:write'), false);
+    assert.strictEqual(hasPermission('SUPER_ADMIN', 'backup:write'), true);
+  });
+});
+
+describe('actionForMethod', () => {
+  it('maps read verbs to read', () => {
+    for (const m of ['GET', 'get', 'HEAD', 'OPTIONS']) {
+      assert.strictEqual(actionForMethod(m), 'read');
+    }
+  });
+  it('maps mutating verbs to write', () => {
+    for (const m of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      assert.strictEqual(actionForMethod(m), 'write');
+    }
+  });
+});
+
+describe('requireResource middleware', () => {
+  function run(role: string | undefined, method: string, resource: string) {
+    const req: any = { method, user: role ? { role } : undefined };
+    let captured: any = 'next-not-called';
+    const next = (err?: unknown) => { captured = err ?? null; };
+    requireResource(resource)(req, {} as any, next);
+    return captured;
+  }
+
+  it('401s when unauthenticated', () => {
+    const err: any = run(undefined, 'GET', 'process');
+    assert.strictEqual(err?.statusCode, 401);
+  });
+
+  it('lets VIEWER read but 403s VIEWER writes', () => {
+    assert.strictEqual(run('VIEWER', 'GET', 'data-asset'), null);
+    const err: any = run('VIEWER', 'POST', 'data-asset');
+    assert.strictEqual(err?.statusCode, 403);
+  });
+
+  it('lets EDITOR write the data registry but 403s governance writes', () => {
+    assert.strictEqual(run('EDITOR', 'PUT', 'data-asset'), null);
+    const err: any = run('EDITOR', 'POST', 'governance');
+    assert.strictEqual(err?.statusCode, 403);
+  });
+
+  it('403s a CONTRIBUTOR deleting a connection but allows ORG_ADMIN', () => {
+    const err: any = run('CONTRIBUTOR', 'DELETE', 'connection');
+    assert.strictEqual(err?.statusCode, 403);
+    assert.strictEqual(run('ORG_ADMIN', 'DELETE', 'connection'), null);
+  });
+
+  it('hides agent routes from non-admins even on read', () => {
+    const err: any = run('EDITOR', 'GET', 'agent');
+    assert.strictEqual(err?.statusCode, 403);
+    assert.strictEqual(run('ORG_ADMIN', 'GET', 'agent'), null);
   });
 });

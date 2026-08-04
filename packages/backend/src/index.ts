@@ -31,6 +31,7 @@ import { hasDatabase } from './db/prisma';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
 import { rateLimit } from './middleware/rate-limit';
+import { requireResource } from './lib/permissions';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import { initAuthProviders, assertAuthSafeForProduction } from './services/auth-providers';
@@ -220,63 +221,96 @@ app.use('/api/v1', (req, res, next) => {
   apiLimiter(req, res, next);
 });
 
-app.use('/api/v1/organizations', authenticateToken, organizationsRouter);
-app.use('/api/v1/people', authenticateToken, peopleRouter);
-app.use('/api/v1/agents', authenticateToken, agentsRouter);
-app.use('/api/v1/process-catalog', authenticateToken, processCatalogRouter);
-app.use('/api/v1/data-assets', authenticateToken, dataAssetsRouter);
-app.use('/api/v1/systems', authenticateToken, systemsRouter);
-app.use('/api/v1/mappings', authenticateToken, mappingsRouter);
+//
+// Authorization layer 1: `requireResource('<bucket>')` gates each
+// router by role. It derives the required permission from the HTTP
+// method — GET/HEAD → `<bucket>:read`, any mutating verb →
+// `<bucket>:write` — so writes are role-gated uniformly while reads
+// stay open to every authenticated user. The bucket → role policy
+// lives in lib/permissions.ts; the full mapping and rationale are in
+// docs/RBAC_PERMISSION_MATRIX.md.
+//
+// Mounts without a requireResource guard are intentionally
+// any-authenticated: dashboards, search, AI assistant, exports, and
+// per-user surfaces (notifications, saved views) where every write is
+// scoped to the caller's own records.
+
+// Process catalog + process knowledge
+app.use('/api/v1/process-catalog', authenticateToken, requireResource('process'), processCatalogRouter);
+app.use('/api/v1/sops', authenticateToken, requireResource('process'), sopsRouter);
+app.use('/api/v1/operations-manuals', authenticateToken, requireResource('process'), operationsManualsRouter);
+
+// Data & system registry (data family shares the data-asset bucket)
+app.use('/api/v1/data-assets', authenticateToken, requireResource('data-asset'), dataAssetsRouter);
+app.use('/api/v1/systems', authenticateToken, requireResource('system'), systemsRouter);
+app.use('/api/v1/mappings', authenticateToken, requireResource('mapping'), mappingsRouter);
+app.use('/api/v1/data-domains', authenticateToken, requireResource('data-asset'), dataDomainsRouter);
+app.use('/api/v1/data-lineage', authenticateToken, requireResource('data-asset'), dataLineageRouter);
+app.use('/api/v1/data-quality', authenticateToken, requireResource('data-asset'), dataQualityRouter);
+app.use('/api/v1/business-glossary', authenticateToken, requireResource('data-asset'), businessGlossaryRouter);
+
+// Connectivity — sensitive: writes require EDITOR+
+app.use('/api/v1/connections', authenticateToken, requireResource('connection'), connectionsRouter);
+app.use('/api/v1/sync-connections', authenticateToken, requireResource('connection'), syncConnectionsRouter);
+app.use('/api/v1/dbt-cloud-connections', authenticateToken, requireResource('connection'), dbtCloudConnectionsRouter);
+
+// Governance suite — writes require ORG_ADMIN+
+app.use('/api/v1/governance-groups', authenticateToken, requireResource('governance'), governanceGroupsRouter);
+app.use('/api/v1/dama-roles', authenticateToken, requireResource('governance'), damaRolesRouter);
+app.use('/api/v1/governance-policies', authenticateToken, requireResource('governance'), governancePoliciesRouter);
+app.use('/api/v1/governance-controls', authenticateToken, requireResource('governance'), governanceControlsRouter);
+app.use('/api/v1/governance-tasks', authenticateToken, requireResource('governance'), governanceTasksRouter);
+app.use('/api/v1/governance-issues', authenticateToken, requireResource('governance'), governanceIssuesRouter);
+app.use('/api/v1/governance-program', authenticateToken, requireResource('governance'), governanceProgramRouter);
+app.use('/api/v1/governance-calendar', authenticateToken, requireResource('governance'), governanceCalendarRouter);
+app.use('/api/v1/decision-rights', authenticateToken, requireResource('governance'), decisionRightsRouter);
+app.use('/api/v1/control-tower', authenticateToken, requireResource('governance'), controlTowerRouter);
+
+// Collaboration — comments/tags/attachments: writes require CONTRIBUTOR+
+app.use('/api/v1/tags', authenticateToken, requireResource('collaboration'), tagsRouter);
+app.use('/api/v1/comments', authenticateToken, requireResource('collaboration'), commentsRouter);
+app.use('/api/v1/attachments', authenticateToken, requireResource('collaboration'), attachmentsRouter);
+
+// Org & identity — writes require ORG_ADMIN+
+app.use('/api/v1/organizations', authenticateToken, requireResource('org'), organizationsRouter);
+app.use('/api/v1/people', authenticateToken, requireResource('people'), peopleRouter);
+
+// AI agents — read & write require ORG_ADMIN+
+app.use('/api/v1/agents', authenticateToken, requireResource('agent'), agentsRouter);
+app.use('/api/v1/agent-executions', authenticateToken, requireResource('agent'), agentExecutionsRouter);
+app.use('/api/v1/agent-schedules', authenticateToken, requireResource('agent'), agentSchedulesRouter);
+
+// Platform & security — elevated
+app.use('/api/v1/audit', authenticateToken, requireResource('audit'), auditRouter);
+app.use('/api/v1/admin', authenticateToken, requireResource('admin'), adminRouter);
+app.use('/api/v1/backup', authenticateToken, requireResource('backup'), backupRouter);
+
+// Any-authenticated: read/dashboard/self surfaces (no role gate)
 app.use('/api/v1/dashboard', authenticateToken, dashboardRouter);
 app.use('/api/v1/ai', authenticateToken, enforceAiBudget, aiRouter);
 app.use('/api/v1/chat', authenticateToken, enforceAiBudget, chatRouter);
-app.use('/api/v1/audit', authenticateToken, auditRouter);
+app.use('/api/v1/exports', authenticateToken, exportsRouter);
+app.use('/api/v1/digest', authenticateToken, digestRouter);
+app.use('/api/v1/search', authenticateToken, searchRouter);
+app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
+app.use('/api/v1/saved-views', authenticateToken, savedViewsRouter);
+app.use('/api/v1/trends', authenticateToken, trendsRouter);
+app.use('/api/v1/maturity-trends', authenticateToken, maturityTrendsRouter);
+app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
+app.use('/api/v1/analysis', authenticateToken, analysisRouter);
+app.use('/api/v1/analysis-reports', authenticateToken, analysisReportsRouter);
+app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
+app.use('/api/v1/skills', authenticateToken, skillsRouter);
+app.use('/api/v1/data-model', authenticateToken, dataModelRouter);
+app.use('/api/v1/reports', authenticateToken, reportsRouter);
+
+// Self-authenticating routers (own auth scheme — left untouched):
 // Support router self-applies authenticateToken + a rate limiter.
 app.use('/api/v1/support', supportRouter);
 // Connectors router handles its own auth — admin endpoints take a
 // user JWT, agent endpoints take a connector token (pct_…) — so it
 // mounts without the global authenticateToken middleware.
 app.use('/api/v1/connectors', connectorsRouter);
-app.use('/api/v1/exports', authenticateToken, exportsRouter);
-app.use('/api/v1/digest', authenticateToken, digestRouter);
-app.use('/api/v1/search', authenticateToken, searchRouter);
-app.use('/api/v1/governance-groups', authenticateToken, governanceGroupsRouter);
-app.use('/api/v1/dama-roles', authenticateToken, damaRolesRouter);
-app.use('/api/v1/data-domains', authenticateToken, dataDomainsRouter);
-app.use('/api/v1/tags', authenticateToken, tagsRouter);
-app.use('/api/v1/comments', authenticateToken, commentsRouter);
-app.use('/api/v1/notifications', authenticateToken, notificationsRouter);
-app.use('/api/v1/saved-views', authenticateToken, savedViewsRouter);
-app.use('/api/v1/dbt-cloud-connections', authenticateToken, dbtCloudConnectionsRouter);
-app.use('/api/v1/trends', authenticateToken, trendsRouter);
-app.use('/api/v1/maturity-trends', authenticateToken, maturityTrendsRouter);
-app.use('/api/v1/backup', authenticateToken, backupRouter);
-app.use('/api/v1/data-lineage', authenticateToken, dataLineageRouter);
-app.use('/api/v1/data-quality', authenticateToken, dataQualityRouter);
-app.use('/api/v1/connections', authenticateToken, connectionsRouter);
-app.use('/api/v1/enterprise-view', authenticateToken, enterpriseViewRouter);
-app.use('/api/v1/analysis', authenticateToken, analysisRouter);
-app.use('/api/v1/analysis-reports', authenticateToken, analysisReportsRouter);
-app.use('/api/v1/gap-detection', authenticateToken, gapDetectionRouter);
-app.use('/api/v1/attachments', authenticateToken, attachmentsRouter);
-app.use('/api/v1/sync-connections', authenticateToken, syncConnectionsRouter);
-app.use('/api/v1/governance-policies', authenticateToken, governancePoliciesRouter);
-app.use('/api/v1/governance-controls', authenticateToken, governanceControlsRouter);
-app.use('/api/v1/governance-tasks', authenticateToken, governanceTasksRouter);
-app.use('/api/v1/governance-issues', authenticateToken, governanceIssuesRouter);
-app.use('/api/v1/admin', authenticateToken, adminRouter);
-app.use('/api/v1/control-tower', authenticateToken, controlTowerRouter);
-app.use('/api/v1/governance-program', authenticateToken, governanceProgramRouter);
-app.use('/api/v1/governance-calendar', authenticateToken, governanceCalendarRouter);
-app.use('/api/v1/decision-rights', authenticateToken, decisionRightsRouter);
-app.use('/api/v1/sops', authenticateToken, sopsRouter);
-app.use('/api/v1/business-glossary', authenticateToken, businessGlossaryRouter);
-app.use('/api/v1/operations-manuals', authenticateToken, operationsManualsRouter);
-app.use('/api/v1/skills', authenticateToken, skillsRouter);
-app.use('/api/v1/data-model', authenticateToken, dataModelRouter);
-app.use('/api/v1/reports', authenticateToken, reportsRouter);
-app.use('/api/v1/agent-executions', authenticateToken, agentExecutionsRouter);
-app.use('/api/v1/agent-schedules', authenticateToken, agentSchedulesRouter);
 
 // ---------------------------------------------------------------------------
 // Error handling

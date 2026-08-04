@@ -54,9 +54,11 @@ jobs:
         with:
           # One language covers all three packages — they're all JS/TS.
           languages: javascript-typescript
-          # security-extended goes deeper than the default security suite
-          # without pulling in the noisier maintainability/quality queries.
-          queries: security-extended
+          # Query suite + filters live in the config file so the
+          # security-extended selection and the js/missing-rate-limiting
+          # exclusion (the repo's custom limiter isn't CodeQL-modelled —
+          # see the config for the full rationale) are versioned together.
+          config-file: ./.github/codeql/codeql-config.yml
 
       # JavaScript/TypeScript needs no build — CodeQL analyzes the source
       # directly, so there is no autobuild step. (A compiled language
