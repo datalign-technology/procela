@@ -12,7 +12,7 @@ truth; this document explains it.
 > the permission catalog distinguishes only `read` vs `write` per
 > resource — not create/edit/delete. This document matches the code.
 > Per-record "assigned" scoping is a **layer-2** concern (see below),
-> not yet enforced.
+> now enforced for the process catalog.
 
 ## Roles
 
@@ -101,12 +101,33 @@ Consequences worth knowing:
   any-authenticated to avoid breaking the many UI surfaces that read
   it; revisit if it grows sensitive writes.
 
-## Enforcement — layer 2 (not yet built)
+## Enforcement — layer 2 (per-record "assigned" scoping)
 
-Per-record "assigned" scoping — e.g. a `CONTRIBUTOR` may edit only a
-record where they are owner/steward/assignee — lives in the handlers,
-where the entity is loaded. Layer 1 is the coarse role gate; layer 2
-would refine specific buckets. Tracked as a follow-up.
+Layer 1 decides whether a role may write a *resource*. Layer 2 refines
+that for roles whose write scope is limited to records they are
+assigned to — today just **`CONTRIBUTOR`**. `EDITOR` / `ORG_ADMIN` /
+`SUPER_ADMIN` have org-wide write and are exempt.
+
+`lib/assignment.ts` provides the reusable predicate:
+
+- `isAssignedTo(user, record)` — true when `user.sub` matches any of a
+  record's assignment fields (`ownerId`, `stewardId`, `assigneeId`,
+  `responsiblePersonId`, `createdBy`). A JWT's `sub` **is** the person
+  id (`routes/auth.ts` mints `sub: person.id`).
+- `enforceAssignment(user, record)` — returns `AppError(403)` when an
+  assigned-scoped role touches a record they are not assigned to;
+  passes through for exempt roles and for unauthenticated callers
+  (so routers mounted without auth in unit tests are unaffected).
+- `ownerOnCreate(user, suppliedOwnerId)` — on create, defaults an
+  assigned-scoped creator as the owner so they can edit what they
+  make.
+
+**Coverage.** Wired into the **process catalog** — the canonical
+`CONTRIBUTOR`-writable surface — on `PUT /nodes/:id`, `DELETE
+/nodes/:id`, `POST /nodes/:id/clone` (assignment checked on the source),
+and `POST /nodes` (creator-owns). The helper is ready for reuse; the
+remaining `CONTRIBUTOR`-writable routers (sops, operations-manuals,
+collaboration) are a follow-up.
 
 ## Tests
 
