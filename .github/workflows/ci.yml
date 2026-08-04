@@ -395,6 +395,13 @@ jobs:
         run: npm run e2e
         env:
           CI: 'true'
+          # The smoke suite creates many orgs/people via direct API calls
+          # in its setup, all from the single runner IP within one window —
+          # a test-harness burst, not a real user's minute. Lift the coarse
+          # per-IP API rate-limit backstop (default 600/min) so functional
+          # smoke isn't throttled; the limiter itself is unit-tested in
+          # api-rate-limit.test.ts.
+          API_RATE_LIMIT_MAX: '1000000'
 
       # On failure upload the HTML report and raw traces so a
       # reviewer can debug locally with `npx playwright show-report`

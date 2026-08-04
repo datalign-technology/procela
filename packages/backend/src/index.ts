@@ -30,6 +30,7 @@ import { startAutoSave, flushStores } from './lib/persistence';
 import { hasDatabase } from './db/prisma';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/auth';
+import { rateLimit } from './middleware/rate-limit';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import { initAuthProviders, assertAuthSafeForProduction } from './services/auth-providers';
@@ -192,6 +193,33 @@ app.use('/api/v1/branding', brandingRouter);
 // ---------------------------------------------------------------------------
 // Routes — Protected (require valid access token)
 // ---------------------------------------------------------------------------
+
+// Coarse abuse backstop over the authenticated API surface. The
+// specific brute-force limiters (login, password reset, support) live
+// on their own routes above and are untouched; this is a wide, generous
+// per-IP ceiling so a single client can't hammer the protected CRUD API.
+// Defaults to 600 req/min/IP — tunable via env, shares the Redis-backed
+// counter store (falling back to in-memory) with the other limiters.
+//
+// Mounted here (after the public health/auth/docs/branding routes, so
+// probes and login keep their own handling) and it deliberately skips
+// /connectors: that path carries high-volume machine/agent traffic
+// (pct_ tokens) that self-limits and would be throttled unfairly by a
+// per-IP ceiling tuned for human clients.
+const apiRateLimitMax = parseInt(process.env.API_RATE_LIMIT_MAX || '600', 10);
+const apiRateLimitWindowMs = parseInt(process.env.API_RATE_LIMIT_WINDOW_MS || '60000', 10);
+const apiLimiter = rateLimit({
+  windowMs: apiRateLimitWindowMs,
+  max: apiRateLimitMax,
+  keyBy: (req) => req.ip || 'unknown',
+  label: 'api',
+});
+app.use('/api/v1', (req, res, next) => {
+  // req.path is relative to the '/api/v1' mount here.
+  if (req.path.startsWith('/connectors')) { next(); return; }
+  apiLimiter(req, res, next);
+});
+
 app.use('/api/v1/organizations', authenticateToken, organizationsRouter);
 app.use('/api/v1/people', authenticateToken, peopleRouter);
 app.use('/api/v1/agents', authenticateToken, agentsRouter);
