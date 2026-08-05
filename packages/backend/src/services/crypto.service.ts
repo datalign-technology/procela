@@ -163,6 +163,13 @@ export async function encryptSecret(plaintext: string): Promise<string> {
   return provider.encrypt(plaintext);
 }
 
+/** True when the value already carries an at-rest encryption envelope
+ *  (any provider prefix: enc:v1:, enc:aws:v1:, enc:azure:v1:, enc:gcp:v1:).
+ *  Lets encrypt-on-write stay idempotent so a value can't be double-wrapped. */
+export function isEncrypted(value: string): boolean {
+  return typeof value === 'string' && value.startsWith('enc:');
+}
+
 /** Decrypt a string. Routes by envelope prefix so a record encrypted
  *  by one provider can still be decrypted after the operator
  *  switches providers (as long as the previous provider's SDK +
