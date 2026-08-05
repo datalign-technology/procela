@@ -6,6 +6,7 @@ import { auditService } from '../services/audit.service';
 import { reconcileDbtManifest, DbtImportSummary } from './data-lineage';
 import { getDbtCloudConnectionsRepository } from '../db/dbt-cloud-connections.repo';
 import { hasDatabase } from '../db/prisma';
+import { encryptSecret, decryptSecret } from '../services/crypto.service';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DBT CLOUD CONNECTIONS
@@ -17,10 +18,11 @@ import { hasDatabase } from '../db/prisma';
 // job. Scheduled polling can stack on this without changing the data
 // model.
 //
-// Token storage: plain text in the JSON store. That's acceptable for
-// the prototype but explicitly flagged on the API response and in the
-// commit so the production migration replaces this with a secret
-// reference (env var, AWS Secrets Manager, etc).
+// Token storage: encrypted at rest via crypto.service (encryptSecret on
+// write, decryptSecret only at the dbt Cloud call). With a KMS/local key
+// configured the stored value is an enc:… envelope; with no key set it
+// falls back to plaintext (dev). The token is never returned by the API —
+// reads expose only `hasToken`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface DbtCloudConnection {
@@ -137,7 +139,8 @@ router.post('/', async (req: Request, res: Response) => {
     host: (host || 'cloud.getdbt.com').replace(/^https?:\/\//, '').replace(/\/+$/, ''),
     accountId: String(accountId),
     jobId: String(jobId),
-    token,
+    // Encrypt the API token at rest; decrypted only at the dbt Cloud call.
+    token: await encryptSecret(token),
     lastRunAt: null,
     lastStatus: 'NEVER',
     lastError: null,
@@ -163,7 +166,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
   if (host !== undefined) conn.host = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
   if (accountId !== undefined) conn.accountId = String(accountId);
   if (jobId !== undefined) conn.jobId = String(jobId);
-  if (token !== undefined && token) conn.token = token;   // empty string = keep existing
+  if (token !== undefined && token) conn.token = await encryptSecret(token);   // empty string = keep existing
   if (pollFrequency !== undefined && VALID_POLL_FREQUENCIES.includes(pollFrequency)) {
     const switchingToScheduled = pollFrequency !== 'NEVER' && conn.pollFrequency !== pollFrequency;
     conn.pollFrequency = pollFrequency;
@@ -223,13 +226,15 @@ async function performRefresh(
   | { ok: false; error: string }
 > {
   try {
+    // Decrypt the at-rest token once for the two dbt Cloud calls below.
+    const token = await decryptSecret(conn.token);
     const runsUrl =
       `https://${conn.host}/api/v2/accounts/${conn.accountId}/runs/`
       + `?job_definition_id=${conn.jobId}`
       + `&status=10`                  // 10 = Success
       + `&order_by=-id&limit=1`;
     const runsRes = await fetch(runsUrl, {
-      headers: { Authorization: `Token ${conn.token}`, Accept: 'application/json' },
+      headers: { Authorization: `Token ${token}`, Accept: 'application/json' },
     });
     if (!runsRes.ok) {
       throw new Error(`dbt Cloud /runs returned ${runsRes.status}: ${await runsRes.text()}`);
@@ -241,7 +246,7 @@ async function performRefresh(
     const manifestUrl =
       `https://${conn.host}/api/v2/accounts/${conn.accountId}/runs/${runId}/artifacts/manifest.json`;
     const manifestRes = await fetch(manifestUrl, {
-      headers: { Authorization: `Token ${conn.token}`, Accept: 'application/json' },
+      headers: { Authorization: `Token ${token}`, Accept: 'application/json' },
     });
     if (!manifestRes.ok) {
       throw new Error(`Manifest fetch returned ${manifestRes.status}: ${await manifestRes.text()}`);

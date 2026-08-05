@@ -73,13 +73,16 @@ customer.
   these are the `auth_provider` / `oidc_*` / `saml_*` tfvars. Sub-domain-based
   tenant white-labeling needs proper DNS + a wildcard cert.
 - [ ] **11. `KMS_PROVIDER` / `MFA_ENCRYPTION_KEY`** — encryption at
-  rest for TOTP secrets is **code-complete** (`services/crypto.service.ts`
-  + `services/kms-providers.ts`, with tests); it encrypts when a key /
-  KMS provider is configured and falls back to plaintext **only in dev**
-  (with a boot warning) when neither is set. **On AWS, Terraform now
-  generates + injects `MFA_ENCRYPTION_KEY` automatically (PR #218)** — no
-  action needed there. On-prem: set `secrets.mfaEncryptionKey` in the Helm
-  values, or point at a `KMS_PROVIDER`.
+  rest is **code-complete** (`services/crypto.service.ts` +
+  `services/kms-providers.ts`, with tests). It now covers TOTP secrets,
+  the **dbt Cloud API token**, and the **OIDC `clientSecret`** — each
+  enveloped on write and decrypted only at the point of use. It encrypts
+  when a key / KMS provider is configured and falls back to plaintext
+  **only in dev** (with a boot warning) when neither is set. **On AWS,
+  Terraform now generates + injects `MFA_ENCRYPTION_KEY` automatically
+  (PR #218)** — no action needed there. On-prem: set
+  `secrets.mfaEncryptionKey` in the Helm values, or point at a
+  `KMS_PROVIDER`.
 
 ## Runtime / operations
 

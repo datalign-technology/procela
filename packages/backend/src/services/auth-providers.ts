@@ -6,7 +6,7 @@ import config from '../config';
 import logger from '../lib/logger';
 import { people, isActive as isPersonActive } from '../routes/people';
 import { mintFlow, consumeFlow, pkceChallenge, type PendingFlow } from './pending-oidc-flows';
-import { resolveEnvSecretSync } from './crypto.service';
+import { resolveEnvSecretSync, encryptSecret, decryptSecret, isEncrypted } from './crypto.service';
 import { loadStore } from '../lib/persistence';
 import { settingsRepo } from '../stores/app-settings';
 import { getOidcProvidersRepository } from '../db/oidc-providers.repo';
@@ -595,9 +595,16 @@ const oidcProviderConfigs = loadStore<OidcConfig>('oidcProviders');
 const oidcRepo = getOidcProvidersRepository(oidcProviderConfigs);
 
 async function persistOidcProvider(cfg: OidcConfig): Promise<void> {
+  // Encrypt the client secret at rest. The in-memory OidcConfig keeps the
+  // plaintext (the token exchange needs it); only the persisted copy is
+  // enveloped. initAuthProviders decrypts on the way back in. Guarded so a
+  // re-persist can't double-wrap an already-enveloped value.
+  const toStore: OidcConfig = cfg.clientSecret && !isEncrypted(cfg.clientSecret)
+    ? { ...cfg, clientSecret: await encryptSecret(cfg.clientSecret) }
+    : cfg;
   const existing = await oidcRepo.get(cfg.id);
-  if (existing) await oidcRepo.update(cfg.id, cfg);
-  else await oidcRepo.create(cfg);
+  if (existing) await oidcRepo.update(cfg.id, toStore);
+  else await oidcRepo.create(toStore);
 }
 
 /**
@@ -612,7 +619,13 @@ export async function initAuthProviders(): Promise<void> {
     authConfig.activeProvider = stored.activeProvider;
   }
   for (const cfg of await oidcRepo.list()) {
-    oidcProviders.set(cfg.id, new OidcAuthProvider(cfg));
+    // Decrypt the at-rest client secret back to plaintext for the running
+    // provider. Legacy plaintext rows (pre-encryption) pass through
+    // unchanged and get enveloped on their next persist.
+    const runtime: OidcConfig = cfg.clientSecret
+      ? { ...cfg, clientSecret: await decryptSecret(cfg.clientSecret) }
+      : cfg;
+    oidcProviders.set(cfg.id, new OidcAuthProvider(runtime));
   }
 }
 

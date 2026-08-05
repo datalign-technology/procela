@@ -3,8 +3,10 @@
 // Replaces the in-memory `oidcProviders` Map in services/auth-providers.ts.
 // Persists the plain OidcConfig (the running OidcAuthProvider instances are
 // reconstructed from it at the call site during the auth cutover, PR 3). Fits
-// the standard {id} pattern. `clientSecret` should be KMS-encrypted at rest
-// before production (go-live checklist #11). See docs/POSTGRES_CUTOVER_PLAN.md.
+// the standard {id} pattern. `clientSecret` is encrypted at rest by
+// services/auth-providers (encryptSecret on persist, decryptSecret on
+// hydrate) — the persisted value is an enc:… envelope when a KMS/local key
+// is configured. See docs/POSTGRES_CUTOVER_PLAN.md.
 
 import type { OidcConfig } from '../services/auth-providers';
 import { saveStore } from '../lib/persistence';
