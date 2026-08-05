@@ -53,10 +53,10 @@ describe('prismaConnectionsRepository', () => {
     };
   }
 
-  it('list maps null systemId to undefined and JSON columns through', async () => {
+  it('list maps JSON columns through', async () => {
     const d = delegate({
       findMany: async () => [{
-        id: 'a1', orgId: 'o1', systemId: null, name: 'C',
+        id: 'a1', orgId: 'o1', name: 'C',
         connectionType: 'DATABASE',
         config: { host: 'h' }, credentials: {},
         status: 'CONNECTED', lastTestedAt: null, lastTestResult: null,
@@ -66,7 +66,6 @@ describe('prismaConnectionsRepository', () => {
     });
     const repo = prismaConnectionsRepository(() => ({ connection: d }));
     const rows = await repo.list();
-    assert.strictEqual(rows[0].systemId, undefined);
     assert.strictEqual((rows[0].config as any).host, 'h');
     assert.strictEqual(rows[0].status, 'CONNECTED');
   });
