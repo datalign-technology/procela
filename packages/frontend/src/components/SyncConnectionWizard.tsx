@@ -338,7 +338,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
             </div>
             <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 8 }}>Source Type</label>
             {([
-              { type: 'DATABASE' as SourceType, label: 'Database Table', desc: 'Connect to a PostgreSQL, MySQL, or SQL Server table' },
+              { type: 'DATABASE' as SourceType, label: 'Database Table (simulated)', desc: 'Direct database drivers are not wired up yet — this source returns representative sample rows, not a live query. CSV/JSON URLs fetch real data.' },
               { type: 'CSV_URL' as SourceType, label: 'CSV URL', desc: 'Poll a CSV file from a URL on a schedule' },
               { type: 'JSON_URL' as SourceType, label: 'JSON URL', desc: 'Poll a JSON endpoint on a schedule' },
             ]).map((opt) => (
@@ -551,7 +551,7 @@ export default function SyncConnectionWizard({ open, onClose, targetEntity, orgI
               <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>Enable scheduled polling</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Automatically sync data on a recurring schedule</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Records the interval on the connection. Note: an automatic background runner is not active yet, so scheduled syncs do not fire on their own — trigger a run from the connection until then.</div>
               </div>
             </label>
             {scheduleEnabled && (

@@ -223,6 +223,7 @@ export default function ConnectionsPage() {
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
   const [discoveringId, setDiscoveringId] = useState<string | null>(null);
   const [discoveredAssets, setDiscoveredAssets] = useState<DiscoveredAsset[]>([]);
+  const [discoverSimulated, setDiscoverSimulated] = useState(false);
   const [discoverModal, setDiscoverModal] = useState<{ connId: string; systemId: string; systemName: string } | null>(null);
   const [formTestResult, setFormTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [formTesting, setFormTesting] = useState(false);
@@ -498,9 +499,11 @@ export default function ConnectionsPage() {
     setDiscoverModal({ connId: conn.id, systemId: primaryId, systemName: sys?.name || 'Unknown System' });
     setDiscoveringId(conn.id);
     setDiscoveredAssets([]);
+    setDiscoverSimulated(false);
     try {
-      const res = await apiClient.post<{ success: boolean; data: { success: boolean; details?: { assets?: DiscoveredAsset[] } } }>(`/connections/${conn.id}/discover`);
+      const res = await apiClient.post<{ success: boolean; data: { success: boolean; simulated?: boolean; details?: { assets?: DiscoveredAsset[] } } }>(`/connections/${conn.id}/discover`);
       setDiscoveredAssets(res.data.details?.assets || []);
+      setDiscoverSimulated(res.data.simulated === true);
     } catch {
       addToast('error', 'Discovery failed');
       setDiscoverModal(null);
@@ -1209,6 +1212,22 @@ export default function ConnectionsPage() {
                 &times;
               </button>
             </div>
+
+            {!discoveringId && discoverSimulated && (
+              <div style={{
+                display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', marginBottom: 16,
+                background: 'var(--color-warning-light, #fffbeb)', border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--color-text-secondary)',
+              }}>
+                <span aria-hidden style={{ color: 'var(--color-warning)', fontWeight: 600 }}>{'⚠'}</span>
+                <span>
+                  <strong style={{ color: 'var(--color-warning)' }}>Simulated results.</strong>{' '}
+                  Direct-connect discovery for this source type is not wired to a live driver yet, so
+                  these tables and columns are representative sample metadata, not a live read of the
+                  source. Uploaded-file connections return real parsed structure.
+                </span>
+              </div>
+            )}
 
             {discoveringId ? (
               <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>

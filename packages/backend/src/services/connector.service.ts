@@ -18,6 +18,13 @@ export interface ConnectorResult {
   success: boolean;
   message: string;
   latencyMs: number;
+  /** True when the assets are illustrative sample data rather than a real
+   *  discovery. Direct-connect discovery for DATABASE / API / WAREHOUSE /
+   *  SPREADSHEET types is simulated in this build (live discovery runs
+   *  through the on-prem connector agent + dbt); LOCAL file uploads are
+   *  real. The UI surfaces this so simulated results aren't mistaken for
+   *  live ones. */
+  simulated?: boolean;
   details?: {
     version?: string;
     tableCount?: number;
@@ -351,6 +358,7 @@ export async function discoverAssets(profile: ConnectionProfileLike): Promise<Co
     success: true,
     message: `Discovered ${mockAssets.length} sample assets (simulated — real discovery requires a ${profile.connectionType} driver)`,
     latencyMs: Math.round(500 + Math.random() * 1000),
+    simulated: true,
     details: { tableCount: mockAssets.length, assets: mockAssets },
   };
 }
@@ -424,6 +432,7 @@ function discoverLocalFile(profile: ConnectionProfileLike): ConnectorResult {
       success: true,
       message: `Discovered 1 asset with ${columns.length} column${columns.length === 1 ? '' : 's'}`,
       latencyMs: Date.now() - start,
+      simulated: false,   // real: parsed from the uploaded file's actual bytes
       details: { tableCount: 1, assets: [asset] },
     };
   } catch (err) {

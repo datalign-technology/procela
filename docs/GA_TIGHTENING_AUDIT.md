@@ -163,6 +163,34 @@ labelled before GA:
   `OidcProvider.clientSecret` are stored plaintext; route them through the
   existing KMS layer before GA.
 
+### §F outcome (mock-surface labelling)
+
+The three simulated surfaces are now **honestly labelled** in the product so
+GA does not ship stubs that look like finished features. We labelled rather
+than hid — the simulated paths are still genuinely useful for demos and
+onboarding, and hiding them would remove the only way to exercise the flow
+before the real drivers land.
+
+- **Direct-connect discovery** — `ConnectorResult` carries a structured
+  `simulated` flag (`true` for the DATABASE/API/WAREHOUSE/SPREADSHEET mock,
+  `false` for real LOCAL file parsing). The Connections page Discover modal
+  renders a warning banner when `simulated` is true, so sample metadata is
+  never mistaken for a live read.
+- **`SyncConnection` DATABASE source** — the wizard's source-type option is
+  relabelled "Database Table (simulated)" with copy explaining that drivers
+  aren't wired yet and CSV/JSON URLs fetch real data. (Backend `/preview`
+  and `/run` responses already returned `simulated`; no backend change.)
+- **`SyncConnection.schedule` auto-run** — the wizard's scheduled-polling
+  toggle now states plainly that no background runner is active yet and that
+  scheduled syncs must be triggered manually until one lands.
+- **Secrets at rest** — done earlier in §F via the KMS/crypto layer (dbt
+  Cloud token + OIDC client secret now encrypted; see the secrets PR).
+
+Deferred (product work, not labelling): actually finishing live database
+discovery drivers and building the background schedule runner. These are the
+"finish it" half of §F and belong on the post-cutover roadmap, not this
+mechanical labelling pass.
+
 ---
 
 ## G. Deploy / manage / stability (the operational half of "tight")
