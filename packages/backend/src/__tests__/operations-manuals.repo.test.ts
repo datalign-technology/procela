@@ -21,6 +21,7 @@ const make = (over: Partial<StoredOperationsManual> = {}): StoredOperationsManua
   escalation: [],
   customContent: '',
   isCustom: false,
+  ownerPersonId: null,
   createdAt: '2026-07-15T00:00:00.000Z',
   updatedAt: '2026-07-15T00:00:00.000Z',
   ...over,
@@ -60,7 +61,7 @@ describe('prismaOperationsManualsRepository', () => {
       findMany: async () => [{
         id: 'a1', orgId: 'o1', roleType: 'STEWARD', label: 'x', purpose: '',
         daily: ['check schedule'], weekly: [], monthly: [], quarterly: [], escalation: [],
-        customContent: '', isCustom: false,
+        customContent: '', isCustom: false, ownerPersonId: null,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
       }],

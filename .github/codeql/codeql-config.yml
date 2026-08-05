@@ -22,6 +22,23 @@ name: "Procela CodeQL config"
 queries:
   - uses: security-extended
 
+# Unit tests are excluded from analysis. Test harnesses legitimately do
+# things the security-extended suite treats as vulnerabilities — most
+# notably the shared `request()` helper (used across ~a dozen route
+# tests) opens a real socket to an ephemeral localhost server, which
+# CodeQL reports as request-forgery / "file data in outbound network
+# request" (js/request-forgery, js/file-access-to-http) whenever the
+# request path or body derives from a response body or a file-backed
+# in-memory store. These are false positives with no production
+# analogue — test code is never deployed and is not attack surface — and
+# they only surface on *new/changed* test files, so they penalise adding
+# test coverage. Excluding the test tree keeps SAST focused on shipped
+# code. Remove a pattern here if a test directory ever ships in a build.
+paths-ignore:
+  - "**/__tests__/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+
 query-filters:
   - exclude:
       id: js/missing-rate-limiting

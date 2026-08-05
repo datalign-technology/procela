@@ -6,6 +6,8 @@ import { auditService } from '../services/audit.service';
 import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { getAttachmentsRepository } from '../db/attachments.repo';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enforceAssignment } from '../lib/assignment';
 
 // ── Attachment model ────────────────────────────────────────────────────
 //
@@ -229,6 +231,11 @@ router.post(
 router.put('/:id', async (req: Request, res: Response) => {
   const a = attachments.find((x) => x.id === req.params.id);
   if (!a) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only edit attachments they uploaded.
+  const putAssignErr = enforceAssignment((req as AuthenticatedRequest).user, a);
+  if (putAssignErr) { res.status(putAssignErr.statusCode).json({ success: false, error: putAssignErr.message }); return; }
+
   const { name, description } = req.body;
   const patch: Partial<StoredAttachment> = { updatedAt: new Date().toISOString() };
   if (name !== undefined) patch.name = name;
@@ -241,6 +248,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = attachments.find((a) => a.id === req.params.id);
   if (!removed) { res.status(404).json({ success: false, error: 'Attachment not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only delete attachments they uploaded.
+  const delAssignErr = enforceAssignment((req as AuthenticatedRequest).user, removed);
+  if (delAssignErr) { res.status(delAssignErr.statusCode).json({ success: false, error: delAssignErr.message }); return; }
+
   if (removed.type === 'FILE' && removed.filePath) {
     const dir = path.dirname(removed.filePath);
     if (dir.startsWith(ATTACHMENTS_ROOT) && fs.existsSync(dir)) {

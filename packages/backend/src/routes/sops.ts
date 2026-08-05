@@ -7,6 +7,8 @@ import { people } from './people';
 import logger from '../lib/logger';
 import { getSopsRepository } from '../db/sops.repo';
 import { getPeopleRepository } from '../db/people.repo';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enforceAssignment, ownerOnCreate } from '../lib/assignment';
 
 // ── Types ──
 
@@ -272,7 +274,9 @@ router.post('/', async (req: Request, res: Response) => {
     steps: normalizeSteps(steps),
     status: (status as Status) || 'DRAFT',
     version: 1,
-    ownerPersonId: ownerPersonId || null,
+    // Layer-2: a CONTRIBUTOR who doesn't name an owner owns what they
+    // create, so they can subsequently edit it.
+    ownerPersonId: ownerOnCreate((req as AuthenticatedRequest).user, ownerPersonId),
     lastReviewedAt: lastReviewedAt || null,
     createdAt: now,
     updatedAt: now,
@@ -288,6 +292,10 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   const sop = await sopsRepo.get(String(req.params.id));
   if (!sop) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only edit SOPs assigned to them.
+  const putAssignErr = enforceAssignment((req as AuthenticatedRequest).user, sop);
+  if (putAssignErr) { res.status(putAssignErr.statusCode).json({ success: false, error: putAssignErr.message }); return; }
 
   const before = { ...sop, steps: [...sop.steps] };
   const {
@@ -334,6 +342,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await sopsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'SOP not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only delete SOPs assigned to them.
+  const delAssignErr = enforceAssignment((req as AuthenticatedRequest).user, removed);
+  if (delAssignErr) { res.status(delAssignErr.statusCode).json({ success: false, error: delAssignErr.message }); return; }
+
   auditService.log(removed.orgId, null, 'Sop', removed.id, 'DELETE', removed, null);
   await sopsRepo.delete(removed.id);
   logger.info({ sopId: removed.id, code: removed.code }, 'Deleted SOP');

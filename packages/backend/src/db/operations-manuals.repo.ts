@@ -23,6 +23,7 @@ type PrismaOperationsManualRow = {
   escalation: string[];
   customContent: string;
   isCustom: boolean;
+  ownerPersonId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -49,6 +50,7 @@ function fromPrisma(r: PrismaOperationsManualRow): StoredOperationsManual {
     escalation: r.escalation ?? [],
     customContent: r.customContent ?? '',
     isCustom: r.isCustom,
+    ownerPersonId: r.ownerPersonId ?? null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -68,6 +70,7 @@ function toPrismaData(row: Partial<StoredOperationsManual>): Record<string, unkn
   if (row.escalation !== undefined) d.escalation = row.escalation;
   if (row.customContent !== undefined) d.customContent = row.customContent;
   if (row.isCustom !== undefined) d.isCustom = row.isCustom;
+  if (row.ownerPersonId !== undefined) d.ownerPersonId = row.ownerPersonId;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }

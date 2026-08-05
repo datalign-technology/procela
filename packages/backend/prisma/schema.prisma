@@ -982,6 +982,7 @@ model Tag {
   entityType String
   entityId   String
   tag        String
+  createdBy  String?  @db.Uuid
   createdAt  DateTime @default(now())
 
   @@index([orgId])
@@ -1095,6 +1096,7 @@ model OperationsManual {
   escalation    String[] @default([])
   customContent String   @default("") @db.Text
   isCustom      Boolean  @default(false)
+  ownerPersonId String?  @db.Uuid
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

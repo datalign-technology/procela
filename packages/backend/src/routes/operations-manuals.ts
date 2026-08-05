@@ -5,6 +5,8 @@ import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { filterByOrgScope } from '../lib/org-scope';
 import logger from '../lib/logger';
 import { getOperationsManualsRepository } from '../db/operations-manuals.repo';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enforceAssignment, ownerOnCreate } from '../lib/assignment';
 
 // ── Types ──
 
@@ -21,6 +23,9 @@ export interface StoredOperationsManual {
   escalation: string[];
   customContent: string;
   isCustom: boolean;
+  // Layer-2 assignment anchor: the person who owns this manual. Nullable —
+  // seeded standard manuals are org-wide reference content with no owner.
+  ownerPersonId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,7 +37,7 @@ const operationsManualsRepo = getOperationsManualsRepository(operationsManuals);
 
 // ── Standard DAMA role templates ──
 
-const STANDARD_MANUALS: Array<Omit<StoredOperationsManual, 'id' | 'orgId' | 'createdAt' | 'updatedAt'>> = [
+const STANDARD_MANUALS: Array<Omit<StoredOperationsManual, 'id' | 'orgId' | 'ownerPersonId' | 'createdAt' | 'updatedAt'>> = [
   {
     roleType: 'CDO',
     label: 'Chief Data Officer',
@@ -286,7 +291,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 /** POST /api/v1/operations-manuals — create */
 router.post('/', async (req: Request, res: Response) => {
-  const { orgId, label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom } = req.body;
+  const { orgId, label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom, ownerPersonId } = req.body;
   if (!orgId) { res.status(400).json({ success: false, error: 'orgId is required' }); return; }
   if (!label) { res.status(400).json({ success: false, error: 'label is required' }); return; }
 
@@ -304,6 +309,9 @@ router.post('/', async (req: Request, res: Response) => {
     escalation: Array.isArray(escalation) ? escalation : [],
     customContent: customContent || '',
     isCustom: isCustom !== undefined ? isCustom : true,
+    // Layer-2: a CONTRIBUTOR who doesn't name an owner owns what they
+    // create, so they can subsequently edit it.
+    ownerPersonId: ownerOnCreate((req as AuthenticatedRequest).user, ownerPersonId),
     createdAt: now,
     updatedAt: now,
   };
@@ -319,8 +327,12 @@ router.put('/:id', async (req: Request, res: Response) => {
   const manual = await operationsManualsRepo.get(String(req.params.id));
   if (!manual) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
 
+  // Layer-2: a CONTRIBUTOR may only edit manuals assigned to them.
+  const putAssignErr = enforceAssignment((req as AuthenticatedRequest).user, manual);
+  if (putAssignErr) { res.status(putAssignErr.statusCode).json({ success: false, error: putAssignErr.message }); return; }
+
   const before = { ...manual };
-  const { label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom } = req.body;
+  const { label, roleType, purpose, daily, weekly, monthly, quarterly, escalation, customContent, isCustom, ownerPersonId } = req.body;
 
   if (label !== undefined) manual.label = label;
   if (roleType !== undefined) manual.roleType = roleType;
@@ -332,6 +344,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (escalation !== undefined) manual.escalation = Array.isArray(escalation) ? escalation : [];
   if (customContent !== undefined) manual.customContent = customContent;
   if (isCustom !== undefined) manual.isCustom = isCustom;
+  if (ownerPersonId !== undefined) manual.ownerPersonId = ownerPersonId;
 
   manual.updatedAt = new Date().toISOString();
   await operationsManualsRepo.update(manual.id, manual);
@@ -344,6 +357,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const removed = await operationsManualsRepo.get(String(req.params.id));
   if (!removed) { res.status(404).json({ success: false, error: 'Operations manual not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only delete manuals assigned to them.
+  const delAssignErr = enforceAssignment((req as AuthenticatedRequest).user, removed);
+  if (delAssignErr) { res.status(delAssignErr.statusCode).json({ success: false, error: delAssignErr.message }); return; }
+
   auditService.log(removed.orgId, null, 'OperationsManual', removed.id, 'DELETE', removed, null);
   await operationsManualsRepo.delete(removed.id);
   logger.info({ manualId: removed.id, label: removed.label }, 'Deleted operations manual');
@@ -371,6 +389,9 @@ router.post('/seed', async (req: Request, res: Response) => {
       id: uuid(),
       orgId,
       ...tmpl,
+      // Seeded standard manuals are org-wide reference content, not owned
+      // by (nor layer-2-editable by) whoever triggered the seed.
+      ownerPersonId: null,
       createdAt: now,
       updatedAt: now,
     };

@@ -14,6 +14,7 @@ const make = (over: Partial<StoredTag> = {}): StoredTag => ({
   entityType: 'DataAsset',
   entityId: 'a1',
   tag: 'pii',
+  createdBy: null,
   createdAt: '2026-07-15T00:00:00.000Z',
   ...over,
 });
@@ -51,6 +52,7 @@ describe('prismaTagsRepository', () => {
     const d = delegate({
       findMany: async () => [{
         id: 'a1', orgId: 'o1', entityType: 'DataAsset', entityId: 'x', tag: 'pii',
+        createdBy: null,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
       }],
     });

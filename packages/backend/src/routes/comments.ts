@@ -9,6 +9,8 @@ import { auditService } from '../services/audit.service';
 import { getCommentsRepository } from '../db/comments.repo';
 import { getPeopleRepository } from '../db/people.repo';
 import { hasDatabase } from '../db/prisma';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enforceAssignment } from '../lib/assignment';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMMENTS
@@ -290,6 +292,14 @@ router.patch('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const c = await commentsRepo.get(String(req.params.id));
   if (!c) { res.status(404).json({ success: false, error: 'Comment not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only delete their own comments (matched on
+  // the author `userId`). EDITOR / ORG_ADMIN / SUPER_ADMIN keep org-wide
+  // write and can moderate any comment. (Editing, by contrast, stays
+  // author-only for every role — see the PATCH handler.)
+  const delAssignErr = enforceAssignment((req as AuthenticatedRequest).user, c);
+  if (delAssignErr) { res.status(delAssignErr.statusCode).json({ success: false, error: delAssignErr.message }); return; }
+
   c.deletedAt = new Date().toISOString();
   c.content = '';
   c.mentions = [];

@@ -22,10 +22,15 @@ const ASSIGNED_SCOPED_ROLES = new Set(['CONTRIBUTOR']);
 /** Record fields that denote assignment to a person (people-store ids). */
 const ASSIGNMENT_FIELDS = [
   'ownerId',
+  'ownerPersonId',
   'stewardId',
   'assigneeId',
   'responsiblePersonId',
   'createdBy',
+  // Authorship anchors for the collaboration bucket: a comment's author
+  // (userId) and an attachment's uploader (uploadedBy).
+  'userId',
+  'uploadedBy',
 ] as const;
 
 interface MinimalUser {
