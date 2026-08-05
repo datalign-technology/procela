@@ -39,6 +39,19 @@ paths-ignore:
   - "**/*.test.ts"
   - "**/*.test.tsx"
 
+# Also excluded: js/file-access-to-http ("file data in outbound network
+# request"). Procela's job is to store connection configs (dbt Cloud
+# tokens, connection credentials, OIDC client secrets) and then call the
+# systems they describe — so a stored value reaching an outbound request
+# is the core, intended data flow, not exfiltration. The query cannot
+# distinguish "send this API token to its own API" from "leak a file to a
+# random host", and the stored secrets are now KMS-encrypted at rest with
+# writes gated to EDITOR+ by RBAC. It produced only by-design positives
+# (e.g. the dbt Cloud auth header). Excluding it keeps the rest of
+# security-extended active. Revisit if the app ever reads arbitrary
+# user-supplied files and forwards them.
 query-filters:
   - exclude:
       id: js/missing-rate-limiting
+  - exclude:
+      id: js/file-access-to-http
