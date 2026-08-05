@@ -29,6 +29,8 @@ describe('isAssignedTo', () => {
     assert.ok(isAssignedTo(contributor, { stewardId: 'person-1' }));
     assert.ok(isAssignedTo(contributor, { assigneeId: 'person-1' }));
     assert.ok(isAssignedTo(contributor, { createdBy: 'person-1' }));
+    assert.ok(isAssignedTo(contributor, { userId: 'person-1' }));
+    assert.ok(isAssignedTo(contributor, { uploadedBy: 'person-1' }));
   });
 
   it('is false when no field matches', () => {

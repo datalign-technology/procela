@@ -27,6 +27,10 @@ const ASSIGNMENT_FIELDS = [
   'assigneeId',
   'responsiblePersonId',
   'createdBy',
+  // Authorship anchors for the collaboration bucket: a comment's author
+  // (userId) and an attachment's uploader (uploadedBy).
+  'userId',
+  'uploadedBy',
 ] as const;
 
 interface MinimalUser {

@@ -982,6 +982,7 @@ model Tag {
   entityType String
   entityId   String
   tag        String
+  createdBy  String?  @db.Uuid
   createdAt  DateTime @default(now())
 
   @@index([orgId])

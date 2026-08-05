@@ -111,9 +111,10 @@ assigned to — today just **`CONTRIBUTOR`**. `EDITOR` / `ORG_ADMIN` /
 `lib/assignment.ts` provides the reusable predicate:
 
 - `isAssignedTo(user, record)` — true when `user.sub` matches any of a
-  record's assignment fields (`ownerId`, `stewardId`, `assigneeId`,
-  `responsiblePersonId`, `createdBy`). A JWT's `sub` **is** the person
-  id (`routes/auth.ts` mints `sub: person.id`).
+  record's assignment fields (`ownerId`, `ownerPersonId`, `stewardId`,
+  `assigneeId`, `responsiblePersonId`, `createdBy`, `userId`,
+  `uploadedBy`). A JWT's `sub` **is** the person id (`routes/auth.ts`
+  mints `sub: person.id`).
 - `enforceAssignment(user, record)` — returns `AppError(403)` when an
   assigned-scoped role touches a record they are not assigned to;
   passes through for exempt roles and for unauthenticated callers
@@ -122,8 +123,8 @@ assigned to — today just **`CONTRIBUTOR`**. `EDITOR` / `ORG_ADMIN` /
   assigned-scoped creator as the owner so they can edit what they
   make.
 
-**Coverage.** Wired into every `CONTRIBUTOR`-writable router in the
-`process` bucket:
+**Coverage.** Wired into **every** `CONTRIBUTOR`-writable router — the
+`process` bucket and the `collaboration` bucket:
 
 - **process catalog** — `PUT /nodes/:id`, `DELETE /nodes/:id`, `POST
   /nodes/:id/clone` (assignment checked on the source), and `POST
@@ -136,11 +137,21 @@ assigned to — today just **`CONTRIBUTOR`**. `EDITOR` / `ORG_ADMIN` /
   `20260805000000_ops_manual_owner_person`, mirroring sops/glossary).
   Seeded standard manuals keep `ownerPersonId = null` — org-wide
   reference content, not editable by whoever triggered the seed.
+- **comments** — `DELETE /:id` is assigned-scoped (anchor: the author
+  `userId`); `EDITOR+` can moderate. Editing (`PATCH /:id`) is
+  **author-only for every role** — a stricter, pre-existing rule, since
+  rewriting someone else's words is never appropriate even for an admin.
+- **tags** — `DELETE /:id` (anchor: `createdBy`) and `POST /`
+  (creator-recorded). Tags had no owner, so a `createdBy` column was
+  added (migration `20260805010000_tag_created_by`).
+- **attachments** — `PUT /:id`, `DELETE /:id`, with `POST /url` and
+  `POST /upload` recording the uploader. Anchor: the existing
+  `uploadedBy` column.
 
-The shared predicate now recognises `ownerPersonId` alongside
-`ownerId` / `stewardId` / `assigneeId` / `responsiblePersonId` /
-`createdBy`. The `collaboration` bucket (comments, tags, attachments)
-is the remaining `CONTRIBUTOR`-writable surface and is a follow-up.
+The shared predicate now recognises `ownerPersonId` / `userId` /
+`uploadedBy` alongside `ownerId` / `stewardId` / `assigneeId` /
+`responsiblePersonId` / `createdBy`. With collaboration covered, every
+`CONTRIBUTOR`-writable surface is layer-2 scoped.
 
 ## Tests
 

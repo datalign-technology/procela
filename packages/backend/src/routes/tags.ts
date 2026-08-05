@@ -3,6 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { getTagsRepository } from '../db/tags.repo';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enforceAssignment } from '../lib/assignment';
 
 export interface StoredTag {
   id: string;
@@ -10,6 +12,9 @@ export interface StoredTag {
   entityType: string;
   entityId: string;
   tag: string;
+  // Layer-2 assignment anchor: the person who created this tag. Nullable
+  // for tags created without an authenticated author (e.g. imports).
+  createdBy: string | null;
   createdAt: string;
 }
 
@@ -81,6 +86,9 @@ router.post('/', async (req: Request, res: Response) => {
     entityType,
     entityId,
     tag: tagName.trim(),
+    // Layer-2 anchor: record who created the tag so a CONTRIBUTOR can
+    // later remove their own (and only their own).
+    createdBy: (req as AuthenticatedRequest).user?.sub ?? null,
     createdAt: new Date().toISOString(),
   };
 
@@ -97,6 +105,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ success: false, error: 'Tag not found' });
     return;
   }
+
+  // Layer-2: a CONTRIBUTOR may only delete tags they created.
+  const delAssignErr = enforceAssignment((req as AuthenticatedRequest).user, removed);
+  if (delAssignErr) { res.status(delAssignErr.statusCode).json({ success: false, error: delAssignErr.message }); return; }
+
   await tagsRepo.delete(removed.id);
   logger.info({ id: removed.id, tag: removed.tag }, 'Deleted tag');
   res.status(204).send();

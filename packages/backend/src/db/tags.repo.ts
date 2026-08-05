@@ -17,6 +17,7 @@ type PrismaTagRow = {
   entityType: string;
   entityId: string;
   tag: string;
+  createdBy: string | null;
   createdAt: Date;
 };
 
@@ -35,6 +36,7 @@ function fromPrisma(r: PrismaTagRow): StoredTag {
     entityType: r.entityType,
     entityId: r.entityId,
     tag: r.tag,
+    createdBy: r.createdBy ?? null,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -46,6 +48,7 @@ function toPrismaData(row: Partial<StoredTag>): Record<string, unknown> {
   if (row.entityType !== undefined) d.entityType = row.entityType;
   if (row.entityId !== undefined) d.entityId = row.entityId;
   if (row.tag !== undefined) d.tag = row.tag;
+  if (row.createdBy !== undefined) d.createdBy = row.createdBy;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }

@@ -471,7 +471,10 @@ suite('live-db repository round-trips', () => {
       type: 'URL', name: 'ref', description: '', url: 'https://x',
       uploadedBy: personId, createdAt: now, updatedAt: now,
     });
-    await tag.create({ id: randomUUID(), orgId, entityType: 'DataAsset', entityId: randomUUID(), tag: 'PII', createdAt: now });
+    const tagId = randomUUID();
+    await tag.create({ id: tagId, orgId, entityType: 'DataAsset', entityId: randomUUID(), tag: 'PII', createdBy: personId, createdAt: now });
+    // createdBy (layer-2 anchor) round-trips through the live column.
+    assert.strictEqual((await tag.list({ orgId })).find((t) => t.id === tagId)?.createdBy, personId);
     await view.create({
       id: randomUUID(), orgId, pageKey: 'data-assets', name: 'v1',
       ownerId: personId, ownerName: 'Bob', isShared: true,
