@@ -3,7 +3,8 @@
 // Replaces the in-memory `validRefreshTokens` Map in routes/auth.ts. Keyed by
 // the token's jti (not an `id`), so it exposes the verbs auth actually needs:
 // list (for /auth/sessions and SLO matching), get, upsert, remove. See
-// docs/POSTGRES_CUTOVER_PLAN.md (PR 2). No consumer is wired yet.
+// docs/POSTGRES_CUTOVER_PLAN.md (PR 2). Wired into routes/auth.ts — login
+// upserts, refresh rotates, logout/SLO/session revocation remove.
 
 import { saveStore } from '../lib/persistence';
 import { getPrisma, hasDatabase } from './prisma';
