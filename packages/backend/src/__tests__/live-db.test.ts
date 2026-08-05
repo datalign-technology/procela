@@ -526,13 +526,16 @@ suite('live-db repository round-trips', () => {
       exampleValues: '', businessRules: '', sourceOfTruth: '',
       createdAt: now, updatedAt: now,
     });
+    const opmId = randomUUID();
     await opm.create({
-      id: randomUUID(), orgId, roleType: 'CDO', label: 'CDO',
+      id: opmId, orgId, roleType: 'CDO', label: 'CDO',
       purpose: 'strategy',
       daily: ['review alerts'], weekly: ['check reports'], monthly: [], quarterly: [], escalation: [],
-      customContent: '', isCustom: false,
+      customContent: '', isCustom: false, ownerPersonId: personId,
       createdAt: now, updatedAt: now,
     });
+    // ownerPersonId (layer-2 anchor) round-trips through the live column.
+    assert.strictEqual((await opm.get(opmId))?.ownerPersonId, personId);
     await cal.create({
       id: randomUUID(), orgId, name: 'DG Council',
       description: 'monthly council', eventType: 'COUNCIL_MEETING',

@@ -22,6 +22,7 @@ const ASSIGNED_SCOPED_ROLES = new Set(['CONTRIBUTOR']);
 /** Record fields that denote assignment to a person (people-store ids). */
 const ASSIGNMENT_FIELDS = [
   'ownerId',
+  'ownerPersonId',
   'stewardId',
   'assigneeId',
   'responsiblePersonId',

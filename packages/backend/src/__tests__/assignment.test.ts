@@ -24,6 +24,7 @@ describe('isAssignedScopedRole', () => {
 describe('isAssignedTo', () => {
   it('matches any assignment field against user.sub', () => {
     assert.ok(isAssignedTo(contributor, { ownerId: 'person-1' }));
+    assert.ok(isAssignedTo(contributor, { ownerPersonId: 'person-1' }));
     assert.ok(isAssignedTo(contributor, { responsiblePersonId: 'person-1' }));
     assert.ok(isAssignedTo(contributor, { stewardId: 'person-1' }));
     assert.ok(isAssignedTo(contributor, { assigneeId: 'person-1' }));

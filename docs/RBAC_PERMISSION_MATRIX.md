@@ -122,12 +122,25 @@ assigned to — today just **`CONTRIBUTOR`**. `EDITOR` / `ORG_ADMIN` /
   assigned-scoped creator as the owner so they can edit what they
   make.
 
-**Coverage.** Wired into the **process catalog** — the canonical
-`CONTRIBUTOR`-writable surface — on `PUT /nodes/:id`, `DELETE
-/nodes/:id`, `POST /nodes/:id/clone` (assignment checked on the source),
-and `POST /nodes` (creator-owns). The helper is ready for reuse; the
-remaining `CONTRIBUTOR`-writable routers (sops, operations-manuals,
-collaboration) are a follow-up.
+**Coverage.** Wired into every `CONTRIBUTOR`-writable router in the
+`process` bucket:
+
+- **process catalog** — `PUT /nodes/:id`, `DELETE /nodes/:id`, `POST
+  /nodes/:id/clone` (assignment checked on the source), and `POST
+  /nodes` (creator-owns). Anchor: `ownerId` / `responsiblePersonId`.
+- **sops** — `PUT /:id`, `DELETE /:id`, and `POST /` (creator-owns).
+  Anchor: the existing `ownerPersonId` column.
+- **operations-manuals** — `PUT /:id`, `DELETE /:id`, and `POST /`
+  (creator-owns). These had no per-record owner, so an `ownerPersonId`
+  column was added (migration
+  `20260805000000_ops_manual_owner_person`, mirroring sops/glossary).
+  Seeded standard manuals keep `ownerPersonId = null` — org-wide
+  reference content, not editable by whoever triggered the seed.
+
+The shared predicate now recognises `ownerPersonId` alongside
+`ownerId` / `stewardId` / `assigneeId` / `responsiblePersonId` /
+`createdBy`. The `collaboration` bucket (comments, tags, attachments)
+is the remaining `CONTRIBUTOR`-writable surface and is a follow-up.
 
 ## Tests
 
