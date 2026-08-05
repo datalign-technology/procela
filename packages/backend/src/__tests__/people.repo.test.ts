@@ -97,8 +97,6 @@ describe('prismaPeopleRepository (stubbed Prisma)', () => {
         id: 'p1',
         name: 'Alice',
         email: 'alice@example.com',
-        department: 'Ops',
-        externalId: 'ext-1',
         title: 'Lead',
         jobRole: 'System Operator',
         role: 'PROCESS_OWNER',
@@ -141,7 +139,7 @@ describe('prismaPeopleRepository (stubbed Prisma)', () => {
     const delegate = makeDelegate({
       findMany: async () => [
         {
-          id: 'p1', name: 'A', email: 'a@x', department: null, externalId: null,
+          id: 'p1', name: 'A', email: 'a@x',
           title: null, jobRole: null, role: 'VIEWER', orgRoles: null,
           passwordHash: null, passwordUpdatedAt: null, passwordMustChange: null,
           failedLoginCount: null, failedLoginFirstAt: null, lockedUntil: null,
@@ -153,7 +151,7 @@ describe('prismaPeopleRepository (stubbed Prisma)', () => {
           personSkills: [],
         },
         {
-          id: 'p2', name: 'B', email: 'b@x', department: null, externalId: null,
+          id: 'p2', name: 'B', email: 'b@x',
           title: null, jobRole: null, role: 'VIEWER', orgRoles: null,
           passwordHash: null, passwordUpdatedAt: null, passwordMustChange: null,
           failedLoginCount: null, failedLoginFirstAt: null, lockedUntil: null,
@@ -176,7 +174,7 @@ describe('prismaPeopleRepository (stubbed Prisma)', () => {
     const calls: Record<string, unknown> = {};
     const delegate = makeDelegate({
       update: async () => ({
-        id: 'p1', name: 'x', email: 'x@x', department: null, externalId: null,
+        id: 'p1', name: 'x', email: 'x@x',
         title: null, jobRole: null, role: 'VIEWER', orgRoles: null,
         passwordHash: null, passwordUpdatedAt: null, passwordMustChange: null,
         failedLoginCount: null, failedLoginFirstAt: null, lockedUntil: null,
@@ -186,7 +184,7 @@ describe('prismaPeopleRepository (stubbed Prisma)', () => {
         createdAt: new Date(), updatedAt: new Date(),
       }),
       findUnique: async () => ({
-        id: 'p1', name: 'x', email: 'x@x', department: null, externalId: null,
+        id: 'p1', name: 'x', email: 'x@x',
         title: null, jobRole: null, role: 'VIEWER', orgRoles: null,
         passwordHash: null, passwordUpdatedAt: null, passwordMustChange: null,
         failedLoginCount: null, failedLoginFirstAt: null, lockedUntil: null,

@@ -62,7 +62,7 @@ describe('prismaSkillsRepository (stubbed Prisma)', () => {
     const delegate = makeDelegate({
       findMany: async () => [{
         id: 's1', orgId: 'o1', name: 'ETL', description: null,
-        category: 'INTEGRATION', damaRoleId: null,
+        category: 'INTEGRATION',
         createdAt: new Date('2026-07-15T12:00:00.000Z'),
         updatedAt: new Date('2026-07-15T13:00:00.000Z'),
       }],

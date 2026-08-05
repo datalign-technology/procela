@@ -3,12 +3,6 @@
 // category, description) with two consumers on the schema side —
 // PersonSkill and ProcessNodeSkill — that manage their own join
 // tables.
-//
-// The schema also carries an optional `damaRoleId` FK (roles surface
-// role-recommended skills), which the Stored type doesn't currently
-// track. We ignore it on both read and write here so the repo stays
-// a one-for-one mirror of the JSON shape; a follow-up can promote
-// the relation into StoredSkill when the code needs it.
 
 import type { StoredSkill } from '../stores/skills';
 import { saveStore } from '../lib/persistence';
@@ -29,7 +23,6 @@ type PrismaSkillRow = {
   name: string;
   description: string | null;
   category: string;
-  damaRoleId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };

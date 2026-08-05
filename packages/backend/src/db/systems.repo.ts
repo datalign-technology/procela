@@ -1,10 +1,10 @@
 // System repository — sixth per-entity migration. New patterns:
 //
 //   - Multiple named Person FKs on one row (ownerPersonId,
-//     deputyOwnerId, stewardId) — each pointing at the same Person
-//     table under distinct Prisma relations. The schema handles this
-//     via `@relation("SystemOwner")` / `@relation("SystemDeputyOwner")`
-//     / `@relation("SystemSteward")` on the Person side.
+//     deputyOwnerId) — each pointing at the same Person table under
+//     distinct Prisma relations. The schema handles this via
+//     `@relation("SystemOwner")` / `@relation("SystemDeputyOwner")`
+//     on the Person side.
 //   - JSONB integrations[] alongside a free-text integrationPoints —
 //     keeps the structured/unstructured pair the JSON store already
 //     carries.
@@ -39,7 +39,6 @@ type PrismaSystemRow = {
   connectivity: string | null;
   ownerPersonId: string | null;
   deputyOwnerId: string | null;
-  stewardId: string | null;
   createdAt: Date;
   updatedAt: Date;
   custodians?: Array<{ personId: string }>;

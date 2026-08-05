@@ -26,7 +26,6 @@ export const createPersonSchema = z.object({
   orgId: z.string().min(1, 'Organization ID is required'),
   email: z.string().email().optional(),
   role: z.string().optional(),
-  department: z.string().optional(),
   title: z.string().optional(),
 });
 

@@ -37,8 +37,6 @@ type PrismaPersonRow = {
   id: string;
   name: string;
   email: string;
-  department: string | null;
-  externalId: string | null;
   title: string | null;
   jobRole: string | null;
   role: string;

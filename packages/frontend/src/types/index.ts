@@ -32,7 +32,6 @@ export interface Organization {
   id: string;
   name: string;
   industry?: string;
-  identityProviderConfig?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -40,11 +39,9 @@ export interface Organization {
 export interface User {
   id: string;
   orgId: string;
-  externalId?: string;
   name: string;
   email: string;
   role: UserRole;
-  department?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,7 +118,6 @@ export interface SystemEntity {
   description?: string;
   systemType?: string;
   ownerId?: string;
-  stewardId?: string;
   createdAt: string;
   updatedAt: string;
   createdBy?: string;

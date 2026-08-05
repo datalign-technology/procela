@@ -1,10 +1,9 @@
 // DataAsset repository — third per-entity migration.
 //
 // New patterns this repo exercises vs earlier entities:
-//   - Native Postgres String[] columns (sensitivityTags,
-//     rejectedSensitivityTags). These map 1:1 with the JSON array
-//     shape, so no join-table dance required — the mapper just
-//     hands the array through.
+//   - Native Postgres String[] columns (sensitivityTags). These map
+//     1:1 with the JSON array shape, so no join-table dance required —
+//     the mapper just hands the array through.
 //   - JSONB payload for retentionDuration ({ value, unit }). Kept
 //     structured so future WHERE clauses on retention duration are
 //     queryable rather than string-parsed.
@@ -52,7 +51,6 @@ type PrismaAssetRow = {
   healthScore: number;
   healthScoreAt: Date | null;
   sensitivityTags: string[];
-  rejectedSensitivityTags: string[];
   dataClassification: string | null;
   dataType: string | null;
   refreshFrequency: string | null;
