@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import logger from '../lib/logger';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enforceAssignment, ownerOnCreate } from '../lib/assignment';
 import { loadStore, saveStore, registerStore } from '../lib/persistence';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getFlowRelationshipsRepository } from '../db/flow-relationships.repo';
@@ -821,7 +823,9 @@ router.post('/nodes', async (req: Request, res: Response) => {
     orderIndex: siblings.length,
     orgId: (orgIds && orgIds.length > 0) ? orgIds[0] : DEV_ORG_ID,
     orgIds: orgIds || [DEV_ORG_ID],
-    ownerId: ownerId || null,
+    // Layer-2: a CONTRIBUTOR who doesn't name an owner owns what they
+    // create, so they can subsequently edit it.
+    ownerId: ownerOnCreate((req as AuthenticatedRequest).user, ownerId),
     version: 1,
     ...(purpose ? { purpose } : {}),
     ...(businessOutcome ? { businessOutcome } : {}),
@@ -861,6 +865,10 @@ router.post('/nodes', async (req: Request, res: Response) => {
 router.put('/nodes/:id', async (req: Request, res: Response) => {
   const node = (await processNodesRepo.get(param(req.params.id))) ?? undefined;
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only edit nodes assigned to them.
+  const putAssignErr = enforceAssignment((req as AuthenticatedRequest).user, node);
+  if (putAssignErr) { res.status(putAssignErr.statusCode).json({ success: false, error: putAssignErr.message }); return; }
 
   const { name, description, status, orderIndex, orgIds, ownerId, parentId, version,
     purpose, businessOutcome, stakeholders, complianceTags, inputsOutputs,
@@ -1170,6 +1178,10 @@ router.delete('/nodes/:id', async (req: Request, res: Response) => {
   const node = findNode(nodeId);
   if (!node) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
 
+  // Layer-2: a CONTRIBUTOR may only delete nodes assigned to them.
+  const delAssignErr = enforceAssignment((req as AuthenticatedRequest).user, node);
+  if (delAssignErr) { res.status(delAssignErr.statusCode).json({ success: false, error: delAssignErr.message }); return; }
+
   // Collect all descendants
   const descendants = getDescendants(nodeId);
   const idsToRemove = new Set([nodeId, ...descendants.map((d) => d.id)]);
@@ -1201,6 +1213,10 @@ router.delete('/nodes/:id', async (req: Request, res: Response) => {
 router.post('/nodes/:id/clone', async (req: Request, res: Response) => {
   const source = findNode(param(req.params.id));
   if (!source) { res.status(404).json({ success: false, error: 'Node not found' }); return; }
+
+  // Layer-2: a CONTRIBUTOR may only clone a node assigned to them.
+  const cloneAssignErr = enforceAssignment((req as AuthenticatedRequest).user, source);
+  if (cloneAssignErr) { res.status(cloneAssignErr.statusCode).json({ success: false, error: cloneAssignErr.message }); return; }
 
   const { name } = req.body;
   const now = new Date().toISOString();
