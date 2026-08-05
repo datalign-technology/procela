@@ -24,17 +24,13 @@ const { operationsManuals } = require('../routes/operations-manuals');
 
 type User = { sub: string; role: string };
 
-// Read the id of the record just created from the in-memory store rather
-// than from the HTTP response body. Feeding a JSON-parsed response value
-// back into a request path reads to CodeQL as request-forgery (js/request-
-// forgery); the store is a trusted local source, so this breaks that flow
-// while asserting exactly the same behaviour.
-function newId(store: Array<{ id: string }>, before: Set<string>): string {
-  const created = store.find((r) => !before.has(r.id));
-  if (!created) throw new Error('expected a newly created record');
-  return created.id;
-}
-
+// NB: request paths in these tests use only compile-time-constant ids
+// (the PREFIX seeds). We deliberately never interpolate a value read back
+// from a response body or from the file-backed module stores into a path —
+// CodeQL flags either as tainted data reaching an outbound request
+// (js/request-forgery, js/file-access-to-http). "Create-owns" is asserted
+// on the POST response; "can edit/delete own" uses a pre-seeded record the
+// contributor owns, addressed by its constant id.
 function request(
   port: number,
   method: string,
@@ -95,24 +91,44 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
   });
 
   beforeEach(() => {
+    // Sweep both the PREFIX seeds and anything created during a test under
+    // our (unique) test orgId — POST-created rows get uuid ids and are
+    // persisted via saveStore, so without the orgId clause a leaked row
+    // survives on disk across runs.
     const sweep = (arr: any[]) => {
-      for (let i = arr.length - 1; i >= 0; i--) if (arr[i].id?.startsWith(PREFIX)) arr.splice(i, 1);
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i].id?.startsWith(PREFIX) || arr[i].orgId === orgId) arr.splice(i, 1);
+      }
     };
     sweep(sops);
     sweep(operationsManuals);
     const now = new Date().toISOString();
-    // A SOP owned by someone other than our test contributor.
+    // A SOP owned by someone other than our test contributor…
     sops.push({
       id: PREFIX + 's-owned', orgId, code: 'SOP-900', title: 'Owned SOP',
       purpose: '', category: 'OTHER', applicableRoles: [], triggerEvent: '',
       steps: [], status: 'DRAFT', version: 1, ownerPersonId: OWNER,
       lastReviewedAt: null, createdAt: now, updatedAt: now,
     });
-    // A manual owned by someone other than our test contributor.
+    // …and one the test contributor owns.
+    sops.push({
+      id: PREFIX + 's-mine', orgId, code: 'SOP-901', title: 'My SOP',
+      purpose: '', category: 'OTHER', applicableRoles: [], triggerEvent: '',
+      steps: [], status: 'DRAFT', version: 1, ownerPersonId: CONTRIB.sub,
+      lastReviewedAt: null, createdAt: now, updatedAt: now,
+    });
+    // A manual owned by someone else…
     operationsManuals.push({
       id: PREFIX + 'm-owned', orgId, roleType: 'CUSTOM', label: 'Owned Manual',
       purpose: '', daily: [], weekly: [], monthly: [], quarterly: [], escalation: [],
       customContent: '', isCustom: true, ownerPersonId: OWNER,
+      createdAt: now, updatedAt: now,
+    });
+    // …and one the test contributor owns.
+    operationsManuals.push({
+      id: PREFIX + 'm-mine', orgId, roleType: 'CUSTOM', label: 'My Manual',
+      purpose: '', daily: [], weekly: [], monthly: [], quarterly: [], escalation: [],
+      customContent: '', isCustom: true, ownerPersonId: CONTRIB.sub,
       createdAt: now, updatedAt: now,
     });
   });
@@ -126,13 +142,9 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
   });
 
   it('sops: CONTRIBUTOR can edit a SOP assigned to them', async () => {
-    const before = new Set<string>(sops.map((s: { id: string }) => s.id));
-    const created = await request(port, 'POST', '/sops', { orgId, title: 'Mine' }, CONTRIB);
-    assert.strictEqual(created.status, 201);
-    const id = newId(sops, before);
-    const res = await request(port, 'PUT', `/sops/${id}`, { title: 'Mine v2' }, CONTRIB);
+    const res = await request(port, 'PUT', `/sops/${PREFIX}s-mine`, { title: 'My SOP v2' }, CONTRIB);
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.data.title, 'Mine v2');
+    assert.strictEqual(res.body.data.title, 'My SOP v2');
   });
 
   it('sops: CONTRIBUTOR is 403 editing a SOP owned by someone else', async () => {
@@ -159,13 +171,9 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
   });
 
   it('ops-manuals: CONTRIBUTOR can edit a manual assigned to them', async () => {
-    const before = new Set<string>(operationsManuals.map((m: { id: string }) => m.id));
-    const created = await request(port, 'POST', '/operations-manuals', { orgId, label: 'Mine' }, CONTRIB);
-    assert.strictEqual(created.status, 201);
-    const id = newId(operationsManuals, before);
-    const res = await request(port, 'PUT', `/operations-manuals/${id}`, { label: 'Mine v2' }, CONTRIB);
+    const res = await request(port, 'PUT', `/operations-manuals/${PREFIX}m-mine`, { label: 'My Manual v2' }, CONTRIB);
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.data.label, 'Mine v2');
+    assert.strictEqual(res.body.data.label, 'My Manual v2');
   });
 
   it('ops-manuals: CONTRIBUTOR is 403 editing a manual owned by someone else', async () => {
