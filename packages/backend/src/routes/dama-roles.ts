@@ -316,7 +316,6 @@ router.post('/', async (req: Request, res: Response) => {
         linkedObjectType: 'DamaRole',
         linkedObjectId: role.id,
         automationMode: 'HUMAN',
-        resolution: null,
         createdBy: null,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),

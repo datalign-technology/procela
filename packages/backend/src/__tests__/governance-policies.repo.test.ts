@@ -24,7 +24,6 @@ const makePolicy = (over: Partial<StoredGovernancePolicy> = {}): StoredGovernanc
   ownerAssignmentId: null,
   category: 'GENERAL',
   reviewFrequency: 'ANNUAL',
-  lastReviewDate: null,
   nextReviewDate: null,
   effectiveDate: null,
   content: '',
@@ -48,12 +47,11 @@ describe('jsonGovernancePoliciesRepository', () => {
     const repo = jsonGovernancePoliciesRepository(store);
     await repo.create(makePolicy({
       id: 'p1', code: 'CHA-002', documentType: 'CHARTER',
-      lastReviewDate: '2026-01-01', nextReviewDate: '2027-01-01',
-      effectiveDate: '2026-01-15',
+      nextReviewDate: '2027-01-01', effectiveDate: '2026-01-15',
     }));
     const got = await repo.get('p1');
     assert.strictEqual(got?.documentType, 'CHARTER');
-    assert.strictEqual(got?.lastReviewDate, '2026-01-01');
+    assert.strictEqual(got?.nextReviewDate, '2027-01-01');
     assert.strictEqual(got?.effectiveDate, '2026-01-15');
   });
 });
@@ -77,7 +75,7 @@ describe('prismaGovernancePoliciesRepository (stubbed Prisma)', () => {
         description: 'body', documentType: 'STANDARD', status: 'ACTIVE',
         ownerAssignmentId: 'p-1', category: 'GOVERNANCE',
         reviewFrequency: 'QUARTERLY',
-        lastReviewDate: '2026-04-01', nextReviewDate: '2026-07-01',
+        nextReviewDate: '2026-07-01',
         effectiveDate: '2026-01-01', content: 'body body',
         createdAt: new Date('2025-12-01T00:00:00.000Z'),
         updatedAt: new Date('2026-04-01T00:00:00.000Z'),
@@ -89,7 +87,7 @@ describe('prismaGovernancePoliciesRepository (stubbed Prisma)', () => {
     assert.strictEqual(r.documentType, 'STANDARD');
     assert.strictEqual(r.status, 'ACTIVE');
     assert.strictEqual(r.reviewFrequency, 'QUARTERLY');
-    assert.strictEqual(r.lastReviewDate, '2026-04-01');
+    assert.strictEqual(r.nextReviewDate, '2026-07-01');
     assert.strictEqual(r.createdAt, '2025-12-01T00:00:00.000Z');
   });
 

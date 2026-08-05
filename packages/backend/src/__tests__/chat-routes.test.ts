@@ -192,14 +192,14 @@ describe('chat routes + buildOrgSnapshot', () => {
     // rule so we can assert the newly-added snapshot sections.
     glossaryTerms.push({
       id: termId, orgId, term: 'Encounter', definition: 'A patient visit or clinical interaction.',
-      context: '', synonyms: [], relatedTerms: [], domainId: null, ownerPersonId: null,
+      context: '', synonyms: [], domainId: null, ownerPersonId: null,
       status: 'APPROVED', category: 'BUSINESS', exampleValues: '', businessRules: '', sourceOfTruth: '',
       createdAt: now, updatedAt: now,
     });
     governancePolicies.push({
       id: policyId, orgId, code: 'POL-001', name: 'Data classification policy',
       description: '', documentType: 'POLICY', status: 'ACTIVE', ownerAssignmentId: null,
-      category: 'CLASSIFICATION', reviewFrequency: 'ANNUAL', lastReviewDate: null, nextReviewDate: null,
+      category: 'CLASSIFICATION', reviewFrequency: 'ANNUAL', nextReviewDate: null,
       effectiveDate: null, content: '', createdAt: now, updatedAt: now,
     });
     governanceIssues.push({
@@ -212,7 +212,7 @@ describe('chat routes + buildOrgSnapshot', () => {
       id: taskId, orgId, title: 'Assign steward to billing ledger', description: '',
       taskType: 'REMEDIATION', status: 'OPEN', priority: 'HIGH',
       assigneeId: null, dueDate: null, linkedObjectType: null, linkedObjectId: null,
-      automationMode: 'MANUAL', resolution: null, createdBy: null,
+      automationMode: 'MANUAL', createdBy: null,
       createdAt: now, updatedAt: now, completedAt: null,
     });
     dataQualityRules.push({

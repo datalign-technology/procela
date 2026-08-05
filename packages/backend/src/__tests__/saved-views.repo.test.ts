@@ -15,7 +15,6 @@ const make = (over: Partial<StoredView> = {}): StoredView => ({
   name: 'My view',
   ownerId: null,
   ownerName: null,
-  isShared: true,
   filters: {},
   createdAt: '2026-07-15T00:00:00.000Z',
   updatedAt: '2026-07-15T00:00:00.000Z',
@@ -55,7 +54,7 @@ describe('prismaSavedViewsRepository', () => {
     const d = delegate({
       findMany: async () => [{
         id: 'a1', orgId: 'o1', pageKey: 'p', name: 'n',
-        ownerId: null, ownerName: null, isShared: true,
+        ownerId: null, ownerName: null,
         filters: { status: 'ACTIVE' },
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),

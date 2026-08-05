@@ -60,7 +60,6 @@ export interface StoredGovernanceTask {
   linkedObjectType: string | null;
   linkedObjectId: string | null;
   automationMode: typeof AUTOMATION_MODES[number];
-  resolution: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -91,7 +90,6 @@ const governanceTaskRowSchema = z.object({
   linkedObjectType: z.string().nullable(),
   linkedObjectId: z.string().nullable(),
   automationMode: z.enum(AUTOMATION_MODES),
-  resolution: z.string().nullable(),
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -123,7 +121,6 @@ const createTaskBodySchema = z.object({
   linkedObjectType: z.string().nullable().optional(),
   linkedObjectId: z.string().nullable().optional(),
   automationMode: z.enum(AUTOMATION_MODES).optional(),
-  resolution: z.string().nullable().optional(),
   createdBy: z.string().nullable().optional(),
 });
 const updateTaskBodySchema = z.object({
@@ -137,7 +134,6 @@ const updateTaskBodySchema = z.object({
   linkedObjectType: z.string().nullable().optional(),
   linkedObjectId: z.string().nullable().optional(),
   automationMode: z.enum(AUTOMATION_MODES).optional(),
-  resolution: z.string().nullable().optional(),
 });
 
 function enrichTask(
@@ -290,7 +286,6 @@ router.post('/', async (req: Request, res: Response) => {
     linkedObjectType: body.linkedObjectType || null,
     linkedObjectId: body.linkedObjectId || null,
     automationMode: body.automationMode || 'HUMAN',
-    resolution: body.resolution || null,
     createdBy: body.createdBy || null,
     createdAt: now,
     updatedAt: now,
@@ -320,7 +315,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const {
     title, description, taskType, status, priority,
     assigneeId, dueDate, linkedObjectType, linkedObjectId,
-    automationMode, resolution,
+    automationMode,
   } = body;
 
   // Validate status transition
@@ -345,7 +340,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (dueDate !== undefined) task.dueDate = dueDate;
   if (linkedObjectType !== undefined) task.linkedObjectType = linkedObjectType;
   if (linkedObjectId !== undefined) task.linkedObjectId = linkedObjectId;
-  if (resolution !== undefined) task.resolution = resolution;
 
   // Apply status last so completedAt logic runs after all other fields
   if (status !== undefined) {

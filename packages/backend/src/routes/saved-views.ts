@@ -13,9 +13,8 @@ import { getSavedViewsRepository } from '../db/saved-views.repo';
 // JSON - each page defines its own shape and round-trips it as-is.
 //
 // v1 visibility model: all views in an org are visible to everyone in
-// that org. The isShared flag is in the schema so a future private/
-// shared toggle can light up without a migration, but the UI doesn't
-// expose the choice yet.
+// that org. A private/shared toggle is out of scope for v1; when it
+// lands it can reintroduce a visibility column of its own.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface StoredView {
@@ -31,8 +30,6 @@ export interface StoredView {
   /** Display name of the owner at write time, so listing views doesn't
    *  require a per-row people join. */
   ownerName: string | null;
-  /** Reserved for future privacy controls; today's UI assumes true. */
-  isShared: boolean;
   /** Opaque filter snapshot. The page defines the shape; we just
    *  round-trip it. */
   filters: Record<string, unknown>;
@@ -95,7 +92,6 @@ router.post('/', async (req: Request, res: Response) => {
     name: name.trim(),
     ownerId,
     ownerName: ownerName || (req as any).user?.name || null,
-    isShared: true,
     filters: filters || {},
     createdAt: now,
     updatedAt: now,

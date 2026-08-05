@@ -15,7 +15,6 @@ const make = (over: Partial<StoredGlossaryTerm> = {}): StoredGlossaryTerm => ({
   definition: '',
   context: '',
   synonyms: [],
-  relatedTerms: [],
   domainId: null,
   ownerPersonId: null,
   status: 'DRAFT',
@@ -61,7 +60,7 @@ describe('prismaGlossaryTermsRepository', () => {
     const d = delegate({
       findMany: async () => [{
         id: 'a1', orgId: 'o1', term: 'X', definition: '', context: '',
-        synonyms: ['x'], relatedTerms: [], domainId: null, ownerPersonId: null,
+        synonyms: ['x'], domainId: null, ownerPersonId: null,
         status: 'DRAFT', category: 'GENERAL',
         exampleValues: '', businessRules: '', sourceOfTruth: '',
         createdAt: new Date('2026-07-15T00:00:00.000Z'),

@@ -18,7 +18,6 @@ export interface StoredGlossaryTerm {
   definition: string;
   context: string;
   synonyms: string[];
-  relatedTerms: string[];
   domainId: string | null;
   ownerPersonId: string | null;
   status: 'DRAFT' | 'PROPOSED' | 'APPROVED' | 'DEPRECATED';
@@ -234,7 +233,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 /** POST /api/v1/business-glossary — create */
 router.post('/', async (req: Request, res: Response) => {
   const {
-    term, orgId, definition, context, synonyms, relatedTerms,
+    term, orgId, definition, context, synonyms,
     domainId, ownerPersonId, status, category,
     exampleValues, businessRules, sourceOfTruth,
   } = req.body;
@@ -264,7 +263,6 @@ router.post('/', async (req: Request, res: Response) => {
     definition: definition || '',
     context: context || '',
     synonyms: Array.isArray(synonyms) ? synonyms : [],
-    relatedTerms: Array.isArray(relatedTerms) ? relatedTerms : [],
     domainId: domainId || null,
     ownerPersonId: ownerPersonId || null,
     status: status && (VALID_STATUSES as readonly string[]).includes(status) ? status : 'DRAFT',
@@ -293,7 +291,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   const before = { ...existing };
   const {
-    term, definition, context, synonyms, relatedTerms,
+    term, definition, context, synonyms,
     domainId, ownerPersonId, status, category,
     exampleValues, businessRules, sourceOfTruth,
   } = req.body;
@@ -313,7 +311,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (definition !== undefined) existing.definition = definition;
   if (context !== undefined) existing.context = context;
   if (synonyms !== undefined && Array.isArray(synonyms)) existing.synonyms = synonyms;
-  if (relatedTerms !== undefined && Array.isArray(relatedTerms)) existing.relatedTerms = relatedTerms;
   if (domainId !== undefined) existing.domainId = domainId || null;
   if (ownerPersonId !== undefined) existing.ownerPersonId = ownerPersonId || null;
   if (status !== undefined && (VALID_STATUSES as readonly string[]).includes(status)) existing.status = status;
@@ -392,7 +389,6 @@ router.post('/seed', async (req: Request, res: Response) => {
       definition: seed.definition,
       context: '',
       synonyms: [],
-      relatedTerms: [],
       domainId: null,
       ownerPersonId: null,
       status: 'DRAFT',
@@ -593,7 +589,6 @@ router.post('/import', async (req: Request, res: Response) => {
         definition: row.definition || '',
         context: row.context || '',
         synonyms: Array.isArray(row.synonyms) ? row.synonyms : [],
-        relatedTerms: [],
         domainId: null,
         ownerPersonId: null,
         status,

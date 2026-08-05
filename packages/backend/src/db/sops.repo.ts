@@ -1,7 +1,5 @@
 // Sop repository — steps is JSONB (array of SopStep), applicableRoles
-// is a native String[]. lastReviewedAt is DateTime? in Postgres but
-// stored as a string on the JSON row, so it's ISO-stringified on read
-// and Date()-parsed on write.
+// is a native String[].
 
 import type { StoredSop, SopStep } from '../routes/sops';
 import { saveStore } from '../lib/persistence';
@@ -25,7 +23,6 @@ type PrismaSopRow = {
   status: string;
   version: number;
   ownerPersonId: string | null;
-  lastReviewedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -52,7 +49,6 @@ function fromPrisma(r: PrismaSopRow): StoredSop {
     status: r.status as StoredSop['status'],
     version: r.version,
     ownerPersonId: r.ownerPersonId ?? null,
-    lastReviewedAt: r.lastReviewedAt ? r.lastReviewedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -72,7 +68,6 @@ function toPrismaData(row: Partial<StoredSop>): Record<string, unknown> {
   if (row.status !== undefined) d.status = row.status;
   if (row.version !== undefined) d.version = row.version;
   if (row.ownerPersonId !== undefined) d.ownerPersonId = row.ownerPersonId ?? null;
-  if (row.lastReviewedAt !== undefined) d.lastReviewedAt = row.lastReviewedAt ? new Date(row.lastReviewedAt) : null;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;
 }

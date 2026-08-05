@@ -32,7 +32,6 @@ type PrismaTaskRow = {
   dueDate: Date | null;
   linkedObjectType: string | null;
   linkedObjectId: string | null;
-  resolution: string | null;
   createdBy: string | null;
   completedAt: Date | null;
   overdueNotifiedAt: Date | null;
@@ -62,7 +61,6 @@ function fromPrisma(r: PrismaTaskRow): StoredGovernanceTask {
     dueDate: r.dueDate ? r.dueDate.toISOString() : null,
     linkedObjectType: r.linkedObjectType,
     linkedObjectId: r.linkedObjectId,
-    resolution: r.resolution,
     createdBy: r.createdBy,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -87,7 +85,6 @@ function toPrismaData(row: Partial<StoredGovernanceTask>): Record<string, unknow
   if (row.dueDate !== undefined) data.dueDate = row.dueDate ? new Date(row.dueDate) : null;
   if (row.linkedObjectType !== undefined) data.linkedObjectType = row.linkedObjectType;
   if (row.linkedObjectId !== undefined) data.linkedObjectId = row.linkedObjectId;
-  if (row.resolution !== undefined) data.resolution = row.resolution;
   if (row.createdBy !== undefined) data.createdBy = row.createdBy;
   if (row.completedAt !== undefined) data.completedAt = row.completedAt ? new Date(row.completedAt) : null;
   if (row.overdueNotifiedAt !== undefined) {

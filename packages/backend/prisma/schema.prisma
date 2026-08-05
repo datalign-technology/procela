@@ -714,7 +714,6 @@ model GovernanceTask {
   // as an FK because the target could be any entity type.
   linkedObjectType  String?
   linkedObjectId    String?
-  resolution        String?   @db.Text
   createdBy         String?   @db.Uuid
   completedAt       DateTime?
   // Overdue-notified dedupe marker — see routes/governance-tasks
@@ -785,7 +784,6 @@ model GovernancePolicy {
   // Date-only strings (yyyy-mm-dd) kept as String? to match the Stored
   // shape one-for-one; a future migration can promote to DATE columns
   // when queryability shows up.
-  lastReviewDate    String?
   nextReviewDate    String?
   effectiveDate     String?
   content           String   @db.Text
@@ -821,8 +819,6 @@ model GovernanceControl {
   status            String   @default("DRAFT")
   ownerAssignmentId String?  @db.Uuid
   evidenceRequired  Boolean  @default(false)
-  linkedDomainId    String?  @db.Uuid
-  linkedSystemId    String?  @db.Uuid
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -912,7 +908,6 @@ model FlowRelationship {
   // PARALLEL / CONDITIONAL / LOOP today and can grow. Same
   // vocabulary-extension pattern the governance rows use.
   type       String   @default("SEQUENCE")
-  condition  String?
   label      String?
   createdAt  DateTime @default(now())
 
@@ -984,7 +979,6 @@ model SavedView {
   name      String
   ownerId   String?
   ownerName String?
-  isShared  Boolean  @default(true)
   filters   Json     @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1036,7 +1030,6 @@ model Sop {
   status          String    @default("DRAFT")
   version         Int       @default(1)
   ownerPersonId   String?   @db.Uuid
-  lastReviewedAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -1052,7 +1045,6 @@ model GlossaryTerm {
   definition    String   @default("") @db.Text
   context       String   @default("") @db.Text
   synonyms      String[] @default([])
-  relatedTerms  String[] @default([])
   domainId      String?  @db.Uuid
   ownerPersonId String?  @db.Uuid
   status        String   @default("DRAFT")

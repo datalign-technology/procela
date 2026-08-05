@@ -21,8 +21,6 @@ export interface StoredGovernanceControl {
   status: 'DRAFT' | 'ACTIVE' | 'DEPRECATED';
   ownerAssignmentId: string | null;
   evidenceRequired: boolean;
-  linkedDomainId: string | null;
-  linkedSystemId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,7 +113,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 /** POST /api/v1/governance-controls — create control */
 router.post('/', async (req: Request, res: Response) => {
   const { name, policyId, orgId, description, controlType, automationMode, status,
-          ownerAssignmentId, evidenceRequired, linkedDomainId, linkedSystemId } = req.body;
+          ownerAssignmentId, evidenceRequired } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!policyId) { res.status(400).json({ success: false, error: 'Policy (policyId) is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'Organization (orgId) is required' }); return; }
@@ -133,8 +131,6 @@ router.post('/', async (req: Request, res: Response) => {
     status: status || 'DRAFT',
     ownerAssignmentId: ownerAssignmentId || null,
     evidenceRequired: evidenceRequired ?? false,
-    linkedDomainId: linkedDomainId || null,
-    linkedSystemId: linkedSystemId || null,
     createdAt: now,
     updatedAt: now,
   };
@@ -152,7 +148,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   const before = { ...control };
   const { name, policyId, description, controlType, automationMode, status,
-          ownerAssignmentId, evidenceRequired, linkedDomainId, linkedSystemId } = req.body;
+          ownerAssignmentId, evidenceRequired } = req.body;
 
   const patch: Partial<StoredGovernanceControl> = {};
   if (name !== undefined) patch.name = name;
@@ -163,8 +159,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (status !== undefined) patch.status = status;
   if (ownerAssignmentId !== undefined) patch.ownerAssignmentId = ownerAssignmentId;
   if (evidenceRequired !== undefined) patch.evidenceRequired = evidenceRequired;
-  if (linkedDomainId !== undefined) patch.linkedDomainId = linkedDomainId;
-  if (linkedSystemId !== undefined) patch.linkedSystemId = linkedSystemId;
   patch.updatedAt = new Date().toISOString();
 
   const updated = await governanceControlsRepo.update(control.id, patch);

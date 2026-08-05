@@ -48,7 +48,6 @@ export interface StoredSop {
   status: Status;
   version: number;
   ownerPersonId: string | null;
-  lastReviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -245,7 +244,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   const {
     title, orgId, purpose, category, applicableRoles, triggerEvent,
-    steps, status, ownerPersonId, lastReviewedAt,
+    steps, status, ownerPersonId,
   } = req.body;
 
   if (!title) { res.status(400).json({ success: false, error: 'Title is required' }); return; }
@@ -277,7 +276,6 @@ router.post('/', async (req: Request, res: Response) => {
     // Layer-2: a CONTRIBUTOR who doesn't name an owner owns what they
     // create, so they can subsequently edit it.
     ownerPersonId: ownerOnCreate((req as AuthenticatedRequest).user, ownerPersonId),
-    lastReviewedAt: lastReviewedAt || null,
     createdAt: now,
     updatedAt: now,
   };
@@ -300,7 +298,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const before = { ...sop, steps: [...sop.steps] };
   const {
     title, purpose, category, applicableRoles, triggerEvent,
-    steps, status, ownerPersonId, lastReviewedAt,
+    steps, status, ownerPersonId,
   } = req.body;
 
   if (category !== undefined && !CATEGORIES.includes(category)) {
@@ -320,7 +318,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
   if (triggerEvent !== undefined) sop.triggerEvent = triggerEvent;
   if (ownerPersonId !== undefined) sop.ownerPersonId = ownerPersonId;
-  if (lastReviewedAt !== undefined) sop.lastReviewedAt = lastReviewedAt;
   if (status !== undefined) sop.status = status;
 
   if (steps !== undefined) {
@@ -388,7 +385,6 @@ router.post('/seed', async (req: Request, res: Response) => {
       status: 'ACTIVE',
       version: 1,
       ownerPersonId: null,
-      lastReviewedAt: null,
       createdAt: now,
       updatedAt: now,
     };

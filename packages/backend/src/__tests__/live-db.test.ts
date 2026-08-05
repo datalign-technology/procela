@@ -327,7 +327,7 @@ suite('live-db repository round-trips', () => {
       taskType: 'REVIEW', priority: 'HIGH', status: 'OPEN',
       assigneeId: personId, dueDate: null,
       linkedObjectType: null, linkedObjectId: null,
-      automationMode: 'HUMAN', resolution: null, createdBy: null,
+      automationMode: 'HUMAN', createdBy: null,
       createdAt: now, updatedAt: now, completedAt: null,
     });
     await issue.create({
@@ -357,7 +357,7 @@ suite('live-db repository round-trips', () => {
       description: '', documentType: 'POLICY', content: 'body',
       status: 'DRAFT', ownerAssignmentId: null,
       category: 'GOVERNANCE', reviewFrequency: 'ANNUAL',
-      lastReviewDate: null, nextReviewDate: null,
+      nextReviewDate: null,
       effectiveDate: null,
       createdAt: now, updatedAt: now,
     });
@@ -367,7 +367,6 @@ suite('live-db repository round-trips', () => {
       controlType: 'PREVENTIVE', automationMode: 'HUMAN',
       status: 'DRAFT', ownerAssignmentId: null,
       evidenceRequired: false,
-      linkedDomainId: null, linkedSystemId: null,
       createdAt: now, updatedAt: now,
     });
     assert.strictEqual((await ctrl.list({ orgId })).length, 1);
@@ -416,7 +415,7 @@ suite('live-db repository round-trips', () => {
     });
     await flow.create({
       id: randomUUID(), fromNodeId: node.id, toNodeId: node2.id,
-      type: 'SEQUENCE', condition: null, label: null,
+      type: 'SEQUENCE', label: null,
       createdAt: now,
     });
     await skill.create({
@@ -477,7 +476,7 @@ suite('live-db repository round-trips', () => {
     assert.strictEqual((await tag.list({ orgId })).find((t) => t.id === tagId)?.createdBy, personId);
     await view.create({
       id: randomUUID(), orgId, pageKey: 'data-assets', name: 'v1',
-      ownerId: personId, ownerName: 'Bob', isShared: true,
+      ownerId: personId, ownerName: 'Bob',
       filters: { status: 'ACTIVE' }, createdAt: now, updatedAt: now,
     });
     await report.create({
@@ -514,7 +513,7 @@ suite('live-db repository round-trips', () => {
       applicableRoles: ['CDO', 'DATA_STEWARD'],
       triggerEvent: 'ticket', steps: [{ order: 1, title: 'Verify', description: '', estimatedMinutes: 5 }],
       status: 'ACTIVE', version: 1,
-      ownerPersonId: personId, lastReviewedAt: null,
+      ownerPersonId: personId,
       createdAt: now, updatedAt: now,
     });
     const gotSop = await sop.get(sopId);
@@ -523,7 +522,7 @@ suite('live-db repository round-trips', () => {
 
     await glossary.create({
       id: randomUUID(), orgId, term: 'Meter Read', definition: 'A reading',
-      context: '', synonyms: ['reading'], relatedTerms: ['Consumption'],
+      context: '', synonyms: ['reading'],
       domainId: null, ownerPersonId: personId,
       status: 'APPROVED', category: 'BUSINESS',
       exampleValues: '', businessRules: '', sourceOfTruth: '',

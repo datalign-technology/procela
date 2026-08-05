@@ -21,7 +21,6 @@ interface DependencyFlow {
   id: string;
   type: 'SEQUENCE' | 'PARALLEL' | 'CONDITIONAL' | 'LOOP';
   label: string | null;
-  condition: string | null;
   other: DependencyOtherEnd | null;
 }
 

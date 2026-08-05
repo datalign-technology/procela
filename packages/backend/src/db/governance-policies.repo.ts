@@ -28,7 +28,6 @@ type PrismaPolicyRow = {
   ownerAssignmentId: string | null;
   category: string;
   reviewFrequency: string;
-  lastReviewDate: string | null;
   nextReviewDate: string | null;
   effectiveDate: string | null;
   content: string;
@@ -56,7 +55,6 @@ function fromPrisma(r: PrismaPolicyRow): StoredGovernancePolicy {
     ownerAssignmentId: r.ownerAssignmentId,
     category: r.category as StoredGovernancePolicy['category'],
     reviewFrequency: r.reviewFrequency as StoredGovernancePolicy['reviewFrequency'],
-    lastReviewDate: r.lastReviewDate,
     nextReviewDate: r.nextReviewDate,
     effectiveDate: r.effectiveDate,
     content: r.content,
@@ -77,7 +75,6 @@ function toPrismaData(row: Partial<StoredGovernancePolicy>): Record<string, unkn
   if (row.ownerAssignmentId !== undefined) data.ownerAssignmentId = row.ownerAssignmentId;
   if (row.category !== undefined) data.category = row.category;
   if (row.reviewFrequency !== undefined) data.reviewFrequency = row.reviewFrequency;
-  if (row.lastReviewDate !== undefined) data.lastReviewDate = row.lastReviewDate;
   if (row.nextReviewDate !== undefined) data.nextReviewDate = row.nextReviewDate;
   if (row.effectiveDate !== undefined) data.effectiveDate = row.effectiveDate;
   if (row.content !== undefined) data.content = row.content;

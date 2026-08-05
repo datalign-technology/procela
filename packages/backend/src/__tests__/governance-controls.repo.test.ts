@@ -24,8 +24,6 @@ const makeControl = (over: Partial<StoredGovernanceControl> = {}): StoredGoverna
   status: 'DRAFT',
   ownerAssignmentId: null,
   evidenceRequired: false,
-  linkedDomainId: null,
-  linkedSystemId: null,
   createdAt: '2026-07-15T00:00:00.000Z',
   updatedAt: '2026-07-15T00:00:00.000Z',
   ...over,
@@ -63,14 +61,13 @@ describe('prismaGovernanceControlsRepository (stubbed Prisma)', () => {
     };
   }
 
-  it('list maps row → StoredGovernanceControl (linked FKs, dates → ISO)', async () => {
+  it('list maps row → StoredGovernanceControl (dates → ISO)', async () => {
     const delegate = makeDelegate({
       findMany: async () => [{
         id: 'c1', orgId: 'o1', policyId: 'pol-1', code: 'CTL-002',
         name: 'Data quality check', description: 'body',
         controlType: 'PREVENTIVE', automationMode: 'AGENT', status: 'ACTIVE',
         ownerAssignmentId: 'p-1', evidenceRequired: true,
-        linkedDomainId: 'd-1', linkedSystemId: null,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T12:00:00.000Z'),
       }],
@@ -81,8 +78,6 @@ describe('prismaGovernanceControlsRepository (stubbed Prisma)', () => {
     assert.strictEqual(r.controlType, 'PREVENTIVE');
     assert.strictEqual(r.automationMode, 'AGENT');
     assert.strictEqual(r.evidenceRequired, true);
-    assert.strictEqual(r.linkedDomainId, 'd-1');
-    assert.strictEqual(r.linkedSystemId, null);
     assert.strictEqual(r.createdAt, '2026-07-15T00:00:00.000Z');
   });
 

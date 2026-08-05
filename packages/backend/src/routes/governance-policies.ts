@@ -26,7 +26,6 @@ export interface StoredGovernancePolicy {
   ownerAssignmentId: string | null;
   category: 'DATA_QUALITY' | 'SECURITY' | 'PRIVACY' | 'RETENTION' | 'ACCESS' | 'CLASSIFICATION' | 'GOVERNANCE' | 'GENERAL';
   reviewFrequency: 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | 'BIENNIAL' | 'NONE';
-  lastReviewDate: string | null;
   nextReviewDate: string | null;
   effectiveDate: string | null;
   content: string;
@@ -158,7 +157,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 /** POST /api/v1/governance-policies — create policy */
 router.post('/', async (req: Request, res: Response) => {
   const { name, orgId, description, status, ownerAssignmentId, category, reviewFrequency,
-          lastReviewDate, nextReviewDate, effectiveDate, content, documentType } = req.body;
+          nextReviewDate, effectiveDate, content, documentType } = req.body;
   if (!name) { res.status(400).json({ success: false, error: 'Name is required' }); return; }
   if (!orgId) { res.status(400).json({ success: false, error: 'Organization (orgId) is required' }); return; }
   const finalDocumentType: StoredGovernancePolicy['documentType'] = VALID_DOCUMENT_TYPES.includes(documentType) ? documentType : 'POLICY';
@@ -175,7 +174,6 @@ router.post('/', async (req: Request, res: Response) => {
     ownerAssignmentId: ownerAssignmentId || null,
     category: category || 'GENERAL',
     reviewFrequency: reviewFrequency || 'ANNUAL',
-    lastReviewDate: lastReviewDate || null,
     nextReviewDate: nextReviewDate || null,
     effectiveDate: effectiveDate || null,
     content: content || '',
@@ -196,7 +194,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   const before = { ...policy };
   const { name, description, status, ownerAssignmentId, category, reviewFrequency,
-          lastReviewDate, nextReviewDate, effectiveDate, content } = req.body;
+          nextReviewDate, effectiveDate, content } = req.body;
 
   const patch: Partial<StoredGovernancePolicy> = {};
   if (name !== undefined) patch.name = name;
@@ -204,7 +202,6 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (ownerAssignmentId !== undefined) patch.ownerAssignmentId = ownerAssignmentId;
   if (category !== undefined) patch.category = category;
   if (reviewFrequency !== undefined) patch.reviewFrequency = reviewFrequency;
-  if (lastReviewDate !== undefined) patch.lastReviewDate = lastReviewDate;
   if (nextReviewDate !== undefined) patch.nextReviewDate = nextReviewDate;
   if (effectiveDate !== undefined) patch.effectiveDate = effectiveDate;
   if (content !== undefined) patch.content = content;

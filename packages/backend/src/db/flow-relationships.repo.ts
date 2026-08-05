@@ -57,7 +57,6 @@ type PrismaFlowRow = {
   fromNodeId: string;
   toNodeId: string;
   type: string;
-  condition: string | null;
   label: string | null;
   createdAt: Date;
   // Optional include used by list() when an orgId filter is present so
@@ -81,7 +80,6 @@ function fromPrisma(r: PrismaFlowRow): FlowRelationship {
     fromNodeId: r.fromNodeId,
     toNodeId: r.toNodeId,
     type: r.type as FlowRelationship['type'],
-    condition: r.condition,
     label: r.label,
     createdAt: r.createdAt.toISOString(),
   };
@@ -93,7 +91,6 @@ function toPrismaData(row: Partial<FlowRelationship>): Record<string, unknown> {
   if (row.fromNodeId !== undefined) data.fromNodeId = row.fromNodeId;
   if (row.toNodeId !== undefined) data.toNodeId = row.toNodeId;
   if (row.type !== undefined) data.type = row.type;
-  if (row.condition !== undefined) data.condition = row.condition;
   if (row.label !== undefined) data.label = row.label;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   return data;

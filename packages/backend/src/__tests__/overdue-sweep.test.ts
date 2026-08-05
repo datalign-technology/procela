@@ -41,7 +41,6 @@ function makeTask(over: Partial<any>): any {
     linkedObjectType: null,
     linkedObjectId: null,
     automationMode: 'HUMAN',
-    resolution: null,
     createdBy: null,
     createdAt: now,
     updatedAt: now,

@@ -38,7 +38,6 @@ interface Sop {
   version: number;
   ownerPersonId: string | null;
   ownerName: string | null;
-  lastReviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

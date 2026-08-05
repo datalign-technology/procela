@@ -370,7 +370,6 @@ router.post('/:id/run', async (req: Request, res: Response) => {
           linkedObjectType: 'CalendarEvent',
           linkedObjectId: event.id,
           automationMode: 'HUMAN',
-          resolution: null,
           createdBy: null,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
