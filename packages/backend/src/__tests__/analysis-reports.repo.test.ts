@@ -14,7 +14,6 @@ const make = (over: Partial<StoredAnalysisReport> = {}): StoredAnalysisReport =>
   name: 'r',
   description: null,
   ownerId: null,
-  ownerName: null,
   config: {},
   createdAt: '2026-07-15T00:00:00.000Z',
   updatedAt: '2026-07-15T00:00:00.000Z',
@@ -50,11 +49,11 @@ describe('prismaAnalysisReportsRepository', () => {
     };
   }
 
-  it('list preserves null description/ownerId/ownerName', async () => {
+  it('list preserves null description/ownerId', async () => {
     const d = delegate({
       findMany: async () => [{
         id: 'a1', orgId: 'o1', name: 'x',
-        description: null, ownerId: null, ownerName: null,
+        description: null, ownerId: null,
         config: { chart: 'bar' },
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),

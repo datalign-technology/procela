@@ -3,6 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { loadStore, registerStore } from '../lib/persistence';
 import logger from '../lib/logger';
 import { getAnalysisReportsRepository } from '../db/analysis-reports.repo';
+import { people } from './people';
+import { getPeopleRepository } from '../db/people.repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ANALYSIS REPORTS — saved configurations for the cube/pivot builder.
@@ -21,7 +23,6 @@ export interface StoredAnalysisReport {
   name: string;
   description: string | null;
   ownerId: string | null;
-  ownerName: string | null;
   config: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -33,6 +34,22 @@ registerStore('analysisReports', analysisReports);
 
 const analysisReportsRepo = getAnalysisReportsRepository(analysisReports);
 
+// people is a foreign store; build its repo lazily so nothing reads the
+// `people` binding at module-init (cycle-safety, matching the other routes).
+let _peopleRepo: ReturnType<typeof getPeopleRepository> | null = null;
+const peopleRepo = () => (_peopleRepo ??= getPeopleRepository(people));
+
+// The owner display name is derived from ownerId via a people join rather
+// than denormalized onto the row (standardises on ownerId + join, matching
+// the sibling Report model). Responses still carry `ownerName` so the UI
+// is unchanged; it now reflects the person's current name.
+async function withOwnerNames(
+  reports: StoredAnalysisReport[],
+): Promise<Array<StoredAnalysisReport & { ownerName: string | null }>> {
+  const nameById = new Map((await peopleRepo().list()).map((p) => [p.id, p.name] as const));
+  return reports.map((r) => ({ ...r, ownerName: r.ownerId ? (nameById.get(r.ownerId) ?? null) : null }));
+}
+
 const DEV_ORG_ID = '00000000-0000-0000-0000-000000000010';
 
 const router = Router();
@@ -43,21 +60,21 @@ router.get('/', async (req: Request, res: Response) => {
   const effectiveOrgId = orgId || DEV_ORG_ID;
   const list = (await analysisReportsRepo.list({ orgId: effectiveOrgId }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  res.json({ success: true, data: list });
+  res.json({ success: true, data: await withOwnerNames(list) });
 });
 
 /** GET /api/v1/analysis-reports/:id */
 router.get('/:id', async (req: Request, res: Response) => {
   const r = await analysisReportsRepo.get(String(req.params.id));
   if (!r) { res.status(404).json({ success: false, error: 'Report not found' }); return; }
-  res.json({ success: true, data: r });
+  res.json({ success: true, data: (await withOwnerNames([r]))[0] });
 });
 
 /** POST /api/v1/analysis-reports */
 router.post('/', async (req: Request, res: Response) => {
-  const { orgId, name, description, config, ownerName } = req.body as {
+  const { orgId, name, description, config } = req.body as {
     orgId?: string; name?: string; description?: string | null;
-    config?: Record<string, unknown>; ownerName?: string;
+    config?: Record<string, unknown>;
   };
   if (!name || !name.trim()) {
     res.status(400).json({ success: false, error: 'name is required' });
@@ -88,14 +105,13 @@ router.post('/', async (req: Request, res: Response) => {
     name: name.trim(),
     description: description?.trim() || null,
     ownerId,
-    ownerName: ownerName || (req as any).user?.name || null,
     config,
     createdAt: now,
     updatedAt: now,
   };
   await analysisReportsRepo.create(rec);
   logger.info({ reportId: rec.id, ownerId }, 'Analysis report saved');
-  res.status(201).json({ success: true, data: rec });
+  res.status(201).json({ success: true, data: (await withOwnerNames([rec]))[0] });
 });
 
 /** PATCH /api/v1/analysis-reports/:id — rename, edit description, update config. */
@@ -119,7 +135,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
   if (config !== undefined) patch.config = config;
   patch.updatedAt = new Date().toISOString();
   const updated = await analysisReportsRepo.update(r.id, patch);
-  res.json({ success: true, data: updated });
+  res.json({ success: true, data: updated ? (await withOwnerNames([updated]))[0] : updated });
 });
 
 /** DELETE /api/v1/analysis-reports/:id */

@@ -488,7 +488,7 @@ suite('live-db repository round-trips', () => {
     });
     await analysis.create({
       id: randomUUID(), orgId, name: 'a1', description: null,
-      ownerId: personId, ownerName: 'Bob',
+      ownerId: personId,
       config: { rowDim: 'status' }, createdAt: now, updatedAt: now,
     });
 

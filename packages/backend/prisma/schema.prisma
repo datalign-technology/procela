@@ -1015,7 +1015,6 @@ model AnalysisReport {
   name        String
   description String?  @db.Text
   ownerId     String?
-  ownerName   String?
   config      Json     @default("{}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
