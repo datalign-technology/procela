@@ -30,9 +30,6 @@ import { useFormValidation, fieldErrorStyle, inputErrorBorder } from '../hooks/u
 interface ConnectionProfile {
   id: string;
   orgId: string;
-  /** Legacy single-system field, mirrored from systemIds[0] for older
-   *  callers. Use systemIds for the authoritative set. */
-  systemId: string;
   /** All systems this connection serves (many-to-many). Populated by
    *  the backend from the connectionSystemLinks join table. */
   systemIds?: string[];
@@ -309,9 +306,7 @@ export default function ConnectionsPage() {
   const openEdit = (conn: ConnectionProfile) => {
     setForm({
       name: conn.name,
-      systemIds: conn.systemIds && conn.systemIds.length > 0
-        ? [...conn.systemIds]
-        : (conn.systemId ? [conn.systemId] : []),
+      systemIds: conn.systemIds ? [...conn.systemIds] : [],
       connectionType: conn.connectionType,
       config: { ...conn.config },
       credentials: { ...conn.credentials },
@@ -327,9 +322,7 @@ export default function ConnectionsPage() {
   const openDuplicate = (conn: ConnectionProfile) => {
     setForm({
       name: `${conn.name} (copy)`,
-      systemIds: conn.systemIds && conn.systemIds.length > 0
-        ? [...conn.systemIds]
-        : (conn.systemId ? [conn.systemId] : []),
+      systemIds: conn.systemIds ? [...conn.systemIds] : [],
       connectionType: conn.connectionType,
       config: { ...conn.config },
       credentials: { ...conn.credentials },
@@ -499,7 +492,7 @@ export default function ConnectionsPage() {
   const handleDiscover = async (conn: ConnectionProfile) => {
     // Discovery surfaces assets under one system; if a connection serves
     // multiple, pick the first link as the default landing spot.
-    const ids = conn.systemIds && conn.systemIds.length > 0 ? conn.systemIds : (conn.systemId ? [conn.systemId] : []);
+    const ids = conn.systemIds ?? [];
     const primaryId = ids[0] || '';
     const sys = systems.find((s) => s.id === primaryId);
     setDiscoverModal({ connId: conn.id, systemId: primaryId, systemName: sys?.name || 'Unknown System' });
@@ -536,13 +529,13 @@ export default function ConnectionsPage() {
   // numbers line up with what the user is looking at.
   const visibleConnections = connections.filter((c) => {
     if (systemFilter) {
-      const ids = c.systemIds && c.systemIds.length > 0 ? c.systemIds : (c.systemId ? [c.systemId] : []);
+      const ids = c.systemIds ?? [];
       if (!ids.includes(systemFilter)) return false;
     }
     if (filterConnType && c.connectionType !== filterConnType) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const sysName = systems.find((s) => s.id === c.systemId)?.name || '';
+      const sysName = systems.filter((s) => (c.systemIds ?? []).includes(s.id)).map((s) => s.name).join(' ');
       if (
         !c.name.toLowerCase().includes(q) &&
         !sysName.toLowerCase().includes(q) &&
@@ -768,7 +761,7 @@ export default function ConnectionsPage() {
                 sheetName: 'Connections',
                 headers: ['Name', 'Type', 'Status', 'Systems', 'Last Tested', 'Last Test Result'],
                 rows: visibleConnections.map((c) => {
-                  const ids = c.systemIds && c.systemIds.length > 0 ? c.systemIds : (c.systemId ? [c.systemId] : []);
+                  const ids = c.systemIds ?? [];
                   const sysNames = ids.map((id) => systemNameMap[id]).filter(Boolean).join('; ');
                   return [
                     c.name,
@@ -1107,9 +1100,7 @@ export default function ConnectionsPage() {
                     {connCols.isVisible('system') && (
                       <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 240 }}>
                         {(() => {
-                          const ids = conn.systemIds && conn.systemIds.length > 0
-                            ? conn.systemIds
-                            : (conn.systemId ? [conn.systemId] : []);
+                          const ids = conn.systemIds ?? [];
                           if (ids.length === 0) {
                             return <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>;
                           }

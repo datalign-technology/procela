@@ -1,7 +1,7 @@
 // Connection repository — admin-side saved connection profiles.
-// `config` and `credentials` are JSON blobs. The legacy `systemId`
-// field is nullable and only retained so the one-time backfill can
-// populate the connectionSystemLinks join table from it.
+// `config` and `credentials` are JSON blobs. System links live in the
+// connectionSystemLinks join table (see routes/connections); a
+// connection row carries no direct system reference.
 
 import type { ConnectionProfile } from '../routes/connections';
 import { saveStore } from '../lib/persistence';
@@ -19,7 +19,6 @@ export function jsonConnectionsRepository(store: ConnectionProfile[]): Repositor
 type PrismaConnectionRow = {
   id: string;
   orgId: string;
-  systemId: string | null;
   name: string;
   connectionType: string;
   config: unknown;
@@ -43,7 +42,6 @@ function fromPrisma(r: PrismaConnectionRow): ConnectionProfile {
   return {
     id: r.id,
     orgId: r.orgId,
-    ...(r.systemId ? { systemId: r.systemId } : {}),
     name: r.name,
     connectionType: r.connectionType as ConnectionProfile['connectionType'],
     config: (r.config ?? {}) as ConnectionProfile['config'],
@@ -60,7 +58,6 @@ function toPrismaData(row: Partial<ConnectionProfile>): Record<string, unknown> 
   const d: Record<string, unknown> = {};
   if (row.id !== undefined) d.id = row.id;
   if (row.orgId !== undefined) d.orgId = row.orgId;
-  if (row.systemId !== undefined) d.systemId = row.systemId || null;
   if (row.name !== undefined) d.name = row.name;
   if (row.connectionType !== undefined) d.connectionType = row.connectionType;
   if (row.config !== undefined) d.config = row.config;

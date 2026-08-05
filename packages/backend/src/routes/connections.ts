@@ -19,12 +19,6 @@ import { getConnectionSystemLinksRepository } from '../db/connection-system-link
 export interface ConnectionProfile {
   id: string;
   orgId: string;
-  /** @deprecated Retired. A connection links to zero or more systems
-   *  via the `connectionSystemLinks` join table (`systemIds` on the
-   *  public shape). This single field is no longer written or read —
-   *  it only persists on pre-migration rows so the one-time backfill
-   *  below can seed the join table from it. Do not add new readers. */
-  systemId?: string;
   name: string;
   connectionType: 'DATABASE' | 'FILE_STORAGE' | 'API' | 'DATA_WAREHOUSE' | 'SPREADSHEET';
 
@@ -121,24 +115,27 @@ registerStore('connectionSystemLinks', connectionSystemLinks);
 const connectionsRepo = getConnectionsRepository(connections);
 const connectionSystemLinksRepo = getConnectionSystemLinksRepository(connectionSystemLinks);
 
-// One-time migration: seed link rows from the legacy single systemId
-// per connection. Idempotent — only inserts a row if no link already
-// exists for the (connectionId, systemId) pair. JSON mode only — in
-// Postgres mode these arrays are retired (the migrate-json script owns
-// the one-time backfill), and reading them here would be a stale read.
+// Final legacy migration: seed link rows from the retired single
+// `systemId` that pre-migration JSON rows may still carry (the typed
+// field is gone, so it's read via a raw cast). Idempotent — only
+// inserts when no link already exists for the (connectionId, systemId)
+// pair. JSON mode only; the Postgres equivalent is the backfill in
+// migration 20260805030000_retire_connection_systemid, which runs
+// before the column is dropped.
 if (!hasDatabase()) {
   let linksMigrated = false;
   for (const c of connections) {
-    if (c.systemId && c.systemId.trim()) {
+    const legacySystemId = (c as { systemId?: string }).systemId;
+    if (legacySystemId && legacySystemId.trim()) {
       const exists = connectionSystemLinks.some(
-        (l) => l.connectionId === c.id && l.systemId === c.systemId,
+        (l) => l.connectionId === c.id && l.systemId === legacySystemId,
       );
       if (!exists) {
         connectionSystemLinks.push({
           id: uuid(),
           orgId: c.orgId,
           connectionId: c.id,
-          systemId: c.systemId,
+          systemId: legacySystemId,
           createdAt: c.createdAt || new Date().toISOString(),
         });
         linksMigrated = true;
@@ -183,10 +180,10 @@ function maskCredentials(creds: ConnectionProfile['credentials']): ConnectionPro
  *  compatibility but `systemIds` is the source of truth. */
 function toPublic(profile: ConnectionProfile) {
   const systemIds = systemIdsForConnection(profile.id);
-  // `systemId` is intentionally NOT emitted — `systemIds` (from the
-  // join table) is the sole source of truth. Strip any legacy value
-  // off pre-migration rows so it can't be read by accident.
-  const { systemId: _legacy, ...rest } = profile;
+  // `systemIds` (from the join table) is the sole source of truth. The
+  // legacy single `systemId` is retired; strip it via a raw cast so a
+  // pre-migration JSON row that still carries the key can't leak it.
+  const { systemId: _legacy, ...rest } = profile as ConnectionProfile & { systemId?: string };
   return {
     ...rest,
     systemIds,

@@ -1153,7 +1153,6 @@ model DecisionRight {
 model Connection {
   id             String   @id @default(uuid()) @db.Uuid
   orgId          String   @db.Uuid
-  systemId       String?  @db.Uuid
   name           String
   connectionType String
   config         Json     @default("{}")
