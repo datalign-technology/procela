@@ -1,5 +1,7 @@
 // AnalysisReport repository — `config` is opaque JSON round-tripped
-// as-is; description/ownerId/ownerName are nullable strings.
+// as-is; description/ownerId are nullable strings. The owner display
+// name is derived from ownerId via a people join in the route, not
+// stored on the row.
 
 import type { StoredAnalysisReport } from '../routes/analysis-reports';
 import { saveStore } from '../lib/persistence';
@@ -16,7 +18,6 @@ type PrismaAnalysisReportRow = {
   name: string;
   description: string | null;
   ownerId: string | null;
-  ownerName: string | null;
   config: unknown;
   createdAt: Date;
   updatedAt: Date;
@@ -37,7 +38,6 @@ function fromPrisma(r: PrismaAnalysisReportRow): StoredAnalysisReport {
     name: r.name,
     description: r.description ?? null,
     ownerId: r.ownerId ?? null,
-    ownerName: r.ownerName ?? null,
     config: (r.config ?? {}) as Record<string, unknown>,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -51,7 +51,6 @@ function toPrismaData(row: Partial<StoredAnalysisReport>): Record<string, unknow
   if (row.name !== undefined) d.name = row.name;
   if (row.description !== undefined) d.description = row.description ?? null;
   if (row.ownerId !== undefined) d.ownerId = row.ownerId ?? null;
-  if (row.ownerName !== undefined) d.ownerName = row.ownerName ?? null;
   if (row.config !== undefined) d.config = row.config;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;

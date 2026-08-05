@@ -51,6 +51,29 @@ tight v1) · **KEEP** (load-bearing; the ~90% not listed here).
 | `AnalysisReport.ownerName` (denormalized) vs `Report` (ownerId + join) | Inconsistent owner patterns across sibling models. Standardize on `ownerId` + join; drop the denormalized name. |
 | `Report` vs `AnalysisReport` (model-level) | Genuinely distinct today (report-engine `definition` vs pivot-cube `config`) — **keep both for v1**, but flag as the clearest long-term model consolidation. |
 
+### Stage-3 outcome (on review)
+
+Only `AnalysisReport.ownerName` was a true, mechanical redundancy and
+was consolidated: the stored column is dropped and the display name is
+derived from `ownerId` via a people join, matching the sibling `Report`.
+
+The other pairs were **reviewed and kept** — on inspection they are not
+dead redundancy but live product surfaces, so removing them is a product
+decision, not cleanup:
+
+- **`Person.title` vs `jobRole`** — *kept.* `jobRole` is a distinct,
+  user-editable field with its own edit input, a RACI-matrix "group by
+  Job Role" dimension, and a sync-wizard mapping. Title (formal title)
+  and Job Role (functional descriptor) are legitimately separate in
+  practice. Collapsing them removes a reporting dimension and user data.
+- **`System.integrationPoints`** — *kept.* Free-text that the schema
+  deliberately retains because it captures nuance the structured
+  `integrations` cannot; there is no lossless free-text→structured
+  migration. Removing it destroys user content.
+- **`Person.role` vs `orgRoles`** — *deferred.* `role` still backs
+  login / JWT / authz; dropping it is high-risk and belongs with a
+  dedicated authz change, not a field-consolidation pass.
+
 ---
 
 ## C. LOW-VALUE fields — wired, but no user value for a tight v1
