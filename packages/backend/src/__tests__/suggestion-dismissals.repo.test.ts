@@ -55,7 +55,7 @@ describe('prismaSuggestionDismissalsRepository', () => {
       findMany: async () => [{
         id: 'a1', orgId: 'o1', nodeId: 'n1', kind: 'system',
         targetId: 't1', dismissedBy: 'u1',
-        dismissedAt: '2026-07-15T00:00:00.000Z',
+        dismissedAt: new Date('2026-07-15T00:00:00.000Z'),
       }],
     });
     const repo = prismaSuggestionDismissalsRepository(() => ({ suggestionDismissal: d }));

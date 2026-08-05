@@ -24,7 +24,7 @@ type PrismaSuggestionDismissalRow = {
   kind: string;
   targetId: string;
   dismissedBy: string | null;
-  dismissedAt: string;
+  dismissedAt: Date;
 };
 
 export interface PrismaSuggestionDismissalDelegate {
@@ -43,7 +43,7 @@ function fromPrisma(r: PrismaSuggestionDismissalRow): SuggestionDismissal {
     kind: r.kind as SuggestionDismissal['kind'],
     targetId: r.targetId,
     dismissedBy: r.dismissedBy,
-    dismissedAt: r.dismissedAt,
+    dismissedAt: r.dismissedAt.toISOString(),
   };
 }
 
@@ -55,7 +55,7 @@ function toPrismaData(row: Partial<SuggestionDismissal>): Record<string, unknown
   if (row.kind !== undefined) d.kind = row.kind;
   if (row.targetId !== undefined) d.targetId = row.targetId;
   if (row.dismissedBy !== undefined) d.dismissedBy = row.dismissedBy;
-  if (row.dismissedAt !== undefined) d.dismissedAt = row.dismissedAt;
+  if (row.dismissedAt !== undefined) d.dismissedAt = new Date(row.dismissedAt);
   return d;
 }
 

@@ -50,7 +50,7 @@ type PrismaProcessVersionRow = {
   version: number;
   snapshot: unknown;
   changedBy: string | null;
-  changedAt: string;
+  changedAt: Date;
   status: string;
   note: string;
 };
@@ -70,7 +70,7 @@ function fromPrisma(r: PrismaProcessVersionRow): ProcessVersion {
     version: r.version,
     snapshot: (r.snapshot ?? {}) as ProcessNode,
     changedBy: r.changedBy,
-    changedAt: r.changedAt,
+    changedAt: r.changedAt.toISOString(),
     status: r.status ?? '',
     note: r.note ?? '',
   };
@@ -83,7 +83,7 @@ function toPrismaData(row: Partial<ProcessVersion>): Record<string, unknown> {
   if (row.version !== undefined) d.version = row.version;
   if (row.snapshot !== undefined) d.snapshot = row.snapshot;
   if (row.changedBy !== undefined) d.changedBy = row.changedBy;
-  if (row.changedAt !== undefined) d.changedAt = row.changedAt;
+  if (row.changedAt !== undefined) d.changedAt = new Date(row.changedAt);
   if (row.status !== undefined) d.status = row.status;
   if (row.note !== undefined) d.note = row.note;
   return d;

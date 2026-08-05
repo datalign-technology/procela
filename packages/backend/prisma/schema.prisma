@@ -1354,7 +1354,7 @@ model ProcessVersion {
   version   Int
   snapshot  Json    @default("{}")
   changedBy String?
-  changedAt String
+  changedAt DateTime
   status    String  @default("")
   note      String  @default("") @db.Text
 
@@ -1369,7 +1369,7 @@ model SuggestionDismissal {
   kind        String
   targetId    String
   dismissedBy String?
-  dismissedAt String
+  dismissedAt DateTime
 
   @@index([orgId])
   @@index([nodeId, kind])
