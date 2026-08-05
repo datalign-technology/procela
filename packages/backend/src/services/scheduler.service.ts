@@ -10,6 +10,7 @@ import { getOrganizationsRepository } from '../db/organizations.repo';
 import { getProcessNodesRepository } from '../db/process-nodes.repo';
 import { getDataAssetsRepository } from '../db/data-assets.repo';
 import { getMappingsRepository } from '../db/mappings.repo';
+import { backgroundTimersDisabled } from '../lib/background-timer';
 
 // ──────────────────────────────────────────────────────────────────────────
 // scheduler.service — self-driving background loops that turn
@@ -30,9 +31,11 @@ import { getMappingsRepository } from '../db/mappings.repo';
 // shutdown. The intervals are wrapped in try/catch so a
 // per-tick failure doesn't take the loop down.
 //
-// Disable in tests via the PROCELA_DISABLE_SCHEDULER env var — the
-// scheduler is heavy for a unit-test suite and each test can drive
-// the underlying functions directly instead.
+// Disable via PROCELA_DISABLE_SCHEDULERS=1 (the shared kill switch that
+// also silences every other background loop — set it on non-leader
+// replicas so scheduled work runs once, not once per replica). Auto-off
+// under NODE_ENV=test. PROCELA_DISABLE_SCHEDULER (singular) still works as
+// a backward-compatible alias.
 // ──────────────────────────────────────────────────────────────────────────
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -60,8 +63,12 @@ async function setLastWeeklyDigestFiredAt(ms: number): Promise<void> {
 }
 
 function isDisabled(): boolean {
-  return process.env.PROCELA_DISABLE_SCHEDULER === '1'
-    || process.env.NODE_ENV === 'test';
+  // Honour the shared background-timer kill switch (PROCELA_DISABLE_SCHEDULERS
+  // + NODE_ENV=test) so a single env var silences EVERY background loop — this
+  // service's sweep/digest included — on non-leader replicas. The older
+  // singular PROCELA_DISABLE_SCHEDULER is kept as a backward-compatible alias.
+  return backgroundTimersDisabled()
+    || process.env.PROCELA_DISABLE_SCHEDULER === '1';
 }
 
 /**

@@ -163,3 +163,93 @@ describe('analysis /cube — pivot counting', () => {
     assert.strictEqual(grandTotal, 2);
   });
 });
+
+// Regression coverage for the system deputy-owner fact.
+//
+// The Systems × People pivot builds a `sys-owner` fact per system for
+// both the owner AND the deputy owner. The deputy branch used to read a
+// field that doesn't exist on a System (`deputyOwnerPersonId`), so the
+// deputy relationship was silently dropped — a system with a distinct
+// owner and deputy counted only ONE person. The fix reads the real
+// `deputyOwnerId` field; a system with two distinct people should now
+// count two.
+describe('analysis /cube — system deputy owner', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const analysisRouter = require('../routes/analysis').default;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { systems } = require('../routes/systems');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { people } = require('../routes/people');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { organizations } = require('../routes/organizations');
+
+  let server: http.Server;
+  let port: number;
+  const PREFIX = 'test-deputy-';
+  const orgId = PREFIX + 'org';
+  const sysId = PREFIX + 'sys';
+  const ownerId = PREFIX + 'owner';
+  const deputyId = PREFIX + 'deputy';
+
+  before(async () => {
+    const app = express();
+    app.use(express.json());
+    app.use('/analysis', analysisRouter);
+    server = http.createServer(app);
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    port = (server.address() as AddressInfo).port;
+  });
+
+  after(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  beforeEach(() => {
+    const sweep = (arr: any[]) => {
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const id = arr[i].id;
+        if (typeof id === 'string' && id.startsWith(PREFIX)) arr.splice(i, 1);
+      }
+    };
+    sweep(systems); sweep(people); sweep(organizations);
+    const now = new Date().toISOString();
+    organizations.push({ id: orgId, name: 'Deputy Test Co', industry: 'Utilities', type: 'company', createdAt: now, updatedAt: now });
+    people.push({ id: ownerId, orgId, name: 'Ada Owner', email: 'ada@test.co', role: 'VIEWER' });
+    people.push({ id: deputyId, orgId, name: 'Ben Deputy', email: 'ben@test.co', role: 'VIEWER' });
+  });
+
+  it('counts both the owner and the deputy owner on the People axis', async () => {
+    const now = new Date().toISOString();
+    systems.push({
+      id: sysId, orgId, name: 'Billing', description: '', systemType: '',
+      ownerPersonId: ownerId, deputyOwnerId: deputyId,
+      createdAt: now, updatedAt: now,
+    });
+
+    const res = await request(port, 'POST', '/analysis/cube', {
+      orgId, rowDims: ['systems'], colDims: ['people'],
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.success, true);
+    const row = res.body.data.rows.find((r: any) => r.labels[0] === 'Billing');
+    assert.ok(row, 'expected a Billing system row');
+    assert.strictEqual(row.total, 2, 'Billing should link to both its owner and its deputy owner (2 people), not just the owner');
+  });
+
+  it('a system with no deputy counts only the owner', async () => {
+    const now = new Date().toISOString();
+    systems.push({
+      id: sysId, orgId, name: 'Billing', description: '', systemType: '',
+      ownerPersonId: ownerId, deputyOwnerId: null,
+      createdAt: now, updatedAt: now,
+    });
+
+    const res = await request(port, 'POST', '/analysis/cube', {
+      orgId, rowDims: ['systems'], colDims: ['people'],
+    });
+    assert.strictEqual(res.status, 200);
+    const row = res.body.data.rows.find((r: any) => r.labels[0] === 'Billing');
+    assert.ok(row, 'expected a Billing system row');
+    assert.strictEqual(row.total, 1, 'Billing with no deputy should link to just the owner');
+  });
+});

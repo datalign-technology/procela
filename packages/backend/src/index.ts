@@ -443,8 +443,9 @@ const offlineScanHandle = config.nodeEnv === 'test'
 offlineScanHandle?.unref();
 
 // Overdue-task sweep + weekly digest. See services/scheduler.service.ts
-// — 1h tick, disabled in tests (NODE_ENV=test) and via
-// PROCELA_DISABLE_SCHEDULER=1.
+// — 1h tick, disabled in tests (NODE_ENV=test) and via the shared
+// PROCELA_DISABLE_SCHEDULERS=1 kill switch (set on non-leader replicas so
+// background work runs once, not once per replica).
 startScheduler();
 
 // ---------------------------------------------------------------------------

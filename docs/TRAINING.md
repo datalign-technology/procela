@@ -1029,8 +1029,11 @@ pushed forward or the task cycles back to OPEN. `POST
 synchronously if you want to drive it from the API console.
 
 The manual `POST /api/v1/digest/run` trigger from 12.1 still works
-— use it for one-off runs (e.g., before a demo). Disable the
-scheduler entirely by setting `PROCELA_DISABLE_SCHEDULER=1`.
+— use it for one-off runs (e.g., before a demo). Disable all
+background loops (this scheduler included) by setting
+`PROCELA_DISABLE_SCHEDULERS=1` — set it on every replica except the one
+designated to run scheduled work, so jobs fire once rather than once
+per replica.
 
 ---
 
