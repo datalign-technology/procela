@@ -105,7 +105,6 @@ model Organization {
   brandGlyph             String?
   ssoButtonLabel         String?
   brandPrimaryColor      String?
-  identityProviderConfig Json?
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 
@@ -145,8 +144,6 @@ model Person {
   id                  String    @id @default(uuid()) @db.Uuid
   name                String
   email               String    @unique
-  department          String?
-  externalId          String?
   title               String?
   jobRole             String?
   // Default / fallback role when the active org has no per-org override.
@@ -189,7 +186,6 @@ model Person {
   ownedNodes          ProcessNode[]       @relation("ProcessNodeOwner")
   responsibleForNodes ProcessNode[]       @relation("ProcessNodeResponsible")
   ownedSystems        System[]            @relation("SystemOwner")
-  stewardSystems      System[]            @relation("SystemSteward")
   deputySystems       System[]            @relation("SystemDeputyOwner")
   custodianSystems    SystemCustodian[]   @relation("SystemCustodianM2M")
   ownedDomains        DataDomain[]        @relation("DataDomainOwner")
@@ -199,7 +195,6 @@ model Person {
   assignedTasks       GovernanceTask[]    @relation("GovernanceTaskAssignee")
   assignedIssues      GovernanceIssue[]   @relation("GovernanceIssueAssignee")
 
-  @@index([externalId])
   @@map("people")
 }
 
@@ -368,15 +363,11 @@ model System {
   // never both at once. Captures coverage / succession without
   // breaking the "one accountable person" property.
   deputyOwnerId       String?  @db.Uuid
-  // Legacy single-steward slot — kept but the code has moved on to
-  // custodianIds M2M for the "technical caretakers" set.
-  stewardId           String?  @db.Uuid
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   owner        Person?      @relation("SystemOwner", fields: [ownerPersonId], references: [id], onDelete: SetNull)
-  steward      Person?      @relation("SystemSteward", fields: [stewardId], references: [id], onDelete: SetNull)
   deputyOwner  Person?      @relation("SystemDeputyOwner", fields: [deputyOwnerId], references: [id], onDelete: SetNull)
 
   custodians   SystemCustodian[]
@@ -456,7 +447,6 @@ model DataAsset {
   healthScore             Float          @default(0)
   healthScoreAt           DateTime?
   sensitivityTags         String[]       @default([])
-  rejectedSensitivityTags String[]       @default([])
   // String-typed classifiers rather than enums so a customer can
   // extend the taxonomy on their side without a schema migration.
   // The current codebase uses fixed vocabularies but treating them
@@ -586,12 +576,10 @@ model Skill {
   name        String
   description String?  @db.Text
   category    String
-  damaRoleId  String?  @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  damaRole     DamaRole?    @relation(fields: [damaRoleId], references: [id], onDelete: SetNull)
 
   personSkills PersonSkill[]
   processNodes ProcessNodeSkill[]
@@ -605,7 +593,6 @@ model PersonSkill {
   id       String  @id @default(uuid()) @db.Uuid
   personId String  @db.Uuid
   skillId  String  @db.Uuid
-  level    String?
 
   person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
   skill  Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
@@ -641,7 +628,6 @@ model DamaRole {
   createdAt DateTime @default(now())
 
   person Person? @relation(fields: [personId], references: [id], onDelete: Cascade)
-  skills Skill[]
 
   @@index([personId])
   @@index([scopeType, scopeId])

@@ -78,7 +78,6 @@ async function seedPerson(personId: string, email: string, opts: { password?: st
     role: 'ORG_ADMIN',
     orgIds: ['org-test-1'],
     title: '',
-    department: '',
     jobRole: undefined,
     accessibleOrgIds: ['org-test-1'],
     passwordHash: opts.password ? await argon2.hash(opts.password) : null,

@@ -1,6 +1,6 @@
 // System repository — JSON adapter + stubbed Prisma path. New
 // coverage vs earlier repo tests: multiple named Person FK slots
-// on one row (ownerPersonId, deputyOwnerId, stewardId) and JSONB
+// on one row (ownerPersonId, deputyOwnerId) and JSONB
 // integrations alongside a free-text integrationPoints.
 
 import { describe, it, beforeEach } from 'node:test';
@@ -86,7 +86,6 @@ describe('prismaSystemsRepository (stubbed Prisma)', () => {
         connectivity: 'INTEGRATED',
         ownerPersonId: 'p-owner',
         deputyOwnerId: 'p-deputy',
-        stewardId: 'p-steward',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
         custodians: [{ personId: 'p-cust-1' }, { personId: 'p-cust-2' }],
@@ -117,14 +116,14 @@ describe('prismaSystemsRepository (stubbed Prisma)', () => {
         id: 's1', orgId: 'o1', name: 'x', description: null, systemType: null,
         businessCriticality: null, vendor: null, integrationPoints: null,
         integrations: null, connectivity: null, ownerPersonId: null,
-        deputyOwnerId: null, stewardId: null,
+        deputyOwnerId: null,
         createdAt: new Date(), updatedAt: new Date(),
       }),
       findUnique: async () => ({
         id: 's1', orgId: 'o1', name: 'x', description: null, systemType: null,
         businessCriticality: null, vendor: null, integrationPoints: null,
         integrations: null, connectivity: null, ownerPersonId: null,
-        deputyOwnerId: null, stewardId: null,
+        deputyOwnerId: null,
         createdAt: new Date(), updatedAt: new Date(),
         custodians: [{ personId: 'p-new' }],
       }),
