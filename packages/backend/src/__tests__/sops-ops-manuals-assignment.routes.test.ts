@@ -108,14 +108,14 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
       id: PREFIX + 's-owned', orgId, code: 'SOP-900', title: 'Owned SOP',
       purpose: '', category: 'OTHER', applicableRoles: [], triggerEvent: '',
       steps: [], status: 'DRAFT', version: 1, ownerPersonId: OWNER,
-      lastReviewedAt: null, createdAt: now, updatedAt: now,
+      createdAt: now, updatedAt: now,
     });
     // …and one the test contributor owns.
     sops.push({
       id: PREFIX + 's-mine', orgId, code: 'SOP-901', title: 'My SOP',
       purpose: '', category: 'OTHER', applicableRoles: [], triggerEvent: '',
       steps: [], status: 'DRAFT', version: 1, ownerPersonId: CONTRIB.sub,
-      lastReviewedAt: null, createdAt: now, updatedAt: now,
+      createdAt: now, updatedAt: now,
     });
     // A manual owned by someone else…
     operationsManuals.push({

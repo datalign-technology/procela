@@ -21,7 +21,6 @@ const make = (over: Partial<StoredSop> = {}): StoredSop => ({
   status: 'DRAFT' as StoredSop['status'],
   version: 1,
   ownerPersonId: null,
-  lastReviewedAt: null,
   createdAt: '2026-07-15T00:00:00.000Z',
   updatedAt: '2026-07-15T00:00:00.000Z',
   ...over,
@@ -62,7 +61,7 @@ describe('prismaSopsRepository', () => {
         id: 'a1', orgId: 'o1', code: 'SOP-001', title: 't', purpose: '',
         category: 'OTHER', applicableRoles: ['STEWARD'], triggerEvent: '',
         steps: [{ order: 1, title: 's', description: '', estimatedMinutes: 5 }],
-        status: 'DRAFT', version: 1, ownerPersonId: null, lastReviewedAt: null,
+        status: 'DRAFT', version: 1, ownerPersonId: null,
         createdAt: new Date('2026-07-15T00:00:00.000Z'),
         updatedAt: new Date('2026-07-15T00:00:00.000Z'),
       }],
@@ -70,7 +69,6 @@ describe('prismaSopsRepository', () => {
     const repo = prismaSopsRepository(() => ({ sop: d }));
     const rows = await repo.list();
     assert.deepStrictEqual(rows[0].applicableRoles, ['STEWARD']);
-    assert.strictEqual(rows[0].lastReviewedAt, null);
     assert.strictEqual(rows[0].steps.length, 1);
   });
 

@@ -1,4 +1,4 @@
-// GlossaryTerm repository — synonyms / relatedTerms as native String[];
+// GlossaryTerm repository — synonyms as native String[];
 // domainId / ownerPersonId nullable-string.
 
 import type { StoredGlossaryTerm } from '../routes/business-glossary';
@@ -17,7 +17,6 @@ type PrismaGlossaryTermRow = {
   definition: string;
   context: string;
   synonyms: string[];
-  relatedTerms: string[];
   domainId: string | null;
   ownerPersonId: string | null;
   status: string;
@@ -45,7 +44,6 @@ function fromPrisma(r: PrismaGlossaryTermRow): StoredGlossaryTerm {
     definition: r.definition ?? '',
     context: r.context ?? '',
     synonyms: r.synonyms ?? [],
-    relatedTerms: r.relatedTerms ?? [],
     domainId: r.domainId ?? null,
     ownerPersonId: r.ownerPersonId ?? null,
     status: r.status as StoredGlossaryTerm['status'],
@@ -66,7 +64,6 @@ function toPrismaData(row: Partial<StoredGlossaryTerm>): Record<string, unknown>
   if (row.definition !== undefined) d.definition = row.definition;
   if (row.context !== undefined) d.context = row.context;
   if (row.synonyms !== undefined) d.synonyms = row.synonyms;
-  if (row.relatedTerms !== undefined) d.relatedTerms = row.relatedTerms;
   if (row.domainId !== undefined) d.domainId = row.domainId ?? null;
   if (row.ownerPersonId !== undefined) d.ownerPersonId = row.ownerPersonId ?? null;
   if (row.status !== undefined) d.status = row.status;

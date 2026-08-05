@@ -102,7 +102,6 @@ export function runGovernanceDocsMigration(): void {
           ownerAssignmentId: asset.ownerPersonId || null,
           category: conversion.category,
           reviewFrequency: 'ANNUAL',
-          lastReviewDate: null,
           nextReviewDate: null,
           effectiveDate: null,
           content: '',

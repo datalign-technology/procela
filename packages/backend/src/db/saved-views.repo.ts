@@ -17,7 +17,6 @@ type PrismaSavedViewRow = {
   name: string;
   ownerId: string | null;
   ownerName: string | null;
-  isShared: boolean;
   filters: unknown;
   createdAt: Date;
   updatedAt: Date;
@@ -39,7 +38,6 @@ function fromPrisma(r: PrismaSavedViewRow): StoredView {
     name: r.name,
     ownerId: r.ownerId ?? null,
     ownerName: r.ownerName ?? null,
-    isShared: r.isShared,
     filters: (r.filters ?? {}) as Record<string, unknown>,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -54,7 +52,6 @@ function toPrismaData(row: Partial<StoredView>): Record<string, unknown> {
   if (row.name !== undefined) d.name = row.name;
   if (row.ownerId !== undefined) d.ownerId = row.ownerId ?? null;
   if (row.ownerName !== undefined) d.ownerName = row.ownerName ?? null;
-  if (row.isShared !== undefined) d.isShared = row.isShared;
   if (row.filters !== undefined) d.filters = row.filters;
   if (row.createdAt !== undefined) d.createdAt = new Date(row.createdAt);
   return d;

@@ -378,7 +378,6 @@ function applyRow(
     if (!newRecord.category) newRecord.category = 'BUSINESS';
     if (!newRecord.status) newRecord.status = 'DRAFT';
     if (!Array.isArray(newRecord.synonyms)) newRecord.synonyms = [];
-    if (!Array.isArray(newRecord.relatedTerms)) newRecord.relatedTerms = [];
     if (newRecord.domainId === undefined) newRecord.domainId = null;
     if (newRecord.ownerPersonId === undefined) newRecord.ownerPersonId = null;
     if (!newRecord.context) newRecord.context = '';

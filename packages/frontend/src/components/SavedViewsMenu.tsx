@@ -22,8 +22,8 @@ import { useToastStore } from '../stores/toastStore';
 //                   filters back onto its own state.
 //
 // Visibility: all views in an org are visible to everyone in v1. Only
-// the owner can rename or delete. The isShared flag is on the data
-// model already so we can opt into private views without a migration.
+// the owner can rename or delete. A private/shared toggle is out of
+// scope for v1.
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface SavedView {
@@ -33,7 +33,6 @@ export interface SavedView {
   name: string;
   ownerId: string | null;
   ownerName: string | null;
-  isShared: boolean;
   filters: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;

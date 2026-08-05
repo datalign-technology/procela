@@ -371,7 +371,6 @@ router.post('/:id/promote', async (req: Request, res: Response) => {
     ownerAssignmentId: null,
     category: (typeof category === 'string' && category ? category : 'GOVERNANCE') as StoredGovernancePolicy['category'],
     reviewFrequency: 'ANNUAL',
-    lastReviewDate: null,
     nextReviewDate: null,
     effectiveDate: null,
     content: exec.output || '',

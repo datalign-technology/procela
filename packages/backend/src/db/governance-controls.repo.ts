@@ -29,8 +29,6 @@ type PrismaControlRow = {
   status: string;
   ownerAssignmentId: string | null;
   evidenceRequired: boolean;
-  linkedDomainId: string | null;
-  linkedSystemId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -56,8 +54,6 @@ function fromPrisma(r: PrismaControlRow): StoredGovernanceControl {
     status: r.status as StoredGovernanceControl['status'],
     ownerAssignmentId: r.ownerAssignmentId,
     evidenceRequired: r.evidenceRequired,
-    linkedDomainId: r.linkedDomainId,
-    linkedSystemId: r.linkedSystemId,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -76,8 +72,6 @@ function toPrismaData(row: Partial<StoredGovernanceControl>): Record<string, unk
   if (row.status !== undefined) data.status = row.status;
   if (row.ownerAssignmentId !== undefined) data.ownerAssignmentId = row.ownerAssignmentId;
   if (row.evidenceRequired !== undefined) data.evidenceRequired = row.evidenceRequired;
-  if (row.linkedDomainId !== undefined) data.linkedDomainId = row.linkedDomainId;
-  if (row.linkedSystemId !== undefined) data.linkedSystemId = row.linkedSystemId;
   if (row.createdAt !== undefined) data.createdAt = new Date(row.createdAt);
   return data;
 }

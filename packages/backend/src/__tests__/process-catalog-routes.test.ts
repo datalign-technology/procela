@@ -136,7 +136,7 @@ describe('process-catalog routes — Tier 2 coverage', () => {
 
     flowRelationships.push({
       id: flowId, fromNodeId: actId, toNodeId: actId, type: 'SEQUENCE',
-      condition: null, label: null, createdAt: now,
+      label: null, createdAt: now,
     });
     dataAssets.push({
       id: seedAsset, orgId, name: 'Asset for cascade', description: '', systemId: '',

@@ -213,7 +213,6 @@ export interface FlowRelationship {
   fromNodeId: string;
   toNodeId: string;
   type: 'SEQUENCE' | 'PARALLEL' | 'CONDITIONAL' | 'LOOP';
-  condition: string | null;  // for conditional flows
   label: string | null;
   createdAt: string;
 }
@@ -1593,7 +1592,7 @@ function nodeSummary(id: string): { id: string; name: string; level: string; sta
 
 /** POST /flows — create a flow relationship */
 router.post('/flows', async (req: Request, res: Response) => {
-  const { fromNodeId, toNodeId, type, condition, label } = req.body;
+  const { fromNodeId, toNodeId, type, label } = req.body;
 
   if (!fromNodeId || !toNodeId) {
     res.status(400).json({ success: false, error: 'fromNodeId and toNodeId are required' });
@@ -1662,7 +1661,6 @@ router.post('/flows', async (req: Request, res: Response) => {
     fromNodeId,
     toNodeId,
     type: (type || 'SEQUENCE') as FlowRelationship['type'],
-    condition: condition || null,
     label: label || null,
     createdAt: new Date().toISOString(),
   };
@@ -1781,7 +1779,7 @@ router.post('/apply-template', async (req: Request, res: Response) => {
             if (prevAct.parentId === actNode.parentId) {
               await flowRelationshipsRepo.create({
                 id: uuid(), fromNodeId: prevAct.id, toNodeId: actNode.id,
-                type: 'SEQUENCE', condition: null, label: null, createdAt: now,
+                type: 'SEQUENCE', label: null, createdAt: now,
               });
             }
           }
@@ -1963,7 +1961,7 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
           const prev = prevActivities[prevActivities.length - 1];
           await flowRelationshipsRepo.create({
             id: uuid(), fromNodeId: prev.id, toNodeId: actNode.id,
-            type: 'SEQUENCE', condition: null, label: null, createdAt: now,
+            type: 'SEQUENCE', label: null, createdAt: now,
           });
         }
         prevActivities.push(actNode);
@@ -2021,7 +2019,6 @@ router.post('/apply-governance-template', async (req: Request, res: Response) =>
         ownerAssignmentId: null,
         category: def.category,
         reviewFrequency: 'ANNUAL',
-        lastReviewDate: null,
         nextReviewDate: null,
         effectiveDate: null,
         content: '',

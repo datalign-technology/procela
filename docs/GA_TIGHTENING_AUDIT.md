@@ -96,6 +96,35 @@ per field: **surface it** (give it real value) or **defer/remove it**.
 | `Agent.skillIds` | Editable in the form but **ignored** by `runAgentExecution` (runs use `node.requiredSkillIds`). Misleading — implies an effect it doesn't have. |
 | `SavedView.isShared` | Defaults true, but no UI toggle and no list-filter enforcement — sharing is never actually exercised. |
 
+### Stage-4 outcome
+
+Removed the seven fields that are pure dead weight — round-tripped but
+with no UI surface and no logic read — in one pure-subtraction migration
+(`20260805060000_ga_low_value_field_sweep`): `FlowRelationship.condition`,
+`GovernanceTask.resolution`, `GovernancePolicy.lastReviewDate`,
+`GovernanceControl.linkedDomainId` + `linkedSystemId`,
+`GlossaryTerm.relatedTerms`, `Sop.lastReviewedAt`, `SavedView.isShared`.
+Each was dropped from the schema, repo mapper, route type/zod/handlers,
+seeds, and fixtures; frontend type-only declarations were removed too.
+
+Kept / deferred (not dead — the audit's "remove or surface" framing
+resolved to keep):
+
+- **`Agent.skillIds` — kept.** The "ignored" note was only true for
+  `runAgentExecution`. It is in fact read by the DAMA skill-gap route,
+  the skill-delete cascade cleanup, and is edited through a live
+  `SkillPicker` form. Removing it would break real behaviour.
+- **`Mapping.createdBy` / `GovernanceTask.createdBy` — deferred.** These
+  are hardcoded to a literal today, but CLAUDE.md mandates `created_by`
+  on every entity and treats audit trail as first-class. They are audit
+  scaffolding pending real identity attribution (the §G auth gap), not
+  dead fields; deleting them would contradict the documented data model.
+- **`RaciOverride.reason` — deferred.** Removal is display-neutral (every
+  reader already falls back to the same constant), but the field is wired
+  into a live tooltip + the dashboard `reasons` map, so it's not a clean
+  scalar drop. Either surface it as a real editable reason or retire it in
+  its own pass.
+
 ---
 
 ## D. Consistency fixes (cheap, high polish-value)

@@ -17,7 +17,6 @@ const makeFlow = (over: Partial<FlowRelationship> = {}): FlowRelationship => ({
   fromNodeId: 'n-1',
   toNodeId: 'n-2',
   type: 'SEQUENCE',
-  condition: null,
   label: null,
   createdAt: '2026-07-15T00:00:00.000Z',
   ...over,
@@ -35,15 +34,13 @@ describe('jsonFlowRelationshipsRepository', () => {
     assert.strictEqual(rows.length, 2);
   });
 
-  it('round-trips CONDITIONAL flow with condition + label', async () => {
+  it('round-trips CONDITIONAL flow with label', async () => {
     const repo = jsonFlowRelationshipsRepository(store);
     await repo.create(makeFlow({
-      id: 'f1', type: 'CONDITIONAL',
-      condition: 'meter reading > 1000', label: 'high-usage',
+      id: 'f1', type: 'CONDITIONAL', label: 'high-usage',
     }));
     const got = await repo.get('f1');
     assert.strictEqual(got?.type, 'CONDITIONAL');
-    assert.strictEqual(got?.condition, 'meter reading > 1000');
     assert.strictEqual(got?.label, 'high-usage');
   });
 });
@@ -67,10 +64,10 @@ describe('prismaFlowRelationshipsRepository (stubbed Prisma)', () => {
         captured.arg = arg;
         return [
           { id: 'f1', fromNodeId: 'n-1', toNodeId: 'n-2', type: 'SEQUENCE',
-            condition: null, label: null, createdAt: new Date('2026-07-15T00:00:00.000Z'),
+            label: null, createdAt: new Date('2026-07-15T00:00:00.000Z'),
             fromNode: { orgId: 'o1' } },
           { id: 'f2', fromNodeId: 'n-3', toNodeId: 'n-4', type: 'SEQUENCE',
-            condition: null, label: null, createdAt: new Date('2026-07-15T00:00:00.000Z'),
+            label: null, createdAt: new Date('2026-07-15T00:00:00.000Z'),
             fromNode: { orgId: 'o2' } },
         ];
       },

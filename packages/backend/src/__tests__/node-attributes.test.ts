@@ -99,8 +99,8 @@ describe('activity attributes — criticality, RTO, SLA, controls', () => {
     processNodes.push({ ...base, id: spId, level: 'SUB_PROCESS', name: 'SP', parentId: procId });
     processNodes.push({ ...base, id: actId, level: 'ACTIVITY', name: 'Act', parentId: spId });
     governanceControls.push(
-      { id: ctlA, orgId, policyId: PREFIX + 'pol', code: 'CTL-A', name: 'Test Control A', description: '', controlType: 'PREVENTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: null, evidenceRequired: false, linkedDomainId: null, linkedSystemId: null, createdAt: now, updatedAt: now },
-      { id: ctlB, orgId, policyId: PREFIX + 'pol', code: 'CTL-B', name: 'Test Control B', description: '', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: null, evidenceRequired: false, linkedDomainId: null, linkedSystemId: null, createdAt: now, updatedAt: now },
+      { id: ctlA, orgId, policyId: PREFIX + 'pol', code: 'CTL-A', name: 'Test Control A', description: '', controlType: 'PREVENTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: null, evidenceRequired: false, createdAt: now, updatedAt: now },
+      { id: ctlB, orgId, policyId: PREFIX + 'pol', code: 'CTL-B', name: 'Test Control B', description: '', controlType: 'DETECTIVE', automationMode: 'HUMAN', status: 'ACTIVE', ownerAssignmentId: null, evidenceRequired: false, createdAt: now, updatedAt: now },
     );
   });
 

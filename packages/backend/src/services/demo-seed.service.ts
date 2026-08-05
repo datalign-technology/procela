@@ -232,9 +232,9 @@ export function seedDemoData(): DemoSeedReport {
   // Dependencies panel: Outage triage sees actSignal as predecessor
   // and actDispatch as successor; actDispatch fans into actNotify.
   flowRelationships.push(
-    { id: P + 'flow-1', fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, condition: null, label: 'anomaly confirmed', createdAt: ts },
-    { id: P + 'flow-2', fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, condition: null, label: 'crew required', createdAt: ts },
-    { id: P + 'flow-3', fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, condition: null, label: 'ETA available', createdAt: ts },
+    { id: P + 'flow-1', fromNodeId: actSignal.id, toNodeId: actTriage.id, type: 'SEQUENCE' as const, label: 'anomaly confirmed', createdAt: ts },
+    { id: P + 'flow-2', fromNodeId: actTriage.id, toNodeId: actDispatch.id, type: 'SEQUENCE' as const, label: 'crew required', createdAt: ts },
+    { id: P + 'flow-3', fromNodeId: actDispatch.id, toNodeId: actNotify.id, type: 'SEQUENCE' as const, label: 'ETA available', createdAt: ts },
   );
 
   // ── Process hierarchy (Tidewater Water) ──
@@ -255,7 +255,7 @@ export function seedDemoData(): DemoSeedReport {
   // Water-side flow — Detect main break → Dispatch repair crew.
   // Mirrors the electric predecessor/successor story.
   flowRelationships.push(
-    { id: P + 'flow-w1', fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, condition: null, label: 'break confirmed', createdAt: ts },
+    { id: P + 'flow-w1', fromNodeId: actDetectBreak.id, toNodeId: actDispatchWater.id, type: 'SEQUENCE' as const, label: 'break confirmed', createdAt: ts },
   );
   saveStore('flowRelationships', flowRelationships);
 
@@ -274,9 +274,9 @@ export function seedDemoData(): DemoSeedReport {
 
   // ── Governance tasks assigned to Susan (populates My Dashboard) ──
   governanceTasks.push(
-    { id: P + 'task-1', orgId: orgTidewater.id, title: 'Approve Q3 data classification review', description: 'Review the AI-suggested sensitivity tags on Customer Master and Outage Logs and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: susan.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetCustomerMaster.id, automationMode: 'HUMAN' as any, resolution: null, createdBy: marisol.id, createdAt: ts, updatedAt: ts, completedAt: null },
-    { id: P + 'task-2', orgId: orgTidewater.id, title: 'Sign off on Regulatory Data domain scope', description: 'Lorraine has proposed expanding the Regulatory Data domain to cover new SDWA reporting fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: susan.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domRegulatory.id, automationMode: 'HUMAN' as any, resolution: null, createdBy: lorraine.id, createdAt: ts, updatedAt: ts, completedAt: null },
-    { id: P + 'task-3', orgId: orgTidewater.id, title: 'Retire Legacy Billing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: susan.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyBilling.id, automationMode: 'HUMAN' as any, resolution: null, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: P + 'task-1', orgId: orgTidewater.id, title: 'Approve Q3 data classification review', description: 'Review the AI-suggested sensitivity tags on Customer Master and Outage Logs and approve or reject each.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'HIGH' as any, assigneeId: susan.id, dueDate: daysFromNow(3), linkedObjectType: 'DataAsset', linkedObjectId: assetCustomerMaster.id, automationMode: 'HUMAN' as any, createdBy: marisol.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: P + 'task-2', orgId: orgTidewater.id, title: 'Sign off on Regulatory Data domain scope', description: 'Lorraine has proposed expanding the Regulatory Data domain to cover new SDWA reporting fields.', taskType: 'REVIEW' as any, status: 'OPEN' as any, priority: 'MEDIUM' as any, assigneeId: susan.id, dueDate: daysFromNow(7), linkedObjectType: 'DataDomain', linkedObjectId: domRegulatory.id, automationMode: 'HUMAN' as any, createdBy: lorraine.id, createdAt: ts, updatedAt: ts, completedAt: null },
+    { id: P + 'task-3', orgId: orgTidewater.id, title: 'Retire Legacy Billing Extract or find its owner', description: 'This asset has been sitting orphaned for two quarters. Confirm it can go, or reassign it.', taskType: 'GENERAL' as any, status: 'OPEN' as any, priority: 'LOW' as any, assigneeId: susan.id, dueDate: daysFromNow(14), linkedObjectType: 'DataAsset', linkedObjectId: orphanLegacyBilling.id, automationMode: 'HUMAN' as any, createdBy: null, createdAt: ts, updatedAt: ts, completedAt: null },
   );
   saveStore('governanceTasks', governanceTasks);
 
