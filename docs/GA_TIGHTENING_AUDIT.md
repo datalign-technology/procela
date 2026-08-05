@@ -107,6 +107,25 @@ per field: **surface it** (give it real value) or **defer/remove it**.
   `SuggestionDismissal.dismissedAt` are `String` ISO values while every
   other model uses `DateTime`. Normalize to `DateTime`.
 
+### Stage-5 outcome
+
+- **Timestamp typing** — *done.* Both columns retyped to `DateTime`
+  (migration `20260805050000_normalize_timestamp_columns`). The repos
+  round-trip ISO strings at the app layer (`Date → toISOString` on read,
+  `new Date()` on write), so there is no app-visible type change — only
+  the DB column type is normalized.
+- **Owner-FK naming** — *deferred.* Renaming `ProcessNode.ownerId` /
+  `DataDomain.ownerId` to `ownerPersonId` touches ~100+ references across
+  the backend, the **frontend** (it's part of the create/update API
+  contract and read on many pages), the repo mappers, and the RBAC
+  layer-2 assignment anchor — a large, coordinated rename whose only
+  benefit is naming symmetry. `ownerId` is also a generic name shared by
+  ~8 other models, so it can't be blanket-renamed. The mixed naming is
+  cosmetic and harmless today; the rename carries real owner-resolution
+  regression risk for no functional gain, so it's best done (if at all)
+  as its own dedicated, carefully-reviewed pass rather than bundled into
+  a "cheap consistency" change.
+
 ---
 
 ## E. Correctness bugs surfaced during the audit (matter for "stable")

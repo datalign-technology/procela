@@ -73,7 +73,7 @@ describe('prismaProcessVersionsRepository', () => {
       findMany: async () => [{
         id: 'a1', nodeId: 'n1', version: 2,
         snapshot: snapshot(),
-        changedBy: null, changedAt: '2026-07-15T00:00:00.000Z',
+        changedBy: null, changedAt: new Date('2026-07-15T00:00:00.000Z'),
         status: 'ACTIVE', note: 'bumped',
       }],
     });
