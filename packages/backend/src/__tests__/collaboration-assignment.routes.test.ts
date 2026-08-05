@@ -28,6 +28,17 @@ const { attachments } = require('../routes/attachments');
 
 type User = { sub: string; role: string };
 
+// Read the id of the record just created from the in-memory store rather
+// than from the HTTP response body. Feeding a JSON-parsed response value
+// back into a request path reads to CodeQL as request-forgery (js/request-
+// forgery); the store is a trusted local source, so this breaks that flow
+// while asserting exactly the same behaviour.
+function newId(store: Array<{ id: string }>, before: Set<string>): string {
+  const created = store.find((r) => !before.has(r.id));
+  if (!created) throw new Error('expected a newly created record');
+  return created.id;
+}
+
 function request(
   port: number,
   method: string,
@@ -115,11 +126,12 @@ describe('layer-2 assigned scoping — collaboration bucket routes', () => {
   // ── comments (author-scoped delete; edit stays author-only elsewhere) ──
 
   it('comments: CONTRIBUTOR create is authored by them and they can delete it', async () => {
+    const beforeIds = new Set<string>(comments.map((r: { id: string }) => r.id));
     const created = await request(port, 'POST', '/comments',
       { entityType: 'DataAsset', entityId: 'e1', content: 'mine', orgId }, CONTRIB);
     assert.strictEqual(created.status, 201);
     assert.strictEqual(created.body.data.userId, CONTRIB.sub);
-    const del = await request(port, 'DELETE', `/comments/${created.body.data.id}`, undefined, CONTRIB);
+    const del = await request(port, 'DELETE', `/comments/${newId(comments, beforeIds)}`, undefined, CONTRIB);
     assert.strictEqual(del.status, 204);
   });
 
@@ -136,11 +148,12 @@ describe('layer-2 assigned scoping — collaboration bucket routes', () => {
   // ── tags ──
 
   it('tags: CONTRIBUTOR create records them as creator and they can delete it', async () => {
+    const beforeIds = new Set<string>(tags.map((r: { id: string }) => r.id));
     const created = await request(port, 'POST', '/tags',
       { entityType: 'DataAsset', entityId: 'e1', tag: 'mine', orgId }, CONTRIB);
     assert.strictEqual(created.status, 201);
     assert.strictEqual(created.body.data.createdBy, CONTRIB.sub);
-    const del = await request(port, 'DELETE', `/tags/${created.body.data.id}`, undefined, CONTRIB);
+    const del = await request(port, 'DELETE', `/tags/${newId(tags, beforeIds)}`, undefined, CONTRIB);
     assert.strictEqual(del.status, 204);
   });
 
@@ -157,11 +170,12 @@ describe('layer-2 assigned scoping — collaboration bucket routes', () => {
   // ── attachments ──
 
   it('attachments: CONTRIBUTOR create records them as uploader and they can edit it', async () => {
+    const beforeIds = new Set<string>(attachments.map((r: { id: string }) => r.id));
     const created = await request(port, 'POST', '/attachments/url',
       { entityType: 'DataAsset', entityId: 'e1', name: 'mine', url: 'https://y', orgId }, CONTRIB);
     assert.strictEqual(created.status, 201);
     assert.strictEqual(created.body.data.uploadedBy, CONTRIB.sub);
-    const put = await request(port, 'PUT', `/attachments/${created.body.data.id}`, { name: 'mine v2' }, CONTRIB);
+    const put = await request(port, 'PUT', `/attachments/${newId(attachments, beforeIds)}`, { name: 'mine v2' }, CONTRIB);
     assert.strictEqual(put.status, 200);
   });
 

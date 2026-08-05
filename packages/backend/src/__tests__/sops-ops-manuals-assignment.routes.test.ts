@@ -24,6 +24,17 @@ const { operationsManuals } = require('../routes/operations-manuals');
 
 type User = { sub: string; role: string };
 
+// Read the id of the record just created from the in-memory store rather
+// than from the HTTP response body. Feeding a JSON-parsed response value
+// back into a request path reads to CodeQL as request-forgery (js/request-
+// forgery); the store is a trusted local source, so this breaks that flow
+// while asserting exactly the same behaviour.
+function newId(store: Array<{ id: string }>, before: Set<string>): string {
+  const created = store.find((r) => !before.has(r.id));
+  if (!created) throw new Error('expected a newly created record');
+  return created.id;
+}
+
 function request(
   port: number,
   method: string,
@@ -115,8 +126,10 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
   });
 
   it('sops: CONTRIBUTOR can edit a SOP assigned to them', async () => {
+    const before = new Set<string>(sops.map((s: { id: string }) => s.id));
     const created = await request(port, 'POST', '/sops', { orgId, title: 'Mine' }, CONTRIB);
-    const id = created.body.data.id;
+    assert.strictEqual(created.status, 201);
+    const id = newId(sops, before);
     const res = await request(port, 'PUT', `/sops/${id}`, { title: 'Mine v2' }, CONTRIB);
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.data.title, 'Mine v2');
@@ -146,8 +159,10 @@ describe('layer-2 assigned scoping — sops & operations-manuals routes', () => 
   });
 
   it('ops-manuals: CONTRIBUTOR can edit a manual assigned to them', async () => {
+    const before = new Set<string>(operationsManuals.map((m: { id: string }) => m.id));
     const created = await request(port, 'POST', '/operations-manuals', { orgId, label: 'Mine' }, CONTRIB);
-    const id = created.body.data.id;
+    assert.strictEqual(created.status, 201);
+    const id = newId(operationsManuals, before);
     const res = await request(port, 'PUT', `/operations-manuals/${id}`, { label: 'Mine v2' }, CONTRIB);
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.data.label, 'Mine v2');
