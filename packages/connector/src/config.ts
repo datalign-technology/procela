@@ -17,6 +17,10 @@ export const LIVENESS_FILE_DEFAULT = '/tmp/procela-connector.alive';
  *
  *  - `PROCELA_PAIRING_CODE` (trimmed) overrides `pairingCode`, so an
  *    operator can pair on first boot without editing the file.
+ *  - `PROCELA_CONNECTOR_TOKEN` (trimmed) overrides `token`, so a
+ *    read-only deployment can supply the bearer token from a secret /
+ *    env without ever writing it into the config file. (This is the env
+ *    var the pairing flow prints when it can't rewrite a read-only mount.)
  *  - heartbeat defaults to 60s, scan to 30m.
  *  - `sources` is coerced to an array so a missing / malformed key
  *    can't crash the scan loop. */
@@ -30,6 +34,9 @@ export function normalizeConfig(
 
   const pairingEnv = env.PROCELA_PAIRING_CODE;
   if (pairingEnv && pairingEnv.trim()) cfg.pairingCode = pairingEnv.trim();
+
+  const tokenEnv = env.PROCELA_CONNECTOR_TOKEN;
+  if (tokenEnv && tokenEnv.trim()) cfg.token = tokenEnv.trim();
 
   cfg.agentVersion = `procela-connector/${AGENT_VERSION}`;
   cfg.heartbeatSeconds = cfg.heartbeatSeconds || 60;

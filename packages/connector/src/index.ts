@@ -13,14 +13,21 @@
 //      SIGINT/SIGTERM after a clean iteration.
 //
 // We deliberately keep the runtime small: native fetch (Node 20+),
-// pg as the one source-adapter dep, yaml for config parsing. No
-// secret management — the admin's job to keep the config file out
-// of source control.
+// pg as the one source-adapter dep, yaml for config parsing.
+//
+// Secret handling is minimal by design: a source connectionString may
+// carry its password inline, or reference the host's secret store with
+// `${ENV_VAR}` / `${file:/path}` (resolved at scan time — see secrets.ts),
+// so the config file need not hold plaintext credentials. Keeping the
+// file itself access-controlled (file perms, a Docker/K8s Secret rather
+// than a plaintext bind-mount, out of source control) remains the
+// operator's job.
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { ConnectorConfig, ReportedAsset } from './types';
 import { normalizeConfig, LIVENESS_FILE_DEFAULT } from './config';
+import { resolveSourceSecrets, defaultResolvers } from './secrets';
 import { writeLiveness, checkLiveness } from './liveness';
 import { pairClaim, heartbeat, report } from './api';
 import { scanPostgres } from './postgres';
@@ -29,6 +36,10 @@ import { scanMysql } from './mysql';
 import { scanDbt } from './dbt';
 import { scanOracle } from './oracle';
 import { withRetry } from './retry';
+
+// Resolvers for ${ENV_VAR} / ${file:/path} references in source
+// connection strings — the real process env + filesystem.
+const secretResolvers = defaultResolvers((p) => readFileSync(p, 'utf-8'));
 
 function log(msg: string, extra: Record<string, unknown> = {}): void {
   // Structured stdout — every line is JSON so a container logger
@@ -89,9 +100,15 @@ async function pairOnce(cfg: ConnectorConfig, path: string): Promise<string | nu
 async function runScan(cfg: ConnectorConfig): Promise<void> {
   let total = 0;
   const all: ReportedAsset[] = [];
-  for (const source of cfg.sources) {
-    log('scanning source', { name: source.name, type: source.type });
+  for (const rawSource of cfg.sources) {
+    log('scanning source', { name: rawSource.name, type: rawSource.type });
     try {
+      // Resolve ${ENV_VAR} / ${file:/path} references in the connection
+      // string here, at scan time — so the on-disk config keeps the
+      // reference (never the resolved secret) and a rotated secret is
+      // picked up without a restart. A missing secret throws and is
+      // caught below, skipping just this source with a clear message.
+      const source = resolveSourceSecrets(rawSource, secretResolvers);
       let assets: ReportedAsset[];
       switch (source.type) {
         case 'postgres':
@@ -121,7 +138,7 @@ async function runScan(cfg: ConnectorConfig): Promise<void> {
       all.push(...assets);
       total += assets.length;
     } catch (err: any) {
-      log('scan failed for source', { source: source.name, error: err?.message || String(err) });
+      log('scan failed for source', { source: rawSource.name, error: err?.message || String(err) });
     }
   }
   if (all.length === 0) {
