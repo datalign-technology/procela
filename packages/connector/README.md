@@ -90,17 +90,17 @@ published to GitHub Container Registry on every release. Pull the
 pinned semver tag for production deployments:
 
 ```bash
-docker pull ghcr.io/crossleyc-bot/procela-connector:0.1.0
+docker pull ghcr.io/datalign-technology/procela-connector:0.1.0
 
 docker run --rm \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/crossleyc-bot/procela-connector:0.1.0
+  ghcr.io/datalign-technology/procela-connector:0.1.0
 
 # Or pass the pairing code via env on first boot
 docker run --rm \
   -e PROCELA_PAIRING_CODE=12345678 \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/crossleyc-bot/procela-connector:0.1.0
+  ghcr.io/datalign-technology/procela-connector:0.1.0
 ```
 
 Available tags:
