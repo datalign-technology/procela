@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
 import { useToastStore } from '../stores/toastStore';
 import SortableTh from '../components/SortableTh';
+import TruncatedText from '../components/TruncatedText';
 import { useSortedList } from '../hooks/useSortedList';
 import InfoTip from '../components/InfoTip';
 import { SkeletonRows } from '../components/Skeleton';
@@ -781,7 +782,7 @@ export default function MappingsPage() {
                   </td>
                   <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 300 }}>
                     {m.stepInfo ? (
-                      formatStepPath(m.stepInfo)
+                      <TruncatedText text={formatStepPath(m.stepInfo)} />
                     ) : (
                       <span
                         title={`Original processStepId: ${m.processStepId}\nThe activity this mapping pointed at no longer exists — likely deleted or regenerated. Delete the row to clean it up.`}
