@@ -86,29 +86,34 @@ stores only a SHA-256 hash. Lose it and you must revoke + re-pair.
 ## Pull & run (recommended)
 
 Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are
-published to GitHub Container Registry on every release. Pull the
-pinned semver tag for production deployments:
+published to GitHub Container Registry: `:edge` on every push to the
+main branch, and pinned semver tags on each tagged release. No
+`connector-v*` release has been cut yet, so `:edge` is the tag to
+pull today — switch to a pinned `:0.3.0` for production once the
+first release is tagged:
 
 ```bash
-docker pull ghcr.io/datalign-technology/procela-connector:0.1.0
+docker pull ghcr.io/datalign-technology/procela-connector:edge
 
 docker run --rm \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/datalign-technology/procela-connector:0.1.0
+  ghcr.io/datalign-technology/procela-connector:edge
 
 # Or pass the pairing code via env on first boot
 docker run --rm \
   -e PROCELA_PAIRING_CODE=12345678 \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/datalign-technology/procela-connector:0.1.0
+  ghcr.io/datalign-technology/procela-connector:edge
 ```
 
 Available tags:
 
-- `:0.1.0`, `:0.1`, `:0`, `:latest` — published on each
-  `connector-vX.Y.Z` git tag
-- `:edge` — auto-built from every push to the main branch
+- `:edge` — auto-built from every push to the main branch. This is
+  the tag to pull today; no tagged release has been cut yet.
 - `:sha-<short>` — every build, for exact-provenance pinning
+- `:0.3.0`, `:0.3`, `:0`, `:latest` — published on each
+  `connector-vX.Y.Z` git tag. None exist until the first
+  `connector-v0.3.0` release is tagged.
 
 See `connector.example.yaml` for the full config shape.
 
@@ -180,8 +185,8 @@ npm run lint -w packages/connector
 | Postgres     | `postgres`     | v1 (0.1.x) |
 | SQL Server   | `sqlserver`    | v1 (0.2.x) |
 | MySQL / MariaDB | `mysql`     | v1 (0.3.x) |
-| Oracle       | `oracle`       | v1 (0.5.x) |
-| dbt manifest | `dbt`          | v1 (0.4.x) |
+| Oracle       | `oracle`       | v1 (0.3.x) |
+| dbt manifest | `dbt`          | v1 (0.3.x) |
 
 The **Oracle** source uses `oracledb` in **thin mode** — pure
 JavaScript, so no Oracle Instant Client is needed in the image. It reads
