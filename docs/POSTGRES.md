@@ -1,12 +1,20 @@
 # Postgres migration playbook
 
-Procela's backend still runs JSON-file persistence by default. The
-Postgres migration is opt-in via `DATABASE_URL` and being done
-**incrementally** — one entity at a time — because a full-repo
-cutover on 55 stores is unshippable in one PR.
+> **Status: the cutover is complete.** Every store now reads and writes
+> through its repository; in Postgres mode the legacy in-memory arrays are
+> retired (`loadStore` returns `[]`) and a live-DB suite gates it in CI.
+> Postgres is a first-class path — set `DATABASE_URL` and the whole backend
+> uses it. JSON-file persistence remains the zero-config **default** when
+> `DATABASE_URL` is unset (local dev / demo). The per-handler conversion
+> walkthrough below documents *how* the cutover was carried out and is
+> retained as the reference pattern to mirror when adding a **new** entity —
+> it is no longer an outstanding to-do list.
+
+Procela's backend defaults to JSON-file persistence and switches to
+Postgres when `DATABASE_URL` is set.
 
 This document is the map: how to run the DB path locally, where the
-pieces live, and how to migrate the next entity.
+pieces live, and the repository pattern every entity follows.
 
 ## Running against Postgres
 
