@@ -46,16 +46,17 @@ pieces live, and the repository pattern every entity follows.
    be captured as a new migration via `prisma migrate dev --name
    <describe-change>` against a local dev DB, then committed.
 
-4. **Boot the backend**. It runs as before; any route that has been
-   migrated to the async Repository pattern (see below) automatically
-   uses Postgres, while unmigrated routes continue to read/write
-   the JSON files under `.procela-data/`.
+4. **Boot the backend**. With `DATABASE_URL` set, every route reads and
+   writes through Postgres. With it unset, the same routes fall back to
+   the JSON files under `.procela-data/`. The switch is per-store and
+   automatic — no code change flips between them.
 
-## Converting a route to actually use its repository
+## The repository conversion pattern
 
-Every entity has a repository shipped (`db/<entity>.repo.ts`).
-Routes still touch the exported in-memory arrays directly — turning
-a route into "uses the repo" is per-handler work. The pattern:
+Every entity has a repository (`db/<entity>.repo.ts`), and every route
+now goes through it. This section documents the pattern that was applied
+to each handler during the cutover — mirror it when you add a **new**
+route or entity. The steps:
 
 1. **Import the factory** at the top of the route file:
    ```ts
@@ -82,18 +83,19 @@ a route into "uses the repo" is per-handler work. The pattern:
    path, the shared in-memory array stays consistent because
    `jsonRepository()` mutates the same reference. On the Postgres
    path, the array falls out of sync — cross-file consumers that
-   still import the array will read stale data. That's the reason
-   the migration is per-handler: each conversion has to consider
-   what else is reading the array and either convert those too, or
-   leave the array in sync by writing to both paths (dual-write).
+   still import the array would read stale data. That is why the cutover
+   was done per-handler: each conversion had to account for what else
+   read the array and either convert those too or keep the array in sync
+   (dual-write). That work is finished — in Postgres mode `loadStore`
+   returns `[]` and no consumer reads the arrays.
 
-`routes/organizations.ts` has the reference `async` handler (GET /
-— the whole-org list). The other 9 handlers on that route are
-follow-up per-handler work.
+`routes/organizations.ts` was the reference `async` handler (GET / —
+the whole-org list); every other handler across the codebase followed
+the same shape.
 
-Long-run: once every handler on a route is async, drop the exported
-in-memory array and the `saveStore` calls. The repo is the only
-persistence surface.
+End state (reached): every handler is async and the repository is the
+only persistence surface on the Postgres path. The exported in-memory
+arrays remain solely as the backing store for the JSON default.
 
 ## Where the pieces live
 
@@ -117,7 +119,7 @@ GovernanceIssue, GovernancePolicy, GovernanceControl,
 GovernanceGroup, Comment, FlowRelationship, plus join tables).
 Secondary stores (attachments, connectors, savedViews, scheduler
 state, tags, etc.) are enumerated in a comment at the bottom of
-`schema.prisma` and will be added as their routes migrate.
+`schema.prisma`; all of them have since been added and migrated.
 
 ## Migrating the next entity
 
@@ -182,9 +184,9 @@ Then in the route file:
   `truncateAll()` runs before each test so state doesn't leak.
   Add the entity's table to that helper's list too.
 
-## What's left
+## Repository coverage
 
-Repository-mapped so far:
+Repository-mapped (complete):
 
 - **Organization** (reference — `db/organizations.repo.ts`).
 - **DataDomain** (`db/data-domains.repo.ts`, includes the M2M
@@ -254,16 +256,14 @@ Skipped as low-value or requiring source-shape changes:
 
 The schema is source-of-truth against the JSON row shape.
 
-**Route conversion status**: `routes/organizations.ts` has one
-reference `async` handler (GET /) using `await orgRepo.list()`.
-Every other route handler across the codebase still touches the
-in-memory arrays directly. See the "Converting a route to actually
-use its repository" section above for the pattern; each handler
-conversion is one small PR of work.
-
-Each migration is one PR. That gives you an incremental cutover
-you can pause or roll back at any point, versus a big-bang PR that
-would touch every route file at once.
+**Route conversion status**: complete. Every route handler across the
+codebase reads and writes through its repository; in Postgres mode the
+in-memory arrays are retired (`loadStore` returns `[]`). The cutover was
+delivered as a sequence of small per-handler / per-entity PRs — an
+incremental path that stayed shippable and roll-back-able at every step,
+versus a big-bang PR touching every route file at once. The repository
+conversion pattern above documents the shape to reuse for any future
+route.
 
 ## Handling schema drift
 
