@@ -2,14 +2,15 @@
 
 A platform that connects business processes to the data and systems that support them. Process owners define how the work runs, data stewards register the assets behind each step, and Procela handles the governance — ownership, RACI, gap detection, audit trail, and federated SSO.
 
-> **Prototype state.** The architecture below describes what's designed; the current build runs against JSON files under `.procela-data/` rather than PostgreSQL. The auth, MFA, SCIM, SAML, GDPR, audit, and at-rest encryption stacks are all real; the database swap is the next bigger production-readiness item. See [`SECURITY.md`](./SECURITY.md) for the security model and `CLAUDE.md` for the full architecture intent.
+> **State.** The auth, MFA, SCIM, SAML, GDPR, audit, and at-rest encryption stacks are all real. Persistence runs on **PostgreSQL** (via Prisma) when `DATABASE_URL` is set — the cutover is complete — and falls back to JSON files under `.procela-data/` as the zero-config default for local development and demos. See [`SECURITY.md`](./SECURITY.md) for the security model and `CLAUDE.md` for the full architecture intent.
 
 ## Architecture overview
 
-Monorepo with two packages:
+Monorepo with three packages:
 
 - **`packages/backend`** — Express + TypeScript REST API. Handles authentication (Dev / Local / OIDC / SAML), authorisation, business logic, audit logging, SCIM provisioning, AI calls.
 - **`packages/frontend`** — React + TypeScript + Vite SPA. Consumes the REST API; no direct database access.
+- **`packages/connector`** — `@procela/connector`, the optional on-prem edge agent (Node 20). Pairs with the backend, scans customer databases (PostgreSQL, MySQL, SQL Server, Oracle, dbt manifest), and reports discovered tables and columns back as Bronze data assets — audit-only, no data values cross the wire. Containerised and shipped via a GHCR release workflow.
 
 ## Tech stack
 
@@ -17,7 +18,7 @@ Monorepo with two packages:
 |-------------|----------------------------------------------------------------|
 | Backend     | Node.js, Express, TypeScript                                   |
 | Frontend    | React, TypeScript, Vite, Zustand                               |
-| Storage     | JSON files (prototype) — designed for PostgreSQL via Prisma    |
+| Storage     | PostgreSQL via Prisma (`DATABASE_URL`); JSON files as the zero-config local default |
 | Cache       | Redis (optional; falls back to in-memory rate limiter)         |
 | AI          | Anthropic Claude API (`claude-sonnet-4-20250514`)              |
 | Auth        | Argon2id, JWT, OIDC (PKCE), SAML 2.0, SCIM 2.0                 |
@@ -40,7 +41,7 @@ npm install
 npm run dev
 ```
 
-The frontend opens at `http://localhost:5173` and the API at `http://localhost:3001`. The first run drops a `.procela-data/` directory next to the backend; that's where every entity (people, orgs, processes, data assets, audit log) lives until the database swap lands.
+The frontend opens at `http://localhost:5173` and the API at `http://localhost:3001`. With no `DATABASE_URL` set, the first run drops a `.procela-data/` directory next to the backend — that's where every entity (people, orgs, processes, data assets, audit log) lives on the JSON default. Set `DATABASE_URL` to run against PostgreSQL instead (see [`docs/POSTGRES.md`](./docs/POSTGRES.md)).
 
 To enable AI-driven features (industry template generation, data suggestions, the in-app assistant) drop your Anthropic key into `.env`:
 
@@ -103,12 +104,16 @@ Procela/
 │   │   │   ├── middleware/     # authenticateToken, authorize, rate-limit
 │   │   │   └── lib/            # persistence, logger
 │   │   └── package.json
-│   └── frontend/          # React SPA
-│       ├── src/
-│       │   ├── pages/          # one per top-level route
-│       │   ├── components/     # shared UI
-│       │   ├── stores/         # Zustand: auth, org context, role drawer
-│       │   └── api/            # typed fetch client
+│   ├── frontend/          # React SPA
+│   │   ├── src/
+│   │   │   ├── pages/          # one per top-level route
+│   │   │   ├── components/     # shared UI
+│   │   │   ├── stores/         # Zustand: auth, org context, role drawer
+│   │   │   └── api/            # typed fetch client
+│   │   └── package.json
+│   └── connector/         # @procela/connector — on-prem edge agent
+│       ├── src/               # discovery, per-engine adapters, pair/heartbeat/report
+│       ├── Dockerfile
 │       └── package.json
 ├── .procela-data/         # JSON store (created on first run)
 ├── .env.example           # Environment variable template
