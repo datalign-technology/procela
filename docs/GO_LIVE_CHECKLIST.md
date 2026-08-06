@@ -247,3 +247,6 @@ customer in production:
 
 Everything else can follow in month-2 iterations once you have a live
 signal.
+
+For a tick-through, ordered operator worksheet covering exactly this
+subset, see [`PILOT_GO_LIVE_WORKSHEET.md`](./PILOT_GO_LIVE_WORKSHEET.md).
