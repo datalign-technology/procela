@@ -171,6 +171,27 @@ resolved to keep):
 3. **Stale doc** — `refresh-tokens.repo.ts` header says "No consumer is
    wired yet"; it is in fact wired into `routes/auth.ts`. Comment only.
 
+### Stage-E outcome
+
+On re-inspection, items 1 and 2 were **already resolved** on
+`create-procela-main` ahead of this pass:
+
+- **Phantom field read (1)** — `routes/analysis.ts:270` already reads the
+  correct `s.deputyOwnerId`, and `analysis-routes.test.ts` carries a
+  regression test asserting the system-deputy fact fires for a system with
+  a distinct deputy. No change needed.
+- **Agent-schedule persistence bypass (2)** — `runScheduleNow` already
+  persists the advance (`lastRunAt` / `runCount` / `nextRunAt` / `status`)
+  through `agentSchedulesRepo.update()`, with an inline comment explaining
+  why a bare `saveStore` lost these under Postgres. No change needed.
+- **Stale doc (3)** — *fixed.* The `refresh-tokens.repo.ts` header no
+  longer claims "No consumer is wired yet"; it now records that the repo is
+  wired into `routes/auth.ts` (login upserts, refresh rotates,
+  logout/SLO/session revocation remove), which a grep of `auth.ts`
+  confirms across ~14 call sites.
+
+With this, every audit section (A–G) is closed.
+
 ---
 
 ## F. Real vs mocked — a "tight v1" should not ship simulated surfaces
