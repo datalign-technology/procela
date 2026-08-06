@@ -203,15 +203,10 @@ export default function GapDetectionPage() {
       const res = await apiClient.get<{ success: boolean; data: GapData; summary: GapSummary }>(`/gap-detection${query}`);
       setData(res.data || null);
       setSummary(res.summary || null);
-      // Auto-expand any critical-severity section that actually has
-      // gaps, so the most urgent items (e.g. Unmapped Activities) are
-      // visible without hunting through nine collapsed rows.
-      if (res.summary) {
-        const critical = GAP_SECTIONS
-          .filter((s) => s.severity === 'critical' && (res.summary as any)[s.key] > 0)
-          .map((s) => s.key as string);
-        if (critical.length) setExpandedSections(new Set(critical));
-      }
+      // All sections start collapsed by default; the user expands the
+      // ones they want. (The severity summary cards up top still call
+      // out where the gaps are, and clicking one scrolls to that
+      // section.)
     } catch { /* */ }
     finally { setLoading(false); }
   }, [activeOrgId]);

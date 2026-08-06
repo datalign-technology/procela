@@ -1324,7 +1324,6 @@ export default function PeoplePage() {
                             onChange={togglePeopleSelectAll} />
                         </th>
                         <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                        <SortableTh sortKey="email" active={sortKey} dir={sortDir} onClick={toggleSort}>Email</SortableTh>
                         <SortableTh sortKey="role" active={sortKey} dir={sortDir} onClick={toggleSort}>App Role</SortableTh>
                         <th scope="col" style={thStyle}>Governance</th>
                         <SortableTh sortKey="title" active={sortKey} dir={sortDir} onClick={toggleSort}>Title</SortableTh>
@@ -1345,15 +1344,6 @@ export default function PeoplePage() {
                               onChange={(e) => setQuickName(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
                               placeholder="Name *"
-                              style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
-                            />
-                          </td>
-                          <td style={tdStyle}>
-                            <input
-                              value={quickEmail}
-                              onChange={(e) => setQuickEmail(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAdd(); }}
-                              placeholder="Email"
                               style={{ fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 3, padding: '3px 6px', width: '100%' }}
                             />
                           </td>
@@ -1407,7 +1397,6 @@ export default function PeoplePage() {
                               <span title="No longer found in the connected data source" style={{ display: 'inline-block', marginLeft: 6, padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: '#fef3c7', color: '#92400e', verticalAlign: 'middle' }}>NOT IN SOURCE</span>
                             )}
                           </td>
-                          <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>{person.email || '--'}</td>
                           <td style={tdStyle}><span style={roleBadge(person.role)}>{ROLE_LABELS[person.role] || person.role}</span></td>
                           <td style={tdStyle}>
                             {govText ? (
