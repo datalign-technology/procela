@@ -231,9 +231,18 @@ test.describe('Procela demo path', () => {
     // KPI tile uses. Landing here directly is the equivalent of
     // clicking the KPI in the demo.
     await gotoWithOrg(page, '/gap-detection', orgId, 'Demo Path Beat9');
-    // The unmapped activity should surface. Its parent process name
-    // renders next to it in the breadcrumb, so grep on that too as
-    // extra confidence the row is fully hydrated.
+    // Gap Detection lands with every section collapsed; the summary
+    // cards up top call out where the gaps are and clicking a section
+    // header expands it. Wait for the "Unmapped Activities" section to
+    // render, then expand it to reveal the seeded unmapped activity.
+    const unmappedHeader = page.getByText('Unmapped Activities', { exact: true });
+    await expect(unmappedHeader).toBeVisible({ timeout: 10_000 });
+    // Collapsed by default: the activity row is not in the DOM yet.
+    await expect(page.locator('body')).not.toContainText('Beat9 Ungapped triage');
+    await unmappedHeader.click();
+    // Now expanded, the unmapped activity should surface. Its parent
+    // process name renders next to it in the breadcrumb, so grep on
+    // that too as extra confidence the row is fully hydrated.
     await expect(page.locator('body')).toContainText('Beat9 Ungapped triage', { timeout: 10_000 });
     expect(errors, errors.join('\n')).toEqual([]);
   });
