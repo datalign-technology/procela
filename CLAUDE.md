@@ -186,7 +186,7 @@ Viewer            — read-only access to the full catalog
 
 ### AI Services
 - **Provider**: Anthropic Claude API
-- **Model**: `claude-sonnet-4-20250514` (update model string as newer versions release)
+- **Model**: `claude-sonnet-5` (update model string as newer versions release)
 - **Uses**:
   - Industry template generation (process hierarchy)
   - Data and system suggestions per process step

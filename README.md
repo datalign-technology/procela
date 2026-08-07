@@ -20,7 +20,7 @@ Monorepo with three packages:
 | Frontend    | React, TypeScript, Vite, Zustand                               |
 | Storage     | PostgreSQL via Prisma (`DATABASE_URL`); JSON files as the zero-config local default |
 | Cache       | Redis (optional; falls back to in-memory rate limiter)         |
-| AI          | Anthropic Claude API (`claude-sonnet-4-20250514`)              |
+| AI          | Anthropic Claude API (`claude-sonnet-5`)                       |
 | Auth        | Argon2id, JWT, OIDC (PKCE), SAML 2.0, SCIM 2.0                 |
 | MFA         | TOTP (`otplib`), WebAuthn / FIDO2 (`@simplewebauthn`)          |
 | Crypto      | AES-256-GCM (local) + AWS KMS / Azure Key Vault / GCP KMS      |
