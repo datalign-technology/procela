@@ -1752,7 +1752,12 @@ export default function DataAssetsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
                       <input type="checkbox" checked={selectedIds.has(asset.id)} disabled={inherited} onChange={() => toggleSelect(asset.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>
+                    {/* maxWidth caps the Asset column so a long description
+                      *  sub-label ellipsises within the cell instead of
+                      *  stretching the table and forcing a horizontal
+                      *  scroll. flex:1 + minWidth:0 on the inner wrapper
+                      *  lets the name row and description shrink to fit. */}
+                    <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 380 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleExpandColumns(asset.id); }}
