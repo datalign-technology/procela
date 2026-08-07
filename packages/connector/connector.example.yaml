@@ -24,10 +24,22 @@ scanSeconds: 1800
 # Data sources to scan. v1 supports Postgres, SQL Server, and
 # MySQL/MariaDB; a single connector container can watch any mix
 # of them.
+# A connectionString password may reference a secret the host already
+# holds instead of sitting inline here, so the credential comes from your
+# secret store (Docker/K8s secret, Vault, systemd credential):
+#   ${ENV_VAR}      -> value of that environment variable
+#   ${file:/path}   -> trimmed contents of that file (e.g. /run/secrets/db_pw)
+# Only the referenced span is substituted; the rest of the DSN stays here.
+# Resolution happens at scan time, so a rotated secret is picked up on the
+# next scan and the reference (never the resolved secret) is what stays in
+# this file after pairing. Example:
+#   connectionString: postgres://procela_ro:${PG_PASSWORD}@db.internal:5432/warehouse
 sources:
   - type: postgres
     name: warehouse-prod
-    # Connection string stays on-prem. Procela never sees it.
+    # Connection string stays on-prem. Procela never sees it. Use a
+    # ${ENV_VAR} / ${file:/path} reference for the password in production
+    # rather than the inline literal below.
     connectionString: postgres://procela_ro:CHANGE_ME@db.internal:5432/warehouse
     # Optional. Empty = scan only 'public'. Add the schemas you care
     # about.

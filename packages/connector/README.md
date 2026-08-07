@@ -24,6 +24,46 @@ For each table or view in every configured schema:
 No row values. No connection strings. No credentials. Column
 **names and types** cross the wire; column **data** never does.
 
+## Security
+
+The connector's security posture, and the answer to "where do the source
+database credentials live?":
+
+- **Credentials never leave your network.** Connection strings and row
+  data stay on-prem; only catalog **metadata** (schema/table/column names
+  and types) is sent outbound over HTTPS. A compromise on the Procela side
+  cannot expose a source credential — Procela never receives one.
+- **Least privilege.** Point the connector at a **read-only** database
+  account (the examples use `procela_ro`). It only ever issues catalog /
+  `information_schema` reads.
+- **Secrets need not sit in the config file.** A source `connectionString`
+  can reference a secret the host already holds instead of embedding the
+  password inline:
+
+  ```yaml
+  connectionString: postgres://procela_ro:${PG_PASSWORD}@db.internal:5432/warehouse
+  # or from a mounted secret file (Docker/K8s secret, Vault agent, …):
+  connectionString: postgres://procela_ro:${file:/run/secrets/db_pw}@db.internal:5432/warehouse
+  ```
+
+  `${ENV_VAR}` resolves from the environment; `${file:/path}` reads a
+  mounted secret file (a single trailing newline is stripped). Only the
+  referenced span is substituted, so the rest of the DSN stays readable in
+  the file. Resolution happens **at scan time**, so (a) the resolved
+  secret is never written back to the config when the connector rewrites
+  it with its pairing token, and (b) a rotated secret is picked up on the
+  next scan without a restart. A referenced secret that can't be resolved
+  fails that source's scan with a clear error rather than connecting with
+  a broken credential.
+- **Deploy the config as a secret, not a plaintext file.** Mount
+  `connector.yaml` from a **Docker/Kubernetes Secret** (or `chmod 600` it
+  on a bare host), keep it out of source control, and prefer a **read-only
+  mount** — the connector will print the issued token to stdout for you to
+  inject via `PROCELA_CONNECTOR_TOKEN` rather than rewriting the file.
+- **The Procela token is a bearer credential.** It is shown once at claim
+  time; Procela stores only a SHA-256 hash. Treat it like the DB
+  credentials above (secret file / env), and revoke + re-pair if it leaks.
+
 ## Pairing flow
 
 1. Open Procela → **Settings → Connectors → Add connector**. A
@@ -36,7 +76,9 @@ No row values. No connection strings. No credentials. Column
    YAML so subsequent runs skip pairing, and drops into its
    heartbeat / scan loop.
 4. If the config mount is read-only the token is printed to
-   stdout instead — paste it under `token:` and restart.
+   stdout instead (as `PROCELA_CONNECTOR_TOKEN=…`) — supply it back via
+   the `PROCELA_CONNECTOR_TOKEN` env var (keeps it off disk) or paste it
+   under `token:`, then restart.
 
 The plaintext token is shown **once**, at claim time. Procela
 stores only a SHA-256 hash. Lose it and you must revoke + re-pair.
@@ -44,29 +86,34 @@ stores only a SHA-256 hash. Lose it and you must revoke + re-pair.
 ## Pull & run (recommended)
 
 Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) are
-published to GitHub Container Registry on every release. Pull the
-pinned semver tag for production deployments:
+published to GitHub Container Registry: `:edge` on every push to the
+main branch, and pinned semver tags on each tagged release. No
+`connector-v*` release has been cut yet, so `:edge` is the tag to
+pull today — switch to a pinned `:0.3.0` for production once the
+first release is tagged:
 
 ```bash
-docker pull ghcr.io/crossleyc-bot/procela-connector:0.1.0
+docker pull ghcr.io/datalign-technology/procela-connector:edge
 
 docker run --rm \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/crossleyc-bot/procela-connector:0.1.0
+  ghcr.io/datalign-technology/procela-connector:edge
 
 # Or pass the pairing code via env on first boot
 docker run --rm \
   -e PROCELA_PAIRING_CODE=12345678 \
   -v "$(pwd)/connector.yaml:/etc/procela/connector.yaml" \
-  ghcr.io/crossleyc-bot/procela-connector:0.1.0
+  ghcr.io/datalign-technology/procela-connector:edge
 ```
 
 Available tags:
 
-- `:0.1.0`, `:0.1`, `:0`, `:latest` — published on each
-  `connector-vX.Y.Z` git tag
-- `:edge` — auto-built from every push to the main branch
+- `:edge` — auto-built from every push to the main branch. This is
+  the tag to pull today; no tagged release has been cut yet.
 - `:sha-<short>` — every build, for exact-provenance pinning
+- `:0.3.0`, `:0.3`, `:0`, `:latest` — published on each
+  `connector-vX.Y.Z` git tag. None exist until the first
+  `connector-v0.3.0` release is tagged.
 
 See `connector.example.yaml` for the full config shape.
 
@@ -138,8 +185,8 @@ npm run lint -w packages/connector
 | Postgres     | `postgres`     | v1 (0.1.x) |
 | SQL Server   | `sqlserver`    | v1 (0.2.x) |
 | MySQL / MariaDB | `mysql`     | v1 (0.3.x) |
-| Oracle       | `oracle`       | v1 (0.5.x) |
-| dbt manifest | `dbt`          | v1 (0.4.x) |
+| Oracle       | `oracle`       | v1 (0.3.x) |
+| dbt manifest | `dbt`          | v1 (0.3.x) |
 
 The **Oracle** source uses `oracledb` in **thin mode** — pure
 JavaScript, so no Oracle Instant Client is needed in the image. It reads

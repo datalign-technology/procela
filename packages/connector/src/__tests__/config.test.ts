@@ -48,6 +48,22 @@ describe('config — normalizeConfig', () => {
     assert.strictEqual(cfg.pairingCode, 'from-file');
   });
 
+  it('lets PROCELA_CONNECTOR_TOKEN (trimmed) override the config token', () => {
+    const cfg = normalizeConfig(
+      { procelaUrl: 'x' },
+      { PROCELA_CONNECTOR_TOKEN: '  pct_env  ' } as NodeJS.ProcessEnv,
+    );
+    assert.strictEqual(cfg.token, 'pct_env');
+  });
+
+  it('keeps the file token when PROCELA_CONNECTOR_TOKEN is empty / whitespace', () => {
+    const cfg = normalizeConfig(
+      { procelaUrl: 'x', token: 'from-file' },
+      { PROCELA_CONNECTOR_TOKEN: '   ' } as NodeJS.ProcessEnv,
+    );
+    assert.strictEqual(cfg.token, 'from-file');
+  });
+
   it('does not throw on a null / non-object parse result', () => {
     const cfg = normalizeConfig(null, EMPTY_ENV);
     assert.deepStrictEqual(cfg.sources, []);
