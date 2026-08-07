@@ -442,10 +442,13 @@ function ConnectPickerModal({
   );
 }
 
-type SystemColId = 'type' | 'description' | 'owner' | 'connections';
+// 'description' is no longer a toggleable column — it renders as a
+// single-line sub-label under the system name (see the Name cell), so
+// the row reads name-over-description like a directory entry, matching
+// the Data Assets page.
+type SystemColId = 'type' | 'owner' | 'connections';
 const SYSTEM_COLUMN_DEFS: Array<{ id: SystemColId; label: string; defaultVisible: boolean }> = [
   { id: 'type',        label: 'Type',        defaultVisible: true  },
-  { id: 'description', label: 'Description', defaultVisible: true  },
   { id: 'owner',       label: 'Owner',       defaultVisible: true  },
   { id: 'connections', label: 'Connections', defaultVisible: true  },
 ];
@@ -1433,7 +1436,6 @@ export default function SystemsPage() {
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
                 {systemCols.isVisible('type') && <SortableTh sortKey="type" active={sortKey} dir={sortDir} onClick={toggleSort}>Type</SortableTh>}
-                {systemCols.isVisible('description') && <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>}
                 {systemCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
                 {systemCols.isVisible('connections') && <th scope="col" style={{ ...thStyle, width: 140 }}>Connections</th>}
                 <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
@@ -1457,7 +1459,7 @@ export default function SystemsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center', width: 40 }} title={inherited ? inheritedHint : undefined}>
                       <input type="checkbox" checked={selectedIds.has(sys.id)} disabled={inherited} onChange={() => toggleSelect(sys.id)} />
                     </td>
-                    <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 280 }}>
+                    <td style={{ ...tdStyle, fontWeight: 500, maxWidth: 340 }}>
                       {/* Clicking the name opens the detail modal, matching
                        *  Data Assets / People / DAMA Roles. Editing the name
                        *  is still possible via the row's Edit pencil button -
@@ -1465,24 +1467,38 @@ export default function SystemsPage() {
                        *  users naturally want to click. flex-nowrap so the
                        *  OwnerBadge lock never falls to a second line — the
                        *  name clips instead, tooltip carries the full text. */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        <button
-                          type="button"
-                          onClick={() => setViewingSystemId(sys.id)}
-                          title={sys.name}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <button
+                            type="button"
+                            onClick={() => setViewingSystemId(sys.id)}
+                            title={sys.name}
+                            style={{
+                              background: 'none', border: 'none', padding: 0,
+                              color: 'var(--color-primary)', cursor: 'pointer',
+                              font: 'inherit', fontWeight: 500, textAlign: 'left',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              minWidth: 0, flexShrink: 1,
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                          >
+                            {sys.name}
+                          </button>
+                          <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+                        </div>
+                        {/* Description renders as a single-line, ellipsised
+                         *  sub-label under the name (directory-entry style,
+                         *  matching Data Assets). Still searchable and fully
+                         *  editable via the row's Edit form / detail modal. */}
+                        <TruncatedText
+                          text={sys.description}
+                          emptyPlaceholder="--"
                           style={{
-                            background: 'none', border: 'none', padding: 0,
-                            color: 'var(--color-primary)', cursor: 'pointer',
-                            font: 'inherit', fontWeight: 500, textAlign: 'left',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            minWidth: 0, flexShrink: 1,
+                            fontSize: 12, fontWeight: 400, marginTop: 2,
+                            ...(sys.description?.trim() ? { color: 'var(--color-text-secondary)' } : null),
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                        >
-                          {sys.name}
-                        </button>
-                        <OwnerBadge assetOrgId={sys.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
+                        />
                       </div>
                     </td>
                     {systemCols.isVisible('type') && (
@@ -1497,11 +1513,6 @@ export default function SystemsPage() {
                         ) : (
                           sys.systemType ? <span style={typeBadge}>{sys.systemType}</span> : <span style={{ color: 'var(--color-text-muted)' }}>--</span>
                         )}
-                      </td>
-                    )}
-                    {systemCols.isVisible('description') && (
-                      <td style={{ ...tdStyle, maxWidth: 400, color: 'var(--color-text-secondary)' }}>
-                        <TruncatedText text={sys.description} emptyPlaceholder="--" />
                       </td>
                     )}
                     {systemCols.isVisible('owner') && (
