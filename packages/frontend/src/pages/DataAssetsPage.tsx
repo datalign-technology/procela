@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import PageHeader from '../components/PageHeader';
 import SectionLabel from '../components/SectionLabel';
-import TruncatedText from '../components/TruncatedText';
 import Modal from '../components/Modal';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import WhereUsed, { WhereUsedGroup } from '../components/WhereUsed';
@@ -294,9 +293,11 @@ function SyncFreshnessChip({ lastSyncedAt }: { lastSyncedAt?: string | null }) {
 // Toggleable columns. Name + Actions are always visible; everything
 // listed here is user-controllable from the Columns popover. Order
 // here is the render order in the table.
-type ColumnId = 'description' | 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward';
+// 'description' is no longer a toggleable column — it renders as a
+// single-line sub-label under the asset name (see the Asset cell), so
+// the row reads name-over-description like a directory entry.
+type ColumnId = 'system' | 'source' | 'tier' | 'health' | 'domain' | 'owner' | 'steward';
 const COLUMN_DEFS: Array<{ id: ColumnId; label: string; defaultVisible: boolean }> = [
-  { id: 'description', label: 'Description', defaultVisible: true  },
   { id: 'system',      label: 'System',      defaultVisible: true  },
   { id: 'source',      label: 'Source',      defaultVisible: false },
   { id: 'tier',        label: 'Tier',        defaultVisible: true  },
@@ -1722,7 +1723,6 @@ export default function DataAssetsPage() {
                   <input type="checkbox" checked={assets.length > 0 && selectedIds.size === assets.length} onChange={toggleSelectAll} aria-label="Select all assets" />
                 </th>
                 <SortableTh sortKey="name" active={sortKey} dir={sortDir} onClick={toggleSort}>Name</SortableTh>
-                {isVisible('description') && <SortableTh sortKey="description" active={sortKey} dir={sortDir} onClick={toggleSort}>Description</SortableTh>}
                 {isVisible('system') && <SortableTh sortKey="system" active={sortKey} dir={sortDir} onClick={toggleSort}>System</SortableTh>}
                 {isVisible('source') && <th scope="col" style={thStyle}>Source</th>}
                 {isVisible('tier') && <th scope="col" style={thStyle}>Tier</th>}
@@ -1761,7 +1761,8 @@ export default function DataAssetsPage() {
                         >
                           {isExpanded ? '\u25BC' : '\u25B6'}
                         </button>
-                        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                           {/* Name is a link to the detail modal for everyone -
                             *  editors and viewers both. Renaming happens via
                             *  the row's Edit pencil so the click target on the
@@ -1797,25 +1798,15 @@ export default function DataAssetsPage() {
                           )}
                           <OwnerBadge assetOrgId={asset.orgId} activeOrgId={activeOrgId} getOrgName={getOrgName} />
                         </div>
+                        <div
+                          style={{ fontSize: 12, fontWeight: 400, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}
+                          title={asset.description || undefined}
+                        >
+                          {asset.description || '--'}
+                        </div>
+                        </div>
                       </div>
                     </td>
-                    {isVisible('description') && (
-                      <td style={{ ...tdStyle, color: asset.description ? 'var(--color-text-secondary)' : 'var(--color-text-muted)', maxWidth: 320 }} title={inherited ? inheritedHint : undefined}>
-                        {canWrite && !inherited ? (
-                          <div
-                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            title={asset.description || undefined}
-                          >
-                            <InlineCellEdit
-                              value={asset.description || ''}
-                              onSave={(v) => inlineSaveField(asset.id, 'description', v)}
-                            />
-                          </div>
-                        ) : (
-                          <TruncatedText text={asset.description} emptyPlaceholder="--" />
-                        )}
-                      </td>
-                    )}
                     {isVisible('system') && (
                       <td style={tdStyle}>
                         {systemName(asset.systemId) || <span style={{ color: 'var(--color-text-muted)' }}>{'--'}</span>}
