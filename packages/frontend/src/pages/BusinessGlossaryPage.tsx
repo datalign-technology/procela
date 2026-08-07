@@ -174,14 +174,17 @@ function InlineCellEdit({
 
 // ── Component ──
 
-type GlossaryColId = 'term' | 'category' | 'status' | 'domain' | 'owner' | 'definition';
+// 'definition' is no longer a toggleable column — it renders as a
+// single-line sub-label under the term (see the Term cell), so the row
+// reads term-over-definition like a directory entry, matching the Data
+// Assets page.
+type GlossaryColId = 'term' | 'category' | 'status' | 'domain' | 'owner';
 const GLOSSARY_COLUMN_DEFS: Array<{ id: GlossaryColId; label: string; defaultVisible: boolean }> = [
   { id: 'term',       label: 'Term',           defaultVisible: true  },
   { id: 'category',   label: 'Category',       defaultVisible: true  },
   { id: 'status',     label: 'Status',         defaultVisible: true  },
   { id: 'domain',     label: 'Primary Domain', defaultVisible: true  },
   { id: 'owner',      label: 'Owner',          defaultVisible: true  },
-  { id: 'definition', label: 'Definition',     defaultVisible: true  },
 ];
 
 export default function BusinessGlossaryPage() {
@@ -910,7 +913,6 @@ export default function BusinessGlossaryPage() {
                     {glossaryCols.isVisible('status') && <SortableTh sortKey="status" active={sortKey} dir={sortDir} onClick={toggleSort}>Status</SortableTh>}
                     {glossaryCols.isVisible('domain') && <SortableTh sortKey="domain" active={sortKey} dir={sortDir} onClick={toggleSort}>Primary Domain</SortableTh>}
                     {glossaryCols.isVisible('owner') && <SortableTh sortKey="owner" active={sortKey} dir={sortDir} onClick={toggleSort}>Owner</SortableTh>}
-                    {glossaryCols.isVisible('definition') && <th scope="col" style={thStyle}>Definition</th>}
                     <th scope="col" style={{ ...thStyle, width: 80, textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
@@ -933,29 +935,42 @@ export default function BusinessGlossaryPage() {
                         </td>
                         {glossaryCols.isVisible('term') && (
                           <td style={{ ...tdStyle, fontWeight: 500 }}>
-                            {/* Click opens the edit form so the term gets a
-                             *  proper modal with definition / classification /
-                             *  related-terms - the inline editor only let users
-                             *  change the headword, missing the rest. Viewers
-                             *  get a plain label since they can't edit. */}
-                            {canWrite ? (
-                              <button
-                                type="button"
-                                onClick={() => openEdit(t)}
-                                title="Click to edit term"
+                            <div style={{ minWidth: 0 }}>
+                              {/* Click opens the edit form so the term gets a
+                               *  proper modal with definition / classification /
+                               *  related-terms - the inline editor only let users
+                               *  change the headword, missing the rest. Viewers
+                               *  get a plain label since they can't edit. */}
+                              {canWrite ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openEdit(t)}
+                                  title="Click to edit term"
+                                  style={{
+                                    background: 'none', border: 'none', padding: 0,
+                                    color: 'var(--color-primary)', cursor: 'pointer',
+                                    font: 'inherit', fontWeight: 500, textAlign: 'left',
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+                                >
+                                  {t.term}
+                                </button>
+                              ) : (
+                                t.term
+                              )}
+                              {/* Definition renders as a single-line, ellipsised
+                               *  sub-label under the term (directory-entry style,
+                               *  matching Data Assets). It stays searchable and
+                               *  fully editable via the row's Edit form. */}
+                              <TruncatedText
+                                text={t.definition}
                                 style={{
-                                  background: 'none', border: 'none', padding: 0,
-                                  color: 'var(--color-primary)', cursor: 'pointer',
-                                  font: 'inherit', fontWeight: 500, textAlign: 'left',
+                                  fontSize: 12, fontWeight: 400, marginTop: 2, maxWidth: 460,
+                                  ...(t.definition?.trim() ? { color: 'var(--color-text-secondary)' } : null),
                                 }}
-                                onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-                              >
-                                {t.term}
-                              </button>
-                            ) : (
-                              t.term
-                            )}
+                              />
+                            </div>
                           </td>
                         )}
                         {glossaryCols.isVisible('category') && (
@@ -996,11 +1011,6 @@ export default function BusinessGlossaryPage() {
                         {glossaryCols.isVisible('owner') && (
                           <td style={{ ...tdStyle, color: t.ownerName ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
                             {t.ownerName || '—'}
-                          </td>
-                        )}
-                        {glossaryCols.isVisible('definition') && (
-                          <td style={{ ...tdStyle, maxWidth: 360 }}>
-                            <TruncatedText text={t.definition} />
                           </td>
                         )}
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
