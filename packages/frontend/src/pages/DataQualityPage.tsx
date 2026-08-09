@@ -223,7 +223,6 @@ export default function DataQualityPage() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [filterAssetId, setFilterAssetId] = useState('');
   const [filterDimension, setFilterDimension] = useState('');
-  const [computingHealth, setComputingHealth] = useState<string | null>(null);
   // New: per-asset view with Manage Rules modal lives under the Assets tab.
   const [tab, setTab] = useState<'assets' | 'rules'>('assets');
   const [fullAssets, setFullAssets] = useState<DataAssetFull[]>([]);
@@ -395,27 +394,9 @@ export default function DataQualityPage() {
     setForm(emptyForm);
   };
 
-  const handleComputeHealth = async (assetId: string) => {
-    setComputingHealth(assetId);
-    try {
-      const res = await apiClient.post<{ success: boolean; data: { healthScore: number; rulesCount: number } }>(`/data-quality/compute-health/${assetId}`);
-      const score = res.data.healthScore;
-      const assetName = assetsList.find((a) => a.id === assetId)?.name || 'Asset';
-      addToast('success', `${assetName} health score computed: ${score}%`);
-      fetchData();
-    } catch {
-      addToast('error', 'Failed to compute health score');
-    } finally {
-      setComputingHealth(null);
-    }
-  };
-
   const updateField = (field: keyof FormData, value: string | number) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
-
-  // Get unique asset IDs from rules that have rules for Compute Health buttons
-  const assetsWithRules = [...new Set(rules.map((r) => r.dataAssetId))];
 
   if (loading) {
     return (
@@ -602,39 +583,6 @@ export default function DataQualityPage() {
         </>
       )}
 
-      {/* Compute Health Buttons */}
-      {assetsWithRules.length > 0 && (
-        <Card padding="12px 16px" marginBottom={16}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Compute Health Scores
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {assetsWithRules.map((assetId) => {
-              const asset = assetsList.find((a) => a.id === assetId);
-              const ruleCount = rules.filter((r) => r.dataAssetId === assetId).length;
-              return (
-                <button
-                  key={assetId}
-                  onClick={() => handleComputeHealth(assetId)}
-                  disabled={computingHealth === assetId}
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: 13,
-                    fontWeight: 500,
-                    background: computingHealth === assetId ? '#e5e7eb' : '#eff6ff',
-                    color: computingHealth === assetId ? '#9ca3af' : '#1e40af',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 'var(--radius-md)',
-                    cursor: computingHealth === assetId ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {computingHealth === assetId ? 'Computing...' : `Compute: ${asset?.name || assetId} (${ruleCount} rules)`}
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-      )}
 
       {/* Add/Edit Form */}
       {showForm && (
@@ -689,29 +637,10 @@ export default function DataQualityPage() {
                 />
               </div>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
-                Current Score: {form.currentScore}%
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={form.currentScore}
-                  onChange={(e) => updateField('currentScore', Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={form.currentScore}
-                  onChange={(e) => updateField('currentScore', Math.max(0, Math.min(100, Number(e.target.value))))}
-                  style={{ ...inputStyle, width: 60, textAlign: 'center' }}
-                />
-              </div>
-            </div>
+            {/* Current Score is read-only: it's the measured pass rate set
+                by running the rule (or fabricated for untyped rules). The
+                editable slider was removed; the score shows read-only in the
+                list column and is populated by rule execution. */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>
                 Weight: {form.weight}

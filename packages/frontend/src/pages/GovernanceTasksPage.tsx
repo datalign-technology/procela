@@ -82,7 +82,6 @@ const TASK_STATUSES = ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const
 const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 const TASK_TYPES = ['REVIEW', 'APPROVAL', 'REMEDIATION', 'CERTIFICATION', 'DATA_QUALITY', 'POLICY_UPDATE', 'OTHER'] as const;
 const AUTOMATION_MODES = ['HUMAN', 'AGENT', 'HYBRID'] as const;
-const LINKED_OBJECT_TYPES = ['', 'DATA_ASSET', 'DATA_DOMAIN', 'PROCESS', 'SYSTEM'] as const;
 
 const STATUS_TRANSITIONS: Record<string, { label: string; target: string; style: 'primary' | 'secondary' | 'danger' }[]> = {
   OPEN:        [{ label: 'Start', target: 'IN_PROGRESS', style: 'primary' }, { label: 'Cancel', target: 'CANCELLED', style: 'danger' }],
@@ -509,23 +508,11 @@ export default function GovernanceTasksPage() {
                 {AUTOMATION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Linked Object Type</label>
-              <select style={selectStyle} value={form.linkedObjectType} onChange={(e) => setForm({ ...form, linkedObjectType: e.target.value, linkedObjectId: '' })}>
-                {LINKED_OBJECT_TYPES.map((t) => <option key={t} value={t}>{t ? t.replace(/_/g, ' ') : '-- None --'}</option>)}
-              </select>
-            </div>
-            {form.linkedObjectType && (
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Linked Object ID</label>
-                <input
-                  style={inputStyle}
-                  value={form.linkedObjectId}
-                  onChange={(e) => setForm({ ...form, linkedObjectId: e.target.value })}
-                  placeholder="Object ID"
-                />
-              </div>
-            )}
+            {/* Linked Object Type/ID inputs removed: the user-pickable
+                vocabulary was read by nothing — the values actually consumed
+                (dashboard / governance-calendar) are set programmatically with
+                their own types. The DB columns and that programmatic linkage
+                are retained. */}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>

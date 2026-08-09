@@ -9,8 +9,6 @@ import { SkeletonRows } from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import OrgPicker from '../components/OrgPicker';
 import SkillPicker from '../components/SkillPicker';
-import CommentsPanel from '../components/CommentsPanel';
-import ActivityFeed from '../components/ActivityFeed';
 import OrgRolePill from '../components/OrgRolePill';
 import SecurityCard from '../components/SecurityCard';
 
@@ -574,31 +572,15 @@ export default function PersonDetailPage() {
         </div>
       )}
 
-      {/* Discussion — threaded comments + @mentions about this person.
-        *  Useful for notes about onboarding, handoffs, escalations. */}
-      <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Discussion</div>
-        <CommentsPanel
-          entityType="Person"
-          entityId={p.id}
-          entityLabel={`${p.name}'s profile`}
-        />
-      </div>
-
       {/* Security — admin-only panel for credential lifecycle.
         *  Surfaces deactivate / reactivate (soft-delete state) and
         *  Reset MFA (forces the user back through enrollment on
         *  next login). Hidden for non-admins so the usual people
         *  page doesn't grow these controls for everyone. */}
       <SecurityCard person={p} onChanged={fetch360} />
-
-      {/* Activity by this person across the org. The userId variant of
-        *  the feed answers "what is X working on lately?", complementing
-        *  the Discussion thread on the same page. */}
-      <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Activity</div>
-        <ActivityFeed userId={p.id} inline initialRows={5} limit={50} />
-      </div>
+      {/* Per-person Discussion and Activity panels removed: low-value
+          per-person threaded comments, and a per-user audit feed that
+          duplicates the global Audit Log filtered by user. */}
     </div>
   );
 }
