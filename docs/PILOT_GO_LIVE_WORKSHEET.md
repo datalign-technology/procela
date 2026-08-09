@@ -66,25 +66,15 @@ needed**: `db_password`, `database_url`, `jwt_secret`,
 ## Step 2 — populate the out-of-band secrets
 
 These are created as empty `REPLACE_ME` placeholders by design (no secret
-material in Terraform state). Populate with `put-secret-value`; `〈prefix〉`
-is your `name_prefix`, e.g. `procela-prod` (`terraform output -json
-secret_arns` lists the ARNs). Generation commands are in DEPLOY_RUNBOOK §2.
+material in Terraform state). `〈prefix〉` is your `name_prefix`, e.g.
+`procela-prod` (`terraform output -json secret_arns` lists the ARNs).
+Generate each secret per DEPLOY_RUNBOOK §2 and place it with
+`put-secret-value` per DEPLOY_RUNBOOK §3 — the exact commands live there,
+don't re-derive them here.
 
-- [ ] **`ANTHROPIC_API_KEY`** *(checklist #6)*
-  ```bash
-  aws secretsmanager put-secret-value \
-    --secret-id '〈prefix〉/app/anthropic_api_key' --secret-string 'sk-ant-…'
-  ```
+- [ ] **`ANTHROPIC_API_KEY`** *(checklist #6)* → `〈prefix〉/app/anthropic_api_key`
 - [ ] **RS256 JWT keypair** *(checklist #7 — else the app drops to HS256
-  with a boot warning)*
-  ```bash
-  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out jwt-private.pem
-  openssl rsa -in jwt-private.pem -pubout -out jwt-public.pem
-  aws secretsmanager put-secret-value \
-    --secret-id '〈prefix〉/app/jwt_private_key' --secret-string "$(cat jwt-private.pem)"
-  aws secretsmanager put-secret-value \
-    --secret-id '〈prefix〉/app/jwt_public_key'  --secret-string "$(cat jwt-public.pem)"
-  ```
+  with a boot warning)* → `〈prefix〉/app/jwt_private_key` + `〈prefix〉/app/jwt_public_key`
 
 ---
 

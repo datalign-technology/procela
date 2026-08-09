@@ -102,7 +102,7 @@ arrays remain solely as the backing store for the JSON default.
 ```
 packages/backend/
 ├── prisma/
-│   ├── schema.prisma            # 31 models, 17 enums — the source of truth
+│   ├── schema.prisma            # 63 models, 7 enums — the source of truth
 │   └── migrations/              # generated SQL migration files
 └── src/
     └── db/
@@ -112,7 +112,7 @@ packages/backend/
                                   #   for every subsequent entity
 ```
 
-The **schema** is complete for the 20 core entities (Organization,
+The **schema** is complete for the 18 core entities (Organization,
 Person, ProcessNode, System, DataAsset, DataDomain, Mapping,
 Skill, DamaRole, AuditLog, Notification, GovernanceTask,
 GovernanceIssue, GovernancePolicy, GovernanceControl,
@@ -256,14 +256,12 @@ Skipped as low-value or requiring source-shape changes:
 
 The schema is source-of-truth against the JSON row shape.
 
-**Route conversion status**: complete. Every route handler across the
-codebase reads and writes through its repository; in Postgres mode the
-in-memory arrays are retired (`loadStore` returns `[]`). The cutover was
-delivered as a sequence of small per-handler / per-entity PRs — an
-incremental path that stayed shippable and roll-back-able at every step,
-versus a big-bang PR touching every route file at once. The repository
-conversion pattern above documents the shape to reuse for any future
-route.
+**Route conversion status**: complete. Every route handler reads and
+writes through its repository; in Postgres mode the in-memory arrays are
+retired (`loadStore` returns `[]`). The repository conversion pattern
+above is the shape to reuse for any future route. See
+[`POSTGRES_CUTOVER_PLAN.md`](./POSTGRES_CUTOVER_PLAN.md) for the full
+record of how the cutover was delivered.
 
 ## Handling schema drift
 
