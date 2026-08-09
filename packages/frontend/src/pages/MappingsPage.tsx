@@ -332,10 +332,6 @@ export default function MappingsPage() {
     }
   };
 
-  // Stats
-  const totalMappings = mappings.length;
-  const aiSuggestedCount = mappings.filter((m) => m.aiSuggested).length;
-  const manualCount = totalMappings - aiSuggestedCount;
   // Orphans = mappings whose linked entity has been deleted. The activity
   // side and the target side are tracked separately because the user
   // experience is different — an orphan activity row is harder to
@@ -628,50 +624,6 @@ export default function MappingsPage() {
         </div>
       )}
 
-      {/* Stats */}
-      {mappings.length > 0 && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          <div
-            style={{
-              flex: 1,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '12px 16px',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{totalMappings}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Total Mappings</div>
-          </div>
-          <div
-            style={{
-              flex: 1,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '12px 16px',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{aiSuggestedCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>AI Suggested</div>
-          </div>
-          <div
-            style={{
-              flex: 1,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              padding: '12px 16px',
-              boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{manualCount}</div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Manual</div>
-          </div>
-        </div>
-      )}
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
