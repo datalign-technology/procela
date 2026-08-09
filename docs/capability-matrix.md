@@ -40,10 +40,13 @@ filterable, sortable view.
 
 ## Quick summary (snapshot)
 
-| Category | Built | Partial / Stubbed | Not Started |
+_Derived from `capability-matrix.csv` — regenerate these counts whenever a
+row's status changes so the snapshot doesn't drift from the source of truth._
+
+| Category | Built | Partial / Stubbed / Designed | Not Started |
 |---|---|---|---|
 | Catalog | 6 | 0 | 0 |
-| Data assets | 9 | 1 | 0 |
+| Data assets | 10 | 1 | 0 |
 | Glossary | 3 | 0 | 0 |
 | Systems | 3 | 0 | 1 |
 | Connections | 3 | 2 | 0 |
@@ -55,7 +58,7 @@ filterable, sortable view.
 | AI | 4 | 0 | 1 |
 | Auth | 2 | 0 | 2 |
 | Audit | 1 | 1 | 0 |
-| Infrastructure | 3 | 0 | 3 |
+| Infrastructure | 1 | 2 | 3 |
 | UX | 4 | 0 | 0 |
 | Misc | 0 | 0 | 3 |
 
