@@ -5,7 +5,6 @@ import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
 import CommentsPanel from '../../components/CommentsPanel';
-import ActivityFeed from '../../components/ActivityFeed';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import AssetSuggestionsPanel from '../../components/AssetSuggestionsPanel';
 import SystemSuggestionsPanel from '../../components/SystemSuggestionsPanel';
@@ -311,14 +310,15 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           {isExpanded && (
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 2 }}>
               {/* "Where it runs" connection summary — read-only one-liner
-                 above the editable fields so the entire connection
-                 landscape (owner · role · systems · data) is visible at
-                 a glance when you open a node. Skipped for value streams
-                 where systems/assets aren't applicable, and for
-                 governance nodes where the system / data-asset counts
-                 are inherently zero — governance happens in policies,
-                 decisions and meetings, not on systems. */}
-              {node.level !== 'VALUE_STREAM' && node.domain !== 'GOVERNANCE' && (() => {
+                 above the editable fields so the connection landscape
+                 (owner · role · systems · data) is visible at a glance.
+                 Activity-only: it's the only level where all four bits are
+                 real. On Value Streams / Processes / Sub-Processes the
+                 systems and data assets live on the child activities (data
+                 assets always read 0 here), and governance nodes have no
+                 system flows at all — above Activity the summary just
+                 duplicated the Owner field or showed zeros. */}
+              {node.level === 'ACTIVITY' && node.domain !== 'GOVERNANCE' && (() => {
                 const ownerName = node.ownerId ? peopleList.find((p) => p.id === node.ownerId)?.name : null;
                 const sysCount = (node.systemIds || []).length;
                 const assetCount = (mappingsByStep[node.id] || []).length;
@@ -784,12 +784,15 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               )}
               {/* Systems this step runs on — first-class link, distinct
                  from the data-asset mappings below (a step may run on a
-                 system even before any data asset is linked). Available
-                 on every level except value streams (too abstract) and
-                 governance nodes (a Data Governance Council meeting
-                 isn't really "running on" the corporate ERP — governance
-                 outputs are policies and decisions, not system flows). */}
-              {node.level !== 'VALUE_STREAM' && node.domain !== 'GOVERNANCE' && (
+                 system even before any data asset is linked). Scoped to
+                 Activity level, like Inputs/Outputs: a process/sub-process
+                 "runs on" whatever its activities do, so a higher-level
+                 node's systems are the roll-up of its children — declaring
+                 them independently is a two-sources-of-truth trap.
+                 Governance nodes have no system flows (policies and
+                 decisions, not systems). Higher levels get the pointer
+                 note below instead. */}
+              {node.level === 'ACTIVITY' && node.domain !== 'GOVERNANCE' && (
                 <DocSystemsField
                   selected={node.systemIds || []}
                   options={systemsList}
@@ -893,7 +896,7 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
           )}
           {isExpanded && node.level !== 'VALUE_STREAM' && node.level !== 'ACTIVITY' && (
             <div style={{ marginTop: 8, padding: '6px 10px', background: '#f8fafc', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-              <strong>Inputs and outputs are defined at the activity level.</strong> Open one of this {node.level === 'PROCESS' ? 'process’s' : 'node’s'} activities to declare data assets, governance documents, and attachments — its effective I/O is the roll-up of its children.
+              <strong>Systems, inputs and outputs are defined at the activity level.</strong> Open one of this {node.level === 'PROCESS' ? 'process’s' : 'node’s'} activities to attach systems and declare data assets, governance documents, and attachments — its effective systems and I/O are the roll-up of its children.
             </div>
           )}
           {/* Approved agent drafts that haven't yet been promoted to a
@@ -963,24 +966,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   onCount={(n) => setSectionCount('discussion', n)}
                 />
               </CollapsibleSection>
-              {/* No count badge here: the feed is capped at limit=30, so a
-                *  badge could undercount a long audit trail. */}
-              {/* Renamed from "Activity" to disambiguate from the tree
-                *  level of the same name — an audit-log feed on a Value
-                *  Stream row sitting next to a `✓ Activity` completeness
-                *  check made the word ambiguous on the same page. */}
-              <CollapsibleSection
-                title="History"
-                open={openSections.has('activity')}
-                onToggle={() => toggleSection('activity')}
-              >
-                <ActivityFeed
-                  entityType="ProcessNode"
-                  entityId={node.id}
-                  inline
-                  initialRows={5}
-                />
-              </CollapsibleSection>
+              {/* Per-node history removed: it duplicated the Versions
+                *  button on this same row (version snapshots) and the
+                *  global Audit Log page. */}
             </>
           )}
           {/* Guided prompt for missing required children */}
