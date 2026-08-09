@@ -880,11 +880,6 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               }}
             />
           )}
-          {isExpanded && node.level !== 'VALUE_STREAM' && node.level !== 'ACTIVITY' && (
-            <div style={{ marginTop: 8, padding: '6px 10px', background: '#f8fafc', border: '1px dashed var(--color-border)', borderRadius: 4, fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-              <strong>Systems, inputs and outputs are defined at the activity level.</strong> Open one of this {node.level === 'PROCESS' ? 'process’s' : 'node’s'} activities to attach systems and declare data assets, governance documents, and attachments — its effective systems and I/O are the roll-up of its children.
-            </div>
-          )}
           {/* Approved agent drafts that haven't yet been promoted to a
              Governance Document — surfaced here in the Outputs area so
              the answer to "where's my approved draft as an output?" is
