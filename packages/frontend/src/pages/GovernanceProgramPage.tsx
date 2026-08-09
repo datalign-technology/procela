@@ -387,7 +387,6 @@ export default function GovernanceProgramPage() {
   const [inScope, setInScope] = useState('');
   const [outOfScope, setOutOfScope] = useState('');
   const [boundaries, setBoundaries] = useState('');
-  const [constraints, setConstraints] = useState('');
   const [vision, setVision] = useState('');
   const [principles, setPrinciples] = useState<string[]>([]);
   const [newPrinciple, setNewPrinciple] = useState('');
@@ -415,8 +414,9 @@ export default function GovernanceProgramPage() {
   const hydrateFromProgram = (p: Program) => {
     setInScope(p.scope?.inScope || '');
     setOutOfScope(p.scope?.outOfScope || '');
-    setBoundaries(p.scope?.boundaries || '');
-    setConstraints(p.scope?.constraints || '');
+    // Boundaries absorbed the former separate Constraints field — fold any
+    // existing constraints text in on load so nothing is lost.
+    setBoundaries([p.scope?.boundaries, p.scope?.constraints].map((s) => (s || '').trim()).filter(Boolean).join('\n\n'));
     setVision(p.principles?.vision || '');
     setPrinciples(Array.isArray(p.principles?.principles) ? p.principles.principles : []);
     setDecisionRights(p.principles?.decisionRights || '');
@@ -498,7 +498,9 @@ export default function GovernanceProgramPage() {
     setSaving(true);
     try {
       const payload = {
-        scope: { inScope, outOfScope, boundaries, constraints },
+        // constraints merged into boundaries; write it empty so the two
+        // can't drift back apart.
+        scope: { inScope, outOfScope, boundaries, constraints: '' },
         principles: { vision, principles, decisionRights, operatingModel },
         targetStartDate: targetStartDate || null,
         targetLaunchDate: targetLaunchDate || null,
@@ -845,8 +847,7 @@ export default function GovernanceProgramPage() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>In Scope</label><textarea style={textareaStyle} value={inScope} onChange={(e) => setInScope(e.target.value)} placeholder="What data, systems, and processes are governed by this program?" /></div>
                       <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Out of Scope</label><textarea style={textareaStyle} value={outOfScope} onChange={(e) => setOutOfScope(e.target.value)} placeholder="What is explicitly excluded from this program?" /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries</label><textarea style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational, geographic, or functional boundaries for this program" /></div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Constraints</label><textarea style={textareaStyle} value={constraints} onChange={(e) => setConstraints(e.target.value)} placeholder="Budget, timeline, regulatory, or resource constraints to respect" /></div>
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Boundaries &amp; Constraints</label><textarea style={textareaStyle} value={boundaries} onChange={(e) => setBoundaries(e.target.value)} placeholder="Organizational / geographic / functional boundaries, plus budget, timeline, regulatory or resource constraints to respect" /></div>
                     </div>
                   )}
                   {activeTab === 'principles' && (
