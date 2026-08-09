@@ -4,14 +4,12 @@ import { apiClient } from '../api/client';
 import { thStyle, tdStyle } from '../lib/tableStyles';
 import PageHeader from '../components/PageHeader';
 import Card from '../components/Card';
-import SectionLabel from '../components/SectionLabel';
 import SkillGapBadge from '../components/SkillGapBadge';
 import { useOrgContext } from '../stores/orgContext';
 import ExportMenu from '../components/ExportMenu';
 import SavedViewsMenu from '../components/SavedViewsMenu';
 import EmptyState from '../components/EmptyState';
 import { renderNavIcon } from '../components/navIcons';
-import Modal from '../components/Modal';
 import { useToastStore } from '../stores/toastStore';
 import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
@@ -105,13 +103,7 @@ const DAMA_ROLE_LABELS: Record<string, string> = {
   DATA_STEWARD: 'Data Steward (Legacy)',
 };
 
-const GROUP_TYPE_LABELS: Record<string, string> = {
-  COUNCIL: 'Council', OFFICE: 'Office', COMMITTEE: 'Committee',
-  STEWARDSHIP_TEAM: 'Stewardship Team', WORKING_GROUP: 'Working Group',
-  COMMUNITY_OF_PRACTICE: 'Community of Practice',
-};
 
-const GROUP_ROLES = ['CHAIR', 'VICE_CHAIR', 'MEMBER', 'SECRETARY', 'ADVISOR'] as const;
 
 // ── Styles ──
 
@@ -127,11 +119,6 @@ const btnSecondary: React.CSSProperties = {
   padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
 };
-const btnIcon: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  padding: '2px 6px', fontSize: 11, color: 'var(--color-text-muted)', borderRadius: 4,
-};
-
 const typeBadge = (type: string): React.CSSProperties => {
   const colors: Record<string, { bg: string; color: string }> = {
     company: { bg: '#dbeafe', color: '#1e40af' }, division: { bg: '#ede9fe', color: '#5b21b6' },
@@ -173,8 +160,8 @@ function flattenTreeForSelect(nodes: OrgNode[], depth = 0): FlatOrgOption[] {
 
 // ── Forms ──
 
-interface PersonFormData { orgIds: string[]; name: string; email: string; role: string; title: string; accessibleOrgIds: string[]; }
-const emptyPersonForm: PersonFormData = { orgIds: [], name: '', email: '', role: 'VIEWER', title: '', accessibleOrgIds: [] };
+interface PersonFormData { orgIds: string[]; name: string; email: string; role: string; title: string; }
+const emptyPersonForm: PersonFormData = { orgIds: [], name: '', email: '', role: 'VIEWER', title: '' };
 
 // ── File Picker ──
 
@@ -302,15 +289,9 @@ export default function PeoplePage() {
   // <currently-filtered org>" is a single click, but the user can change it
   // to any org they have access to in the dropdown.
   const [peopleImportOrgId, setPeopleImportOrgId] = useState('');
-  const [viewing360, setViewing360] = useState<Person360Data | null>(null);
   const [previewPersonId, setPreviewPersonId] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<Person360Data | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  // loading360 is only read by the legacy modal (now unreachable); setter
-  // is dead. `_setLoading360` retains the tuple shape without the unused
-  // warning.
-  const [loading360, _setLoading360] = useState(false); void _setLoading360;
-  const [saving360, setSaving360] = useState(false);
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [confirmBulkDeletePeople, setConfirmBulkDeletePeople] = useState(false);
   const [confirmDeletePerson, setConfirmDeletePerson] = useState<string | null>(null);
@@ -332,7 +313,6 @@ export default function PeoplePage() {
 
   // Quick-add row state
   const [quickName, setQuickName] = useState('');
-  const [quickEmail, setQuickEmail] = useState('');
   const [quickTitle, setQuickTitle] = useState('');
   const [quickSaving, setQuickSaving] = useState(false);
 
@@ -342,13 +322,12 @@ export default function PeoplePage() {
     try {
       await apiClient.post('/people', {
         name: quickName.trim(),
-        email: quickEmail.trim() || undefined,
         title: quickTitle.trim() || undefined,
         role: 'VIEWER',
         orgIds: [selectedOrgId],
       });
       addToast('success', `${quickName.trim()} added`);
-      setQuickName(''); setQuickEmail(''); setQuickTitle('');
+      setQuickName(''); setQuickTitle('');
       fetchData();
     } catch (e) {
       addToast('error', e instanceof Error ? e.message : 'Failed to add person');
@@ -366,10 +345,6 @@ export default function PeoplePage() {
   // person is in multiple orgs.
   const [allSkills, setAllSkills] = useState<Array<{ id: string; name: string; category: string }>>([]);
   const [skillCoverageByPerson, setSkillCoverageByPerson] = useState<Record<string, { unqualifiedCount: number; sample: string[] }>>({});
-
-  // DAMA role add form state inside 360 modal
-  const [showAddDamaRole, setShowAddDamaRole] = useState(false);
-  const [newDamaRole, setNewDamaRole] = useState({ roleType: 'CDO', scopeType: 'ORG' as const, scopeId: '' });
 
   const fetchData = useCallback(async () => {
     try {
@@ -558,7 +533,6 @@ export default function PeoplePage() {
     setPersonForm({
       orgIds: person.orgIds || [], name: person.name, email: person.email,
       role: person.role, title: person.title,
-      accessibleOrgIds: person.accessibleOrgIds || [],
     });
     setEditingPersonId(person.id);
     setShowPersonForm(true);
@@ -568,9 +542,9 @@ export default function PeoplePage() {
     setPersonFormSave('saving');
     try {
       if (editingPersonId) {
-        // Edit: send only the identity fields. Skipping orgIds / role /
-        // accessibleOrgIds means the backend leaves them untouched, so
-        // changes made under Manage aren't clobbered.
+        // Edit: send only the identity fields. Skipping orgIds / role
+        // means the backend leaves them untouched, so changes made under
+        // Manage aren't clobbered.
         await apiClient.put(`/people/${editingPersonId}`, {
           name: personForm.name,
           email: personForm.email,
@@ -713,168 +687,6 @@ export default function PeoplePage() {
     } catch (err) {
       errorToast(err, 'Bulk role assignment failed');
     }
-  };
-  // NOTE: The Person 360 modal used to be the entry point here.
-  // It's now the dedicated /people/:id page; the Manage button
-  // navigates there. The modal JSX below remains as legacy code but
-  // is unreachable because nothing sets `viewing360` anymore. Leave
-  // it in place for one release cycle so we can ship the new page
-  // without a destructive diff; remove in a follow-up.
-
-  // Re-fetch 360 data for current person (after edits)
-  const refresh360 = async () => {
-    if (!viewing360) return;
-    try {
-      const res = await apiClient.get<{ success: boolean; data: Person360Data }>(`/people/${viewing360.person.id}/360`);
-      setViewing360(res.data || null);
-    } catch { /* */ }
-    // Also refresh governance data for summary column
-    try {
-      const [govRes, damaRes, domainRes] = await Promise.all([
-        apiClient.get<{ success: boolean; data: GovernanceGroupFull[] }>('/governance-groups'),
-        apiClient.get<{ success: boolean; data: DamaRoleFull[] }>('/dama-roles'),
-        apiClient.get<{ success: boolean; data: DataDomainFull[] }>('/data-domains'),
-      ]);
-      setAllGovernanceGroups(govRes.data || []);
-      setAllDamaRoles(damaRes.data || []);
-      setAllDataDomains(domainRes.data || []);
-    } catch { /* */ }
-  };
-
-  // ── Governance Group membership toggle (optimistic) ──
-  // Flip the UI state immediately so the checkbox feels instant, then
-  // call the API in the background. On failure, revert and toast — the
-  // previous state is captured in `snapshot` before mutation.
-  const toggleGroupMembership = async (groupId: string, isMember: boolean, role: string = 'MEMBER') => {
-    if (!viewing360) return;
-    const snapshot = viewing360;
-    // Optimistically toggle the group in the currently-viewed 360.
-    const nextGroups = isMember
-      ? viewing360.governanceGroups.filter((g) => g.groupId !== groupId)
-      : [
-          ...viewing360.governanceGroups,
-          {
-            groupId,
-            groupName: viewing360.allGroups.find((g) => g.id === groupId)?.name || '',
-            groupType: viewing360.allGroups.find((g) => g.id === groupId)?.type || '',
-            groupRole: role,
-            since: new Date().toISOString(),
-          },
-        ];
-    setViewing360({ ...viewing360, governanceGroups: nextGroups });
-    try {
-      if (isMember) await apiClient.delete(`/governance-groups/${groupId}/members/${viewing360.person.id}`);
-      else await apiClient.post(`/governance-groups/${groupId}/members`, { personId: viewing360.person.id, groupRole: role });
-      // Background reconcile with server truth — catches any server-side
-      // mutations our optimistic model didn't predict (timestamps, etc.).
-      await refresh360();
-    } catch (err) {
-      setViewing360(snapshot);  // revert
-      errorToast(err, 'Failed to update group membership');
-    }
-  };
-
-  // ── Governance Group role change ──
-  const changeGroupRole = async (groupId: string, newRole: string) => {
-    if (!viewing360) return;
-    setSaving360(true);
-    try {
-      // Remove then re-add with new role
-      await apiClient.delete(`/governance-groups/${groupId}/members/${viewing360.person.id}`);
-      await apiClient.post(`/governance-groups/${groupId}/members`, {
-        personId: viewing360.person.id, groupRole: newRole,
-      });
-      await refresh360();
-    } catch (err) { errorToast(err, 'Failed to change group role'); }
-    finally { setSaving360(false); }
-  };
-
-  // ── DAMA Role add/remove ──
-  const addDamaRole = async () => {
-    if (!viewing360 || !newDamaRole.roleType || !newDamaRole.scopeId) return;
-    setSaving360(true);
-    try {
-      await apiClient.post('/dama-roles', {
-        personId: viewing360.person.id,
-        roleType: newDamaRole.roleType,
-        scopeType: newDamaRole.scopeType,
-        scopeId: newDamaRole.scopeId,
-      });
-      setShowAddDamaRole(false);
-      setNewDamaRole({ roleType: 'CDO', scopeType: 'ORG', scopeId: '' });
-      await refresh360();
-    } catch (err) { errorToast(err, 'Failed to assign governance role'); }
-    finally { setSaving360(false); }
-  };
-
-  const removeDamaRole = async (roleId: string) => {
-    setSaving360(true);
-    try {
-      await apiClient.delete(`/dama-roles/${roleId}`);
-      await refresh360();
-    } catch (err) { errorToast(err, 'Failed to remove governance role'); }
-    finally { setSaving360(false); }
-  };
-
-  // ── Person identity (org + role) editing inside the Manage modal ──
-  // These live here (not in the Edit form) so users edit "who they are"
-  // separately from "what access / responsibilities they have".
-
-  const togglePersonOrgAssignment = async (orgId: string) => {
-    if (!viewing360) return;
-    const current = viewing360.person.orgIds || [];
-    const next = current.includes(orgId)
-      ? current.filter((id) => id !== orgId)
-      : [...current, orgId];
-    if (next.length === 0) return; // backend requires at least one assignment
-    setSaving360(true);
-    try {
-      await apiClient.put(`/people/${viewing360.person.id}`, { orgIds: next });
-      addToast('success', 'Org assignment updated');
-      await refresh360();
-      fetchData();
-    } catch (err) { errorToast(err, 'Failed to update org assignment'); }
-    finally { setSaving360(false); }
-  };
-
-  const changePersonRole = async (newRole: string) => {
-    if (!viewing360) return;
-    setSaving360(true);
-    try {
-      await apiClient.put(`/people/${viewing360.person.id}`, { role: newRole });
-      addToast('success', 'Role updated');
-      await refresh360();
-      fetchData();
-    } catch (err) { errorToast(err, 'Failed to change application role'); }
-    finally { setSaving360(false); }
-  };
-
-  // ── Data Domain owner/steward toggle ──
-  const toggleDomainOwner = async (domainId: string, isCurrentOwner: boolean) => {
-    if (!viewing360) return;
-    setSaving360(true);
-    try {
-      await apiClient.put(`/data-domains/${domainId}`, {
-        ownerId: isCurrentOwner ? null : viewing360.person.id,
-      });
-      addToast('success', isCurrentOwner ? 'Domain owner removed' : 'Domain owner assigned');
-      await refresh360();
-    } catch (err) { errorToast(err, 'Failed to update data domain owner'); }
-    finally { setSaving360(false); }
-  };
-
-  const toggleDomainSteward = async (domainId: string, isSteward: boolean, currentStewardIds: string[]) => {
-    if (!viewing360) return;
-    setSaving360(true);
-    try {
-      const newStewardIds = isSteward
-        ? currentStewardIds.filter((id) => id !== viewing360.person.id)
-        : [...currentStewardIds, viewing360.person.id];
-      await apiClient.put(`/data-domains/${domainId}`, { stewardIds: newStewardIds });
-      addToast('success', isSteward ? 'Steward removed' : 'Steward assigned');
-      await refresh360();
-    } catch (err) { errorToast(err, 'Failed to update steward'); }
-    finally { setSaving360(false); }
   };
   const handlePeopleImport = async () => {
     const orgId = peopleImportOrgId || selectedOrgId || activeOrgId;
@@ -1547,304 +1359,6 @@ export default function PeoplePage() {
         )}
       </div>
 
-      {/* Person 360 View Modal */}
-      <Modal
-        open={!!(viewing360 || loading360)}
-        onClose={() => { if (!loading360) setViewing360(null); }}
-        size="lg"
-        kicker="MANAGE PERSON"
-        title={viewing360?.person.name || 'Loading\u2026'}
-        subtitle={viewing360 ? (
-          <>
-            {viewing360.person.email && <span>{viewing360.person.email}</span>}
-            {viewing360.person.title && <span>{viewing360.person.email ? ' \u2022 ' : ''}{viewing360.person.title}</span>}
-          </>
-        ) : undefined}
-        ariaLabel={viewing360 ? `Person: ${viewing360.person.name}` : 'Person details'}
-        footer={viewing360 ? (
-          <button
-            onClick={() => setViewing360(null)}
-            style={{
-              padding: '8px 16px', background: 'var(--color-bg)', color: 'var(--color-text)',
-              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-              fontSize: 13, fontWeight: 500, cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
-        ) : undefined}
-      >
-        {loading360 ? (
-          <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>Loading...</p>
-        ) : viewing360 ? (
-          <>
-
-                {/* ── ASSIGNED ORGANIZATIONS (editable, tree) ── */}
-                <div style={{ marginBottom: 16 }}>
-                  <SectionLabel marginBottom={4}>
-                    Assigned Organizations ({(viewing360.person.orgIds || []).length})
-                  </SectionLabel>
-                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 6 }}>
-                    Toggle membership across the org hierarchy. The person must remain assigned to at least one org.
-                  </p>
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', gap: 1,
-                    border: '1px solid var(--color-border)', borderRadius: 4,
-                    background: 'var(--color-surface)',
-                    maxHeight: 280, overflowY: 'auto',
-                  }}>
-                    {orgOptions.map((opt) => {
-                      const personOrgIds = viewing360.person.orgIds || [];
-                      const checked = personOrgIds.includes(opt.id);
-                      const isOnlyAssignment = checked && personOrgIds.length === 1;
-                      return (
-                        <label
-                          key={opt.id}
-                          title={isOnlyAssignment ? 'Cannot unassign the last org' : undefined}
-                          style={{
-                            fontSize: 11, display: 'flex', alignItems: 'center', gap: 6,
-                            cursor: saving360 || isOnlyAssignment ? 'default' : 'pointer',
-                            padding: '4px 8px',
-                            paddingLeft: 8 + opt.depth * 18,
-                            borderBottom: '1px solid var(--color-border)',
-                            background: checked ? '#eff6ff' : undefined,
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={saving360 || isOnlyAssignment}
-                            onChange={() => togglePersonOrgAssignment(opt.id)}
-                            style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
-                          />
-                          <span style={{ whiteSpace: 'nowrap', fontWeight: checked ? 500 : 400 }}>{opt.name}</span>
-                          <span style={typeBadge(opt.type)}>{opt.type}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* ── APPLICATION ACCESS (editable) ── */}
-                <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
-                  <h3 style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Application Access</h3>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <label style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Platform role:</label>
-                    <select
-                      value={viewing360.person.role}
-                      onChange={(e) => changePersonRole(e.target.value)}
-                      disabled={saving360}
-                      style={{ ...inputStyle, width: 'auto', appearance: 'auto' as any, fontSize: 12, padding: '4px 8px' }}
-                    >
-                      {roles.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
-                    </select>
-                    <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Controls what this person can do in the application</span>
-                  </div>
-                </div>
-
-                {/* ── GOVERNANCE RESPONSIBILITIES ── */}
-                <div style={{ marginBottom: 8, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
-                  <h3 style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Governance Responsibilities</h3>
-                  <p style={{ fontSize: 10, color: 'var(--color-text-muted)', marginBottom: 10 }}>Governance roles, governance group memberships, and data domain assignments</p>
-                </div>
-
-                {/* Governance Groups — Editable */}
-                <div style={{ marginBottom: 16 }}>
-                  <SectionLabel>
-                    Governance Groups ({viewing360.governanceGroups.length} of {viewing360.allGroups.length})
-                  </SectionLabel>
-                  {viewing360.allGroups.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No governance groups defined yet</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {viewing360.allGroups.map((group) => {
-                        const membership = viewing360.governanceGroups.find((g) => g.groupId === group.id);
-                        const isMember = !!membership;
-                        return (
-                          <div key={group.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input
-                              type="checkbox" checked={isMember} disabled={saving360}
-                              style={{ accentColor: 'var(--color-primary)', flexShrink: 0 }}
-                              onChange={() => toggleGroupMembership(group.id, isMember)}
-                            />
-                            <span style={{ fontSize: 12, fontWeight: 500, flex: 1 }}>{group.name}</span>
-                            <span style={{
-                              display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
-                              textTransform: 'uppercase',
-                              background: group.type === 'COUNCIL' ? '#fce7f3' : group.type === 'OFFICE' ? '#ede9fe' : '#f1f5f9',
-                              color: group.type === 'COUNCIL' ? '#9d174d' : group.type === 'OFFICE' ? '#5b21b6' : '#64748b',
-                            }}>{GROUP_TYPE_LABELS[group.type] || group.type}</span>
-                            {isMember && (
-                              <select
-                                value={membership.groupRole} disabled={saving360}
-                                style={{ fontSize: 11, padding: '2px 4px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', appearance: 'auto' as any }}
-                                onChange={(e) => changeGroupRole(group.id, e.target.value)}
-                              >
-                                {GROUP_ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                              </select>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* DAMA Roles — Editable */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <SectionLabel marginBottom={0}>Governance Roles ({viewing360.damaRoles.length})</SectionLabel>
-                    <button
-                      style={{ ...btnSecondary, padding: '3px 10px', fontSize: 11 }}
-                      onClick={() => { setShowAddDamaRole(!showAddDamaRole); setNewDamaRole({ roleType: viewing360.allDamaRoleTypes[0] || 'CDO', scopeType: 'ORG', scopeId: '' }); }}
-                    >
-                      {showAddDamaRole ? 'Cancel' : '+ Add Role'}
-                    </button>
-                  </div>
-                  {showAddDamaRole && (
-                    <div style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                      <div>
-                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Role Type</label>
-                        <select
-                          style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', appearance: 'auto' as any }}
-                          value={newDamaRole.roleType}
-                          onChange={(e) => setNewDamaRole({ ...newDamaRole, roleType: e.target.value })}
-                        >
-                          {(viewing360.allDamaRoleTypes || []).map((rt) => (
-                            <option key={rt} value={rt}>{DAMA_ROLE_LABELS[rt] || rt}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 120 }}>
-                        <label style={{ fontSize: 10, fontWeight: 500, display: 'block', marginBottom: 2 }}>Organization</label>
-                        <select
-                          style={{ fontSize: 11, padding: '4px 6px', border: '1px solid var(--color-border)', borderRadius: 3, background: 'var(--color-surface)', width: '100%', appearance: 'auto' as any }}
-                          value={newDamaRole.scopeId}
-                          onChange={(e) => setNewDamaRole({ ...newDamaRole, scopeId: e.target.value })}
-                        >
-                          <option value="">-- Select organization --</option>
-                          {flatOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                        </select>
-                      </div>
-                      <button
-                        style={{ ...btnPrimary, padding: '4px 12px', fontSize: 11, opacity: !newDamaRole.scopeId ? 0.5 : 1, cursor: !newDamaRole.scopeId || saving360 ? 'not-allowed' : 'pointer' }}
-                        disabled={!newDamaRole.scopeId || saving360}
-                        onClick={addDamaRole}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-                  {viewing360.damaRoles.length === 0 && !showAddDamaRole ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No governance roles assigned</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {viewing360.damaRoles.map((r) => (
-                        <div key={r.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <span style={{
-                              display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                              background: '#dbeafe', color: '#1e40af', marginRight: 8,
-                            }}>{DAMA_ROLE_LABELS[r.roleType] || r.roleType.replace(/_/g, ' ')}</span>
-                            <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{r.scopeType}: {r.scopeName}</span>
-                          </div>
-                          <button
-                            style={{ ...btnIcon, color: 'var(--color-error)', fontSize: 11 }}
-                            disabled={saving360}
-                            onClick={() => removeDamaRole(r.id)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Data Domains — Editable */}
-                <div style={{ marginBottom: 16 }}>
-                  <SectionLabel>
-                    Data Domains ({(viewing360.allDomains || []).filter((d) => d.ownerId === viewing360.person.id || d.stewardIds?.includes(viewing360.person.id)).length} of {(viewing360.allDomains || []).length})
-                  </SectionLabel>
-                  {(viewing360.allDomains || []).length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data domains defined yet</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {(viewing360.allDomains || []).map((domain) => {
-                        const isOwner = domain.ownerId === viewing360.person.id;
-                        const isSteward = domain.stewardIds?.includes(viewing360.person.id) || false;
-                        return (
-                          <div key={domain.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: 12, fontWeight: 500, flex: 1 }}>{domain.name}</span>
-                            <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                              <input
-                                type="checkbox" checked={isOwner} disabled={saving360}
-                                style={{ accentColor: '#0f4f46' }}
-                                onChange={() => toggleDomainOwner(domain.id, isOwner)}
-                              />
-                              Owner
-                            </label>
-                            <label style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                              <input
-                                type="checkbox" checked={isSteward} disabled={saving360}
-                                style={{ accentColor: '#1e40af' }}
-                                onChange={() => toggleDomainSteward(domain.id, isSteward, domain.stewardIds || [])}
-                              />
-                              Steward
-                            </label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Owned Processes (read-only) */}
-                <div style={{ marginBottom: 16 }}>
-                  <SectionLabel>Owned Processes ({viewing360.ownedProcessNodes.length})</SectionLabel>
-                  {viewing360.ownedProcessNodes.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Does not own any process nodes</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {viewing360.ownedProcessNodes.map((n) => (
-                        <div key={n.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12 }}>{n.name}</span>
-                          <span style={{
-                            display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                            background: '#ede9fe', color: '#5b21b6',
-                          }}>{n.level}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Owned/Stewarded Data Assets (read-only) */}
-                <div style={{ marginBottom: 16 }}>
-                  <SectionLabel>Data Assets ({viewing360.dataAssets.length})</SectionLabel>
-                  {viewing360.dataAssets.length === 0 ? (
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>No data assets owned or stewarded</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {viewing360.dataAssets.map((a) => (
-                        <div key={a.id} style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', padding: '6px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12 }}>{a.name}</span>
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                            <span style={{
-                              display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                              background: a.relation === 'owner' ? '#d1f0eb' : '#dbeafe',
-                              color: a.relation === 'owner' ? '#0f4f46' : '#1e40af',
-                            }}>{a.relation}</span>
-                            <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{a.governanceTier}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : null}
-      </Modal>
       {showPeopleSync && (
         <Suspense fallback={null}>
           <SyncConnectionWizard open={showPeopleSync} onClose={() => setShowPeopleSync(false)} targetEntity="people" orgId={activeOrgId || ''} onCreated={fetchData} />
