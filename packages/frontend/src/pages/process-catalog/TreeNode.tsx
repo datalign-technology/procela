@@ -4,7 +4,6 @@ import StatusBadge from '../../components/StatusBadge';
 import SkillPicker from '../../components/SkillPicker';
 import UnqualifiedPersonChip from '../../components/UnqualifiedPersonChip';
 import AttachmentsPanel from '../../components/AttachmentsPanel';
-import CommentsPanel from '../../components/CommentsPanel';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import AssetSuggestionsPanel from '../../components/AssetSuggestionsPanel';
 import SystemSuggestionsPanel from '../../components/SystemSuggestionsPanel';
@@ -349,13 +348,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
               {/* Value Stream fields */}
               {node.level === 'VALUE_STREAM' && (() => {
                 const isGov = node.domain === 'GOVERNANCE';
-                // On governance nodes, restrict the person pickers to
-                // people who hold a governance role. If nobody has a
-                // role assigned yet, the picker is locked with a hint
-                // pointing the user at the Governance Roles page.
-                const govNamesEligible = new Set(
-                  peopleList.filter((p) => governanceHolderIds.has(p.id)).map((p) => p.name),
-                );
+                // On governance nodes, restrict the Owner picker to people
+                // who hold a governance role. If nobody has a role assigned
+                // yet, the picker is locked with a hint pointing the user at
+                // the Governance Roles page.
                 const noHolders = governanceHolderIds.size === 0;
                 const govHint = 'Locked until at least one person is given a governance role on the Governance Roles page.';
                 return (
@@ -370,7 +366,11 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         accomplishes and the value it delivers.) */}
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What this accomplishes and the value it delivers…" />
                     <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
-                    <DocPersonField label="Stakeholders" mode="multi" valueMode="name" value={(node.stakeholders || '').split(',').map((s) => s.trim()).filter(Boolean)} onChange={(vals) => onUpdate(node.id, { stakeholders: (vals as string[]).join(', ') })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? govNamesEligible : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
+                    {/* Stakeholders removed: the RACI Matrix is the
+                        structured home for who's responsible / accountable /
+                        consulted / informed. A parallel free-text field just
+                        drifted from it. Existing values are retained on the
+                        record, just no longer edited from this panel. */}
                     {viewMode === 'advanced' && (
                       <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
                     )}
@@ -392,17 +392,12 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         without a strategic purpose of their own. */}
                     <DocField label="Purpose" value={node.purpose || ''} onSave={(v) => onUpdate(node.id, { purpose: v })} disabled={isLocked} placeholder="What does this accomplish?" />
                     <DocPersonField label="Owner" mode="single" valueMode="id" value={node.ownerId || null} onChange={(id) => onUpdate(node.id, { ownerId: id || null })} disabled={isLocked || (isGov && noHolders)} domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'} eligibleKeys={isGov ? governanceHolderIds : undefined} disabledHint={isGov && noHolders ? govHint : undefined} disabledHintLink={isGov && noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined} />
-                    {/* Stakeholders is intentionally absent at the
-                        Process level. It lives only on Value Streams
-                        — the strategic level where "who cares about
-                        this end-to-end flow" is a useful quick
-                        answer. At Process and below, the RACI Matrix
-                        is the structured home for who-needs-to-be-
-                        informed-or-consulted; a parallel free-text
-                        Stakeholders field there just drifted from
-                        RACI. Existing process rows with a stored
-                        stakeholders value keep it on the record
-                        (it's just not edited from the panel). */}
+                    {/* Stakeholders is not edited here. The RACI Matrix is
+                        the structured home for who-needs-to-be-responsible /
+                        accountable / consulted / informed; a parallel
+                        free-text Stakeholders field just drifted from it, so
+                        it was retired from every level. Existing stored
+                        values stay on the record. */}
                     {viewMode === 'advanced' && (
                       <>
                         <DocMultiSelect label="Compliance" selected={node.complianceTags || []} options={COMPLIANCE_OPTIONS} onSave={(vals) => onUpdate(node.id, { complianceTags: vals })} disabled={isLocked} placeholder="Select compliance tags..." />
@@ -950,22 +945,9 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                   onCount={(n) => setSectionCount('attachments', n)}
                 />
               </CollapsibleSection>
-              {/* Discussion — threaded comments + @mentions for this node.
-                *  Process-level conversations stay attached to the node
-                *  rather than living in someone's email. */}
-              <CollapsibleSection
-                title="Discussion"
-                count={sectionCounts.discussion}
-                open={openSections.has('discussion')}
-                onToggle={() => toggleSection('discussion')}
-              >
-                <CommentsPanel
-                  entityType="ProcessNode"
-                  entityId={node.id}
-                  entityLabel={`${LEVEL_CONFIG[node.level].label}: ${node.name}`}
-                  onCount={(n) => setSectionCount('discussion', n)}
-                />
-              </CollapsibleSection>
+              {/* Discussion (per-node threaded comments) removed: low
+                *  real-world use — teams discuss in Slack/Teams, not per
+                *  node. The comments API remains for other entity types. */}
               {/* Per-node history removed: it duplicated the Versions
                 *  button on this same row (version snapshots) and the
                 *  global Audit Log page. */}
