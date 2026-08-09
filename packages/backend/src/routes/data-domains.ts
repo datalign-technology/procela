@@ -200,6 +200,20 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json({ success: true, data: enrichDomain(domain, allPeople, allAssets) });
 });
 
+/**
+ * Scope Definition was merged into Description (they overlapped — both
+ * describe "what this domain is"). Fold any incoming scopeDefinition into
+ * description so nothing is lost: both present → two paragraphs; one → that
+ * one; neither → undefined. Callers write the result to `description` and
+ * stop persisting `scopeDefinition` (the column is kept but deprecated).
+ */
+function combineDescription(description?: string | null, scopeDefinition?: string | null): string | undefined {
+  const d = (description || '').trim();
+  const s = (scopeDefinition || '').trim();
+  if (d && s) return d === s ? d : `${d}\n\n${s}`;
+  return d || s || undefined;
+}
+
 /** POST /api/v1/data-domains — create */
 router.post('/', async (req: Request, res: Response) => {
   const { name, description, orgId, status, scopeDefinition } = req.body;
@@ -219,11 +233,11 @@ router.post('/', async (req: Request, res: Response) => {
     id: uuid(),
     orgId,
     name,
-    description: description || '',
+    // Scope Definition merged into Description.
+    description: combineDescription(description, scopeDefinition) || '',
     ownerId: null,
     stewardIds: [],
     dataAssetIds: [],
-    ...(scopeDefinition ? { scopeDefinition } : {}),
     status: status && VALID_STATUSES.includes(status) ? status : 'DRAFT',
     createdAt: now,
     updatedAt: now,
@@ -259,7 +273,10 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (ownerId !== undefined) domain.ownerId = ownerId || null;
   if (stewardIds !== undefined && Array.isArray(stewardIds)) domain.stewardIds = stewardIds;
   if (dataAssetIds !== undefined && Array.isArray(dataAssetIds)) domain.dataAssetIds = dataAssetIds;
-  if (scopeDefinition !== undefined) domain.scopeDefinition = scopeDefinition || undefined;
+  // Scope Definition merged into Description: fold any incoming value in.
+  if (scopeDefinition !== undefined) {
+    domain.description = combineDescription(domain.description, scopeDefinition) || '';
+  }
 
   // Validate status transition
   if (status !== undefined && status !== domain.status) {
