@@ -355,7 +355,10 @@ export default function PersonDetailPage() {
           </div>
           <InlineField label="Email" value={p.email} field="email" personId={p.id} onSaved={fetch360} />
           <InlineField label="Job Title" value={p.title} field="title" personId={p.id} onSaved={fetch360} />
-          <InlineField label="Job Role" value={(p as any).jobRole || ''} field="jobRole" personId={p.id} onSaved={fetch360} />
+          {/* "Job Role" editor removed: it duplicated Job Title as a second
+              free-text job descriptor. The jobRole field itself is kept (it
+              backs the RACI "group by Job Role" dimension and sync mapping)
+              — just no longer edited from a second inline box here. */}
         </div>
       </div>
 
