@@ -1266,15 +1266,10 @@ export default function SystemsPage() {
                 );
               })()}
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Integration Notes</label>
-              <input
-                style={inputStyle}
-                value={form.integrationPoints}
-                onChange={(e) => setFormDirty({ ...form, integrationPoints: e.target.value })}
-                placeholder="Anything the integration rows don't capture — vendor portals, batch windows, auth quirks, etc."
-              />
-            </div>
+            {/* Integration Notes (free-text integrationPoints) removed:
+                the structured Integration rows below capture interfaces;
+                the free-text field was written but rendered on no read
+                surface. Stored values are retained on the record. */}
             {form.connectivity === 'INTEGRATED' && (
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>

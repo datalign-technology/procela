@@ -869,7 +869,10 @@ export default function GovernanceProgramPage() {
                           <button type="button" style={btnSecondary} onClick={addPrinciple}>Add</button>
                         </div>
                       </div>
-                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Decision Rights</label><textarea style={textareaStyle} value={decisionRights} onChange={(e) => setDecisionRights(e.target.value)} placeholder="Who decides what?" /></div>
+                      {/* Decision Rights is a structured entity of its own —
+                          the free-text box here duplicated it. Point at the
+                          dedicated page instead; any stored text is retained. */}
+                      <div><label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Decision Rights</label><div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Defined on the <Link to="/decision-rights" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Decision Rights</Link> page — who decides / recommends / approves for each decision.</div></div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 }}>Operating Model</label>
                         <select style={selectStyle} value={operatingModel} onChange={(e) => setOperatingModel(e.target.value as Program['principles']['operatingModel'])}>
