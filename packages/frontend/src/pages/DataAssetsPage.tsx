@@ -950,7 +950,7 @@ export default function DataAssetsPage() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     try {
-      await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { owner: ownerId })));
+      await Promise.all(ids.map((id) => apiClient.put(`/data-assets/${id}`, { ownerPersonId: ownerId })));
       const ownerName = peopleList.find((p) => p.id === ownerId)?.name || 'selected owner';
       addToast('success', `Assigned ${ownerName} as owner to ${ids.length} asset${ids.length === 1 ? '' : 's'}`);
       setSelectedIds(new Set());
