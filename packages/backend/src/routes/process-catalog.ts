@@ -226,6 +226,20 @@ export function combinePurpose(
   return p || b || undefined;
 }
 
+/**
+ * successMeasure absorbed the former slaTarget (the merged "Target / SLA"
+ * activity field). Folds any incoming/stored slaTarget into successMeasure
+ * with the same semantics as combinePurpose, so no content is lost. Callers
+ * write the result to `successMeasure` and stop persisting `slaTarget` (the
+ * column is kept but deprecated).
+ */
+export function combineTargetSla(
+  successMeasure?: string | null,
+  slaTarget?: string | null,
+): string | undefined {
+  return combinePurpose(successMeasure, slaTarget);
+}
+
 export interface FlowRelationship {
   id: string;
   fromNodeId: string;
@@ -858,8 +872,8 @@ router.post('/nodes', async (req: Request, res: Response) => {
     // don't grow "" placeholders and pickers stay clean.
     ...(criticalityTier && CRITICALITY_TIERS.includes(criticalityTier) ? { criticalityTier } : {}),
     ...(typeof rtoHours === 'number' && rtoHours >= 0 ? { rtoHours } : {}),
-    ...(successMeasure ? { successMeasure } : {}),
-    ...(slaTarget ? { slaTarget } : {}),
+    // Success Measure + former SLA Target are merged into one field.
+    ...(combineTargetSla(successMeasure, slaTarget) ? { successMeasure: combineTargetSla(successMeasure, slaTarget) } : {}),
     ...(cleanedControlIds.length ? { controlIds: cleanedControlIds } : {}),
     domain: nodeDomain,
     createdAt: now,
@@ -1013,7 +1027,12 @@ router.put('/nodes/:id', async (req: Request, res: Response) => {
     }
   }
   if (successMeasure !== undefined) node.successMeasure = successMeasure || undefined;
-  if (slaTarget !== undefined) node.slaTarget = slaTarget || undefined;
+  // SLA Target merged into Success Measure (the "Target / SLA" field): fold
+  // any incoming slaTarget into successMeasure. The deprecated field is never
+  // written back (existing rows cleared by the merge migration).
+  if (slaTarget !== undefined) {
+    node.successMeasure = combineTargetSla(node.successMeasure, slaTarget);
+  }
   if (controlIds !== undefined) {
     node.controlIds = Array.isArray(controlIds) && controlIds.length > 0
       ? await cleanControlIds(controlIds)
