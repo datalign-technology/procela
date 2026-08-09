@@ -57,7 +57,6 @@ interface DataAssetEntity {
   governanceTier?: 'BRONZE' | 'SILVER' | 'GOLD';
   healthScore?: number;
   healthScoreAt?: string | null;
-  dataClassification?: string;
   /** Content classification (Master/Reference/Transactional/Analytical/Metadata). */
   dataType?: string;
   /** @deprecated mixed-axis legacy enum; replaced by dataType. */
@@ -182,7 +181,6 @@ interface FormData {
   governanceTier: string;
   domainId: string;
   dataType: string;
-  dataClassification: string;
   retentionDurationValue: string;
   retentionDurationUnit: 'DAYS' | 'MONTHS' | 'YEARS' | '';
   retentionReason: string;
@@ -201,7 +199,6 @@ const emptyForm: FormData = {
   governanceTier: 'BRONZE',
   domainId: '',
   dataType: '',
-  dataClassification: '',
   retentionDurationValue: '',
   retentionDurationUnit: '',
   retentionReason: '',
@@ -690,7 +687,6 @@ export default function DataAssetsPage() {
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: dom?.id || '',
       dataType: asset.dataType || '',
-      dataClassification: asset.dataClassification || '',
       retentionDurationValue: asset.retentionDuration?.value ? String(asset.retentionDuration.value) : '',
       retentionDurationUnit: asset.retentionDuration?.unit || '',
       retentionReason: asset.retentionReason || asset.retentionPolicy || '',
@@ -713,7 +709,6 @@ export default function DataAssetsPage() {
       governanceTier: asset.governanceTier || 'BRONZE',
       domainId: '',
       dataType: asset.dataType || '',
-      dataClassification: asset.dataClassification || '',
       retentionDurationValue: asset.retentionDuration?.value ? String(asset.retentionDuration.value) : '',
       retentionDurationUnit: asset.retentionDuration?.unit || '',
       retentionReason: asset.retentionReason || asset.retentionPolicy || '',
@@ -827,7 +822,6 @@ export default function DataAssetsPage() {
               stewardIds: asset.stewardIds,
               governanceTier: asset.governanceTier,
               dataType: asset.dataType,
-              dataClassification: asset.dataClassification,
               retentionDuration: asset.retentionDuration,
               retentionReason: asset.retentionReason,
               refreshFrequency: asset.refreshFrequency,
@@ -1406,7 +1400,7 @@ export default function DataAssetsPage() {
             onClick={() => setShowAdvancedFields(!showAdvancedFields)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500, color: 'var(--color-primary)', padding: 0, marginBottom: showAdvancedFields ? 12 : 0 }}
           >
-            {showAdvancedFields ? '▼ Hide' : '▶ Show'} advanced fields (classification, frequency, retention, system, source)
+            {showAdvancedFields ? '▼ Hide' : '▶ Show'} advanced fields (frequency, retention, system, source)
           </button>
           {showAdvancedFields && (
             <>
@@ -1417,16 +1411,6 @@ export default function DataAssetsPage() {
                   <select style={selectStyle} value={form.systemId} onChange={(e) => updateField('systemId', e.target.value)}>
                     <option value="">-- Select system --</option>
                     {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>Data Classification <HelpPopover id="asset-classification" title="Data Classification">Public = open data. Internal = employee-only. Confidential = limited access, business-sensitive. Restricted = regulated (PII, PHI, financial).</HelpPopover></label>
-                  <select style={selectStyle} value={form.dataClassification} onChange={(e) => updateField('dataClassification', e.target.value)}>
-                    <option value="">-- Select --</option>
-                    <option value="PUBLIC">Public</option>
-                    <option value="INTERNAL">Internal</option>
-                    <option value="CONFIDENTIAL">Confidential</option>
-                    <option value="RESTRICTED">Restricted</option>
                   </select>
                 </div>
                 <div>

@@ -176,7 +176,7 @@ export default function HelpPage() {
           <li><strong>Dashboard</strong> &mdash; Personalized home with your tasks, issues, domains, and KPIs.</li>
           <li><strong>Organizations</strong> &mdash; Accordion covering the "who" of the platform: <strong>Structure</strong> (your company / division / team tree), <strong>People</strong> (the humans on your team), <strong>Agents</strong> (AI agents that hold governance roles and run automation), and <strong>Skills</strong> (the competencies your roles need).</li>
           <li><strong>Processes</strong> &mdash; the Process Catalog, where you define value streams, processes, sub-processes and activities, and connect each node to its owner / responsible role / systems / data assets inline. Direct link, not an accordion. (The cross-process flat-list view of activity↔asset mappings lives under <strong>Insights &rarr; Data Mapping</strong>.)</li>
-          <li><strong>Data</strong> &mdash; Data Assets, Glossary, Data Dictionary, Lineage, Domains, Data Quality.</li>
+          <li><strong>Data</strong> &mdash; Data Assets, Glossary, Lineage, Domains, Data Quality.</li>
           <li><strong>Systems</strong> &mdash; Systems and Connections (databases, APIs, files).</li>
           <li><strong>Governance</strong> &mdash; grouped into <strong>Set up</strong> (Program, Groups, Roles with RACI Matrix tab, Documents, Decision Rights) and <strong>Operate</strong> (Documentation with Manual + Procedures tabs, Calendar, Tasks &amp; Issues). The sub-labels are visual dividers in the expanded section &mdash; every item still navigates directly.</li>
           <li><strong>Insights</strong> &mdash; grouped into <strong>Explore</strong> (Enterprise View, Analysis, Data Mapping) and <strong>Review</strong> (Reports, Gap Detection, Audit Log). Cross-cutting exploration and review surfaces that read across Data, Systems, People, Processes and Governance &mdash; promoted out of Governance so they're easier to find.</li>
@@ -266,12 +266,6 @@ export default function HelpPage() {
           <li>Group by category (Business, Technical, Regulatory, Metric) or alphabetically.</li>
           <li>Industry-specific seed terms based on your organization's industry.</li>
           <li>Approval workflow: Draft &rarr; Proposed &rarr; Approved &rarr; Deprecated.</li>
-        </ul>
-        <h3 style={h3Style}>Data Dictionary</h3>
-        <ul style={listStyle}>
-          <li>Publishable technical catalog of all data assets organized by domain.</li>
-          <li>Shows columns, data types, ownership, source connections, health scores.</li>
-          <li>Export to CSV, Excel, JSON, or clipboard via the Export button.</li>
         </ul>
         <h3 style={h3Style}>Data Lineage</h3>
         <ul style={listStyle}>
@@ -630,7 +624,7 @@ export default function HelpPage() {
         <h3 style={h3Style}>Saved views</h3>
         <ul style={listStyle}>
           <li>Capture the current sidebar / search / group-by state on a list page under a name, then recall it later. The <strong>Views</strong> button sits in the page header next to Export.</li>
-          <li>Eight list pages support saved views: Data Assets, Systems, Connections, Data Dictionary, Decision Rights, Governance Roles, Business Glossary, and People.</li>
+          <li>Seven list pages support saved views: Data Assets, Systems, Connections, Decision Rights, Governance Roles, Business Glossary, and People.</li>
           <li>Views are org-visible &mdash; everyone in the org sees views saved by anyone. Only the owner can delete or rename their own.</li>
           <li>Tree-based pages (Organizations, Process Catalog, Governance Groups) don't have saved views because their state isn't a flat filter set.</li>
         </ul>
@@ -761,9 +755,9 @@ export default function HelpPage() {
           Open <strong>Governance &rarr; Roles</strong> and switch to the <em>RACI Matrix</em> tab. RACI is a derived view of role assignments, so editing assignments and inspecting RACI now sit together. Old <code>/raci</code> links redirect to the matrix tab.
         </p>
 
-        <h3 style={h3Style}>How do I publish a Data Dictionary?</h3>
+        <h3 style={h3Style}>How do I export my data catalog?</h3>
         <p style={pStyle}>
-          Go to Data &rarr; Data Dictionary. Filter by domain, classification, or trust level if needed, then click the Export button and choose Excel, CSV, JSON, or copy to clipboard.
+          Go to Data &rarr; Data Assets. Filter by domain, classification, or trust level if needed, then click the Export button and choose Excel, CSV, JSON, or copy to clipboard.
         </p>
 
         <h3 style={h3Style}>How do I learn what a governance role does?</h3>
@@ -793,7 +787,7 @@ export default function HelpPage() {
 
         <h3 style={h3Style}>How do I save a filtered view of a list page?</h3>
         <p style={pStyle}>
-          On a list page with the <strong>Views</strong> button (Data Assets, Systems, Connections, Data Dictionary, Decision Rights, Governance Roles, Business Glossary, People), set your filters, click <em>Views</em>, then <em>+ Save current filters as view</em> and name it. Views are org-visible; only the owner can rename or delete their own.
+          On a list page with the <strong>Views</strong> button (Data Assets, Systems, Connections, Decision Rights, Governance Roles, Business Glossary, People), set your filters, click <em>Views</em>, then <em>+ Save current filters as view</em> and name it. Views are org-visible; only the owner can rename or delete their own.
         </p>
 
         <h3 style={h3Style}>How do I mention someone in a comment?</h3>
