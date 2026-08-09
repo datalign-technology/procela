@@ -758,14 +758,9 @@ export default function BusinessGlossaryPage() {
                     {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
                   </select>
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={labelStyle}>Business Rules</label>
-                  <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={form.businessRules} onChange={(e) => setForm({ ...form, businessRules: e.target.value })} placeholder="Rules or constraints..." />
-                </div>
-                <div>
-                  <label style={labelStyle}>Example Values</label>
-                  <input style={inputStyle} value={form.exampleValues} onChange={(e) => setForm({ ...form, exampleValues: e.target.value })} placeholder="e.g. $12,500" />
-                </div>
+                {/* Business Rules and Example Values removed: write-only —
+                    no column, not exported, not searched. Any stored values
+                    are retained on the record (still round-tripped on save). */}
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
                     <button style={btnSecondary} onClick={closeForm}>Cancel</button>

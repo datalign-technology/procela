@@ -82,7 +82,6 @@ const emptyControlForm: ControlForm = {
 
 const CATEGORIES = ['DATA_QUALITY', 'SECURITY', 'PRIVACY', 'RETENTION', 'ACCESS', 'CLASSIFICATION', 'GOVERNANCE', 'GENERAL'] as const;
 const STATUSES = ['DRAFT', 'ACTIVE', 'UNDER_REVIEW', 'DEPRECATED'] as const;
-const REVIEW_FREQUENCIES = ['QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL', 'BIENNIAL', 'NONE'] as const;
 const CONTROL_TYPES = ['PREVENTIVE', 'DETECTIVE', 'CORRECTIVE'] as const;
 const AUTOMATION_MODES = ['HUMAN', 'AGENT', 'HYBRID'] as const;
 
@@ -129,14 +128,13 @@ function badgeStyle(colors: { bg: string; color: string }): React.CSSProperties 
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, display: 'block', marginBottom: 4 };
 
-type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'reviewDue' | 'controls';
+type PolicyColId = 'code' | 'name' | 'category' | 'status' | 'owner' | 'controls';
 const POLICY_COLUMN_DEFS: Array<{ id: PolicyColId; label: string; defaultVisible: boolean }> = [
   { id: 'code',      label: 'Code',       defaultVisible: true  },
   { id: 'name',      label: 'Name',       defaultVisible: true  },
   { id: 'category',  label: 'Category',   defaultVisible: true  },
   { id: 'status',    label: 'Status',     defaultVisible: true  },
   { id: 'owner',     label: 'Owner',      defaultVisible: true  },
-  { id: 'reviewDue', label: 'Review Due', defaultVisible: false },
   { id: 'controls',  label: 'Controls',   defaultVisible: true  },
 ];
 
@@ -331,8 +329,6 @@ export default function GovernancePoliciesPage() {
 
   const controlsForPolicy = (policyId: string) => controls.filter((c) => c.policyId === policyId);
 
-  const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : '--';
-
   return (
     <div>
       <DependencyBanner phase="Governance documents should follow governance structure and domain definition." checks={[
@@ -448,16 +444,10 @@ export default function GovernancePoliciesPage() {
                 {people.map((p) => <option key={p.id} value={p.id}>{formatPersonLabel(p)}</option>)}
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>Review Frequency</label>
-              <select style={selectStyle} value={form.reviewFrequency} onChange={(e) => setForm({ ...form, reviewFrequency: e.target.value })}>
-                {REVIEW_FREQUENCIES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-              </select>
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Content</label>
-              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} placeholder="Full policy text..." />
-            </div>
+            {/* Review Frequency and Content removed: Review Frequency drove
+                nothing (nextReviewDate was never computed from it, so the
+                Review Due column always read "--"), and Content ("full policy
+                text") had no read surface. Stored values are retained. */}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={closeForm}>Cancel</button>
@@ -515,7 +505,6 @@ export default function GovernancePoliciesPage() {
                 {policyCols.isVisible('category') && <th scope="col" style={thStyle}>Category</th>}
                 {policyCols.isVisible('status') && <th scope="col" style={thStyle}>Status</th>}
                 {policyCols.isVisible('owner') && <th scope="col" style={thStyle}>Owner</th>}
-                {policyCols.isVisible('reviewDue') && <th scope="col" style={thStyle}>Review Due</th>}
                 {policyCols.isVisible('controls') && <th scope="col" style={thStyle}>Controls</th>}
                 <th scope="col" style={{ ...thStyle, width: 100, textAlign: 'center' }}>Actions</th>
               </tr>
@@ -557,7 +546,6 @@ export default function GovernancePoliciesPage() {
                     {policyCols.isVisible('category') && <td style={tdStyle}><span style={badgeStyle(CATEGORY_COLORS[pol.category] || CATEGORY_COLORS.GENERAL)}>{pol.category.replace(/_/g, ' ')}</span></td>}
                     {policyCols.isVisible('status') && <td style={tdStyle}><span style={badgeStyle(STATUS_COLORS[pol.status] || STATUS_COLORS.DRAFT)}>{pol.status.replace(/_/g, ' ')}</span></td>}
                     {policyCols.isVisible('owner') && <td style={tdStyle}>{pol.ownerName || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Unassigned</span>}</td>}
-                    {policyCols.isVisible('reviewDue') && <td style={tdStyle}>{formatDate(pol.nextReviewDate)}</td>}
                     {policyCols.isVisible('controls') && <td style={tdStyle}><span style={{ fontSize: 12, fontWeight: 600 }}>{policyControls.length}</span></td>}
                     <td style={{ ...tdStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'inline-flex', gap: 4 }}>

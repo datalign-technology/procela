@@ -978,10 +978,9 @@ export default function GovernanceGroupsPage() {
               <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Description</label>
               <input style={inputStyle} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Brief description of this group's purpose" />
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontSize: 11, fontWeight: 500, display: 'block', marginBottom: 4 }}>Charter</label>
-              <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} value={form.charter} onChange={(e) => setForm({ ...form, charter: e.target.value })} placeholder="Group charter, responsibilities, and scope" />
-            </div>
+            {/* Charter removed: write-only — editable but rendered on no
+                detail panel or export. Description covers the group's
+                purpose. Stored values are retained on the record. */}
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'flex-end' }}>
             <button style={btnSecondary} onClick={handleCancel}>Cancel</button>
