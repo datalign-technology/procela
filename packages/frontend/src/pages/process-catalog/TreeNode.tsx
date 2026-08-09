@@ -428,11 +428,20 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                      (with hints pointing the user at where to fix it). */}
                   {(() => {
                     const role = node.responsibleRole || '';
+                    const isGov = node.domain === 'GOVERNANCE';
                     const holders = role ? (holdersByRoleLabel.get(role) || new Set<string>()) : new Set<string>();
                     const noRole = !role;
-                    const noHolders = !noRole && holders.size === 0;
+                    // "No holders" only gates GOVERNANCE roles, whose holders come
+                    // from formal DAMA assignments on the Governance Roles page.
+                    // Operational roles are job titles, not a governance registry —
+                    // so an operational activity is never gated on governance
+                    // holders and never points the user at that page (any person
+                    // can be marked responsible, matching the Owner field above).
+                    const noHolders = isGov && !noRole && holders.size === 0;
                     const hint = noRole
-                      ? 'Pick a Responsible Role first — then the person list will be filtered to people who hold it.'
+                      ? (isGov
+                          ? 'Pick a Responsible Role first — then the person list will be filtered to people who hold it.'
+                          : 'Pick a Responsible Role first.')
                       : noHolders
                         ? `No one currently holds "${role}". Assign it on the Governance Roles page first.`
                         : undefined;
@@ -444,10 +453,10 @@ function TreeNode({ node, depth, onUpdate, onDelete, onClone, onAddChild, expand
                         value={node.responsiblePersonId || null}
                         onChange={(id) => onUpdate(node.id, { responsiblePersonId: id || null })}
                         disabled={isLocked || noRole || noHolders}
-                        domain={node.domain === 'GOVERNANCE' ? 'GOVERNANCE' : 'OPERATIONAL'}
-                        eligibleKeys={holders}
+                        domain={isGov ? 'GOVERNANCE' : 'OPERATIONAL'}
+                        eligibleKeys={isGov ? holders : undefined}
                         disabledHint={hint}
-                        disabledHintLink={noHolders && !noRole ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined}
+                        disabledHintLink={noHolders ? { to: '/dama-roles', label: 'Open Governance Roles' } : undefined}
                         placeholder={noRole ? 'Pick a role first…' : 'Select responsible person…'}
                       />
                     );
