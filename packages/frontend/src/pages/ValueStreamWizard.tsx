@@ -577,10 +577,13 @@ export default function ValueStreamWizard() {
 
                   {isExpanded && (
                     <div style={{ padding: '0 14px 12px 44px' }}>
+                      {/* Purpose absorbed the former Business Outcome —
+                          show them folded into one Purpose line so older
+                          cached templates that still carry both don't lose
+                          the outcome text. */}
                       {(vs.purpose || vs.businessOutcome) && (
                         <div style={{ fontSize: 11, padding: '6px 10px', background: '#f8fafc', borderRadius: 4, marginBottom: 10 }}>
-                          {vs.purpose && <div><span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>Purpose:</span> {vs.purpose}</div>}
-                          {vs.businessOutcome && <div><span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>Business Outcome:</span> {vs.businessOutcome}</div>}
+                          <div><span style={{ fontWeight: 600, color: 'var(--color-text-muted)' }}>Purpose:</span> {[vs.purpose, vs.businessOutcome].map((s) => (s || '').trim()).filter(Boolean).join(' — ')}</div>
                         </div>
                       )}
                       {vs.processes.map((proc, pIdx) => (
